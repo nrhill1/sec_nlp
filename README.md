@@ -33,19 +33,19 @@ pip install -r requirements.txt
 
 ## Basic Command Format
 
-***Command line interface format***
+### Command line interface format
 
 ```bash
 python main.py SYMBOL START_DATE END_DATE KEYWORD
 ```
 
-***Example command***
+### Example command
 
 ```bash
 python main.py AAPL 2023-01-01 2024-01-01 revenue
 ```
 
-***Example .env file***
+### Example .env file
 
 ```env
 EMAIL=your_email@example.com
