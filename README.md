@@ -31,7 +31,7 @@ pip install -r requirements.txt
 
 ### Basic Command Format
 
-***Command line interface format**
+***Command line interface format***
 
 ```bash
 python main.py SYMBOL START_DATE END_DATE KEYWORD
