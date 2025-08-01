@@ -27,6 +27,8 @@ pip install -r requirements.txt
 
 ## Usage
 
+***(This program requires the use of Python v3.11.3)***
+
 ### Basic Command Format
 
 ***Command line interface format**
