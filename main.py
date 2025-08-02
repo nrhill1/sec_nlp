@@ -4,6 +4,7 @@ import time
 import json
 import argparse
 import logging
+import shutil
 import traceback
 from pathlib import Path
 from typing import Optional
@@ -88,6 +89,13 @@ def run_pipeline(symbol: str, start_date: str, end_date: str,
         f"{symbol.lower()}_{keyword.lower()}_{start_date}_to_{end_date}_summary.json"
     with open(output_path, "w") as f:
         json.dump({"symbol": symbol, "summaries": summaries}, f, indent=2)
+
+    try:
+        logger.info("Cleaning up downloaded files...")
+        shutil.rmtree(dl_path / "sec-edgar-filings")
+    except Exception as e:
+        logger.error(
+            f"Something went wrong while removing downloaded files: {type(e).__name__}: {e}")
 
     logger.info(f"Summary written to {output_path.resolve()}")
     return output_path
