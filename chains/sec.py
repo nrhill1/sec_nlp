@@ -23,7 +23,8 @@ class SECFilingSummaryChain(Chain):
     def output_keys(self) -> List[str]:
         return ["symbol", "summary"]
 
-    def _summarize_chunk(self, chunk: str, symbol: str, search_term: str) -> Dict[str, Any]:
+    def _summarize_chunk(self, chunk: str, symbol: str,
+                         search_term: str) -> Dict[str, Any]:
         """
         Runs summarization over text chunk and returns parsed summary.
         """

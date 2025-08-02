@@ -3,7 +3,8 @@ from transformers import pipeline
 
 
 class LocalT5Wrapper:
-    def __init__(self, model_name: str = "google/flan-t5-small", max_new_tokens: int = 512):
+    def __init__(self, model_name: str = "google/flan-t5-small",
+                 max_new_tokens: int = 512):
         self.pipe = pipeline("text2text-generation", model=model_name)
         self.max_new_tokens = max_new_tokens
 
