@@ -24,4 +24,4 @@ template: |
     "quotes": ["<relevant direct quotes>", "..."]
   }}
 
-  Only return a single, valid JSON object.
+  Only return a single, valid JSON object containing statistics.
