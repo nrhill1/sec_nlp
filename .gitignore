@@ -1,0 +1,15 @@
+# General
+.env
+.venv
+**.DS_Store
+**.history/
+**.vscode/
+
+# Application data
+downloads/
+data/
+output/
+
+# Python
+**__pycache__
+.pytest_cache
