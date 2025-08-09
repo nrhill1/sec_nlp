@@ -1,7 +1,7 @@
 # utils/parse/preprocessor.py
 import os
 from pathlib import Path
-from typing import List, Sequence, Optional, Union
+from typing import List, Sequence, Optional
 
 from langchain_core.documents import Document
 from langchain_community.document_loaders import BSHTMLLoader
@@ -19,7 +19,7 @@ class PreProcessor:
         downloads_folder (Path): Base folder containing 'sec-edgar-filings/<SYMBOL>/(10-K|10-Q)'
         chunk_size (int): Max characters per chunk
         chunk_overlap (int): Overlap between chunks
-        splitter (TextSplitter): Optional custom text splitter (default: RecursiveCharacterTextSplitter)
+        splitter (TextSplitter): Optional custom text splitter
         transformer (BaseDocumentTransformer): Optional document transformer (default: Markdownify)
     """
 
@@ -59,7 +59,8 @@ class PreProcessor:
         limit: Optional[int] = None
     ) -> List[Path]:
         """
-        List HTML filing paths for a given symbol & mode (10-K or 10-Q), sorted by most recently modified.
+        List HTML filing paths for a given symbol & mode (10-K or 10-Q),
+        sorted by most recently modified.
 
         Args:
             symbol (str): Stock ticker
