@@ -25,7 +25,7 @@ logging.basicConfig(level=logging.INFO,
 
 
 def run_pipeline(symbol: str, start_date: str, end_date: str,
-                 keyword: str, prompt_file: str, model_name) -> Optional[Path]:
+                 keyword: str, prompt_file: str, model_name: str) -> Optional[Path]:
 
     load_dotenv()
 
