@@ -1,6 +1,7 @@
 # General
 .env
 .venv
+dist/
 **.DS_Store
 **.history/
 **.vscode/
@@ -12,4 +13,5 @@ output/
 
 # Python
 **__pycache__
+**.egg-info
 .pytest_cache
