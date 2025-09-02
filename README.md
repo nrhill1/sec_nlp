@@ -27,7 +27,7 @@ pip install -r requirements.txt
 
 ## Usage
 
-***(This program requires the use of Python v3.11.3)***
+***(This program exclusively requires the use of Python v3.11.3)***
 
 ---
 
