@@ -1,17 +1,18 @@
 # General
-.env
-.venv
-dist/
+**.env
+**dist/
 **.DS_Store
 **.history/
 **.vscode/
 
 # Application data
-downloads/
-data/
-output/
+**downloads/
+**data/
+**output/
 
 # Python
 **__pycache__
-**.egg-info
-.pytest_cache
+**.egg-info/
+**.pytest_cache
+**.venv
+**uv.lock

@@ -14,10 +14,9 @@ from tqdm import tqdm
 
 from langchain.prompts import load_prompt
 
-from chains.sec import SECFilingSummaryChain
-from utils.llms.local_t5_wrapper import LocalT5Wrapper
-from utils.fetch import SECFilingDownloader
-from utils.parse import PreProcessor
+from sec_nlp.chains import SECFilingSummaryChain
+from sec_nlp.utils import SECFilingDownloader, PreProcessor, LocalT5Wrapper
+
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO,
@@ -37,7 +36,7 @@ def run_pipeline(symbol: str, start_date: str, end_date: str,
     out_path = Path(output_folder)
 
     logger.info(
-        f"Starting pipeline for symbol: {symbol} from {start_date} to {end_date}")
+        f"Starting pipeline for symbol: {symbol} from {start_date} to {end_date} using {model_name}...")
 
     downloader = SECFilingDownloader(email, dl_path)
     downloader.add_symbol(symbol)
@@ -48,7 +47,6 @@ def run_pipeline(symbol: str, start_date: str, end_date: str,
 
     if not html_paths:
         logger.warning(f"No filings found for {symbol}.")
-        return None
 
     html_path = html_paths[0]
     chunks = preprocessor.transform_html(html_path)
@@ -108,7 +106,7 @@ def main():
     parser.add_argument("start", help="Start date (YYYY-MM-DD)")
     parser.add_argument("end", help="End date (YYYY-MM-DD)")
     parser.add_argument("keyword", help="Keyword to search in filings")
-    parser.add_argument("--prompt_file", default="prompts/sample_prompt.yml",
+    parser.add_argument("--prompt_file", default="./prompts/sample_prompt.yml",
                         help="Path to a .yml file containing the LLM prompt")
     parser.add_argument("--model_name", default="google/flan-t5-base",
                         help="The name of the LLM to use (default is )")
