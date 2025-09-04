@@ -17,7 +17,7 @@ A CLI tool to **download**, **parse**, **filter**, and **summarize** SEC filings
 ## Requirements
 
 - **Python 3.11.3 (exact)**  
-  This project will not install on other Python versions (e.g., 3.12 or 3.13).  
+  This project will not install on other Python versions (e.g., 3.11.5, 3.12 or 3.13).  
 
 - [`uv`](https://github.com/astral-sh/uv) for fast installs and builds.  
 
@@ -26,6 +26,7 @@ A CLI tool to **download**, **parse**, **filter**, and **summarize** SEC filings
 ## Setup
 
 ```bash
+# clone this repo to your machine
 git clone https://github.com/nrhill1/sec_nlp.git
 cd sec_nlp
 
