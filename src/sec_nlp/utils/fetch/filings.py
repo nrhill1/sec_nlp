@@ -40,15 +40,15 @@ class SECFilingDownloader:
             str(self._downloads_folder)
         )
 
-    def add_symbol(self, symbol: str) -> None:
+    def add_symbol(self, symbol: str):
         clean = symbol.strip().upper()
         self._symbols.add(clean)
 
-    def add_symbols(self, symbols: List[str]) -> None:
+    def add_symbols(self, symbols: List[str]):
         for symbol in symbols:
             self.add_symbol(symbol)
 
-    def _validate_date(self, date_str: Optional[str], name: str) -> None:
+    def _validate_date(self, date_str: Optional[str], name: str):
         if date_str:
             try:
                 datetime.strptime(date_str, "%Y-%m-%d")
