@@ -72,7 +72,7 @@ def run_pipeline(symbol: str, start_date: str, end_date: str,
                 })
                 if not result["summary"]:
                     logger.warning(
-                        f"Failed to parse output for {symbol} {html_path.name}.")
+                        f"Failed to parse output for {symbol}: {html_path.name}.")
                 summaries.append(result.get(
                     "summary", {"n/a": "No summary produced."}))
             except Exception as e:

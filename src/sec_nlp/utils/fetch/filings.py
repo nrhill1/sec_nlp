@@ -1,7 +1,8 @@
 # utils/fetch/filings.py
+import logging
+from datetime import datetime
 from pathlib import Path
 from typing import Optional, Set, List, Dict
-from datetime import datetime
 
 from tqdm import tqdm
 from sec_edgar_downloader import Downloader  # type: ignore
