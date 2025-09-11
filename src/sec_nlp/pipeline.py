@@ -80,7 +80,6 @@ def run_pipeline(symbol: str, start_date: str, end_date: str,
                     f"Model invocation failed: {type(e).__name__}: {e}")
                 traceback.print_exc()
 
-        # Write output for this specific document
         safe_keyword = keyword.lower().replace(" ", "_")
         doc_output_path = out_path / \
             f"{symbol.lower()}_{safe_keyword}_{html_path.stem}_summary.json"
@@ -131,7 +130,6 @@ def main():
                      args.keyword, args.prompt_file, args.model_name,
                      out_path=output_folder, dl_path=downloads_folder)
 
-    # Cleanup downloads
     try:
         logger.info("Cleaning up downloaded files...")
         shutil.rmtree(downloads_folder / "sec-edgar-filings")
