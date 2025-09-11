@@ -21,7 +21,9 @@ dependencies = [
   "lxml",
   "markdownify",
   "huggingface_hub",
-  "sec_edgar_downloader"
+  "sec_edgar_downloader",
+  "langchain-pinecone>=0.2.12",
+  "pinecone>=7.3.0",
 ]
 
 [project.scripts]

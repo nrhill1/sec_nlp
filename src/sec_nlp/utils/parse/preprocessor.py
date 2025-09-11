@@ -10,6 +10,8 @@ from langchain_community.document_transformers import MarkdownifyTransformer
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_text_splitters.base import TextSplitter
 
+logger = logging.getLogger(__name__)
+
 
 class PreProcessor:
     """
@@ -94,12 +96,12 @@ class PreProcessor:
             Sequence[Document]: Transformed LangChain Documents
         """
         if not html_path.exists():
-            raise FileNotFoundError(f"File not found: {html_path}")
+            raise FileNotFoundError(f"File not found: {html_path.resolve()}")
         loader = BSHTMLLoader(file_path=html_path,
                               bs_kwargs={"features": "xml"})
         html_docs = loader.load_and_split(self._html_splitter)
         finished_docs = self._transformer.transform_documents(html_docs)
-        print(
+        logger.info(
             f"Loaded {len(finished_docs)} transformed documents from {html_path.name}")
         return finished_docs
 
@@ -116,5 +118,6 @@ class PreProcessor:
         loader = BSHTMLLoader(file_path=html_path,
                               bs_kwargs={"features": "xml"})
         docs = loader.load_and_split(self._html_splitter)
-        print(f"Loaded {len(docs)} raw text chunks from {html_path.name}")
+        logger.info(
+            f"Loaded {len(docs)} raw text chunks from {html_path.name}")
         return [doc.page_content for doc in docs]
