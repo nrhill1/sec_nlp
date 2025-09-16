@@ -23,8 +23,8 @@ class SECFilingSummaryChain(Chain):
     def output_keys(self) -> List[str]:
         return ["symbol", "summary"]
 
-    def _summarize_chunk(self, chunk: str, symbol: str,
-                         search_term: str) -> Dict[str, Any]:
+    def __summarize_chunk(self, chunk: str, symbol: str,
+                          search_term: str) -> Dict[str, Any]:
         """
         Runs summarization over text chunk and returns parsed summary.
         """
@@ -51,7 +51,7 @@ class SECFilingSummaryChain(Chain):
             raise ValueError(
                 "Inputs must include 'symbol', 'chunk', and 'search_term'.")
 
-        summary = self._summarize_chunk(chunk, symbol, search_term)
+        summary = self.__summarize_chunk(chunk, symbol, search_term)
 
         return {
             "symbol": symbol,

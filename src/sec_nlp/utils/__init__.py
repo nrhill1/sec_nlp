@@ -2,6 +2,6 @@
 from .fetch import *
 from .llms import *
 from .parse import *
-# from .embed import *
+from .embed import *
 
-__all__ = ["fetch", "llms", "parse"]
+__all__ = ["fetch", "llms", "parse", "embed"]

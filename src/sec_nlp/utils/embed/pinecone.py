@@ -11,4 +11,4 @@ logger = logging.getLogger(__name__)
 class PineconeDBManager:
 
     def __init__(self, pinecone_api_key: str):
-        self._pc = Pinecone(api_key=os.getenv("PINECONE_API_KEY"))
+        self._pc = Pinecone(api_key=pinecone_api_key)
