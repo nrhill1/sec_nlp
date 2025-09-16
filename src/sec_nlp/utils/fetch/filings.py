@@ -93,7 +93,8 @@ class SECFilingDownloader:
         logger.info(
             f"Beggining {filing_type} downloads for {list(self._symbols)}")
 
-        for symbol in tqdm(sorted(self._symbols), desc=f"Downloading {filing_type} files..."):
+        for symbol in tqdm(sorted(self._symbols),
+                           desc=f"Downloading {filing_type} files..."):
             try:
                 self._downloader.get(
                     filing_type,

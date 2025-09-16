@@ -25,10 +25,11 @@ dependencies = [
   "langchain-pinecone>=0.2.12",
   "pinecone>=7.3.0",
   "accelerate>=1.10.1",
+  "pinecone-plugin-assistant>=1.8.0",
 ]
 
 [project.scripts]
-main = "sec_nlp.pipeline:main"
+main = "sec_nlp.main:main"
 
 
 [tool.setuptools]
