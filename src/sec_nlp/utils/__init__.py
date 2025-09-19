@@ -2,4 +2,4 @@
 from .fetch import *
 from .parse import *
 
-__all__ = ["fetch", "parse"]
+__all__ = ("fetch", "parse",)
