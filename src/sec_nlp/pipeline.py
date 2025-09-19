@@ -13,7 +13,8 @@ from tqdm import tqdm
 from langchain.prompts import load_prompt
 
 from sec_nlp.chains import SECFilingSummaryChain
-from sec_nlp.utils import SECFilingDownloader, PreProcessor, LocalT5Wrapper
+from sec_nlp.llms import LocalT5Wrapper
+from sec_nlp.utils import SECFilingDownloader, PreProcessor
 
 
 logger = logging.getLogger(__name__)
