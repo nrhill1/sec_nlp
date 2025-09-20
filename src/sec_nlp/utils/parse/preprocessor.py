@@ -88,7 +88,7 @@ class PreProcessor:
 
     def transform_html(self, html_path: Path) -> Sequence[Document]:
         """
-        Converts an HTML filing into Markdown chunks using the configured transformer.
+        Converts an HTML filing into chunks using the configured transformer.
 
         Args:
             html_path (Path): Path to an HTML filing
