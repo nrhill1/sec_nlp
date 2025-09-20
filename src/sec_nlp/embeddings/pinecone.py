@@ -15,6 +15,10 @@ class PineconeEmbedder:
     def __init__(self, pinecone_api_key: str, initial_index: str):
         self._pc = Pinecone(api_key=pinecone_api_key)
         self._current_index = initial_index
+
+        if not self._pc.has_index(initial_index):
+            self.add_index(initial_index)
+
         self._vector_store = self.initialize_vector_store()
         logger.info("Initialized Pinecone client.")
 
@@ -46,7 +50,7 @@ class PineconeEmbedder:
         if not self._pc.has_index(index_name):
             self._pc.create_index(
                 name=index_name,
-                dimension=1536,
+                dimension=384,
                 metric="cosine",
                 spec=ServerlessSpec(cloud="aws", region="us-east-1"),
             )
@@ -69,9 +73,10 @@ class PineconeEmbedder:
         embeddings_model = HuggingFaceEmbeddings(
             model_name="sentence-transformers/all-MiniLM-L6-v2")
         index = self._pc.Index(self._current_index)
-        self._vector_store = PineconeVectorStore(
-            index=index, embedding=embeddings_model)
+
         logger.info("Initialized Pinecone vector store.")
+        return PineconeVectorStore(
+            index=index, embedding=embeddings_model)
 
     def query(self, query: str, top_k: int = 5):
         """
