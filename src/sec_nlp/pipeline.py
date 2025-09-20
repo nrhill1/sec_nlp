@@ -13,6 +13,7 @@ from tqdm import tqdm
 from langchain.prompts import load_prompt
 
 from sec_nlp.chains import SECFilingSummaryChain
+from sec_nlp.embeddings.pinecone import PineconeEmbedder
 from sec_nlp.llms import LocalT5Wrapper
 from sec_nlp.utils import SECFilingDownloader, PreProcessor
 
@@ -47,11 +48,19 @@ def run_pipeline(symbol: str, start_date: str, end_date: str,
 
     output_files = []
 
+    pinecone_api_key = os.getenv("PINECONE_API_KEY")
+    if not pinecone_api_key:
+        raise ValueError("PINECONE_API_KEY environment variable not set.")
+
+    embedder = PineconeEmbedder(pinecone_api_key, initial_index="sec-filings")
+
     for html_path in html_paths:
         chunks = preprocessor.transform_html(html_path)
         relevant_chunks = [
             chunk for chunk in chunks if keyword.lower() in chunk.page_content.lower()
         ]
+
+        embedder.add_documents(relevant_chunks)
 
         if not relevant_chunks:
             logger.warning(
