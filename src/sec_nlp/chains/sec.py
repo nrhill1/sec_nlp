@@ -10,6 +10,10 @@ class SECFilingSummaryChain(Chain):
     """
     Summarizes chunks of SEC filing text using a local Hugging Face model
     and a LangChain-compatible prompt template. Returns a JSON dict of summaries.
+
+    Args:
+        prompt (BasePromptTemplate): Langchain prompt template for summarization.
+        llm (Any): Model instance with an `invoke` method.
     """
 
     prompt: BasePromptTemplate
@@ -66,7 +70,7 @@ class SECFilingSummaryChain(Chain):
         Returns:
             Dict[str, Any]:  Output dictionary with keys:
                 - symbol (str): Stock symbol
-                - summary (Dict[str, Any]): Parsed JSON summary or error details  
+                - summary (Dict[str, Any]): Parsed JSON summary or error details
         """
         symbol = inputs.get("symbol")
         chunk = inputs.get("chunk")
