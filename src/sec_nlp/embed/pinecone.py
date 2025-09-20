@@ -8,7 +8,7 @@ from pinecone import Pinecone
 logger = logging.getLogger(__name__)
 
 
-class PineconeDBManager:
+class PineconeEmbedder:
 
     def __init__(self, pinecone_api_key: str = os.getenv("PINECONE_API_KEY")):
         self._pc = Pinecone(api_key=pinecone_api_key)
