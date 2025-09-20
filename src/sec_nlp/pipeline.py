@@ -19,8 +19,6 @@ from sec_nlp.utils import SECFilingDownloader, PreProcessor
 
 
 logger = logging.getLogger(__name__)
-logging.basicConfig(level=logging.INFO,
-                    format="%(asctime)s - %(levelname)s - %(message)s")
 
 
 def run_pipeline(symbol: str, start_date: str, end_date: str,
