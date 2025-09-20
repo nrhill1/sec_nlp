@@ -1,7 +1,8 @@
 import logging
 import os
 
-from langchain_core import Document
+from langchain_core.documents import Document
+from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_pinecone import PineconeVectorStore
 from pinecone import Pinecone, ServerlessSpec
 from uuid import uuid4
@@ -13,8 +14,7 @@ class PineconeEmbedder:
 
     def __init__(self, pinecone_api_key: str, initial_index: str):
         self._pc = Pinecone(api_key=pinecone_api_key)
-        self._current_index = self.set_index(
-            initial_index) if self._pc.has_index(initial_index) else self.add_index(initial_index)
+        self._current_index = initial_index
         self._vector_store = self.initialize_vector_store()
         logger.info("Initialized Pinecone client.")
 
@@ -44,18 +44,14 @@ class PineconeEmbedder:
             index_name (str): Name of the Pinecone index to create
         """
         if not self._pc.has_index(index_name):
-            pc.create_index(
+            self._pc.create_index(
                 name=index_name,
+                dimension=1536,
                 metric="cosine",
-                embed={
-                    "model": "llama-text-embed-v2",
-                }
-                spec=ServerlessSpec(
-                    cloud="aws",
-                    region="us-east-1"
-                )
+                spec=ServerlessSpec(cloud="aws", region="us-east-1"),
             )
-            self._current_index = self._pc.get_index(index_name)
+
+            self._current_index = index_name
             logger.info(f"Created Pinecone index: {index_name}")
         else:
             logger.info(f"Pinecone index already exists: {index_name}")
@@ -70,8 +66,11 @@ class PineconeEmbedder:
         if self._current_index is None:
             raise ValueError(
                 "No Pinecone index set. Please set/add an index before initializing the vector store.")
+        embeddings_model = HuggingFaceEmbeddings(
+            model_name="sentence-transformers/all-MiniLM-L6-v2")
+        index = self._pc.Index(self._current_index)
         self._vector_store = PineconeVectorStore(
-            pinecone_index=self._current_index)
+            index=index, embedding=embeddings_model)
         logger.info("Initialized Pinecone vector store.")
 
     def query(self, query: str, top_k: int = 5):
@@ -105,5 +104,5 @@ class PineconeEmbedder:
         """
         if not self._pc.has_index(index_name):
             raise ValueError(f"Pinecone index does not exist: {index_name}")
-        self._current_index = self._pc.get_index(index_name)
+        self._current_index = index_name
         logger.info(f"Current Pinecone index: {index_name}")
