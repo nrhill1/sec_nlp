@@ -19,7 +19,7 @@ class PineconeEmbedder:
         if not self._pc.has_index(initial_index):
             self.add_index(initial_index)
 
-        self._vector_store = self.initialize_vector_store()
+        self._vector_store = self._create_vector_store()
         logger.info("Initialized Pinecone client.")
 
     def add_documents(self, documents: list[Document]):
@@ -60,7 +60,7 @@ class PineconeEmbedder:
         else:
             logger.info(f"Pinecone index already exists: {index_name}")
 
-    def initialize_vector_store(self):
+    def _create_vector_store(self):
         """
         Initialize the Pinecone vector store.
 
