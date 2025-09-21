@@ -1,9 +1,13 @@
 # utils/fetch/filings.py
+import logging
+from datetime import datetime
 from pathlib import Path
 from typing import Optional, Set, List, Dict
-from datetime import datetime
 
+from tqdm import tqdm
 from sec_edgar_downloader import Downloader  # type: ignore
+
+logger = logging.getLogger(__name__)
 
 
 class SECFilingDownloader:
@@ -86,7 +90,11 @@ class SECFilingDownloader:
 
         results: Dict[str, bool] = {}
 
-        for symbol in sorted(self._symbols):
+        logger.info(
+            f"Beggining {filing_type} downloads for {list(self._symbols)}")
+
+        for symbol in tqdm(sorted(self._symbols),
+                           desc=f"Downloading {filing_type} files..."):
             try:
                 self._downloader.get(
                     filing_type,

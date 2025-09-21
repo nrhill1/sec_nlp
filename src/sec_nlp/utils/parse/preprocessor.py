@@ -1,5 +1,6 @@
 # utils/parse/preprocessor.py
 import os
+import logging
 from pathlib import Path
 from typing import List, Sequence, Optional
 
@@ -9,6 +10,8 @@ from langchain_core.documents.transformers import BaseDocumentTransformer
 from langchain_community.document_transformers import MarkdownifyTransformer
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_text_splitters.base import TextSplitter
+
+logger = logging.getLogger(__name__)
 
 
 class PreProcessor:
@@ -85,7 +88,7 @@ class PreProcessor:
 
     def transform_html(self, html_path: Path) -> Sequence[Document]:
         """
-        Converts an HTML filing into Markdown chunks using the configured transformer.
+        Converts an HTML filing into chunks using the configured transformer.
 
         Args:
             html_path (Path): Path to an HTML filing
@@ -94,12 +97,12 @@ class PreProcessor:
             Sequence[Document]: Transformed LangChain Documents
         """
         if not html_path.exists():
-            raise FileNotFoundError(f"File not found: {html_path}")
+            raise FileNotFoundError(f"File not found: {html_path.resolve()}")
         loader = BSHTMLLoader(file_path=html_path,
                               bs_kwargs={"features": "xml"})
         html_docs = loader.load_and_split(self._html_splitter)
         finished_docs = self._transformer.transform_documents(html_docs)
-        print(
+        logger.info(
             f"Loaded {len(finished_docs)} transformed documents from {html_path.name}")
         return finished_docs
 
@@ -116,5 +119,6 @@ class PreProcessor:
         loader = BSHTMLLoader(file_path=html_path,
                               bs_kwargs={"features": "xml"})
         docs = loader.load_and_split(self._html_splitter)
-        print(f"Loaded {len(docs)} raw text chunks from {html_path.name}")
+        logger.info(
+            f"Loaded {len(docs)} raw text chunks from {html_path.name}")
         return [doc.page_content for doc in docs]

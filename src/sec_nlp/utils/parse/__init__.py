@@ -1,3 +1,3 @@
 from .preprocessor import PreProcessor
 
-__all__ = ["PreProcessor"]
+__all__ = ("PreProcessor",)
