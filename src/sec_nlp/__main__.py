@@ -49,6 +49,22 @@ def setup_folders() -> (Path, Path):
     output_folder = base_folder / "outputs"
     downloads_folder = base_folder / "downloads"
 
+    if output_folder.exists() and not output_folder.is_dir():
+        raise NotADirectoryError(
+            f"Output path exists and is not a directory: {output_folder}")
+
+    if downloads_folder.exists() and not downloads_folder.is_dir():
+        raise NotADirectoryError(
+            f"Downloads path exists and is not a directory: {downloads_folder}")
+
+    if output_folder.exists() and any(output_folder.iterdir()):
+        shutil.rmtree(output_folder)
+        logger.info(f"Cleared existing output folder: {output_folder}")
+
+    if downloads_folder.exists() and any(downloads_folder.iterdir()):
+        shutil.rmtree(downloads_folder)
+        logger.info(f"Cleared existing downloads folder: {downloads_folder}")
+
     output_folder.mkdir(parents=True, exist_ok=True)
     downloads_folder.mkdir(parents=True, exist_ok=True)
 
