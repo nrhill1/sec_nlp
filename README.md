@@ -45,6 +45,7 @@ This project uses environment variables for configuration. Create a `.env` file 
 EMAIL=your_email@example.com
 DOWNLOADS_FOLDER=downloads
 OUTPUT_FOLDER=output
+PINECONE_API_KEY=your-pinecone-api-key-here
 ```
 
 ## Usage
