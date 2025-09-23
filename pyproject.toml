@@ -31,7 +31,7 @@ dependencies = [
 ]
 
 [project.scripts]
-main = "sec_nlp.main:main"
+main = "sec_nlp.__main__:main"
 
 
 [tool.setuptools]
