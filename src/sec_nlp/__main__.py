@@ -73,16 +73,15 @@ def main():
     output_folder, downloads_folder = setup_folders()
 
     start_time = time.perf_counter()
-
     for symbol in args.symbols:
         logger.info(
             f"Starting pipeline for {symbol} ({args.start_date} → {args.end_date})")
         run_pipeline(symbol, args.start_date, args.end_date,
                      args.keyword, args.prompt_file, args.model_name,
                      out_path=output_folder, dl_path=downloads_folder)
+    elapsed_time = time.perf_counter() - start_time
 
     cleanup_downloads(downloads_folder)
-    elapsed_time = time.perf_counter() - start_time
     logger.info(f"Pipeline complete in {elapsed_time:.2f} seconds.")
 
 
