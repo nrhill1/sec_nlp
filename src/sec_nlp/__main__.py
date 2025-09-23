@@ -18,13 +18,14 @@ logging.basicConfig(level=logging.INFO,
                     format="%(asctime)s - %(levelname)s - %(message)s")
 
 
-def main():
+def parse_args() -> argparse.Namespace:
     today = datetime.today()
     one_year_ago = today - timedelta(days=365)
 
     parser = argparse.ArgumentParser(
         description="Run summarization pipeline on SEC filings."
     )
+
     parser.add_argument(
         "symbols", nargs="+", help="Stock symbols to fetch SEC filings for (space-separated)",
         default=["AAPL", "TSLA", "GOOG"])
@@ -41,13 +42,36 @@ def main():
 
     args = parser.parse_args()
 
+    return args
+
+
+def setup_folders() -> (Path, Path):
+    base_folder = Path(__file__).parent.parent.resolve()
+    output_folder = base_folder / "outputs"
+    downloads_folder = base_folder / "downloads"
+
+    output_folder.mkdir(parents=True, exist_ok=True)
+    downloads_folder.mkdir(parents=True, exist_ok=True)
+
+    logger.info(f"Output folder: {output_folder.resolve()}")
+    logger.info(f"Downloads folder: {downloads_folder.resolve()}")
+
+    return output_folder, downloads_folder
+
+
+def cleanup_downloads(downloads_folder: Path):
+    try:
+        logger.info("Cleaning up downloaded files...")
+        shutil.rmtree(downloads_folder / "sec-edgar-filings")
+    except Exception as e:
+        logger.error(f"Cleanup failed: {type(e).__name__}: {e}")
+
+
+def main():
+    args = parse_args()
     load_dotenv()
 
-    downloads_folder = Path(os.getenv("DOWNLOADS_FOLDER", "downloads"))
-    output_folder = Path(os.getenv("OUTPUT_FOLDER", "output"))
-
-    downloads_folder.mkdir(parents=True, exist_ok=True)
-    output_folder.mkdir(parents=True, exist_ok=True)
+    output_folder, downloads_folder = setup_folders()
 
     start_time = time.perf_counter()
 
@@ -58,12 +82,7 @@ def main():
                      args.keyword, args.prompt_file, args.model_name,
                      out_path=output_folder, dl_path=downloads_folder)
 
-    try:
-        logger.info("Cleaning up downloaded files...")
-        shutil.rmtree(downloads_folder / "sec-edgar-filings")
-    except Exception as e:
-        logger.error(f"Cleanup failed: {type(e).__name__}: {e}")
-
+    cleanup_downloads(downloads_folder)
     elapsed_time = time.perf_counter() - start_time
     logger.info(f"Pipeline complete in {elapsed_time:.2f} seconds.")
 
