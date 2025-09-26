@@ -50,7 +50,8 @@ def run_pipeline(symbol: str, start_date: str, end_date: str,
     if not pinecone_api_key:
         raise ValueError("PINECONE_API_KEY environment variable not set.")
 
-    embedder = PineconeEmbedder(pinecone_api_key, initial_index="sec-filings")
+    embedder = PineconeEmbedder(
+        pinecone_api_key, initial_index=f"{symbol.lower()}-{keyword.lower()}-docs")
 
     for html_path in html_paths:
         chunks = preprocessor.transform_html(html_path)
