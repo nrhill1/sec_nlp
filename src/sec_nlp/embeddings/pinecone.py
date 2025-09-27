@@ -7,6 +7,7 @@ from langchain_pinecone import PineconeVectorStore
 from pinecone import Pinecone, ServerlessSpec
 from uuid import uuid4
 
+
 logger = logging.getLogger(__name__)
 
 
