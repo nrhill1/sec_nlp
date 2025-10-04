@@ -11,7 +11,7 @@ from typing import List
 
 from dotenv import load_dotenv
 
-from .pipeline import run_pipeline
+from .pipeline import run_pipeline, PipelineConfig
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO,
@@ -93,9 +93,19 @@ def main():
     for symbol in args.symbols:
         logger.info(
             f"Starting pipeline for {symbol} ({args.start_date} → {args.end_date})")
-        run_pipeline(symbol, args.start_date, args.end_date,
-                     args.keyword, args.prompt_file, args.model_name,
-                     out_path=output_folder, dl_path=downloads_folder)
+
+        pipeline_config = PipelineConfig(
+            symbol=symbol,
+            start_date=args.start_date,
+            end_date=args.end_date,
+            keyword=args.keyword,
+            prompt_file=args.prompt_file,
+            model_name=args.model_name,
+            out_path=output_folder,
+            dl_path=downloads_folder
+        )
+
+        run_pipeline(pipeline_config)
 
     elapsed_time = time.perf_counter() - start_time
 

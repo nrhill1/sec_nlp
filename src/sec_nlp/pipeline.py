@@ -4,7 +4,7 @@ import json
 import logging
 import shutil
 import traceback
-from datetime import datetime, timedelta
+from dataclasses import dataclass
 from pathlib import Path
 from typing import List
 
@@ -21,26 +21,38 @@ from sec_nlp.utils import SECFilingDownloader, PreProcessor
 logger = logging.getLogger(__name__)
 
 
-def run_pipeline(symbol: str, start_date: str, end_date: str,
-                 keyword: str, prompt_file: str, model_name: str,
-                 out_path: Path, dl_path: Path) -> List[Path]:
+@dataclass
+class PipelineConfig:
+    symbols: List[str]
+    start_date: str
+    end_date: str
+    keyword: str
+    prompt_file: str
+    model_name: str
+    out_path: Path
+    dl_path: Path
+
+
+def run_pipeline(config: PipelineConfig) -> List[Path]:
     """
     Run summarization pipeline for one symbol across all filings.
     Returns a list of output paths (one per document).
 
     Args:
-        symbol (str): Stock symbol (e.g., AAPL)
-        start_date (str): Start date (YYYY-MM-DD)
-        end_date (str): End date (YYYY-MM-DD)
-        keyword (str): Keyword to search in filings
-        prompt_file (str): Path to a .yml file containing the LLM prompt
-        model_name (str): The name of the LLM to use
-        out_path (Path): Directory to save output summaries
-        dl_path (Path): Directory to save downloaded filings
+        config (PipelineConfig): Configuration parameters
 
     Returns:
         List[Path]: List of output file paths
     """
+
+    symbols = config.symbols
+    start_date = config.start_date
+    end_date = config.end_date
+    keyword = config.keyword
+    prompt_file = config.prompt_file
+    model_name = config.model_name
+    out_path = config.out_path
+    dl_path = config.dl_path
 
     downloader = SECFilingDownloader(
         os.getenv("EMAIL", "xxxxxx_xxxx@gmail.com"), dl_path)
