@@ -92,11 +92,11 @@ def run_pipeline(symbol: str, start_date: str, end_date: str,
                     "chunk": chunk.page_content,
                     "search_term": keyword
                 })
-                if not result["summary"]:
+                if not result["output"]:
                     logger.warning(
                         f"Failed to parse output for {symbol}: {html_path.name}.")
                 summaries.append(result.get(
-                    "summary", {"n/a": "No summary produced."}))
+                    "output", {"n/a": "No output produced."}))
             except Exception as e:
                 logger.error(
                     f"Model invocation failed: {type(e).__name__}: {e}")
