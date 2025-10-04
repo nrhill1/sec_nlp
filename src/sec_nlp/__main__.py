@@ -27,7 +27,7 @@ def parse_args() -> argparse.Namespace:
     )
 
     parser.add_argument(
-        "symbols", nargs="+", help="Stock symbols to fetch SEC filings for (space-separated)", required=True)
+        "symbols", nargs="+", help="Stock symbols to fetch SEC filings for (space-separated)")
     parser.add_argument("--start_date", default=one_year_ago.strftime("%Y-%m-%d"),
                         help="Start date (YYYY-MM-DD). Defaults to one year ago.")
     parser.add_argument("--end_date", default=today.strftime("%Y-%m-%d"),
