@@ -27,7 +27,21 @@ def run_pipeline(symbol: str, start_date: str, end_date: str,
     """
     Run summarization pipeline for one symbol across all filings.
     Returns a list of output paths (one per document).
+
+    Args:
+        symbol (str): Stock symbol (e.g., AAPL)
+        start_date (str): Start date (YYYY-MM-DD)
+        end_date (str): End date (YYYY-MM-DD)
+        keyword (str): Keyword to search in filings
+        prompt_file (str): Path to a .yml file containing the LLM prompt
+        model_name (str): The name of the LLM to use
+        out_path (Path): Directory to save output summaries
+        dl_path (Path): Directory to save downloaded filings
+
+    Returns:
+        List[Path]: List of output file paths
     """
+
     downloader = SECFilingDownloader(
         os.getenv("EMAIL", "xxxxxx_xxxx@gmail.com"), dl_path)
     downloader.add_symbol(symbol)
