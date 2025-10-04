@@ -46,7 +46,7 @@ def parse_args() -> argparse.Namespace:
 
 def setup_folders() -> (Path, Path):
     base_folder = Path(__file__).parent.parent.resolve()
-    output_folder = base_folder / "outputs"
+    output_folder = base_folder / "output"
     downloads_folder = base_folder / "downloads"
 
     if output_folder.exists() and not output_folder.is_dir():
