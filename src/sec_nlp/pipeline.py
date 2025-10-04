@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class PipelineConfig:
-    symbols: List[str]
+    symbol: str
     start_date: str
     end_date: str
     keyword: str
@@ -45,7 +45,7 @@ def run_pipeline(config: PipelineConfig) -> List[Path]:
         List[Path]: List of output file paths
     """
 
-    symbols = config.symbols
+    symbol = config.symbol
     start_date = config.start_date
     end_date = config.end_date
     keyword = config.keyword
