@@ -14,14 +14,14 @@ template: |
 
   Your task is to extract statistics specifically related to the topic: "{search_term}".
 
-  Please return your response solely as a valid JSON object with the following structure:
+  Please return your response solely as a valid JSON object with the following fields:
 
-  {
-    <statistic_1>: <value_1>,
-    <statistic_2>: <value_2>,
-    ...
-  }
+  {{
+    "keyword": "<the search_term you focused on>",
+    "mentions": <integer number of times the keyword appears>,
+    "summary": "<short summary (1-2 sentences) of the topic as discussed in the text>",
+    "confidence": "<low|medium|high>",
+    "quotes": ["<relevant direct quotes>", "..."]
+  }}
 
-  Where "statistic_n" is a descriptive name of the statistic and "value_n" is its numerical value.
-
-  Only return a single, valid JSON object containing numerical values for statistics relevant to {search_term}.
+  Only return a single, valid JSON object containing statistics.

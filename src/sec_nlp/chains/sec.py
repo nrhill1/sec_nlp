@@ -80,9 +80,9 @@ class SECFilingSummaryChain(Chain):
             raise ValueError(
                 "Inputs must include 'symbol', 'chunk', and 'search_term'.")
 
-        output = self._summarize_chunk(chunk, symbol, search_term)
+        summary = self._summarize_chunk(chunk, symbol, search_term)
 
         return {
             "symbol": symbol,
-            "output": output
+            "summary": summary
         }
