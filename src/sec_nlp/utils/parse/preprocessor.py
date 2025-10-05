@@ -51,7 +51,7 @@ class PreProcessor:
         mode = mode.lower()
         if mode not in self.SUPPORTED_MODES:
             raise ValueError(
-                f"Unsupported mode: {mode}. Must be one of: {list(self.SUPPORTED_MODES)}")
+                "Unsupported mode: %s. Must be one of: %s" % (mode, list(self.SUPPORTED_MODES)))
         filing_type = self.SUPPORTED_MODES[mode]
         return self._filings_folder / symbol / filing_type
 
@@ -75,12 +75,12 @@ class PreProcessor:
         """
         if mode not in self.SUPPORTED_MODES:
             raise ValueError(
-                f"Unsupported mode: {mode}. Must be one of: {list(self.SUPPORTED_MODES)}")
+                f"Unsupported mode: %s. Must be one of: %s" % (mode, list(self.SUPPORTED_MODES)))
 
         dir_path = self._filing_dir(symbol, mode)
         if not dir_path.exists():
             raise FileNotFoundError(
-                f"No filings found for {symbol} in mode {mode}")
+                "No filings found for %s in mode %s at %s" % (symbol, mode, dir_path.resolve()))
 
         html_files = sorted(dir_path.rglob("*.html"),
                             key=os.path.getmtime, reverse=True)
@@ -103,7 +103,7 @@ class PreProcessor:
         html_docs = loader.load_and_split(self._html_splitter)
         finished_docs = self._transformer.transform_documents(html_docs)
         logger.info(
-            f"Loaded {len(finished_docs)} transformed documents from {html_path.name}")
+            "Loaded %d transformed documents from %s", len(finished_docs), html_path.name)
         return finished_docs
 
     def html_to_text(self, html_path: Path) -> List[str]:
@@ -120,5 +120,5 @@ class PreProcessor:
                               bs_kwargs={"features": "xml"})
         docs = loader.load_and_split(self._html_splitter)
         logger.info(
-            f"Loaded {len(docs)} raw text chunks from {html_path.name}")
+            "Loaded %d raw text chunks from %s", len(docs), html_path.name)
         return [doc.page_content for doc in docs]

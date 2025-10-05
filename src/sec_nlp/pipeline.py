@@ -63,7 +63,7 @@ def run_pipeline(config: PipelineConfig) -> List[Path]:
     html_paths = preprocessor.html_paths_for_symbol(symbol)
 
     if not html_paths:
-        logger.warning(f"No filings found for {symbol}.")
+        logger.warning("No filings found for %s. Skipping...", symbol)
         return []
 
     prompt = load_prompt(Path(prompt_file))
@@ -89,11 +89,11 @@ def run_pipeline(config: PipelineConfig) -> List[Path]:
 
         if not relevant_chunks:
             logger.warning(
-                f"No chunks matched keyword '{keyword}' in {html_path.name}.")
+                "No chunks matched keyword '%s' in %s.", keyword, html_path.name)
             continue
 
         logger.info(
-            f"{len(relevant_chunks)} relevant chunks found in {html_path.name}. Summarizing...")
+            "%d relevant chunks found in %s. Summarizing...", len(relevant_chunks), html_path.name)
 
         summaries = []
         for chunk in tqdm(relevant_chunks,
@@ -106,12 +106,12 @@ def run_pipeline(config: PipelineConfig) -> List[Path]:
                 })
                 if not result["summary"]:
                     logger.warning(
-                        f"Failed to parse output for {symbol}: {html_path.name}.")
+                        "Failed to parse output for %s: %s", html_path.name, result)
                 summaries.append(result.get(
                     "summary", {"n/a": "No summary produced."}))
             except Exception as e:
                 logger.error(
-                    f"Model invocation failed: {type(e).__name__}: {e}")
+                    "Model invocation failed: %s:  %s", type(e).__name__, e)
                 traceback.print_exc()
 
         safe_keyword = keyword.lower().replace(" ", "_")
@@ -121,7 +121,7 @@ def run_pipeline(config: PipelineConfig) -> List[Path]:
             json.dump({"symbol": symbol, "document": html_path.name,
                       "summaries": summaries}, f, indent=2)
 
-        logger.info(f"Summary written to {doc_output_path.resolve()}")
+        logger.info("Summary written to %s", doc_output_path.resolve())
         output_files.append(doc_output_path)
 
     return output_files

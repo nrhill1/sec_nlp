@@ -57,7 +57,7 @@ class SECFilingDownloader:
             try:
                 datetime.strptime(date_str, "%Y-%m-%d")
             except ValueError:
-                raise ValueError(f"{name} must be in YYYY-MM-DD format")
+                raise ValueError("%s must be in YYYY-MM-DD format", name)
 
     def download_filings(
         self,
@@ -78,7 +78,7 @@ class SECFilingDownloader:
         """
         if mode not in self.SUPPORTED_MODES:
             raise ValueError(
-                f"Unsupported mode: {mode}. Must be one of: {list(self.SUPPORTED_MODES)}")
+                "Unsupported mode: %s. Must be one of: %s" % (mode, list(self.SUPPORTED_MODES)))
 
         self._validate_date(start_date, "start_date")
         self._validate_date(end_date, "end_date")
@@ -91,7 +91,7 @@ class SECFilingDownloader:
         results: Dict[str, bool] = {}
 
         logger.info(
-            f"Beggining {filing_type} downloads for {list(self._symbols)}")
+            "Beggining %s downloads for %d symbol(s) in mode %s", filing_type, len(self._symbols), mode)
 
         for symbol in tqdm(sorted(self._symbols),
                            desc=f"Downloading {filing_type} files..."):

@@ -39,7 +39,7 @@ class PineconeEmbedder:
         uuids = [str(uuid4()) for _ in documents]
         self._vector_store.add_documents(documents=documents, ids=uuids)
         logger.info(
-            f"Added {len(documents)} documents to Pinecone vector store.")
+            "Added %d documents to Pinecone vector store.", len(documents))
 
     def add_index(self, index_name: str):
         """
@@ -57,9 +57,9 @@ class PineconeEmbedder:
             )
 
             self._current_index = index_name
-            logger.info(f"Created Pinecone index: {index_name}")
+            logger.info("Created Pinecone index: %s", index_name)
         else:
-            logger.info(f"Pinecone index already exists: {index_name}")
+            logger.info("Pinecone index already exists: %s", index_name)
 
     def _create_vector_store(self):
         """
@@ -95,7 +95,7 @@ class PineconeEmbedder:
         """
         results = self._vector_store.similarity_search(
             query=query, k=top_k)
-        logger.info(f"Queried Pinecone vector store with query: {query}")
+        logger.info("Queried Pinecone vector store with query: %s", query)
         return results
 
     def set_index(self, index_name: str):
@@ -109,6 +109,6 @@ class PineconeEmbedder:
             ValueError: If the specified Pinecone index does not exist.
         """
         if not self._pc.has_index(index_name):
-            raise ValueError(f"Pinecone index does not exist: {index_name}")
+            raise ValueError("Pinecone index does not exist: %s", index_name)
         self._current_index = index_name
-        logger.info(f"Current Pinecone index: {index_name}")
+        logger.info("Current Pinecone index: %s", index_name)

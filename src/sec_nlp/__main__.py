@@ -51,25 +51,25 @@ def setup_folders() -> (Path, Path):
 
     if output_folder.exists() and not output_folder.is_dir():
         raise NotADirectoryError(
-            f"Output path exists and is not a directory: {output_folder}")
+            "Output path exists and is not a directory: %s", output_folder)
 
     if downloads_folder.exists() and not downloads_folder.is_dir():
         raise NotADirectoryError(
-            f"Downloads path exists and is not a directory: {downloads_folder}")
+            "Downloads path exists and is not a directory: %s", downloads_folder)
 
     if output_folder.exists() and any(output_folder.iterdir()):
         shutil.rmtree(output_folder)
-        logger.info(f"Cleared existing output folder: {output_folder}")
+        logger.info("Cleared existing output folder: %s", output_folder)
 
     if downloads_folder.exists() and any(downloads_folder.iterdir()):
         shutil.rmtree(downloads_folder)
-        logger.info(f"Cleared existing downloads folder: {downloads_folder}")
+        logger.info("Cleared existing downloads folder: %s", downloads_folder)
 
     output_folder.mkdir(parents=True, exist_ok=True)
     downloads_folder.mkdir(parents=True, exist_ok=True)
 
-    logger.info(f"Output folder: {output_folder.resolve()}")
-    logger.info(f"Downloads folder: {downloads_folder.resolve()}")
+    logger.info("Output folder: %s", output_folder.resolve())
+    logger.info("Downloads folder: %s", downloads_folder.resolve())
 
     return output_folder, downloads_folder
 
@@ -79,7 +79,7 @@ def cleanup_downloads(downloads_folder: Path):
         logger.info("Cleaning up downloaded files...")
         shutil.rmtree(downloads_folder / "sec-edgar-filings")
     except Exception as e:
-        logger.error(f"Cleanup failed: {type(e).__name__}: {e}")
+        logger.error("Cleanup failed: %s: %s", type(e).__name__, e)
 
 
 def main():
@@ -92,7 +92,7 @@ def main():
 
     for symbol in args.symbols:
         logger.info(
-            f"Starting pipeline for {symbol} ({args.start_date} → {args.end_date})")
+            "Starting pipeline for %s (%s → %s)", symbol, args.start_date, args.end_date)
 
         pipeline_config = PipelineConfig(
             symbol=symbol,
@@ -110,7 +110,7 @@ def main():
     elapsed_time = time.perf_counter() - start_time
 
     cleanup_downloads(downloads_folder)
-    logger.info(f"Pipeline complete in {elapsed_time:.2f} seconds.")
+    logger.info("Pipeline complete in %.2f seconds.", elapsed_time)
 
 
 if __name__ == "__main__":
