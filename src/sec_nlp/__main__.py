@@ -34,7 +34,7 @@ def parse_args() -> argparse.Namespace:
                         help="End date (YYYY-MM-DD). Defaults to today.")
     parser.add_argument("--keyword", default="revenue",
                         help="Keyword to search in filings (default: revenue)")
-    parser.add_argument("--prompt_file", default="./prompts/sample_prompt.yml",
+    parser.add_argument("--prompt_file", default="./prompts/sample_prompt_1.yml",
                         help="Path to a .yml file containing the LLM prompt")
     parser.add_argument("--model_name", default="google/flan-t5-base",
                         help="The name of the LLM to use")
