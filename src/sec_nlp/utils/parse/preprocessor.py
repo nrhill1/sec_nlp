@@ -75,7 +75,7 @@ class PreProcessor:
         """
         if mode not in self.SUPPORTED_MODES:
             raise ValueError(
-                f"Unsupported mode: %s. Must be one of: %s" % (mode, list(self.SUPPORTED_MODES)))
+                "Unsupported mode: %s. Must be one of: %s" % (mode, list(self.SUPPORTED_MODES)))
 
         dir_path = self._filing_dir(symbol, mode)
         if not dir_path.exists():
@@ -97,7 +97,7 @@ class PreProcessor:
             Sequence[Document]: Transformed LangChain Documents
         """
         if not html_path.exists():
-            raise FileNotFoundError(f"File not found: {html_path.resolve()}")
+            raise FileNotFoundError("File not found: %s", html_path.resolve())
         loader = BSHTMLLoader(file_path=html_path,
                               bs_kwargs={"features": "xml"})
         html_docs = loader.load_and_split(self._html_splitter)
