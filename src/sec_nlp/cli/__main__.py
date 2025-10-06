@@ -119,9 +119,9 @@ def main():
         run_pipeline(pipeline_config)
 
     elapsed_time = time.perf_counter() - start_time
+    logger.info("Pipeline complete in %.2f seconds.", elapsed_time)
 
     cleanup_downloads(downloads_folder)
-    logger.info("Pipeline complete in %.2f seconds.", elapsed_time)
 
 
 if __name__ == "__main__":
