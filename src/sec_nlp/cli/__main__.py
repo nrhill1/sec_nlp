@@ -45,19 +45,29 @@ def parse_args() -> argparse.Namespace:
 
 
 def setup_folders() -> (Path, Path):
+    """
+    Setup data, output, and downloads folders.
+
+    Raises:
+        NotADirectoryError: _desc
+        NotADirectoryError: _description_
+
+    Returns:
+        _type_: _description_
+    """
     file_path = Path(__file__).resolve()
-    base_folder = file_path.parent.parent.parent / "data"
-    base_folder.mkdir(parents=True, exist_ok=True)
-    output_folder = base_folder / "output"
-    downloads_folder = base_folder / "downloads"
 
-    if output_folder.exists() and not output_folder.is_dir():
-        raise NotADirectoryError(
-            "Output path exists and is not a directory: %s", output_folder)
+    data_folder = file_path.parent.parent.parent / "data"
+    data_folder.mkdir(parents=True, exist_ok=True)
 
-    if downloads_folder.exists() and not downloads_folder.is_dir():
+    logger.info("Data folder: %s", data_folder.resolve())
+
+    if any(not i.is_dir() for i in [data_folder]):
         raise NotADirectoryError(
-            "Downloads path exists and is not a directory: %s", downloads_folder)
+            "Expected a directory but found a file in %s", data_folder.resolve())
+
+    output_folder = data_folder / "output"
+    downloads_folder = data_folder / "downloads"
 
     if output_folder.exists() and any(output_folder.iterdir()):
         shutil.rmtree(output_folder)
