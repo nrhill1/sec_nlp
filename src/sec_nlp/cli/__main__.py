@@ -11,7 +11,7 @@ from typing import List
 
 from dotenv import load_dotenv
 
-from .pipeline import run_pipeline, PipelineConfig
+from sec_nlp.pipelines import run_pipeline, PipelineConfig
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO,

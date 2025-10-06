@@ -13,7 +13,7 @@ from tqdm import tqdm
 from langchain.prompts import load_prompt
 
 from sec_nlp.chains import SECFilingSummaryChain
-from sec_nlp.embeddings.pinecone import PineconeEmbedder
+from sec_nlp.embeddings import PineconeEmbedder
 from sec_nlp.llms import LocalT5Wrapper
 from sec_nlp.utils import SECFilingDownloader, PreProcessor
 
