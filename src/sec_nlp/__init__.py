@@ -6,6 +6,7 @@ from .embeddings import *
 from .llms import *
 from .pipelines import *
 from .utils import *
+from .cli import main as cli_main
 
 
-__all__ = ("utils", "chains", "embeddings", "llms", "pipelines",)
+__all__ = ("utils", "chains", "embeddings", "llms", "pipelines", "cli_main")
