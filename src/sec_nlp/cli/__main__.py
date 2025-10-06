@@ -49,11 +49,10 @@ def setup_folders() -> (Path, Path):
     Setup data, output, and downloads folders.
 
     Raises:
-        NotADirectoryError: _desc
-        NotADirectoryError: _description_
+        NotADirectoryError: If a file is found where a directory is expected within data folder.
 
     Returns:
-        _type_: _description_
+        Tuple[Path, Path]: Paths to the output and downloads folders.
     """
     file_path = Path(__file__).resolve()
 
