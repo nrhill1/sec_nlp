@@ -45,7 +45,9 @@ def parse_args() -> argparse.Namespace:
 
 
 def setup_folders() -> (Path, Path):
-    base_folder = Path(__file__).parent.parent.resolve()
+    file_path = Path(__file__).resolve()
+    base_folder = file_path.parent.parent.parent / "data"
+    base_folder.mkdir(parents=True, exist_ok=True)
     output_folder = base_folder / "output"
     downloads_folder = base_folder / "downloads"
 
