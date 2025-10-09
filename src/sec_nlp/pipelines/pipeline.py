@@ -103,8 +103,7 @@ class Pipeline(BaseModel):
         if Path(p).exists():
             return Path(p)
         try:
-            prompt_path = resources.files(
-                "sec_nlp.prompts") / "sample_prompt_1.yml"
+            prompt_path = resources.files("sec_nlp.prompts") / "sample_prompt_1.yml"
             if prompt_path.is_file():
                 return Path(prompt_path)
         except FileNotFoundError as e:
@@ -152,8 +151,7 @@ class Pipeline(BaseModel):
         self.pinecone_metric = self.pinecone_metric or os.getenv(
             "PINECONE_METRIC", "cosine"
         )
-        self.pinecone_cloud = self.pinecone_cloud or os.getenv(
-            "PINECONE_CLOUD", "aws")
+        self.pinecone_cloud = self.pinecone_cloud or os.getenv("PINECONE_CLOUD", "aws")
         self.pinecone_region = self.pinecone_region or os.getenv(
             "PINECONE_REGION", "us-east-1"
         )
@@ -221,8 +219,7 @@ class Pipeline(BaseModel):
         self._ensure_pinecone()
         if not texts:
             return []
-        res = self._pc.inference.embed(
-            model=str(self.pinecone_model), inputs=texts)
+        res = self._pc.inference.embed(model=str(self.pinecone_model), inputs=texts)
         rows = getattr(res, "data", None) or res.get("data", [])
         return [row.get("values") or row.get("embedding") or [] for row in rows]
 
@@ -296,8 +293,7 @@ class Pipeline(BaseModel):
         )
 
         pre = self._get_preprocessor()
-        html_paths = pre.html_paths_for_symbol(
-            symbol, mode=self.mode, limit=self.limit)
+        html_paths = pre.html_paths_for_symbol(symbol, mode=self.mode, limit=self.limit)
         if not html_paths:
             logger.warning("No filings found for %s. Skipping...", symbol)
             return []
@@ -347,7 +343,7 @@ class Pipeline(BaseModel):
             summaries: list[dict] = []
 
             for i in range(0, len(inputs), self.batch_size):
-                window = inputs[i: i + self.batch_size]
+                window = inputs[i : i + self.batch_size]
                 try:
                     results = graph.batch(window)
                     for r in results:
@@ -360,8 +356,7 @@ class Pipeline(BaseModel):
                         )
                         summaries.append(payload_dict)
                 except Exception as e:
-                    logger.error("Batch invocation failed: %s: %s",
-                                 type(e).__name__, e)
+                    logger.error("Batch invocation failed: %s: %s", type(e).__name__, e)
                     traceback.print_exc()
                     summaries.extend(
                         [
