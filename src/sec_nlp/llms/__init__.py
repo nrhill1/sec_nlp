@@ -1,3 +1,3 @@
-from .local_t5_wrapper import LocalT5Wrapper
+from .local_t5_wrapper import LocalModelWrapper
 
-__all__ = ("LocalT5Wrapper",)
+__all__ = ["LocalModelWrapper"]

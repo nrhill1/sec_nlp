@@ -1,127 +1,148 @@
-import os
-import time
-import json
 import argparse
 import logging
 import shutil
-import traceback
+import time
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import List
+from importlib.resources import files
 
 from dotenv import load_dotenv
 
-from sec_nlp.pipelines import run_pipeline, PipelineConfig
+from sec_nlp.pipelines import Pipeline
 
 logger = logging.getLogger(__name__)
-logging.basicConfig(level=logging.INFO,
-                    format="%(asctime)s - %(levelname)s - %(message)s")
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
+)
+
+
+def setup_logging(verbose: bool):
+    if verbose:
+        logging.getLogger().setLevel(logging.DEBUG)
+        logger.debug("Verbose logging enabled (DEBUG).")
+
+
+def setup_folders(fresh: bool) -> tuple[Path, Path]:
+    here = Path(__file__).resolve()
+    data_folder = here.parent.parent / "data"
+    data_folder.mkdir(parents=True, exist_ok=True)
+
+    output_folder = data_folder / "output"
+    downloads_folder = data_folder / "downloads"
+
+    if fresh:
+        for folder in (output_folder, downloads_folder):
+            if folder.exists() and any(folder.iterdir()):
+                shutil.rmtree(folder)
+                logger.info("Cleared existing folder: %s", folder)
+
+    output_folder.mkdir(parents=True, exist_ok=True)
+    downloads_folder.mkdir(parents=True, exist_ok=True)
+    logger.info("Output folder: %s", output_folder.resolve())
+    logger.info("Downloads folder: %s", downloads_folder.resolve())
+    return output_folder, downloads_folder
+
+
+def cleanup_downloads(downloads_folder: Path):
+    try:
+        shutil.rmtree(downloads_folder / "sec-edgar-filings")
+        logger.info("Cleaned up downloaded SEC files.")
+    except Exception as e:
+        logger.error("Cleanup failed: %s: %s", type(e).__name__, e)
+
+
+def _default_prompt_path() -> str:
+    return str(files("sec_nlp.prompts").joinpath("sample_prompt_1.yml"))
 
 
 def parse_args() -> argparse.Namespace:
     today = datetime.today()
     one_year_ago = today - timedelta(days=365)
 
-    parser = argparse.ArgumentParser(
-        description="Run summarization pipeline on SEC filings."
+    p = argparse.ArgumentParser(description="Run SEC NLP pipeline over filings.")
+    p.add_argument(
+        "symbols", nargs="*", default=["AAPL"], help="Ticker symbols (default: AAPL)."
     )
-
-    parser.add_argument(
-        "symbols", nargs="+", help="Stock symbols to fetch SEC filings for (space-separated)")
-    parser.add_argument("--start_date", default=one_year_ago.strftime("%Y-%m-%d"),
-                        help="Start date (YYYY-MM-DD). Defaults to one year ago.")
-    parser.add_argument("--end_date", default=today.strftime("%Y-%m-%d"),
-                        help="End date (YYYY-MM-DD). Defaults to today.")
-    parser.add_argument("--keyword", default="revenue",
-                        help="Keyword to search in filings (default: revenue)")
-    parser.add_argument("--prompt_file", default="./prompts/sample_prompt_1.yml",
-                        help="Path to a .yml file containing the LLM prompt")
-    parser.add_argument("--model_name", default="google/flan-t5-base",
-                        help="The name of the LLM to use")
-
-    args = parser.parse_args()
-
-    return args
-
-
-def setup_folders() -> (Path, Path):
-    """
-    Setup data, output, and downloads folders.
-
-    Raises:
-        NotADirectoryError: If a file is found where a directory is expected within data folder.
-
-    Returns:
-        Tuple[Path, Path]: Paths to the output and downloads folders.
-    """
-    file_path = Path(__file__).resolve()
-
-    data_folder = file_path.parent.parent.parent / "data"
-    data_folder.mkdir(parents=True, exist_ok=True)
-
-    logger.info("Data folder: %s", data_folder.resolve())
-
-    if any(not i.is_dir() for i in [data_folder]):
-        raise NotADirectoryError(
-            "Expected a directory but found a file in %s", data_folder.resolve())
-
-    output_folder = data_folder / "output"
-    downloads_folder = data_folder / "downloads"
-
-    if output_folder.exists() and any(output_folder.iterdir()):
-        shutil.rmtree(output_folder)
-        logger.info("Cleared existing output folder: %s", output_folder)
-
-    if downloads_folder.exists() and any(downloads_folder.iterdir()):
-        shutil.rmtree(downloads_folder)
-        logger.info("Cleared existing downloads folder: %s", downloads_folder)
-
-    output_folder.mkdir(parents=True, exist_ok=True)
-    downloads_folder.mkdir(parents=True, exist_ok=True)
-
-    logger.info("Output folder: %s", output_folder.resolve())
-    logger.info("Downloads folder: %s", downloads_folder.resolve())
-
-    return output_folder, downloads_folder
-
-
-def cleanup_downloads(downloads_folder: Path):
-    try:
-        logger.info("Cleaning up downloaded files...")
-        shutil.rmtree(downloads_folder / "sec-edgar-filings")
-    except Exception as e:
-        logger.error("Cleanup failed: %s: %s", type(e).__name__, e)
+    p.add_argument(
+        "--mode",
+        choices=["annual", "quarterly"],
+        default="annual",
+        help="10-K or 10-Q mode.",
+    )
+    p.add_argument(
+        "--start_date",
+        default=one_year_ago.strftime("%Y-%m-%d"),
+        help="Start date (YYYY-MM-DD).",
+    )
+    p.add_argument(
+        "--end_date", default=today.strftime("%Y-%m-%d"), help="End date (YYYY-MM-DD)."
+    )
+    p.add_argument(
+        "--keyword", default="revenue", help="Keyword to filter filing chunks."
+    )
+    p.add_argument(
+        "--prompt_file",
+        default=_default_prompt_path(),
+        help="Prompt YAML path or packaged file.",
+    )
+    p.add_argument(
+        "--model_name", default="google/flan-t5-base", help="LLM model name."
+    )
+    p.add_argument("--limit", type=int, default=1)
+    p.add_argument("--max-new-tokens", type=int, default=1024)
+    p.add_argument("--max-retries", type=int, default=2)
+    p.add_argument("--batch-size", type=int, default=16)
+    p.add_argument("--no-require-json", action="store_true")
+    p.add_argument("--fresh", action="store_true", help="Clear old output/downloads.")
+    p.add_argument("--no-cleanup", action="store_true", help="Keep downloaded files.")
+    p.add_argument("--verbose", action="store_true", help="Enable debug logging.")
+    p.add_argument(
+        "--dry-run", action="store_true", help="Skip Pinecone provisioning and upserts."
+    )
+    return p.parse_args()
 
 
 def main():
-    args = parse_args()
     load_dotenv()
 
-    output_folder, downloads_folder = setup_folders()
+    args = parse_args()
+    setup_logging(args.verbose)
+    output_folder, downloads_folder = setup_folders(fresh=args.fresh)
 
-    start_time = time.perf_counter()
+    pipe = Pipeline(
+        mode=args.mode,
+        start_date=args.start_date,
+        end_date=args.end_date,
+        keyword=args.keyword,
+        prompt_file=Path(args.prompt_file),
+        model_name=args.model_name,
+        out_path=output_folder,
+        dl_path=downloads_folder,
+        limit=args.limit,
+        max_new_tokens=args.max_new_tokens,
+        require_json=not args.no_require_json,
+        max_retries=args.max_retries,
+        batch_size=args.batch_size,
+        dry_run=args.dry_run,
+    )
 
-    for symbol in args.symbols:
+    start = time.perf_counter()
+    logger.info("Starting pipeline for symbols: %s", ", ".join(args.symbols))
+
+    results = pipe.run_all(args.symbols)
+
+    elapsed = time.perf_counter() - start
+    logger.info("Pipeline complete in %.2f seconds.", elapsed)
+
+    for sym, paths in results.items():
+        logger.info("[%s] wrote %d file(s).", sym, len(paths))
+
+    if not args.no_cleanup:
+        cleanup_downloads(downloads_folder)
+    else:
         logger.info(
-            "Starting pipeline for %s (%s → %s)", symbol, args.start_date, args.end_date)
-
-        pipeline_config = PipelineConfig(
-            symbol=symbol,
-            start_date=args.start_date,
-            end_date=args.end_date,
-            keyword=args.keyword,
-            prompt_file=args.prompt_file,
-            model_name=args.model_name,
-            out_path=output_folder,
-            dl_path=downloads_folder
+            "--no-cleanup set; leaving downloads at %s", downloads_folder.resolve()
         )
-
-        run_pipeline(pipeline_config)
-
-    elapsed_time = time.perf_counter() - start_time
-    logger.info("Pipeline complete in %.2f seconds.", elapsed_time)
-
-    cleanup_downloads(downloads_folder)
 
 
 if __name__ == "__main__":

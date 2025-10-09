@@ -1,3 +1,4 @@
-from .pipeline import run_pipeline, PipelineConfig
+from .pipeline import Pipeline
+from ..types import FilingMode
 
-__all__ = ("run_pipeline", "PipelineConfig")
+__all__ = ["Pipeline", "FilingMode"]

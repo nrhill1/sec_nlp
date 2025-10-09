@@ -1,127 +1,393 @@
-import os
-import time
 import json
 import logging
-import shutil
+import os
+import re
 import traceback
-from dataclasses import dataclass
+from datetime import date, datetime
 from pathlib import Path
-from typing import List
 
-from tqdm import tqdm
+import importlib.resources as resources
 
-from langchain.prompts import load_prompt
+from langchain_core.prompts.loading import load_prompt
+from pydantic import BaseModel, Field, computed_field, field_validator, PrivateAttr
+from pinecone import Pinecone, ServerlessSpec
+from uuid import uuid4
 
-from sec_nlp.chains import SECFilingSummaryChain
-from sec_nlp.embeddings import PineconeEmbedder
-from sec_nlp.llms import LocalT5Wrapper
-from sec_nlp.utils import SECFilingDownloader, PreProcessor
-
+from sec_nlp.llms import LocalModelWrapper
+from sec_nlp.utils import SECFilingDownloader, Preprocessor
+from sec_nlp.chains import build_sec_summarizer
+from sec_nlp.types import FilingMode
 
 logger = logging.getLogger(__name__)
 
 
-@dataclass
-class PipelineConfig:
-    symbol: str
-    start_date: str
-    end_date: str
+def _slugify(s: str) -> str:
+    return re.sub(r"[^a-z0-9-]+", "-", s.lower()).strip("-")
+
+
+def _safe_name(s: str, allow: str = r"a-zA-Z0-9._-") -> str:
+    return re.sub(r"[^%s]+" % allow, "_", s)[:120]
+
+
+class Pipeline(BaseModel):
+    """
+    End-to-end SEC filing processing pipeline.
+    """
+
+    mode: FilingMode
+    start_date: date
+    end_date: date
     keyword: str
-    prompt_file: str
-    model_name: str
-    out_path: Path
-    dl_path: Path
+    model_name: str = "google/flan-t5-base"
 
+    prompt_file: Path = Field(
+        default_factory=lambda: Path("./prompts/sample_prompt_1.yml")
+    )
+    out_path: Path = Field(default_factory=lambda: Path("./data/output"))
+    dl_path: Path = Field(default_factory=lambda: Path("./data/downloads"))
 
-def run_pipeline(config: PipelineConfig) -> List[Path]:
-    """
-    Run summarization pipeline for one symbol across all filings.
-    Returns a list of output paths (one per document).
+    limit: int | None = None
+    max_new_tokens: int = 1024
+    require_json: bool = True
+    max_retries: int = 2
+    batch_size: int = 16
 
-    Args:
-        config (PipelineConfig): Configuration parameters
+    email: str | None = None
+    pinecone_api_key: str | None = None
 
-    Returns:
-        List[Path]: List of output file paths
-    """
+    pinecone_model: str | None = None
+    pinecone_metric: str | None = None
+    pinecone_cloud: str | None = None
+    pinecone_region: str | None = None
+    pinecone_dimension: int | None = None
+    pinecone_namespace: str | None = None
 
-    symbol = config.symbol
-    start_date = config.start_date
-    end_date = config.end_date
-    keyword = config.keyword
-    prompt_file = config.prompt_file
-    model_name = config.model_name
-    out_path = config.out_path
-    dl_path = config.dl_path
+    dry_run: bool = False
 
-    downloader = SECFilingDownloader(
-        os.getenv("EMAIL", "xxxxxx_xxxx@gmail.com"), dl_path)
-    downloader.add_symbol(symbol)
-    downloader.download_filings(start_date=start_date, end_date=end_date)
+    _pre: Preprocessor | None = PrivateAttr(default=None)
+    _pc: Pinecone | None = PrivateAttr(default=None)
+    _index = PrivateAttr(default=None)
 
-    preprocessor = PreProcessor(dl_path)
-    html_paths = preprocessor.html_paths_for_symbol(symbol)
+    @field_validator("start_date")
+    @classmethod
+    def _check_start(cls, v: date) -> date:
+        if v > date.today():
+            raise ValueError("start_date cannot be in the future.")
+        return v
 
-    if not html_paths:
-        logger.warning("No filings found for %s. Skipping...", symbol)
-        return []
+    @field_validator("end_date")
+    @classmethod
+    def _check_order(cls, v: date, info):
+        start_date = info.data.get("start_date")
+        if start_date and v <= start_date:
+            raise ValueError("end_date cannot be on or before start_date.")
+        return v
 
-    prompt = load_prompt(Path(prompt_file))
-    llm = LocalT5Wrapper(model_name, max_new_tokens=1024)
-    chain = SECFilingSummaryChain(prompt=prompt, llm=llm)
+    @field_validator("start_date", "end_date")
+    @classmethod
+    def _not_too_old(cls, v: date) -> date:
+        if v < date(1993, 1, 1):
+            raise ValueError("Dates before 1993-01-01 are not supported.")
+        return v
 
-    output_files = []
+    @field_validator("keyword")
+    @classmethod
+    def _nonempty_keyword(cls, v: str) -> str:
+        v = (v or "").strip()
+        if not v:
+            raise ValueError("keyword must be a non-empty string")
+        return v
 
-    pinecone_api_key = os.getenv("PINECONE_API_KEY")
-    if not pinecone_api_key:
-        raise ValueError("PINECONE_API_KEY environment variable not set.")
+    @field_validator("prompt_file")
+    @classmethod
+    def _prompt_exists(cls, p: Path | str):
+        if Path(p).exists():
+            return Path(p)
+        try:
+            prompt_path = resources.files("sec_nlp.prompts") / "sample_prompt_1.yml"
+            if prompt_path.is_file():
+                return Path(prompt_path)
+        except Exception:
+            pass
+        raise FileNotFoundError("Prompt file not found: %s" % p)
 
-    embedder = PineconeEmbedder(
-        pinecone_api_key, initial_index=f"{symbol.lower()}-{keyword.lower()}-docs")
+    @field_validator("out_path", "dl_path")
+    @classmethod
+    def _ensure_dirs(cls, v: Path) -> Path:
+        v = Path(v)
+        v.mkdir(parents=True, exist_ok=True)
+        return v
 
-    for html_path in html_paths:
-        chunks = preprocessor.transform_html(html_path)
-        relevant_chunks = [
-            chunk for chunk in chunks if keyword.lower() in chunk.page_content.lower()
-        ]
+    @field_validator("limit")
+    @classmethod
+    def _positive_limit(cls, v: int | None) -> int | None:
+        if v is not None and v <= 0:
+            raise ValueError("limit must be a positive integer when provided")
+        return v
 
-        embedder.add_documents(relevant_chunks)
+    @field_validator("max_new_tokens", "max_retries", "batch_size")
+    @classmethod
+    def _positive_ints(cls, v: int) -> int:
+        if int(v) <= 0:
+            raise ValueError("must be a positive integer")
+        return int(v)
 
-        if not relevant_chunks:
-            logger.warning(
-                "No chunks matched keyword '%s' in %s.", keyword, html_path.name)
-            continue
+    @computed_field  # type: ignore[misc]
+    @property
+    def keyword_lower(self) -> str:
+        return self.keyword.lower()
+
+    def _index_slug(self, symbol: str) -> str:
+        return _slugify("%s-%s-docs" % (symbol.upper(), self.keyword))
+
+    def model_post_init(self, __ctx):
+        if self.email is None:
+            self.email = os.getenv("EMAIL", "xxxxxx_xxxx@gmail.com")
+
+        if self.pinecone_api_key is None:
+            self.pinecone_api_key = os.getenv("PINECONE_API_KEY")
+
+        self.pinecone_model = self.pinecone_model or os.getenv(
+            "PINECONE_MODEL", "multilingual-e5-large"
+        )
+        self.pinecone_metric = self.pinecone_metric or os.getenv(
+            "PINECONE_METRIC", "cosine"
+        )
+        self.pinecone_cloud = self.pinecone_cloud or os.getenv("PINECONE_CLOUD", "aws")
+        self.pinecone_region = self.pinecone_region or os.getenv(
+            "PINECONE_REGION", "us-east-1"
+        )
+
+        dim_env = os.getenv("PINECONE_DIMENSION")
+        if self.pinecone_dimension is None and dim_env:
+            try:
+                self.pinecone_dimension = int(dim_env)
+            except ValueError:
+                logger.warning(
+                    "Invalid PINECONE_DIMENSION=%r; will infer at runtime.", dim_env
+                )
+
+        ns_env = os.getenv("PINECONE_NAMESPACE")
+        if self.pinecone_namespace is None and ns_env:
+            self.pinecone_namespace = ns_env
+
+        if not self.dry_run and not self.pinecone_api_key:
+            raise ValueError("PINECONE_API_KEY not set and dry_run is False.")
+
+    def _get_preprocessor(self) -> Preprocessor:
+        if self._pre is None:
+            self._pre = Preprocessor(downloads_folder=self.dl_path)
+        return self._pre
+
+    def _ensure_pinecone(self):
+        if self._pc is None:
+            self._pc = Pinecone(api_key=str(self.pinecone_api_key))
+
+    def _ensure_index(self, index_name: str):
+        self._ensure_pinecone()
+        if self.pinecone_dimension is None:
+            dim = self._infer_dimension(str(self.pinecone_model))
+            self.pinecone_dimension = int(dim)
+            logger.info(
+                "Inferred embedding dimension for %s = %d",
+                self.pinecone_model,
+                self.pinecone_dimension,
+            )
+        if not self._pc.has_index(index_name):
+            logger.info("Creating Pinecone index: %s", index_name)
+            self._pc.create_index(
+                name=index_name,
+                dimension=int(self.pinecone_dimension),
+                metric=str(self.pinecone_metric),
+                spec=ServerlessSpec(
+                    cloud=str(self.pinecone_cloud), region=str(self.pinecone_region)
+                ),
+            )
+        self._index = self._pc.Index(index_name)
+        logger.info("Using Pinecone index: %s", index_name)
+
+    def _infer_dimension(self, model: str) -> int:
+        self._ensure_pinecone()
+        vecs = self._pc.inference.embed(model=model, inputs=["ok"])
+        data = getattr(vecs, "data", None) or vecs.get("data", [])
+        if not data or not (data[0].get("values") or data[0].get("embedding")):
+            raise RuntimeError(
+                "Could not infer embedding dimension for model: %s" % model
+            )
+        values = data[0].get("values") or data[0].get("embedding")
+        return len(values)
+
+    def _embed_texts(self, texts: list[str]) -> list[list[float]]:
+        self._ensure_pinecone()
+        if not texts:
+            return []
+        res = self._pc.inference.embed(model=str(self.pinecone_model), inputs=texts)
+        rows = getattr(res, "data", None) or res.get("data", [])
+        return [row.get("values") or row.get("embedding") or [] for row in rows]
+
+    def _upsert_texts(
+        self,
+        texts: list[str],
+        metadata: list[dict] | None = None,
+        ids: list[str] | None = None,
+        namespace: str | None = None,
+    ) -> list[str]:
+
+        if not texts:
+            return []
+        vectors = self._embed_texts(texts)
+        if ids is None:
+            ids = [str(uuid4()) for _ in texts]
+        if metadata is None:
+            metadata = [{} for _ in texts]
+        payload = []
+        for _id, vec, meta in zip(ids, vectors, metadata):
+            payload.append({"id": _id, "values": vec, "metadata": meta or {}})
+        self._index.upsert(vectors=payload, namespace=namespace)
+        logger.info(
+            "Upserted %d vectors into index %s",
+            len(payload),
+            getattr(self._index, "name", "<index>"),
+        )
+        return ids
+
+    def _make_graph(self):
+        prompt = load_prompt(str(self.prompt_file))
+        llm = LocalModelWrapper(
+            model_name=self.model_name, max_new_tokens=self.max_new_tokens
+        )
+        return build_sec_summarizer(
+            prompt=prompt,
+            llm=llm,
+            require_json=self.require_json,
+            max_retries=self.max_retries,
+        )
+
+    def run_all(self, symbols: list[str]) -> dict[str, list[Path]]:
+        out: dict[str, list[Path]] = {}
+        for sym in symbols:
+            out[sym] = self.run(sym)
+        return out
+
+    def run(self, symbol: str) -> list[Path]:
+
+        symbol = symbol.strip().upper()
 
         logger.info(
-            "%d relevant chunks found in %s. Summarizing...", len(relevant_chunks), html_path.name)
+            "Pipeline start: %s (%s → %s) mode=%s (form=%s) keyword=%r dry_run=%s",
+            symbol,
+            self.start_date,
+            self.end_date,
+            self.mode.value,
+            self.mode.form,
+            self.keyword,
+            self.dry_run,
+        )
 
-        summaries = []
-        for chunk in tqdm(relevant_chunks,
-                          desc=f"Summarizing {symbol}-{html_path.stem}"):
-            try:
-                result = chain.invoke({
-                    "symbol": symbol,
-                    "chunk": chunk.page_content,
-                    "search_term": keyword
-                })
-                if not result["summary"]:
-                    logger.warning(
-                        "Failed to parse output for %s: %s", html_path.name, result)
-                summaries.append(result.get(
-                    "summary", {"n/a": "No summary produced."}))
-            except Exception as e:
-                logger.error(
-                    "Model invocation failed: %s:  %s", type(e).__name__, e)
-                traceback.print_exc()
+        downloader = SECFilingDownloader(
+            email=str(self.email), downloads_folder=self.dl_path
+        )
+        downloader.add_symbol(symbol)
+        downloader.download_filings(
+            start_date=self.start_date,
+            end_date=self.end_date,
+            mode=self.mode,
+        )
 
-        safe_keyword = keyword.lower().replace(" ", "_")
-        doc_output_path = out_path / \
-            f"{symbol.lower()}_{safe_keyword}_{html_path.stem}_summary.json"
-        with open(doc_output_path, "w") as f:
-            json.dump({"symbol": symbol, "document": html_path.name,
-                      "summaries": summaries}, f, indent=2)
+        pre = self._get_preprocessor()
+        html_paths = pre.html_paths_for_symbol(symbol, mode=self.mode, limit=self.limit)
+        if not html_paths:
+            logger.warning("No filings found for %s. Skipping...", symbol)
+            return []
 
-        logger.info("Summary written to %s", doc_output_path.resolve())
-        output_files.append(doc_output_path)
+        graph = self._make_graph()
 
-    return output_files
+        if not self.dry_run:
+            logger.info("Provisioning Pinecone index for %s...", symbol)
+            index_name = self._index_slug(symbol)
+            self._ensure_index(index_name)
+        else:
+            logger.info(
+                "Dry-run set: skipping Pinecone index provisioning and upserts."
+            )
+
+        output_files: list[Path] = []
+
+        for html_path in html_paths:
+            chunks = pre.transform_html(html_path)
+            relevant = [
+                c for c in chunks if self.keyword_lower in c.page_content.lower()
+            ]
+            if not relevant:
+                logger.warning(
+                    "No chunks matched keyword %r in %s.", self.keyword, html_path.name
+                )
+                continue
+
+            texts = [c.page_content for c in relevant]
+            metas = [{"source": html_path.name} for _ in relevant]
+
+            if not self.dry_run:
+                self._upsert_texts(
+                    texts, metadata=metas, namespace=self.pinecone_namespace
+                )
+
+            logger.info(
+                "%d relevant chunks found in %s. Summarizing...",
+                len(relevant),
+                html_path.name,
+            )
+
+            inputs = [
+                {"symbol": symbol, "chunk": t, "search_term": self.keyword}
+                for t in texts
+            ]
+            summaries: list[dict] = []
+
+            for i in range(0, len(inputs), self.batch_size):
+                window = inputs[i : i + self.batch_size]
+                try:
+                    results = graph.batch(window)
+                    for r in results:
+                        payload_dict = r.get(
+                            "summary",
+                            {
+                                "summary": "(null)",
+                                "error": "No summary payload returned.",
+                            },
+                        )
+                        summaries.append(payload_dict)
+                except Exception as e:
+                    logger.error("Batch invocation failed: %s: %s", type(e).__name__, e)
+                    traceback.print_exc()
+                    summaries.extend(
+                        [
+                            {
+                                "summary": None,
+                                "error": "Exception: %s: %s" % (type(e).__name__, e),
+                            }
+                            for _ in window
+                        ]
+                    )
+
+            safe_kw = re.sub(r"[^a-z0-9_-]+", "_", self.keyword_lower)
+            safe_doc = _safe_name(html_path.stem)
+            out_file = self.out_path / (
+                "%s_%s_%s.summary.json" % (symbol.lower(), safe_kw, safe_doc)
+            )
+
+            with open(out_file, "w") as f:
+                json.dump(
+                    {
+                        "symbol": symbol,
+                        "document": html_path.name,
+                        "summaries": summaries,
+                    },
+                    f,
+                    indent=2,
+                )
+
+            logger.info("Summary written to %s", out_file.resolve())
+            output_files.append(out_file)
+
+        return output_files
