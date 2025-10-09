@@ -1,17 +1,24 @@
+from __future__ import annotations
+
 import json
 import logging
 import os
 import re
 import traceback
 from datetime import date
+from os import fspath
 from pathlib import Path
+from typing import Any, Mapping, Sequence, Optional
 from uuid import uuid4
 
 import importlib.resources as resources
 from langchain_core.prompts.loading import load_prompt
+from langchain_core.runnables import RunnableLambda
 from pinecone import Pinecone, ServerlessSpec
 from pydantic import BaseModel, Field, computed_field, field_validator, PrivateAttr
 
+from sec_nlp import __version__
+from sec_nlp import _default_prompt_path
 from sec_nlp.llms import LocalModelWrapper
 from sec_nlp.utils import SECFilingDownloader, Preprocessor
 from sec_nlp.chains import build_sec_summarizer
@@ -39,9 +46,7 @@ class Pipeline(BaseModel):
     keyword: str
     model_name: str = "google/flan-t5-base"
 
-    prompt_file: Path = Field(
-        default_factory=lambda: Path("./prompts/sample_prompt_1.yml")
-    )
+    prompt_file: Path = Field(default_factory=_default_prompt_path)
     out_path: Path = Field(default_factory=lambda: Path("./data/output"))
     dl_path: Path = Field(default_factory=lambda: Path("./data/downloads"))
 
@@ -139,7 +144,7 @@ class Pipeline(BaseModel):
     def _index_slug(self, symbol: str) -> str:
         return _slugify("%s-%s-docs" % (symbol.upper(), self.keyword))
 
-    def model_post_init(self, __ctx):
+    def model_post_init(self, __ctx) -> None:
         if self.email is None:
             self.email = os.getenv("EMAIL", "xxxxxx_xxxx@gmail.com")
 
@@ -179,12 +184,13 @@ class Pipeline(BaseModel):
             self._pre = Preprocessor(downloads_folder=self.dl_path)
         return self._pre
 
-    def _ensure_pinecone(self):
+    def _ensure_pinecone(self) -> Pinecone:
         if self._pc is None:
             self._pc = Pinecone(api_key=str(self.pinecone_api_key))
+        return self._pc
 
-    def _ensure_index(self, index_name: str):
-        self._ensure_pinecone()
+    def _ensure_index(self, index_name: str) -> None:
+        pc = self._ensure_pinecone()
         if self.pinecone_dimension is None:
             dim = self._infer_dimension(str(self.pinecone_model))
             self.pinecone_dimension = int(dim)
@@ -193,9 +199,9 @@ class Pipeline(BaseModel):
                 self.pinecone_model,
                 self.pinecone_dimension,
             )
-        if not self._pc.has_index(index_name):
+        if not pc.has_index(index_name):
             logger.info("Creating Pinecone index: %s", index_name)
-            self._pc.create_index(
+            pc.create_index(
                 name=index_name,
                 dimension=int(self.pinecone_dimension),
                 metric=str(self.pinecone_metric),
@@ -203,37 +209,35 @@ class Pipeline(BaseModel):
                     cloud=str(self.pinecone_cloud), region=str(self.pinecone_region)
                 ),
             )
-        self._index = self._pc.Index(index_name)
+        self._index = pc.Index(index_name)
         logger.info("Using Pinecone index: %s", index_name)
 
     def _infer_dimension(self, model: str) -> int:
-        self._ensure_pinecone()
-        vecs = self._pc.inference.embed(model=model, inputs=["ok"])
-        data = getattr(vecs, "data", None) or vecs.get("data", [])
+        pc = self._ensure_pinecone()
+        vecs: Any = pc.inference.embed(model=model, inputs=["ok"])
+        data = getattr(vecs, "data", None) or (
+            vecs.get("data", []) if isinstance(vecs, Mapping) else [])
         if not data or not (data[0].get("values") or data[0].get("embedding")):
-            raise RuntimeError(
-                "Could not infer embedding dimension for model: %s" % model
-            )
-        values = data[0].get("values") or data[0].get("embedding")
+            raise RuntimeError(f"Could not infer embedding dimension for model: {model}")
+        values: Sequence[float] = data[0].get("values") or data[0].get("embedding")
         return len(values)
 
     def _embed_texts(self, texts: list[str]) -> list[list[float]]:
-        self._ensure_pinecone()
         if not texts:
             return []
-        res = self._pc.inference.embed(
-            model=str(self.pinecone_model), inputs=texts)
-        rows = getattr(res, "data", None) or res.get("data", [])
-        return [row.get("values") or row.get("embedding") or [] for row in rows]
+        pc = self._ensure_pinecone()
+        res: Any = pc.inference.embed(model=str(self.pinecone_model), inputs=texts)
+        rows = getattr(res, "data", None) or (
+            res.get("data", []) if isinstance(res, Mapping) else [])
+        return [list(row.get("values") or row.get("embedding") or []) for row in rows]
 
     def _upsert_texts(
         self,
         texts: list[str],
-        metadata: list[dict] | None = None,
+        metadata: list[dict[str, Any]] | None = None,
         ids: list[str] | None = None,
         namespace: str | None = None,
     ) -> list[str]:
-
         if not texts:
             return []
         vectors = self._embed_texts(texts)
@@ -241,10 +245,14 @@ class Pipeline(BaseModel):
             ids = [str(uuid4()) for _ in texts]
         if metadata is None:
             metadata = [{} for _ in texts]
-        payload = []
+
+        payload: list[dict[str, Any]] = []
         for _id, vec, meta in zip(ids, vectors, metadata):
             payload.append({"id": _id, "values": vec, "metadata": meta or {}})
+
+        assert self._index is not None, "Pinecone index not initialized"
         self._index.upsert(vectors=payload, namespace=namespace)
+
         logger.info(
             "Upserted %d vectors into index %s",
             len(payload),
@@ -252,7 +260,7 @@ class Pipeline(BaseModel):
         )
         return ids
 
-    def _make_graph(self):
+    def _make_graph(self) -> RunnableLambda:
         prompt = load_prompt(str(self.prompt_file))
         llm = LocalModelWrapper(
             model_name=self.model_name, max_new_tokens=self.max_new_tokens
@@ -309,9 +317,7 @@ class Pipeline(BaseModel):
             index_name = self._index_slug(symbol)
             self._ensure_index(index_name)
         else:
-            logger.info(
-                "Dry-run set: skipping Pinecone index provisioning and upserts."
-            )
+            logger.info("Dry-run set: skipping Pinecone index provisioning and upserts.")
 
         output_files: list[Path] = []
 
@@ -344,7 +350,7 @@ class Pipeline(BaseModel):
                 {"symbol": symbol, "chunk": t, "search_term": self.keyword}
                 for t in texts
             ]
-            summaries: list[dict] = []
+            summaries: list[dict[str, Any]] = []
 
             for i in range(0, len(inputs), self.batch_size):
                 window = inputs[i: i + self.batch_size]

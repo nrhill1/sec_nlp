@@ -10,6 +10,12 @@ from .pipelines import Pipeline
 from .chains import SummaryPayload, build_sec_summarizer
 from .llms import LocalModelWrapper
 from .utils import SECFilingDownloader, Preprocessor
+from .cli.__main__ import main as cli_main
+
+
+def _default_prompt_path() -> str:
+    return str(files("sec_nlp.prompts").joinpath("sample_prompt_1.yml"))
+
 
 __all__ = [
     "__version__",
@@ -20,4 +26,6 @@ __all__ = [
     "LocalModelWrapper",
     "SECFilingDownloader",
     "Preprocessor",
+    "cli_main",
+    "_default_prompt_path",
 ]

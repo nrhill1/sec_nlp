@@ -1,22 +1,26 @@
+# src/cli/__main__.py
+from __future__ import annotations
+
 import argparse
 import logging
 import shutil
 import time
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from importlib.resources import files
 
 from dotenv import load_dotenv
 
+from sec_nlp import _default_prompt_path
 from sec_nlp.pipelines import Pipeline
-
+from sec_nlp.types import FilingMode
 logger = logging.getLogger(__name__)
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
 )
 
 
-def setup_logging(verbose: bool):
+def setup_logging(verbose: bool) -> None:
     if verbose:
         logging.getLogger().setLevel(logging.DEBUG)
         logger.debug("Verbose logging enabled (DEBUG).")
@@ -43,16 +47,12 @@ def setup_folders(fresh: bool) -> tuple[Path, Path]:
     return output_folder, downloads_folder
 
 
-def cleanup_downloads(downloads_folder: Path):
+def cleanup_downloads(downloads_folder: Path) -> None:
     try:
         shutil.rmtree(downloads_folder / "sec-edgar-filings")
         logger.info("Cleaned up downloaded SEC files.")
     except Exception as e:
         logger.error("Cleanup failed: %s: %s", type(e).__name__, e)
-
-
-def _default_prompt_path() -> str:
-    return str(files("sec_nlp.prompts").joinpath("sample_prompt_1.yml"))
 
 
 def parse_args() -> argparse.Namespace:
@@ -102,19 +102,27 @@ def parse_args() -> argparse.Namespace:
     return p.parse_args()
 
 
-def main():
+def main() -> None:
     load_dotenv()
 
     args = parse_args()
     setup_logging(args.verbose)
     output_folder, downloads_folder = setup_folders(fresh=args.fresh)
 
+    start: date = date.fromisoformat(args.start_date)
+    end: date = date.fromisoformat(args.end_date)
+    mode: FilingMode = FilingMode(args.mode)
+    symbols: list[str] = [str(s).upper() for s in args.symbols]
+
+    prompt_path = Path(args.prompt_file) if Path(
+        args.prompt_file).is_file() else _default_prompt_path()
+
     pipe = Pipeline(
-        mode=args.mode,
-        start_date=args.start_date,
-        end_date=args.end_date,
+        mode=mode,
+        start_date=start,
+        end_date=end,
         keyword=args.keyword,
-        prompt_file=Path(args.prompt_file),
+        prompt_file=prompt_path,
         model_name=args.model_name,
         out_path=output_folder,
         dl_path=downloads_folder,
@@ -126,12 +134,12 @@ def main():
         dry_run=args.dry_run,
     )
 
-    start = time.perf_counter()
-    logger.info("Starting pipeline for symbols: %s", ", ".join(args.symbols))
+    start_time = time.perf_counter()
+    logger.info("Starting pipeline for symbols: %s", ", ".join(symbols))
 
-    results = pipe.run_all(args.symbols)
+    results = pipe.run_all(symbols)
 
-    elapsed = time.perf_counter() - start
+    elapsed = time.perf_counter() - start_time
     logger.info("Pipeline complete in %.2f seconds.", elapsed)
 
     for sym, paths in results.items():
