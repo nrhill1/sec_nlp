@@ -4,7 +4,6 @@ from __future__ import annotations
 import json
 import logging
 from dataclasses import asdict
-from functools import lru_cache
 from typing import Any
 
 from pydantic import Field, ValidationError, TypeAdapter
@@ -30,7 +29,6 @@ class SummaryPayload:
     raw_output: str | None = None
 
     @classmethod
-    @lru_cache(maxsize=1)
     def _adapter(cls) -> TypeAdapter[SummaryPayload]:
         return TypeAdapter(cls)
 
