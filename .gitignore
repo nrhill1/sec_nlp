@@ -29,5 +29,7 @@
 **.mypy_cache/
 
 # Virtual environments
+**.env
 **.venv
-**.venv
+**env/
+**venv/
