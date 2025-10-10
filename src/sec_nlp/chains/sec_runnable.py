@@ -14,7 +14,7 @@ from langchain_core.runnables import RunnableLambda
 logger = logging.getLogger(__name__)
 
 
-@dataclass(slots=True)
+@dataclass(slots=True, frozen=True)
 class SummaryPayload:
     """
     Dataclass with Pydantic validation.
