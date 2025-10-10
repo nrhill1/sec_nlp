@@ -5,17 +5,21 @@ import logging
 import os
 import re
 import traceback
+import importlib.resources as resources
+
 from datetime import date
 from os import fspath
 from pathlib import Path
 from typing import Any, Mapping, Sequence, Optional
 from uuid import uuid4
 
-import importlib.resources as resources
 from langchain_core.prompts.loading import load_prompt
 from langchain_core.runnables import RunnableLambda
+
 from pinecone import Pinecone, ServerlessSpec
+
 from pydantic import BaseModel, Field, computed_field, field_validator, PrivateAttr
+from pydantic_core import PydanticMetadata
 
 from sec_nlp import __version__
 from sec_nlp import _default_prompt_path
@@ -79,14 +83,6 @@ class Pipeline(BaseModel):
             raise ValueError("start_date cannot be in the future.")
         return v
 
-    @field_validator("end_date")
-    @classmethod
-    def _check_order(cls, v: date, info):
-        start_date = info.data.get("start_date")
-        if start_date and v <= start_date:
-            raise ValueError("end_date cannot be on or before start_date.")
-        return v
-
     @field_validator("start_date", "end_date")
     @classmethod
     def _not_too_old(cls, v: date) -> date:
@@ -104,14 +100,13 @@ class Pipeline(BaseModel):
 
     @field_validator("prompt_file")
     @classmethod
-    def _prompt_exists(cls, p: Path | str):
-        if Path(p).exists():
-            return Path(p)
+    def _prompt_valid(cls, p: Path) -> Path:
+        if p.exists():
+            return p
         try:
             prompt_path = resources.files(
                 "sec_nlp.prompts") / "sample_prompt_1.yml"
-            if prompt_path.is_file():
-                return Path(prompt_path)
+            return Path(str(prompt_path))
         except FileNotFoundError as e:
             raise FileNotFoundError("Prompt file not found: %s" % p) from e
 
@@ -136,15 +131,23 @@ class Pipeline(BaseModel):
             raise ValueError("must be a positive integer")
         return int(v)
 
-    @computed_field  # type: ignore[misc]
+    @model_validator(mode="after")
+    def _check_dates(self) -> Self:
+        if self.start_date > self.end_date:
+            raise ValueError("start_date cannot be after end_date.")
+        return self
+
+    @computed_field  # type: ignore[prop-decorator]
     @property
     def keyword_lower(self) -> str:
         return self.keyword.lower()
 
+    @computed_field  # type: ignore[prop-decorator]
+    @property
     def _index_slug(self, symbol: str) -> str:
         return _slugify("%s-%s-docs" % (symbol.upper(), self.keyword))
 
-    def model_post_init(self, __ctx) -> None:
+    def model_post_init(self, __ctx: Any) -> None:
         if self.email is None:
             self.email = os.getenv("EMAIL", "xxxxxx_xxxx@gmail.com")
 
@@ -178,6 +181,12 @@ class Pipeline(BaseModel):
 
         if not self.dry_run and not self.pinecone_api_key:
             raise ValueError("PINECONE_API_KEY not set and dry_run is False.")
+
+        logger.info(
+            "Pipeline initialized: sec_nlp %s \n Python %s",
+            __version__,
+            os.sys.version.split()[0],
+        )
 
     def _get_preprocessor(self) -> Preprocessor:
         if self._pre is None:
@@ -227,7 +236,7 @@ class Pipeline(BaseModel):
             return []
         pc = self._ensure_pinecone()
         res: Any = pc.inference.embed(model=str(self.pinecone_model), inputs=texts)
-        rows = getattr(res, "data", None) or (
+        rows = getattr(res, "data", []) or (
             res.get("data", []) if isinstance(res, Mapping) else [])
         return [list(row.get("values") or row.get("embedding") or []) for row in rows]
 
@@ -279,6 +288,8 @@ class Pipeline(BaseModel):
         return out
 
     def run(self, symbol: str) -> list[Path]:
+
+        logger.info("Processing symbol: %s", symbol)
 
         symbol = symbol.strip().upper()
 
