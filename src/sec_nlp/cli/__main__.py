@@ -11,9 +11,9 @@ from importlib.resources import files
 
 from dotenv import load_dotenv
 
-from sec_nlp import _default_prompt_path
-from sec_nlp.pipelines import Pipeline
+from sec_nlp.pipelines import Pipeline, _default_prompt_path
 from sec_nlp.types import FilingMode
+
 logger = logging.getLogger(__name__)
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
@@ -114,8 +114,11 @@ def main() -> None:
     mode: FilingMode = FilingMode(args.mode)
     symbols: list[str] = [str(s).upper() for s in args.symbols]
 
-    prompt_path = Path(args.prompt_file) if Path(
-        args.prompt_file).is_file() else _default_prompt_path()
+    prompt_path = (
+        Path(args.prompt_file).resolve()
+        if Path(args.prompt_file).is_file()
+        else _default_prompt_path()
+    )
 
     pipe = Pipeline(
         mode=mode,

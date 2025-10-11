@@ -1,3 +1,4 @@
+from typing import Protocol, Any
 from enum import Enum
 
 
