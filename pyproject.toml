@@ -85,10 +85,10 @@ build-backend = "uv_build"
 [dependency-groups]
 dev = [
   "pytest",
+  "pytest-cov",
   "coverage",
   "mypy",
   "autopep8",
   "types-requests",
   "types-PyYAML",
 ]
-
