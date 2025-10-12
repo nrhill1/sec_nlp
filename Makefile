@@ -41,3 +41,18 @@ coverage-report:
 
 clean:
 	rm -rf .pytest_tmp .pytest_cache $(LOG_DIR)
+
+
+.PHONY: lint typecheck format
+
+install-dev:
+	uv sync --dev
+
+lint:
+	uv run autopep8 -r --diff --exit-code .
+
+typecheck:  ## Mypy type checking
+	uv run mypy .
+
+format:  ## Apply PEP8 fixes in-place
+	uv run autopep8 -r -i .
