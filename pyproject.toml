@@ -5,7 +5,7 @@ description = "Summarize SEC filings using local LLMs"
 authors = [
   { name = "Nicolas Hill", email = "your-email@example.com" }
 ]
-requires-python = "==3.11.3"
+requires-python = ">=3.11,<3.13"
 dependencies = [
   "python-dotenv",
   "tqdm",
@@ -31,7 +31,15 @@ dependencies = [
 ]
 
 [project.scripts]
-cli = "sec_nlp.cli.__main__:main"
+tests = "pytest:console_main"
+coverage-run = "coverage.cmdline:main"
+coverage-report = "coverage.cmdline:main"
+
+[tool.pytest.ini_options]
+testpaths = ["src/sec_nlp/tests"]
+python_files = "test_*.py"
+python_functions = "test_*"
+filterwarnings = ["ignore::DeprecationWarning"]
 
 [tool.uv_build]
 package = "sec_nlp"
@@ -78,14 +86,9 @@ build-backend = "uv_build"
 dev = [
   "mypy",
   "autopep8",
-  "pydantic",
+  "pytest",
+  "coverage",
   "python-dotenv",
-  "tqdm",
-  "transformers",
-  "torch",
-  "langchain-core",
-  "langchain-community",
-  "langchain-text-splitters",
   "types-tqdm",
   "types-requests",
   "types-PyYAML",

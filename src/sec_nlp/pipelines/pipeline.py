@@ -1,5 +1,4 @@
-
-
+# sec_nlp/pipelines/pipeline.py
 from sec_nlp import __version__
 from sec_nlp.types import FilingMode
 from sec_nlp.chains import (

@@ -1,3 +1,4 @@
+# sec_nlp/prompts/sample_prompt_1.yml
 template_format: f-string
 template: |
   You are an SEC filing summarization assistant.
