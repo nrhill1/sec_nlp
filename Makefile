@@ -10,7 +10,7 @@ COVERAGE := uv run coverage
 # Pytest flags (isolated temp dirs; clear cache each run)
 PYTEST_FLAGS := -v --maxfail=1 --tb=short --color=yes --basetemp .pytest_tmp --cache-clear
 
-.PHONY: help install-dev create-log-dir test coverage coverage-report lint typecheck format clean ci
+.PHONY: help install-dev create-log-dir test coverage coverage-report lint typecheck format clean ci type-stubs fix-all
 
 help:
 	@echo "Targets:"
@@ -21,6 +21,8 @@ help:
 	@echo "  lint              PEP8 check (autopep8 --diff --exit-code)"
 	@echo "  typecheck         Run mypy"
 	@echo "  format            Apply autopep8 fixes in-place"
+	@echo "  type-stubs        Auto-install missing type stubs via mypy"
+	@echo "  fix-all           Format, install stubs, then typecheck"
 	@echo "  clean             Remove test artifacts and logs"
 	@echo "  ci                Run lint, typecheck, tests (for local pre-push)"
 
@@ -55,6 +57,14 @@ typecheck:
 
 format:
 	uv run autopep8 -r -i --max-line-length 100 .
+
+# Auto-install missing type stubs, then re-run mypy install (non-fatal) to capture all
+type-stubs:
+	uv run python -m ensurepip --upgrade || true
+	uv run mypy --install-types --non-interactive || true
+
+# One-shot: format code, install stubs, then typecheck
+fix-all: format type-stubs typecheck
 
 clean:
 	rm -rf .pytest_tmp .pytest_cache $(LOG_DIR) .coverage coverage.xml htmlcov
