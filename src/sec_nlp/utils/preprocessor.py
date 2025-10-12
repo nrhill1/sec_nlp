@@ -1,3 +1,4 @@
+# sec_nlp/utils/preprocessor.py
 from __future__ import annotations
 
 import logging
@@ -53,7 +54,7 @@ class Preprocessor(BaseModel):
         self._transformer_impl = MarkdownifyTransformer()
 
     def _filing_dir(self, symbol: str, mode: FilingMode) -> Path:
-        filing_type = mode.form  # e.g., 'annual' -> '10-K'
+        filing_type = mode.form
         return (
             self.downloads_folder / "sec-edgar-filings" / symbol.upper() / filing_type
         )

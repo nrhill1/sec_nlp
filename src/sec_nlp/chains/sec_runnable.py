@@ -3,102 +3,126 @@ from __future__ import annotations
 
 import json
 import logging
-from dataclasses import asdict
-from functools import lru_cache
-from typing import Any
+from typing import Any, ClassVar, Literal, NotRequired, Self, TypedDict
 
-from pydantic import Field, ValidationError, TypeAdapter
+from pydantic import Field, TypeAdapter, ValidationError
 from pydantic.dataclasses import dataclass
 from langchain_core.prompts.base import BasePromptTemplate
-from langchain_core.runnables import RunnableLambda
+from langchain_core.prompt_values import PromptValue
+from langchain_core.runnables import Runnable, RunnableLambda, RunnableSequence
+
+from sec_nlp.llms.local_llm_base import LocalLLM
 
 logger = logging.getLogger(__name__)
 
 
-@dataclass(slots=True)
-class SummaryPayload:
-    """
-    Dataclass with Pydantic validation.
-    Add .validate_from_json() that uses TypeAdapter under the hood.
-    """
+class SummarizationInput(TypedDict):
+    """Input schema for the SEC summarization chain."""
 
-    summary: str | None = None
-    points: list[str] | None = None
+    chunk: str
+    symbol: str
+    search_term: str
+
+
+class SummarizationResult(TypedDict, total=False):
+    """Validated summary structure returned by the LLM."""
+
+    summary: str | None
+    points: list[str] | None
+    confidence: float | None
+    error: NotRequired[str | None]
+    raw_output: NotRequired[str | None]
+
+
+class SummarizationOutput(TypedDict):
+    """Final runnable output, wrapping the summary and status."""
+
+    status: Literal["ok", "error"]
+    summary: SummarizationResult
+
+
+@dataclass(slots=True, frozen=True)
+class SummaryPayload:
+    """Immutable Pydantic dataclass representing a validated LLM summary payload."""
+
+    summary: str | None = Field(default=None)
+    points: list[str] | None = Field(default=None, min_items=0)
     confidence: float | None = Field(default=None, ge=0.0, le=1.0)
 
     error: str | None = None
     raw_output: str | None = None
 
-    @classmethod
-    @lru_cache(maxsize=1)
-    def _adapter(cls) -> TypeAdapter[SummaryPayload]:
-        return TypeAdapter(cls)
+    _ADAPTER: ClassVar[TypeAdapter[SummaryPayload] | None] = None
 
     @classmethod
-    def validate_from_json(cls, raw: str) -> SummaryPayload:
-        """
-        Strictly validate a JSON string into SummaryPayload.
-        """
+    def _adapter(cls) -> TypeAdapter[SummaryPayload]:
+        if cls._ADAPTER is None:
+            cls._ADAPTER = TypeAdapter(cls)
+        return cls._ADAPTER
+
+    @classmethod
+    def validate_from_json(cls, raw: str) -> Self:
+        """Strictly parse JSON string → dict → validate into a frozen instance."""
         try:
-            return cls._adapter().validate_json(raw)
-        except ValidationError as e:
-            logger.warning(
-                "SummaryPayload.validate_from_json: validation failed: %s", e
-            )
-            return cls(error="Schema validation failed", raw_output=raw)
+            data = json.loads(raw)
         except Exception as e:
-            # Malformed JSON or unexpected issues
-            logger.warning("SummaryPayload.validate_from_json: parse failed: %s", e)
+            logger.warning("SummaryPayload: JSON parse failed: %s", e)
             return cls(error="JSON parse failed", raw_output=raw)
 
+        if isinstance(data, dict):
+            # Normalize before validation (can't mutate frozen instances later)
+            s = data.get("summary")
+            if isinstance(s, str):
+                s = s.strip()
+                data["summary"] = s or None
+            pts = data.get("points")
+            if isinstance(pts, list):
+                data["points"] = [
+                    p.strip() for p in pts if isinstance(p, str) and p.strip()
+                ]
 
-def build_sec_summarizer(
+        try:
+            return cls._adapter().validate_python(data)
+        except ValidationError as e:
+            logger.warning("SummaryPayload: schema validation failed: %s", e)
+            return cls(error="Schema validation failed", raw_output=raw)
+
+
+def build_sec_runnable(
     *,
-    prompt: BasePromptTemplate,
-    llm: Any,
+    prompt: BasePromptTemplate,  # Runnable[SummarizationInput, PromptValue]
+    llm: LocalLLM,  # Runnable[str, str]
     require_json: bool = True,
-    max_retries: int = 2,
-) -> RunnableLambda:
+) -> Runnable[SummarizationInput, SummarizationOutput]:
     """
-    Build a Runnable that summarizes SEC filing text chunks using the given LLM
-    and prompt template.
+    Build the SEC summarization chain:
+      input:  SummarizationInput
+      pipe:   prompt(as string) -> llm -> validation
+      output: SummarizationOutput
     """
 
-    def _invoke_with_retry(inputs: dict[str, Any]) -> dict[str, Any]:
-        prompt_str = prompt.format_prompt(
-            chunk=inputs["chunk"],
-            symbol=inputs["symbol"],
-            search_term=inputs["search_term"],
-        ).to_string()
-
-        last_err: Exception | None = None
-        for attempt in range(1, int(max_retries) + 1):
-            try:
-                raw = llm.invoke(prompt_str)
-                if require_json:
-                    payload = SummaryPayload.validate_from_json(raw)
-                else:
-                    payload = SummaryPayload(summary=str(raw))
-                return {"summary": asdict(payload)}
-            except Exception as e:
-                last_err = e
-                logger.error(
-                    "LLM invoke failed (attempt %d/%d): %s: %s",
-                    attempt,
-                    max_retries,
-                    type(e).__name__,
-                    e,
-                )
-
-        err_msg = (
-            "%s: %s" % (type(last_err).__name__, last_err)
-            if last_err
-            else "Unknown error"
+    coerce_str: Runnable[Any, str] = RunnableLambda(
+        lambda t, *_a, **_k: (
+            t.to_string() if hasattr(t, "to_string")
+            else (t if isinstance(t, str) else str(t))
         )
-        return {
-            "summary": asdict(
-                SummaryPayload(error="LLM invocation failed", raw_output=err_msg)
-            )
-        }
+    )
 
-    return RunnableLambda(_invoke_with_retry)
+    def _validate(raw: str) -> SummarizationOutput:
+        if require_json:
+            payload = SummaryPayload.validate_from_json(raw)
+        else:
+            payload = SummaryPayload(summary=raw)
+
+        status: Literal["ok", "error"] = "ok" if payload.error is None else "error"
+        payload_dict = SummaryPayload._adapter().dump_python(payload)
+        result: SummarizationResult = payload_dict
+        return {"status": status, "summary": result}
+
+    validate_step: Runnable[str, SummarizationOutput] = RunnableLambda(_validate)
+
+    chain: RunnableSequence[Any, Any] = prompt | coerce_str | llm | validate_step
+
+    return chain.with_types(
+        input_type=SummarizationInput, output_type=SummarizationOutput
+    )

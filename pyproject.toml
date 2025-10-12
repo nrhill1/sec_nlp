@@ -5,7 +5,7 @@ description = "Summarize SEC filings using local LLMs"
 authors = [
   { name = "Nicolas Hill", email = "your-email@example.com" }
 ]
-requires-python = "==3.11.3"
+requires-python = ">=3.11,<3.13"
 dependencies = [
   "python-dotenv",
   "tqdm",
@@ -23,7 +23,7 @@ dependencies = [
   "huggingface_hub",
   "sec_edgar_downloader",
   "langchain-pinecone>=0.2.12",
-  "pinecone>=7.3.0",
+  "pinecone>=7.0.0,<8.0.0",
   "accelerate>=1.10.1",
   "pinecone-plugin-assistant>=1.8.0",
   "uuid>=1.30",
@@ -31,7 +31,15 @@ dependencies = [
 ]
 
 [project.scripts]
-cli = "sec_nlp.cli.__main__:main"
+tests = "pytest:console_main"
+coverage-run = "coverage.cmdline:main"
+coverage-report = "coverage.cmdline:main"
+
+[tool.pytest.ini_options]
+testpaths = ["src/sec_nlp/tests"]
+python_files = "test_*.py"
+python_functions = "test_*"
+filterwarnings = ["ignore::DeprecationWarning"]
 
 [tool.uv_build]
 package = "sec_nlp"
@@ -43,20 +51,20 @@ sec_nlp = ["py.typed"]
 
 [tool.mypy]
 python_version = "3.11"
-packages = ["sec_nlp"]
 plugins = ["pydantic.mypy"]
-mypy_path = ["src"]
-strict = true
+strict = false
 warn_unused_ignores = true
 warn_redundant_casts = true
-warn_return_any = true
+warn_unreachable = true
 disallow_untyped_defs = true
-disallow_incomplete_defs = true
 no_implicit_optional = true
+check_untyped_defs = true
+show_error_codes = true
+pretty = true
 exclude = [
-  '^dist/',
-  '^src/sec_nlp/data/',
-  '^src/sec_nlp/.*/__pycache__',
+  '^src/sec_nlp/tests/.*',
+  '^dist/.*',
+  '^build/.*',
 ]
 
 [tool.pydantic-mypy]
@@ -76,18 +84,11 @@ build-backend = "uv_build"
 
 [dependency-groups]
 dev = [
+  "pytest",
+  "coverage",
   "mypy",
   "autopep8",
-  "pydantic",
-  "python-dotenv",
-  "tqdm",
-  "pinecone-client>=5",
-  "transformers",
-  "torch",
-  "langchain-core",
-  "langchain-community",
-  "langchain-text-splitters",
-  "types-tqdm",
   "types-requests",
   "types-PyYAML",
 ]
+

@@ -1,3 +1,5 @@
+# sec_nlp/types.py
+from typing import Protocol, Any
 from enum import Enum
 
 

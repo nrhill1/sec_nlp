@@ -1,32 +1,42 @@
-from __future__ import annotations
+# sec_nlp/pipelines/pipeline.py
+from sec_nlp import __version__
+from sec_nlp.types import FilingMode
+from sec_nlp.chains import (
+    build_sec_runnable,
+    SummarizationInput,
+    SummarizationOutput,
+    SummarizationResult,
+)
+from sec_nlp.utils import SECFilingDownloader, Preprocessor
+from sec_nlp.llms import FlanT5LocalLLM
 
+import importlib.resources as resources
+import traceback
+import re
+import os
 import json
 import logging
-import os
-import re
-import traceback
-import importlib.resources as resources
-
+from importlib.resources import files
 from datetime import date
 from os import fspath
 from pathlib import Path
-from typing import Any, Mapping, Sequence, Optional
+from typing import Any, Mapping, Sequence, Self
 from uuid import uuid4
 
+
+from langchain_core.runnables import Runnable
 from langchain_core.prompts.loading import load_prompt
-from langchain_core.runnables import RunnableLambda
-
+from langchain_core.prompts.base import BasePromptTemplate
 from pinecone import Pinecone, ServerlessSpec
+from pydantic import (
+    BaseModel,
+    Field,
+    PrivateAttr,
+    computed_field,
+    field_validator,
+    model_validator,
+)
 
-from pydantic import BaseModel, Field, computed_field, field_validator, PrivateAttr
-from pydantic_core import PydanticMetadata
-
-from sec_nlp import __version__
-from sec_nlp import _default_prompt_path
-from sec_nlp.llms import LocalModelWrapper
-from sec_nlp.utils import SECFilingDownloader, Preprocessor
-from sec_nlp.chains import build_sec_summarizer
-from sec_nlp.types import FilingMode
 
 logger = logging.getLogger(__name__)
 
@@ -36,12 +46,17 @@ def _slugify(s: str) -> str:
 
 
 def _safe_name(s: str, allow: str = r"a-zA-Z0-9._-") -> str:
-    return re.sub(r"[^%s]+" % allow, "_", s)[:120]
+    return re.sub(rf"[^{allow}]+", "_", s)[:120]
+
+
+def _default_prompt_path() -> Path:
+    return Path(fspath(files("sec_nlp.prompts").joinpath("sample_prompt_1.yml")))
 
 
 class Pipeline(BaseModel):
     """
     End-to-end SEC filing processing pipeline.
+    Loads the prompt and builds the runnable graph once; reuses across symbols.
     """
 
     mode: FilingMode
@@ -74,7 +89,12 @@ class Pipeline(BaseModel):
 
     _pre: Preprocessor | None = PrivateAttr(default=None)
     _pc: Pinecone | None = PrivateAttr(default=None)
-    _index = PrivateAttr(default=None)
+    _index: Any | None = PrivateAttr(default=None)
+
+    _prompt: BasePromptTemplate | None = PrivateAttr(default=None)
+    _graph: Runnable[SummarizationInput, SummarizationOutput] | None = PrivateAttr(
+        default=None
+    )
 
     @field_validator("start_date")
     @classmethod
@@ -104,11 +124,13 @@ class Pipeline(BaseModel):
         if p.exists():
             return p
         try:
-            prompt_path = resources.files(
-                "sec_nlp.prompts") / "sample_prompt_1.yml"
-            return Path(str(prompt_path))
+            prompt_path = resources.files("sec_nlp.prompts") / "sample_prompt_1.yml"
+            if prompt_path.exists():
+                logger.warning("Using built-in prompt file: %s", fspath(prompt_path))
+                return Path(fspath(prompt_path))
+            raise ValueError(f"Prompt file does not exist: {p}")
         except FileNotFoundError as e:
-            raise FileNotFoundError("Prompt file not found: %s" % p) from e
+            raise FileNotFoundError(f"Prompt file not found: {p}") from e
 
     @field_validator("out_path", "dl_path")
     @classmethod
@@ -142,10 +164,8 @@ class Pipeline(BaseModel):
     def keyword_lower(self) -> str:
         return self.keyword.lower()
 
-    @computed_field  # type: ignore[prop-decorator]
-    @property
     def _index_slug(self, symbol: str) -> str:
-        return _slugify("%s-%s-docs" % (symbol.upper(), self.keyword))
+        return _slugify(f"{symbol.upper()}-{self.keyword}-docs")
 
     def model_post_init(self, __ctx: Any) -> None:
         if self.email is None:
@@ -160,8 +180,7 @@ class Pipeline(BaseModel):
         self.pinecone_metric = self.pinecone_metric or os.getenv(
             "PINECONE_METRIC", "cosine"
         )
-        self.pinecone_cloud = self.pinecone_cloud or os.getenv(
-            "PINECONE_CLOUD", "aws")
+        self.pinecone_cloud = self.pinecone_cloud or os.getenv("PINECONE_CLOUD", "aws")
         self.pinecone_region = self.pinecone_region or os.getenv(
             "PINECONE_REGION", "us-east-1"
         )
@@ -182,11 +201,26 @@ class Pipeline(BaseModel):
         if not self.dry_run and not self.pinecone_api_key:
             raise ValueError("PINECONE_API_KEY not set and dry_run is False.")
 
+        try:
+            self._prompt = load_prompt(self.prompt_file)
+            logger.info("Loaded prompt: %s", self.prompt_file)
+        except Exception as e:
+            raise ValueError(
+                f"Failed to load prompt from {self.prompt_file}: {e}"
+            ) from e
+
         logger.info(
             "Pipeline initialized: sec_nlp %s \n Python %s",
             __version__,
             os.sys.version.split()[0],
         )
+
+    def reload_prompt(self, path: Path | None = None) -> None:
+        if path is not None:
+            self.prompt_file = path
+        self._prompt = load_prompt(self.prompt_file)
+        self._graph = None
+        logger.info("Reloaded prompt: %s", self.prompt_file)
 
     def _get_preprocessor(self) -> Preprocessor:
         if self._pre is None:
@@ -225,9 +259,12 @@ class Pipeline(BaseModel):
         pc = self._ensure_pinecone()
         vecs: Any = pc.inference.embed(model=model, inputs=["ok"])
         data = getattr(vecs, "data", None) or (
-            vecs.get("data", []) if isinstance(vecs, Mapping) else [])
+            vecs.get("data", []) if isinstance(vecs, Mapping) else []
+        )
         if not data or not (data[0].get("values") or data[0].get("embedding")):
-            raise RuntimeError(f"Could not infer embedding dimension for model: {model}")
+            raise RuntimeError(
+                f"Could not infer embedding dimension for model: {model}"
+            )
         values: Sequence[float] = data[0].get("values") or data[0].get("embedding")
         return len(values)
 
@@ -237,7 +274,8 @@ class Pipeline(BaseModel):
         pc = self._ensure_pinecone()
         res: Any = pc.inference.embed(model=str(self.pinecone_model), inputs=texts)
         rows = getattr(res, "data", []) or (
-            res.get("data", []) if isinstance(res, Mapping) else [])
+            res.get("data", []) if isinstance(res, Mapping) else []
+        )
         return [list(row.get("values") or row.get("embedding") or []) for row in rows]
 
     def _upsert_texts(
@@ -269,17 +307,28 @@ class Pipeline(BaseModel):
         )
         return ids
 
-    def _make_graph(self) -> RunnableLambda:
-        prompt = load_prompt(str(self.prompt_file))
-        llm = LocalModelWrapper(
-            model_name=self.model_name, max_new_tokens=self.max_new_tokens
-        )
-        return build_sec_summarizer(
-            prompt=prompt,
-            llm=llm,
-            require_json=self.require_json,
-            max_retries=self.max_retries,
-        )
+    def _get_graph(self) -> Runnable[SummarizationInput, SummarizationOutput]:
+        """
+        Build once, reuse across symbols. Rebuilt only if reload_prompt() is called.
+        """
+        if self._graph is None:
+            if self._prompt is None:
+                # Defensive: should be set in model_post_init
+                self._prompt = load_prompt(self.prompt_file)
+
+            llm = FlanT5LocalLLM(
+                model_name=self.model_name,
+                device="cpu",
+                max_new_tokens=int(self.max_new_tokens),
+            )
+
+            self._graph = build_sec_runnable(
+                prompt=self._prompt,
+                llm=llm,
+                require_json=bool(self.require_json),
+            )
+            logger.info("Built summarization runnable graph.")
+        return self._graph
 
     def run_all(self, symbols: list[str]) -> dict[str, list[Path]]:
         out: dict[str, list[Path]] = {}
@@ -288,9 +337,7 @@ class Pipeline(BaseModel):
         return out
 
     def run(self, symbol: str) -> list[Path]:
-
         logger.info("Processing symbol: %s", symbol)
-
         symbol = symbol.strip().upper()
 
         logger.info(
@@ -315,20 +362,21 @@ class Pipeline(BaseModel):
         )
 
         pre = self._get_preprocessor()
-        html_paths = pre.html_paths_for_symbol(
-            symbol, mode=self.mode, limit=self.limit)
+        html_paths = pre.html_paths_for_symbol(symbol, mode=self.mode, limit=self.limit)
         if not html_paths:
             logger.warning("No filings found for %s. Skipping...", symbol)
             return []
 
-        graph = self._make_graph()
+        graph = self._get_graph()
 
         if not self.dry_run:
             logger.info("Provisioning Pinecone index for %s...", symbol)
             index_name = self._index_slug(symbol)
             self._ensure_index(index_name)
         else:
-            logger.info("Dry-run set: skipping Pinecone index provisioning and upserts.")
+            logger.info(
+                "Dry-run set: skipping Pinecone index provisioning and upserts."
+            )
 
         output_files: list[Path] = []
 
@@ -357,16 +405,16 @@ class Pipeline(BaseModel):
                 html_path.name,
             )
 
-            inputs = [
+            inputs: list[SummarizationInput] = [
                 {"symbol": symbol, "chunk": t, "search_term": self.keyword}
                 for t in texts
             ]
             summaries: list[dict[str, Any]] = []
 
-            for i in range(0, len(inputs), self.batch_size):
-                window = inputs[i: i + self.batch_size]
+            for i in range(0, len(inputs), int(self.batch_size)):
+                window = inputs[i : i + int(self.batch_size)]
                 try:
-                    results = graph.batch(window)
+                    results: list[SummarizationOutput] = graph.batch(window)
                     for r in results:
                         payload_dict = r.get(
                             "summary",
@@ -377,14 +425,13 @@ class Pipeline(BaseModel):
                         )
                         summaries.append(payload_dict)
                 except Exception as e:
-                    logger.error("Batch invocation failed: %s: %s",
-                                 type(e).__name__, e)
+                    logger.error("Batch invocation failed: %s: %s", type(e).__name__, e)
                     traceback.print_exc()
                     summaries.extend(
                         [
                             {
                                 "summary": None,
-                                "error": "Exception: %s: %s" % (type(e).__name__, e),
+                                "error": f"Exception: {type(e).__name__}: {e}",
                             }
                             for _ in window
                         ]
@@ -392,8 +439,8 @@ class Pipeline(BaseModel):
 
             safe_kw = re.sub(r"[^a-z0-9_-]+", "_", self.keyword_lower)
             safe_doc = _safe_name(html_path.stem)
-            out_file = self.out_path / (
-                "%s_%s_%s.summary.json" % (symbol.lower(), safe_kw, safe_doc)
+            out_file = (
+                self.out_path / f"{symbol.lower()}_{safe_kw}_{safe_doc}.summary.json"
             )
 
             with open(out_file, "w") as f:

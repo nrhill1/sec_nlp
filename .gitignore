@@ -1,33 +1,41 @@
 # General
-**.env
-**.DS_Store
+**/.DS_Store
+**/.env
+**/.env.*
 
-# VSCode
-**.vscode/
-**.history/
+# Editors / IDEs
+**/.vscode/
+**/.idea/
+**/.history/
 
+# Build & Distribution
+**/build/
+**/dist/
+**/*.egg-info/
+**/__pycache__/
 
-# Build
-**build/
-**dist/
+# Application Data
+**/downloads/
+**/data/
+**/output/
+**/test_logs/
 
+# Python tooling
+**/.pytest_cache/
+**/.mypy_cache/
+**/.ruff_cache/
+**/.tox/
+**/.coverage
+**/coverage.xml
+**/htmlcov/
 
-# Application data
-**downloads/
-**data/
-**output/
+# uv (package manager)
+**/uv.lock
+**/.uv-cache/
+**/.uv/
 
-# Python
-**__pycache__
-**.egg-info/
-**.pytest_cache
-
-# uv
-**uv.lock
-
-# MyPy
-**.mypy_cache/
-
-# Virtual environments
-**.venv
-**.venv
+# Virtual Environments
+**/.venv/
+**/venv/
+**/env/
+**/.envrc
