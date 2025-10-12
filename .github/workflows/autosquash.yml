@@ -1,0 +1,51 @@
+name: auto-squash-merge
+
+on:
+    pull_request:
+        types: [opened, reopened, synchronize, labeled, unlabeled]
+        branches: [main]
+    check_suite:
+        types: [completed]
+    workflow_run:
+        workflows:
+            - CI
+        types:
+            - completed
+
+permissions:
+    contents: write
+    pull-requests: write
+    checks: read
+    statuses: read
+
+jobs:
+    enable-automerge:
+        name: Enable PR auto-merge (squash)
+        if: >
+            github.event_name == 'pull_request' &&
+            contains(github.event.pull_request.labels.*.name, 'automerge')
+        runs-on: ubuntu-latest
+        steps:
+            - name: Enable auto-merge on this PR
+              uses: "peter-evans/enable-pull-request-automerge@v3"
+              with:
+                  token: ${{ secrets.GITHUB_TOKEN }}
+                  pull-request-number: ${{ github.event.pull_request.number }}
+                  merge-method: squash
+
+    auto-merge:
+        name: Auto-merge when checks pass
+        runs-on: ubuntu-latest
+        steps:
+            - name: Merge eligible PRs labeled automerge
+              uses: "peter-evans/auto-merge@v4"
+              with:
+                  token: ${{ secrets.GITHUB_TOKEN }}
+                  merge-method: squash
+                  labels: automerge
+                  required-status-checks: |
+                      CI
+                      CI (ubuntu-latest, py3.11.3)
+                      CI (macos-latest, py3.11.3)
+                      Lint & Type Check (py3.11.3)
+                  delete-branch: true
