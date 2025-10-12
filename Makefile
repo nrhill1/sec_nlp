@@ -2,21 +2,27 @@
 SHELL := /bin/bash
 .DEFAULT_GOAL := test
 
-LOG_DIR := test_logs
+# Paths & commands
+LOG_DIR := src/sec_nlp/tests/test_logs
 PYTEST := uv run pytest
 COVERAGE := uv run coverage
 
+# Pytest flags (isolated temp dirs; clear cache each run)
 PYTEST_FLAGS := -v --maxfail=1 --tb=short --color=yes --basetemp .pytest_tmp --cache-clear
 
-.PHONY: help install-dev test coverage coverage-report clean create-log-dir
+.PHONY: help install-dev create-log-dir test coverage coverage-report lint typecheck format clean ci
 
 help:
 	@echo "Targets:"
-	@echo "  install-dev       Install dev deps (pytest, coverage) via uv"
-	@echo "  test              Run pytest and tee output to test_logs/test_<timestamp>.log"
-	@echo "  coverage          Run coverage + pytest and tee to test_logs/coverage_<timestamp>.log"
-	@echo "  coverage-report   Show coverage summary"
-	@echo "  clean             Remove .pytest_tmp, .pytest_cache, and test_logs"
+	@echo "  install-dev       Install dev deps via uv (pytest, coverage, mypy, autopep8)"
+	@echo "  test              Run pytest; tee output to $(LOG_DIR)/test_<timestamp>.log"
+	@echo "  coverage          Run coverage+pytest; tee to $(LOG_DIR)/coverage_<timestamp>.log"
+	@echo "  coverage-report   Print coverage summary"
+	@echo "  lint              PEP8 check (autopep8 --diff --exit-code)"
+	@echo "  typecheck         Run mypy"
+	@echo "  format            Apply autopep8 fixes in-place"
+	@echo "  clean             Remove test artifacts and logs"
+	@echo "  ci                Run lint, typecheck, tests (for local pre-push)"
 
 install-dev:
 	uv sync --dev
@@ -28,31 +34,29 @@ test: create-log-dir
 	@ts=$$(date +"%Y-%m-%dT%H-%M-%S"); \
 	log="$(LOG_DIR)/test_$${ts}.log"; \
 	echo "Writing test log to $$log"; \
-	bash -o pipefail -c '$(PYTEST) $(PYTEST_FLAGS) | tee "$$log"'
+	set -o pipefail; \
+	$(PYTEST) $(PYTEST_FLAGS) 2>&1 | tee "$$log"
 
 coverage: create-log-dir
 	@ts=$$(date +"%Y-%m-%dT%H-%M-%S"); \
 	log="$(LOG_DIR)/coverage_$${ts}.log"; \
 	echo "Writing coverage log to $$log"; \
-	bash -o pipefail -c '$(COVERAGE) run -m pytest -q --basetemp .pytest_tmp --cache-clear | tee "$$log"'
+	set -o pipefail; \
+	$(COVERAGE) run -m pytest -q --basetemp .pytest_tmp --cache-clear 2>&1 | tee "$$log"
 
 coverage-report:
 	$(COVERAGE) report -m
 
-clean:
-	rm -rf .pytest_tmp .pytest_cache $(LOG_DIR)
-
-
-.PHONY: lint typecheck format
-
-install-dev:
-	uv sync --dev
-
 lint:
-	uv run autopep8 -r --diff --exit-code .
+	uv run autopep8 -r --diff --exit-code --max-line-length 100 .
 
-typecheck:  ## Mypy type checking
+typecheck:
 	uv run mypy .
 
-format:  ## Apply PEP8 fixes in-place
-	uv run autopep8 -r -i .
+format:
+	uv run autopep8 -r -i --max-line-length 100 .
+
+clean:
+	rm -rf .pytest_tmp .pytest_cache $(LOG_DIR) .coverage coverage.xml htmlcov
+
+ci: lint typecheck test
