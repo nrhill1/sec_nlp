@@ -31,7 +31,6 @@
 **/htmlcov/
 
 # uv (package manager)
-**/uv.lock
 **/.uv-cache/
 **/.uv/
 
