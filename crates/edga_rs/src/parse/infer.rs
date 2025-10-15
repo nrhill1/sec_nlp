@@ -50,9 +50,8 @@ pub fn infer_form_type(input: &str) -> Option<SecFormType> {
                 S\-1 | S\-3 | S\-4 | S\-8 |
                 20\-F | 6\-K | 11\-K |
                 13F\-HR | 144 | SC \s*13D | SC \s*13G |
-                424B5 | 425 |
-                (?<!\d)[345](?!\d)   # Forms 3/4/5
-            )\b",
+                424B5 | 425
+            )\b", //TODO: Add support for forms 3/4/5
         )
         .unwrap()
     });
