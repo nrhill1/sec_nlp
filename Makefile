@@ -2,7 +2,9 @@
 SHELL := /bin/bash
 .DEFAULT_GOAL := test
 
-# Paths & commands
+# -------------------------
+# Python: paths & commands
+# -------------------------
 LOG_DIR := src/sec_nlp/tests/test_logs
 PYTEST := uv run pytest
 COVERAGE := uv run coverage
@@ -10,7 +12,21 @@ COVERAGE := uv run coverage
 # Pytest flags (isolated temp dirs; clear cache each run)
 PYTEST_FLAGS := -v --maxfail=1 --tb=short --color=yes --basetemp .pytest_tmp --cache-clear
 
-.PHONY: help install-dev create-log-dir test coverage coverage-report lint typecheck format clean ci type-stubs fix-all
+# -------------------------
+# Rust: workspace settings
+# -------------------------
+CARGO ?= cargo
+RUST_CRATE := edga_rs                 # package name in Cargo.toml
+RUST_PKG_FLAG := -p $(RUST_CRATE)     # limit actions to the crate (still uses workspace)
+CLIPPY_FLAGS ?= -D warnings
+
+# If you want to run on the whole workspace instead of a single crate, set:
+#   RUST_PKG_FLAG :=
+# to allow e.g. cargo test to run for all members.
+
+.PHONY: help install-dev create-log-dir \
+        test coverage coverage-report lint typecheck format clean ci type-stubs fix-all \
+        rust-build rust-check rust-test rust-fmt rust-clippy rust-doc rust-clean rust-bench ci-rust
 
 help:
 	@echo "Targets:"
@@ -24,7 +40,18 @@ help:
 	@echo "  type-stubs        Auto-install missing type stubs via mypy"
 	@echo "  fix-all           Format, install stubs, then typecheck"
 	@echo "  clean             Remove test artifacts and logs"
-	@echo "  ci                Run lint, typecheck, tests (for local pre-push)"
+	@echo "  ci                Run Rust + Python checks (pre-push style)"
+	@echo ""
+	@echo "Rust:"
+	@echo "  rust-build        cargo build for $(RUST_CRATE)"
+	@echo "  rust-check        cargo check for $(RUST_CRATE)"
+	@echo "  rust-test         cargo test for $(RUST_CRATE)"
+	@echo "  rust-fmt          cargo fmt --all (check and fix)"
+	@echo "  rust-clippy       cargo clippy $(CLIPPY_FLAGS) for $(RUST_CRATE)"
+	@echo "  rust-doc          cargo doc (no-deps) for $(RUST_CRATE)"
+	@echo "  rust-bench        cargo bench for $(RUST_CRATE)"
+	@echo "  rust-clean        cargo clean (package only)"
+	@echo "  ci-rust           Run rust-fmt, rust-clippy, rust-check, rust-test"
 
 install-dev:
 	uv sync --dev
@@ -32,6 +59,9 @@ install-dev:
 create-log-dir:
 	@mkdir -p $(LOG_DIR)
 
+# -------------------------
+# Python targets
+# -------------------------
 test: create-log-dir
 	@ts=$$(date +"%Y-%m-%dT%H-%M-%S"); \
 	log="$(LOG_DIR)/test_$${ts}.log"; \
@@ -56,7 +86,7 @@ typecheck:
 	uv run mypy .
 
 format:
-	uv run autopep8 -r -i --max-line-length 100 .
+	uv run autopep8 -r -i --max-line_length 100 .
 
 # Auto-install missing type stubs, then re-run mypy install (non-fatal) to capture all
 type-stubs:
@@ -69,4 +99,38 @@ fix-all: format type-stubs typecheck
 clean:
 	rm -rf .pytest_tmp .pytest_cache $(LOG_DIR) .coverage coverage.xml htmlcov
 
-ci: lint typecheck test
+# -------------------------
+# Rust targets
+# -------------------------
+rust-build:
+	$(CARGO) build $(RUST_PKG_FLAG)
+
+rust-check:
+	$(CARGO) check $(RUST_PKG_FLAG)
+
+rust-test:
+	$(CARGO) test $(RUST_PKG_FLAG) -- --nocapture
+
+rust-fmt:
+	$(CARGO) fmt --all
+
+rust-clippy:
+	$(CARGO) clippy $(RUST_PKG_FLAG) -- $(CLIPPY_FLAGS)
+
+rust-doc:
+	$(CARGO) doc $(RUST_PKG_FLAG) --no-deps
+
+rust-bench:
+	$(CARGO) bench $(RUST_PKG_FLAG)
+
+rust-clean:
+	$(CARGO) clean $(RUST_PKG_FLAG) || $(CARGO) clean
+
+# Run all Rust checks that you'd want on pre-push
+ci-rust: rust-fmt rust-clippy rust-check rust-test
+
+# -------------------------
+# Combined CI
+# -------------------------
+# Run Rust checks first so you fail fast on native deps, then Python.
+ci: ci-rust lint typecheck test
