@@ -1,64 +1,35 @@
-# .pre-commit-config.yaml
-
-ci:
-  autoupdate_schedule: monthly
-
-default_stages: [pre-commit, pre-push]
-
-exclude: |
-  (^src/sec_nlp/data/)|(^src/sec_nlp/tests/test_logs/)|(^dist/)|(^build/)|(^.venv/)|(^target/)
-
+fail_fast: true
 repos:
-  # --- Python lint/format (ruff) ---
-  - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.6.9
-    hooks:
-      - id: ruff
-        args: ["--fix"]
-        files: "^src/.*\\.py$"
-      - id: ruff-format
-        files: "^src/.*\\.py$"
+- repo: https://github.com/pre-commit/pre-commit-hooks
+  rev: v4.6.0
+  hooks:
+  - id: check-yaml
+  - id: check-toml
+  - id: end-of-file-fixer
+  - id: trailing-whitespace
+  - id: check-added-large-files
+  - id: check-merge-conflict
+  - id: mixed-line-ending
 
-  # --- Python type checking (mypy) ---
-  - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.11.2
-    hooks:
-      - id: mypy
-        args: ["--install-types", "--non-interactive"]
-        additional_dependencies:
-          - types-requests
-          - types-PyYAML
-          - types-tqdm
-        files: "^src/.*\\.py$"
+- repo: local
+  hooks:
+  - id: python-lint
+    name: Python Lint (Ruff)
+    entry: make python-lint
+    types: [python]
+    language: system
+    pass_filenames: false
 
-  # --- Rust checks (workspace-aware) ---
-  - repo: https://github.com/doublify/pre-commit-rust
-    rev: v1.0
-    hooks:
-      - id: fmt
-      - id: clippy
-        args: ["--", "-D", "warnings"]
-      - id: cargo-check
+  - id: python-typecheck
+    name: Python Typecheck (Mypy)
+    entry: make python-typecheck
+    types: [python]
+    language: system
+    pass_filenames: false
 
-  - repo: local
-    hooks:
-      - id: rust-fmt
-        name: rustfmt (workspace)
-        language: system
-        entry: bash -c 'cargo fmt --all'
-        pass_filenames: false
-        stages: [pre-commit, pre-push]
-
-      - id: rust-clippy-fix
-        name: clippy --fix (workspace)
-        language: system
-        entry: bash -c 'cargo +nightly clippy --fix --workspace --allow-dirty --allow-staged || cargo clippy --workspace'
-        pass_filenames: false
-        stages: [pre-commit, pre-push]
-
-      - id: cargo-check-ws
-        name: cargo check (workspace)
-        language: system
-        entry: bash -c 'cargo check --workspace'
-        pass_filenames: false
-        stages: [pre-commit, pre-push]
+  - id: rust-lint
+    name: Rust Lint (fmt + clippy)
+    entry: make rust-lint
+    types: [rust]
+    language: system
+    pass_filenames: false
