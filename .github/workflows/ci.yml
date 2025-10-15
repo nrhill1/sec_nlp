@@ -19,11 +19,9 @@ permissions:
 env:
   RUSTFLAGS: -C target-cpu=native
   CARGO_INCREMENTAL: "0"
+  RUST_CRATE: edga_rs
 
 jobs:
-  # ---------------------------------------------------------------------------
-  # Detect path changes (to only run relevant tests)
-  # ---------------------------------------------------------------------------
   changes:
     name: Detect path changes
     if: ${{ github.event_name != 'push' || github.ref_name != 'main' }}
@@ -31,6 +29,7 @@ jobs:
     outputs:
       rust_changed: ${{ steps.filter.outputs.rust }}
       python_changed: ${{ steps.filter.outputs.python }}
+      config_changed: ${{ steps.filter.outputs.config }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -43,22 +42,23 @@ jobs:
         with:
           filters: |
             rust:
-              - 'edga_rs/**'
+              - 'crates/edga_rs/**'
               - '**/*.rs'
-              - 'edga_rs/Cargo.toml'
-              - 'edga_rs/Cargo.lock'
             python:
               - 'pyproject.toml'
-              - 'src/**'
+              - 'src/sec_nlp/**'
               - '**/*.py'
               - 'uv.lock'
+            config:
               - 'Makefile'
+              - '.github/**'
+              - '.pre-commit-config.yaml'
 
   # ---------------------------------------------------------------------------
   # FULL SUITES on push to main
   # ---------------------------------------------------------------------------
   full_rust:
-    name: "(FULL) Rust — ${{ matrix.os }}"
+    name: "Rust (Full) — ${{ matrix.os }}"
     if: ${{ github.event_name == 'push' && github.ref_name == 'main' }}
     runs-on: ${{ matrix.os }}
     strategy:
@@ -73,32 +73,25 @@ jobs:
         run: git config --system core.longpaths true
 
       - uses: dtolnay/rust-toolchain@stable
-
-      - name: Add Rust components
-        run: rustup component add rustfmt clippy llvm-tools-preview
+        with:
+          components: rustfmt, clippy, llvm-tools-preview
 
       - name: Cache cargo
         uses: Swatinem/rust-cache@v2
         with:
-          workspaces: |
-            edga_rs -> target
+          workspaces: ${{ env.RUST_CRATE }} -> target
           cache-all-crates: true
 
-      - name: Build
-        run: cargo build --release
-        working-directory: edga_rs
+      - name: Build (release)
+        run: cargo build --release -p ${{ env.RUST_CRATE }}
 
-      - name: Format check
-        run: cargo fmt --all -- --check
-        working-directory: edga_rs
+      - name: Lint (fmt + clippy)
+        run: |
+          cargo fmt --all -- --check
+          cargo clippy -p ${{ env.RUST_CRATE }} --all-features -- -D warnings
 
-      - name: Clippy (deny warnings)
-        run: cargo clippy --all-features -- -D warnings
-        working-directory: edga_rs
-
-      - name: Test
-        run: cargo test --release --all-features -- --quiet
-        working-directory: edga_rs
+      - name: Test (release)
+        run: cargo test --release -p ${{ env.RUST_CRATE }} --all-features -- --nocapture
 
       - name: Install cargo-llvm-cov
         uses: taiki-e/install-action@v2
@@ -106,20 +99,19 @@ jobs:
           tool: cargo-llvm-cov
 
       - name: Coverage (lcov)
-        run: cargo llvm-cov --workspace --all-features --lcov --output-path ../../lcov.info
-        working-directory: edga_rs
+        run: cargo llvm-cov -p ${{ env.RUST_CRATE }} --all-features --lcov --output-path lcov.info
 
       - name: Upload to Codecov
         uses: codecov/codecov-action@v4
         with:
           files: lcov.info
-          flags: rust
+          flags: rust,${{ matrix.os }}
           fail_ci_if_error: false
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
   full_python:
-    name: "(FULL) Python — ${{ matrix.os }} / py${{ matrix.python }}"
+    name: "Python (Full) — ${{ matrix.os }} / py${{ matrix.python }}"
     if: ${{ github.event_name == 'push' && github.ref_name == 'main' }}
     runs-on: ${{ matrix.os }}
     continue-on-error: ${{ matrix.experimental || false }}
@@ -127,73 +119,51 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
-        python: ["3.11.3", "3.11", "3.12", "3.13"]
+        python: ["3.11", "3.12"]
         include:
-          - python: "3.11.3"
-            experimental: false
           - python: "3.11"
-            experimental: true
+            experimental: false
           - python: "3.12"
-            experimental: true
-          - python: "3.13"
             experimental: true
     steps:
       - uses: actions/checkout@v4
 
       - name: Setup Python
-        id: setup
         uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python }}
 
-      - name: Skip 3.11 latest if equals 3.11.3
-        id: skip311
-        if: matrix.python == '3.11'
-        shell: bash
-        run: |
-          resolved="${{ steps.setup.outputs.python-version }}"
-          if [[ "$resolved" == "3.11.3" ]]; then
-            echo "skip=true" >> "$GITHUB_OUTPUT"
-            echo "::notice title=Skipping 3.11 latest::Resolved to 3.11.3"
-          else
-            echo "skip=false" >> "$GITHUB_OUTPUT"
-          fi
+      - uses: dtolnay/rust-toolchain@stable
 
       - uses: astral-sh/setup-uv@v3
-        if: steps.skip311.outputs.skip != 'true'
+        with:
+          enable-cache: true
 
-      - name: Sync deps
-        if: steps.skip311.outputs.skip != 'true'
-        run: uv sync --all-extras --dev
+      - name: Install dependencies
+        run: make install-dev
 
-      - name: Ruff lint
-        if: steps.skip311.outputs.skip != 'true'
-        run: uv run ruff check .
+      - name: Lint
+        run: make python-lint
 
-      - name: Ruff format check
-        if: steps.skip311.outputs.skip != 'true'
-        run: uv run ruff format --check .
+      - name: Type check
+        run: make python-typecheck
 
-      - name: Mypy
-        if: steps.skip311.outputs.skip != 'true'
-        run: uv run mypy --install-types --non-interactive
+      - name: Build PyO3 extension
+        run: make py-ext-develop
 
-      - name: Pytest
-        if: steps.skip311.outputs.skip != 'true'
-        run: uv run pytest -q
+      - name: Test
+        run: make python-test
 
-      - name: Coverage (XML)
-        if: steps.skip311.outputs.skip != 'true'
+      - name: Coverage
         run: |
-          uv run coverage run -m pytest -q
+          uv run coverage run -m pytest -q --basetemp .pytest_tmp --cache-clear
           uv run coverage xml
 
       - name: Upload to Codecov
-        if: steps.skip311.outputs.skip != 'true'
         uses: codecov/codecov-action@v4
         with:
           files: coverage.xml
-          flags: python,py${{ steps.setup.outputs.python-version }}
+          flags: python,${{ matrix.os }},py${{ matrix.python }}
           fail_ci_if_error: false
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
@@ -202,7 +172,7 @@ jobs:
   # TARGETED JOBS (only changed modules)
   # ---------------------------------------------------------------------------
   rust_targeted:
-    name: "(TARGETED) Rust — ${{ matrix.os }}"
+    name: "Rust (Quick) — ${{ matrix.os }}"
     needs: changes
     if: ${{ (github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref_name != 'main')) && needs.changes.outputs.rust_changed == 'true' }}
     runs-on: ${{ matrix.os }}
@@ -212,19 +182,30 @@ jobs:
         os: [ubuntu-latest, macos-latest, windows-latest]
     steps:
       - uses: actions/checkout@v4
+
+      - name: Enable long paths (Windows)
+        if: runner.os == 'Windows'
+        run: git config --system core.longpaths true
+
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
       - name: Cache cargo
         uses: Swatinem/rust-cache@v2
         with:
-          workspaces: |
-            edga_rs -> target
-      - run: cargo build --release
-        working-directory: edga_rs
-      - run: cargo test --release --all-features -- --quiet
-        working-directory: edga_rs
+          workspaces: ${{ env.RUST_CRATE }} -> target
+
+      - name: Lint
+        run: |
+          cargo fmt --all -- --check
+          cargo clippy -p ${{ env.RUST_CRATE }} -- -D warnings
+
+      - name: Test
+        run: cargo test -p ${{ env.RUST_CRATE }} -- --nocapture
 
   python_targeted:
-    name: "(TARGETED) Python — ${{ matrix.os }} / py${{ matrix.python }}"
+    name: "Python (Quick) — ${{ matrix.os }} / py${{ matrix.python }}"
     needs: changes
     if: ${{ (github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref_name != 'main')) && needs.changes.outputs.python_changed == 'true' }}
     runs-on: ${{ matrix.os }}
@@ -232,35 +213,112 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
-        python: ["3.11.3", "3.11", "3.12", "3.13"]
+        python: ["3.11", "3.12"]
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python }}
+
+      - uses: dtolnay/rust-toolchain@stable
+
       - uses: astral-sh/setup-uv@v3
-      - run: uv sync --all-extras --dev
-      - run: uv run pytest -q
+        with:
+          enable-cache: true
+
+      - name: Install dependencies
+        run: make install-dev
+
+      - name: Lint
+        run: make python-lint
+
+      - name: Build PyO3 extension
+        run: make py-ext-develop
+
+      - name: Test
+        run: make python-test
+
+  # ---------------------------------------------------------------------------
+  # PRE-COMMIT (lint all files)
+  # ---------------------------------------------------------------------------
+  pre_commit:
+    name: Pre-commit hooks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: astral-sh/setup-uv@v3
+
+      - name: Install dependencies
+        run: make bootstrap
+
+      - uses: pre-commit/action@v3.0.1
 
   # ---------------------------------------------------------------------------
   # INTEGRATION TESTS (always run on push)
   # ---------------------------------------------------------------------------
   integration:
-    name: Integration Tests — ${{ matrix.os }} / py${{ matrix.python }}
+    name: "Integration — ${{ matrix.os }} / py${{ matrix.python }}"
     if: github.event_name == 'push'
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
-        python: ["3.11.3"]
+        os: [ubuntu-latest, macos-latest]
+        python: ["3.11"]
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python }}
+
+      - uses: dtolnay/rust-toolchain@stable
+
       - uses: astral-sh/setup-uv@v3
-      - run: uv sync --all-extras --dev
+        with:
+          enable-cache: true
+
+      - name: Install dependencies
+        run: make install-dev
+
+      - name: Build PyO3 extension
+        run: make py-ext-develop
+
       - name: Run integration tests
+        run: uv run pytest -v tests/integration
+
+  # ---------------------------------------------------------------------------
+  # STATUS CHECK (required for branch protection)
+  # ---------------------------------------------------------------------------
+  ci_success:
+    name: CI Success
+    if: always()
+    needs:
+      - changes
+      - full_rust
+      - full_python
+      - rust_targeted
+      - python_targeted
+      - pre_commit
+      - integration
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check all jobs
         run: |
-          uv run pytest -q tests/integration
+          if [[ "${{ contains(needs.*.result, 'failure') }}" == "true" ]]; then
+            echo "One or more jobs failed"
+            exit 1
+          elif [[ "${{ contains(needs.*.result, 'cancelled') }}" == "true" ]]; then
+            echo "One or more jobs were cancelled"
+            exit 1
+          else
+            echo "All jobs passed"
