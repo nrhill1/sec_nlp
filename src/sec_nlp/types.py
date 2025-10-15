@@ -1,5 +1,4 @@
 # sec_nlp/types.py
-from typing import Protocol, Any
 from enum import Enum
 
 
@@ -11,6 +10,9 @@ class FilingMode(str, Enum):
 
     annual = "annual"
     quarterly = "quarterly"
+
+    def __str__(self) -> str:
+        return self.value
 
     @property
     def form(self) -> str:

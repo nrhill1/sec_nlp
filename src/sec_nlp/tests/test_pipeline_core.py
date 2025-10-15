@@ -1,9 +1,8 @@
-from pathlib import Path
 from unittest.mock import patch, MagicMock
 import json
 
 from datetime import date
-from sec_nlp.pipelines.pipeline import Pipeline, _default_prompt_path
+from sec_nlp.pipelines.pipeline import Pipeline
 from sec_nlp.types import FilingMode
 
 
@@ -43,7 +42,14 @@ def test_pipeline_run_writes_summary(mock_build_chain, MockPre, MockDL, tmp_path
     dl_inst.download_filings.return_value = {"AAPL": True}
 
     pre_inst = MockPre.return_value
-    fake_html = dl_path / "sec-edgar-filings" / "AAPL" / "10-K" / "0001" / "primary-document.html"
+    fake_html = (
+        dl_path
+        / "sec-edgar-filings"
+        / "AAPL"
+        / "10-K"
+        / "0001"
+        / "primary-document.html"
+    )
     fake_html.parent.mkdir(parents=True, exist_ok=True)
     fake_html.write_text("<html>Revenue is up</html>", encoding="utf-8")
     pre_inst.html_paths_for_symbol.return_value = [fake_html]
@@ -51,7 +57,18 @@ def test_pipeline_run_writes_summary(mock_build_chain, MockPre, MockDL, tmp_path
 
     class FakeGraph:
         def batch(self, batch_inputs):
-            return [{"status": "ok", "summary": {"summary": "Revenue up", "points": ["X"], "confidence": 0.9}} for _ in batch_inputs]
+            return [
+                {
+                    "status": "ok",
+                    "summary": {
+                        "summary": "Revenue up",
+                        "points": ["X"],
+                        "confidence": 0.9,
+                    },
+                }
+                for _ in batch_inputs
+            ]
+
     mock_build_chain.return_value = FakeGraph()
 
     pipe = Pipeline(

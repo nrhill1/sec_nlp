@@ -2,6 +2,7 @@
 **/.DS_Store
 **/.env
 **/.env.*
+**/.backups
 
 # Editors / IDEs
 **/.vscode/
@@ -18,6 +19,8 @@
 **/downloads/
 **/data/
 **/output/
+
+# Logs
 **/test_logs/
 
 # Python tooling
@@ -39,3 +42,4 @@
 **/venv/
 **/env/
 **/.envrc
+target/

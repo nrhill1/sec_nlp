@@ -1,13 +1,11 @@
 import sys
-from pathlib import Path
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
 import importlib
 import importlib.util
 
 
 def test_cli_main_wires_pipeline_and_cleans(tmp_path, monkeypatch):
-
     out = tmp_path / "out"
     out.mkdir()
     dl = tmp_path / "dl"
@@ -22,23 +20,33 @@ def test_cli_main_wires_pipeline_and_cleans(tmp_path, monkeypatch):
 
     # Simulate CLI argv
     argv = [
-        "python", "-m", "sec_nlp.cli", "AAPL", "MSFT",
-        "--mode", "quarterly",
-        "--start_date", "2024-01-01",
-        "--end_date", "2024-12-31",
-        "--keyword", "revenue",
-        "--limit", "1",
+        "python",
+        "-m",
+        "sec_nlp.cli",
+        "AAPL",
+        "MSFT",
+        "--mode",
+        "quarterly",
+        "--start_date",
+        "2024-01-01",
+        "--end_date",
+        "2024-12-31",
+        "--keyword",
+        "revenue",
+        "--limit",
+        "1",
         "--dry-run",  # avoid Pinecone requirement
         "--no-cleanup",
     ]
 
-    with patch("sec_nlp.cli.__main__.setup_folders", return_value=(out, dl)), \
-            patch("sec_nlp.cli.__main__.Pipeline", FakePipeline), \
-            patch("sec_nlp.cli.__main__.load_dotenv", lambda: None):
+    with patch("sec_nlp.cli.__main__.setup_folders", return_value=(out, dl)), patch(
+        "sec_nlp.cli.__main__.Pipeline", FakePipeline
+    ), patch("sec_nlp.cli.__main__.load_dotenv", lambda: None):
         monkeypatch.setattr(sys, "argv", argv)
 
         # Import and run main()
         import sec_nlp.cli.__main__ as entry
+
         importlib.reload(entry)
 
         entry.main()

@@ -1,0 +1,49 @@
+# .pre-commit-config.yaml
+
+ci:
+  autoupdate_schedule: monthly
+
+default_stages: [pre-commit, pre-push]
+
+exclude: |
+  (^src/sec_nlp/data/)|(^src/sec_nlp/tests/test_logs/)|(^dist/)|(^build/)|(^.venv/)|(^target/)
+
+repos:
+  # --- Python formatting (autopep8) ---
+  - repo: https://github.com/pre-commit/mirrors-autopep8
+    rev: v2.0.4
+    hooks:
+      - id: autopep8
+        args: ["-r", "--in-place", "--max-line-length=100"]
+        files: "^src/sec_nlp/.*\\.py$"
+
+  # --- Python lint/format (ruff) ---
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.6.9
+    hooks:
+      - id: ruff
+        args: ["--fix"]
+        files: "^src/.*\\.py$"
+      - id: ruff-format
+        files: "^src/.*\\.py$"
+
+  # --- Python type checking (mypy) ---
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.11.2
+    hooks:
+      - id: mypy
+        args: ["--install-types", "--non-interactive"]
+        additional_dependencies:
+          - types-requests
+          - types-PyYAML
+          - types-tqdm
+        files: "^src/.*\\.py$"
+
+  # --- Rust checks (workspace-aware) ---
+  - repo: https://github.com/doublify/pre-commit-rust
+    rev: v1.0
+    hooks:
+      - id: fmt
+      - id: clippy
+        args: ["--", "-D", "warnings"]
+      - id: cargo-check

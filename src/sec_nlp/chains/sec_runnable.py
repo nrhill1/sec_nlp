@@ -8,7 +8,6 @@ from typing import Any, ClassVar, Literal, NotRequired, Self, TypedDict
 from pydantic import Field, TypeAdapter, ValidationError
 from pydantic.dataclasses import dataclass
 from langchain_core.prompts.base import BasePromptTemplate
-from langchain_core.prompt_values import PromptValue
 from langchain_core.runnables import Runnable, RunnableLambda, RunnableSequence
 
 from sec_nlp.llms.local_llm_base import LocalLLM
@@ -103,7 +102,8 @@ def build_sec_runnable(
 
     coerce_str: Runnable[Any, str] = RunnableLambda(
         lambda t, *_a, **_k: (
-            t.to_string() if hasattr(t, "to_string")
+            t.to_string()
+            if hasattr(t, "to_string")
             else (t if isinstance(t, str) else str(t))
         )
     )

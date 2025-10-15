@@ -7,7 +7,6 @@ import shutil
 import time
 from datetime import date, datetime, timedelta
 from pathlib import Path
-from importlib.resources import files
 
 from dotenv import load_dotenv
 

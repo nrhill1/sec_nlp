@@ -13,7 +13,9 @@ def test_form_property_returns_correct_form_codes():
     assert FilingMode.quarterly.form == "10-Q"
 
 
-@pytest.mark.parametrize("mode,expected", [(FilingMode.annual, "10-K"), (FilingMode.quarterly, "10-Q")])
+@pytest.mark.parametrize(
+    "mode,expected", [(FilingMode.annual, "10-K"), (FilingMode.quarterly, "10-Q")]
+)
 def test_form_property_consistency(mode, expected):
     assert mode.form == expected
     assert mode.form == expected

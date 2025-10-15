@@ -5,7 +5,6 @@ from sec_nlp.chains import (
     build_sec_runnable,
     SummarizationInput,
     SummarizationOutput,
-    SummarizationResult,
 )
 from sec_nlp.utils import SECFilingDownloader, Preprocessor
 from sec_nlp.llms import FlanT5LocalLLM

@@ -1,6 +1,4 @@
 # src/sec_nlp/tests/conftest.py
-import os
-from pathlib import Path
 import pytest
 
 
@@ -8,6 +6,7 @@ import pytest
 def _block_network():
     """Block real network calls during tests."""
     import socket
+
     orig = socket.socket
 
     class GuardedSocket(orig):
@@ -65,7 +64,9 @@ def tmp_dirs(tmp_path):
 @pytest.fixture
 def make_fake_doc():
     class D:
-        def __init__(self, text): self.page_content = text
+        def __init__(self, text):
+            self.page_content = text
+
     return lambda t: D(t)
 
 
@@ -77,10 +78,17 @@ def write_html_tree(tmp_dirs):
     """
     _, dl = tmp_dirs
 
-    def _mk(symbol="AAPL", form="10-K", acc="0001", fname="primary-document.html", html="<html>Revenue</html>"):
+    def _mk(
+        symbol="AAPL",
+        form="10-K",
+        acc="0001",
+        fname="primary-document.html",
+        html="<html>Revenue</html>",
+    ):
         p = dl / "sec-edgar-filings" / symbol / form / acc
         p.mkdir(parents=True, exist_ok=True)
         f = p / fname
         f.write_text(html, encoding="utf-8")
         return f
+
     return _mk
