@@ -65,4 +65,4 @@ class FlanT5LocalLLM(LocalLLM):
             outputs = model.generate(**inputs, **gen_args)
 
         # Decode first sequence; batch_decode handles tensors directly
-        return tok.batch_decode(outputs, skip_special_tokens=True)[0]
+        return str(tok.batch_decode(outputs, skip_special_tokens=True)[0])
