@@ -63,8 +63,7 @@ pub fn infer_form_type(input: &str) -> Option<SecFormType> {
     }
 
     // 3) "Form 10-K" / "FORM 8-K" pattern
-    static FORM_WORD_RE: Lazy<Regex> =
-        Lazy::new(|| Regex::new(r"(?i)\bFORM\s+([A-Z0-9\- ]{2,8})\b").unwrap());
+    static FORM_WORD_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?i)\bFORM\s+([A-Z0-9\- ]{2,8})\b").unwrap());
     if let Some(m) = FORM_WORD_RE.captures(s).and_then(|c| c.get(1)) {
         if let Ok(ft) = SecFormType::from_str(m.as_str()) {
             return Some(ft);

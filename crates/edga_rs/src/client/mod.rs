@@ -117,9 +117,7 @@ impl SecClient {
 
         let status = res.status();
         if !status.is_success() {
-            return Err(FetchError::Network(NetworkError::from_status(
-                status.as_u16(),
-            )));
+            return Err(FetchError::Network(NetworkError::from_status(status.as_u16())));
         }
 
         let body = res.into_body();
@@ -155,9 +153,7 @@ impl SecClient {
 
         let status = res.status();
         if !status.is_success() {
-            return Err(FetchError::Network(NetworkError::from_status(
-                status.as_u16(),
-            )));
+            return Err(FetchError::Network(NetworkError::from_status(status.as_u16())));
         }
 
         let body = res.into_body();
@@ -171,13 +167,9 @@ impl SecClient {
     }
 
     /// Fetch and parse JSON in one operation.
-    pub async fn fetch_and_parse_json<T: for<'de> serde::Deserialize<'de>>(
-        &self,
-        url: &str,
-    ) -> Result<T> {
+    pub async fn fetch_and_parse_json<T: for<'de> serde::Deserialize<'de>>(&self, url: &str) -> Result<T> {
         let text = self.fetch_text(url).await?;
-        let value =
-            serde_json::from_str::<T>(&text).map_err(|e| FetchError::Parse(ParseError::Json(e)))?;
+        let value = serde_json::from_str::<T>(&text).map_err(|e| FetchError::Parse(ParseError::Json(e)))?;
         Ok(value)
     }
 }

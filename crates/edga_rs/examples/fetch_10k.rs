@@ -14,10 +14,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let submissions = fetch_company_filings(&cik).await?;
 
     println!("Company: {}", submissions.name);
-    println!(
-        "Total recent filings: {}",
-        submissions.filings.recent.form.len()
-    );
+    println!("Total recent filings: {}", submissions.filings.recent.form.len());
 
     // Find the latest 10-K
     for (idx, form) in submissions.filings.recent.form.iter().enumerate() {

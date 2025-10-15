@@ -41,8 +41,8 @@ impl DiskCache {
         }
 
         let contents = std::fs::read_to_string(&path)?;
-        let entry: CacheEntry<T> = serde_json::from_str(&contents)
-            .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
+        let entry: CacheEntry<T> =
+            serde_json::from_str(&contents).map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
 
         // Check if expired
         if let Ok(elapsed) = entry.timestamp.elapsed() {

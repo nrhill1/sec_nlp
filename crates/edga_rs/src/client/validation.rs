@@ -3,8 +3,7 @@ use crate::errors::ValidationError;
 
 /// Validate that a URL is suitable for SEC API requests
 pub fn validate_sec_url(url: &str) -> Result<(), ValidationError> {
-    let parsed = url::Url::parse(url)
-        .map_err(|e| ValidationError::Invalid(format!("Invalid URL: {}", e)))?;
+    let parsed = url::Url::parse(url).map_err(|e| ValidationError::Invalid(format!("Invalid URL: {}", e)))?;
 
     // Enforce HTTPS
     if parsed.scheme() != "https" {
@@ -41,10 +40,7 @@ mod tests {
     fn test_valid_sec_urls() {
         assert!(validate_sec_url("https://www.sec.gov/cgi-bin/browse-edgar").is_ok());
         assert!(validate_sec_url("https://data.sec.gov/submissions/CIK0000320193.json").is_ok());
-        assert!(validate_sec_url(
-            "https://sec.gov/Archives/edgar/data/320193/0000320193-23-000077.txt"
-        )
-        .is_ok());
+        assert!(validate_sec_url("https://sec.gov/Archives/edgar/data/320193/0000320193-23-000077.txt").is_ok());
     }
 
     #[test]

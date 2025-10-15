@@ -19,8 +19,8 @@ pub struct JsonParser;
 impl DocumentParser for HtmlParser {
     fn parse(&self, input: &str) -> Result<ParsedDocument> {
         let doc = Html::parse_document(input);
-        let sel = Selector::parse("title")
-            .map_err(|e| ParserError::ParseDetail(ParseError::Selector(e.to_string())))?;
+        let sel =
+            Selector::parse("title").map_err(|e| ParserError::ParseDetail(ParseError::Selector(e.to_string())))?;
 
         let title = doc
             .select(&sel)
@@ -28,9 +28,8 @@ impl DocumentParser for HtmlParser {
             .map(|n| n.text().collect::<String>().trim().to_owned())
             .filter(|s| !s.is_empty());
 
-        let form_type = infer::infer_form_type(input).ok_or_else(|| {
-            ParserError::Parse("Could not determine form type from document".into())
-        })?;
+        let form_type = infer::infer_form_type(input)
+            .ok_or_else(|| ParserError::Parse("Could not determine form type from document".into()))?;
 
         Ok(ParsedDocument {
             form_type,
@@ -43,8 +42,8 @@ impl DocumentParser for HtmlParser {
 
 impl DocumentParser for JsonParser {
     fn parse(&self, input: &str) -> Result<ParsedDocument> {
-        let v: serde_json::Value = serde_json::from_str(input)
-            .map_err(|e| ParserError::ParseDetail(ParseError::Json(e)))?;
+        let v: serde_json::Value =
+            serde_json::from_str(input).map_err(|e| ParserError::ParseDetail(ParseError::Json(e)))?;
 
         let title = v.get("title").and_then(|t| t.as_str()).map(str::to_string);
 
@@ -64,9 +63,7 @@ pub fn parse(format: DataFormat, input: &str) -> Result<ParsedDocument> {
     match format {
         DataFormat::Html => HtmlParser.parse(input),
         DataFormat::Json => JsonParser.parse(input),
-        DataFormat::Xbrl => Err(ParserError::NotImplemented(
-            "XBRL parsing not implemented".into(),
-        )),
+        DataFormat::Xbrl => Err(ParserError::NotImplemented("XBRL parsing not implemented".into())),
     }
 }
 
@@ -102,9 +99,6 @@ mod tests {
     fn test_parse_xbrl_not_implemented() {
         let result = parse(DataFormat::Xbrl, "<xbrl>data</xbrl>");
         assert!(result.is_err());
-        assert!(matches!(
-            result.unwrap_err(),
-            ParserError::NotImplemented(_)
-        ));
+        assert!(matches!(result.unwrap_err(), ParserError::NotImplemented(_)));
     }
 }

@@ -276,10 +276,7 @@ impl FromStr for SecFormType {
             "25/A" => Ok(SecFormType::TwentyFiveA),
             "RW" => Ok(SecFormType::Rw),
             "RW/WD" | "RW/Wd" => Ok(SecFormType::RwWd),
-            _ => Err(ValidationError::Invalid(format!(
-                "unknown form type: {}",
-                s
-            ))),
+            _ => Err(ValidationError::Invalid(format!("unknown form type: {}", s))),
         }
     }
 }

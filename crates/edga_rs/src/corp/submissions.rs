@@ -61,10 +61,7 @@ pub async fn fetch_company_filings(cik: &str) -> Result<CompanySubmissions> {
 }
 
 /// Filter filings by form type
-pub fn filter_by_form_type(
-    submissions: &CompanySubmissions,
-    form_type: SecFormType,
-) -> Vec<Filing> {
+pub fn filter_by_form_type(submissions: &CompanySubmissions, form_type: SecFormType) -> Vec<Filing> {
     let form_str = form_type.to_string();
     let recent = &submissions.filings.recent;
 
@@ -97,11 +94,7 @@ mod tests {
     #[test]
     fn test_submissions_url() {
         let cik = "320193";
-        let url = format!(
-            "{}/CIK{}.json",
-            SUBMISSIONS_BASE,
-            crate::corp::cik::normalize_cik(cik)
-        );
+        let url = format!("{}/CIK{}.json", SUBMISSIONS_BASE, crate::corp::cik::normalize_cik(cik));
         assert_eq!(url, "https://data.sec.gov/submissions/CIK0000320193.json");
     }
 }

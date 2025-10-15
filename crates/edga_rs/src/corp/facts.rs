@@ -55,14 +55,7 @@ mod tests {
     #[test]
     fn test_facts_url() {
         let cik = "320193";
-        let url = format!(
-            "{}/CIK{}.json",
-            FACTS_BASE,
-            crate::corp::cik::normalize_cik(cik)
-        );
-        assert_eq!(
-            url,
-            "https://data.sec.gov/api/xbrl/companyfacts/CIK0000320193.json"
-        );
+        let url = format!("{}/CIK{}.json", FACTS_BASE, crate::corp::cik::normalize_cik(cik));
+        assert_eq!(url, "https://data.sec.gov/api/xbrl/companyfacts/CIK0000320193.json");
     }
 }

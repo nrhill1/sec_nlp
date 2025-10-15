@@ -38,8 +38,7 @@ pub use corp::{
     submissions::{fetch_company_filings, CompanySubmissions},
 };
 pub use errors::{
-    DecodeError, FetchError, IngestError, IoError, LookupError, NetworkError, ParseError,
-    ParserError, ValidationError,
+    DecodeError, FetchError, IngestError, IoError, LookupError, NetworkError, ParseError, ParserError, ValidationError,
 };
 pub use filings::{is_valid_filing_type, SecFormType};
 pub use parse::{
