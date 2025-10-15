@@ -1,3 +1,7 @@
 [workspace]
 members = ["src/edga_rs"]
 resolver = "2"
+
+[workspace]
+members = ["crates/edga_rs"]
+resolver = "2"

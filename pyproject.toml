@@ -62,7 +62,7 @@ check_untyped_defs = true
 show_error_codes = true
 pretty = true
 exclude = [
-  '^src/sec_nlp/tests/.*',
+  '^sec_nlp/tests/.*',
   '^dist/.*',
   '^build/.*',
 ]
