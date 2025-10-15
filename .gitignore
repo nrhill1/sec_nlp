@@ -1,45 +1,74 @@
-# General
-**/.DS_Store
-**/.env
-**/.env.*
-**/.backups
+# Python / uv / testing
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.egg-info/
+.eggs/
+.pytest_cache/
+htmlcov/
+.coverage
+coverage.xml
+.pyre/
+.mypy_cache/
+.ruff_cache/
+.uvsync.stamp
+.bootstrap.stamp
+.venv/
+.uv/
+.uv-cache/
+.uv-tmp/
+.uv.lock
 
-# Editors / IDEs
-**/.vscode/
-**/.idea/
-**/.history/
-
-# Build & Distribution
-**/build/
-**/dist/
-**/*.egg-info/
-**/__pycache__/
-
-# Application Data
-**/downloads/
-**/data/
-**/output/
-
-# Logs
-**/test_logs/
-
-# Python tooling
-**/.pytest_cache/
-**/.pytest_tmp/
-**/.mypy_cache/
-**/.ruff_cache/
-**/.tox/
-**/.coverage
-**/coverage.xml
-**/htmlcov/
-
-# uv (package manager)
-**/.uv-cache/
-**/.uv/
-
-# Virtual Environments
-**/.venv/
-**/venv/
-**/env/
-**/.envrc
+# Rust / Cargo
 target/
+Cargo.lock
+*.rlib
+*.dSYM/
+*.pdb
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Maturin build artifacts
+target/wheels/
+*.whl
+dist/
+build/
+*.egg
+*.egg-info/
+src/**/*.egg-info/
+*.spec
+
+# Logs / temp output
+src/sec_nlp/data/
+src/sec_nlp/tests/test_logs/
+pytest_tmp/
+*.log
+*.tmp
+
+# History / backups
+.history
+.python_history
+.bash_history
+.zsh_history
+.backups/
+*.bak
+*.old
+*.orig
+*.swp
+*.swo
+*~
+*.tmp~
+
+# IDE / Editor
+.vscode/
+.idea/
+*.code-workspace
+.DS_Store
+Thumbs.db
+
+# Misc / OS / Packaging
+.env
+.env.*
