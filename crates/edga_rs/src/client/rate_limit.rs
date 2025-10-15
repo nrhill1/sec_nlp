@@ -1,10 +1,6 @@
 // src/client/rate_limit.rs - Rate limiting for SEC API compliance
-use governor::{
-    clock::DefaultClock, state::InMemoryState, state::NotKeyed, DefaultDirectRateLimiter, Quota,
-    RateLimiter,
-};
+use governor::{clock::DefaultClock, state::InMemoryState, state::NotKeyed, Quota, RateLimiter};
 use std::num::NonZeroU32;
-use std::time::Duration;
 
 /// SEC allows 10 requests per second
 const SEC_RATE_LIMIT: u32 = 10;

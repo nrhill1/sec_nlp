@@ -5,7 +5,7 @@ import logging
 from abc import ABC, abstractmethod
 from typing import Any
 
-from langchain_core.runnables import Runnable
+from langchain_core.runnables import Runnable, RunnableConfig
 from pydantic import BaseModel, Field, PrivateAttr
 
 logger = logging.getLogger(__name__)
@@ -25,9 +25,10 @@ class LocalLLM(BaseModel, Runnable[str, str], ABC):
     device: str | None = Field(default=None, description="e.g. 'cuda', 'cpu', 'mps'")
     eos_token_id: int | None = None
 
-    _tokenizer = PrivateAttr(default=None)
-    _model = PrivateAttr(default=None)
-    _torch = PrivateAttr(default=None)
+    # Make the types explicit so mypy knows these won't always be None
+    _tokenizer: Any | None = PrivateAttr(default=None)
+    _model: Any | None = PrivateAttr(default=None)
+    _torch: Any | None = PrivateAttr(default=None)
 
     @staticmethod
     def _lazy_imports() -> bool:
@@ -55,23 +56,35 @@ class LocalLLM(BaseModel, Runnable[str, str], ABC):
 
         logger.info("Initialized %s with %s", self.__class__.__name__, self.model_name)
 
+    # Match Runnable[str, str] exactly: (input, config=None, **kwargs) -> str
     def invoke(
-        self, prompt: str, config: Optional[RunnableConfig] = None, **kwargs
+        self, input: str, config: RunnableConfig | None = None, **kwargs: Any
     ) -> str:
         if self._model is None or self._tokenizer is None:
             logger.warning("Model not initialized; returning prompt passthrough.")
-            return prompt
-        return self._generate(prompt, kwargs or {})
+            return input
+        return self._generate(input, kwargs or {})
 
+    # Match Runnable batch: (inputs, config=None, **kwargs) -> list[str]
     def batch(
-        self, prompts: list[str], config: Optional[RunnableConfig] = None, **kwargs
+        self,
+        inputs: list[str],
+        config: RunnableConfig | list[RunnableConfig] | None = None,
+        **kwargs: Any | None,
     ) -> list[str]:
-        return [self.invoke(p) for p in prompts]
+        # Forward config/kwargs to keep signature compatibility
+        if isinstance(config, list):
+            if len(config) != len(inputs):
+                raise ValueError(
+                    f"len(config)={len(config)} must equal len(inputs)={len(inputs)}"
+                )
+            return [self.invoke(inp, cfg, **kwargs) for inp, cfg in zip(inputs, config)]
+
+        # Case 2: single config (or None) → broadcast
+        return [self.invoke(inp, config, **kwargs) for inp in inputs]
 
     @abstractmethod
-    def _load_backend(self) -> None:
-        pass
+    def _load_backend(self) -> None: ...
 
     @abstractmethod
-    def _generate(self, prompt: str, gen_kwargs: dict[str, Any]) -> str:
-        pass
+    def _generate(self, prompt: str, gen_kwargs: dict[str, Any]) -> str: ...

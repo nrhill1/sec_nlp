@@ -1,20 +1,16 @@
-# sec_nlp/tests/test_llms_local_passthrough.py
-from sec_nlp.llms.local_llm_base import LocalLLM
+from typing import Callable
+from sec_nlp.tests.conftest import DummyLLM
 
 
-class Dummy(LocalLLM):
-    def _load_backend(self):
-        self._model = None
+def test_llm_passthrough(dummy_llm: Callable[[bool], DummyLLM]) -> None:
+    """Test that uninitialized DummyLLM returns prompt passthrough."""
+    llm = dummy_llm(False)
+    result = llm.invoke("hi")
+    assert result == "hi"
 
-    def _generate(self, prompt, gen_kwargs):
-        return "never"
 
-
-def test_local_llm_passthrough_when_uninitialized(monkeypatch):
-    monkeypatch.setattr(
-        "sec_nlp.llms.local_llm_base.LocalLLM._lazy_imports",
-        staticmethod(lambda: False),
-    )
-    d = Dummy(model_name="x")
-    out = d.invoke("hello")
-    assert out == "hello"
+def test_llm_generate(dummy_llm: Callable[[bool], DummyLLM]) -> None:
+    """Test that initialized DummyLLM calls _generate()."""
+    llm = dummy_llm(True)
+    result = llm.invoke("hi")
+    assert result == "gen:hi"

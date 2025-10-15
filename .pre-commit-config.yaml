@@ -47,3 +47,26 @@ repos:
       - id: clippy
         args: ["--", "-D", "warnings"]
       - id: cargo-check
+
+  - repo: local
+    hooks:
+      - id: rust-fmt
+        name: rustfmt (workspace)
+        language: system
+        entry: bash -c 'cargo fmt --all'
+        pass_filenames: false
+        stages: [pre-commit, pre-push]
+
+      - id: rust-clippy-fix
+        name: clippy --fix (workspace)
+        language: system
+        entry: bash -c 'cargo +nightly clippy --fix --workspace --allow-dirty --allow-staged || cargo clippy --workspace'
+        pass_filenames: false
+        stages: [pre-commit, pre-push]
+
+      - id: cargo-check-ws
+        name: cargo check (workspace)
+        language: system
+        entry: bash -c 'cargo check --workspace'
+        pass_filenames: false
+        stages: [pre-commit, pre-push]

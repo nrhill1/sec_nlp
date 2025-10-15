@@ -1,5 +1,4 @@
 from importlib.metadata import PackageNotFoundError, version as _pkg_version
-from pathlib import Path
 
 try:
     __version__ = _pkg_version("sec_nlp")

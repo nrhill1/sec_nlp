@@ -1,18 +1,49 @@
-from unittest.mock import patch, MagicMock
-import json
+from __future__ import annotations
 
 from datetime import date
+from pathlib import Path
+from typing import Any, Protocol, TypedDict, cast
+
+import json
+import pytest
+from unittest.mock import MagicMock, patch
+
 from sec_nlp.pipelines.pipeline import Pipeline
 from sec_nlp.types import FilingMode
 
 
-def make_fake_doc(text):
-    D = MagicMock()
-    D.page_content = text
-    return D
+# --- Minimal structural types used in mocks ---------------------------------
 
 
-def test_pipeline_instantiation_validates_and_loads_prompt(tmp_path):
+class HasPageContent(Protocol):
+    page_content: str
+
+
+class ChainSummary(TypedDict):
+    summary: str
+    points: list[str]
+    confidence: float
+
+
+class ChainOutput(TypedDict):
+    status: str
+    summary: ChainSummary
+
+
+class BatchingGraph(Protocol):
+    def batch(self, batch_inputs: list[dict[str, Any]]) -> list[ChainOutput]: ...
+
+
+# ---------------------------------------------------------------------------
+
+
+def make_fake_doc(text: str) -> HasPageContent:
+    d = cast(HasPageContent, MagicMock())
+    d.page_content = text
+    return d
+
+
+def test_pipeline_instantiation_validates_and_loads_prompt(tmp_path: Path) -> None:
     p = Pipeline(
         mode=FilingMode.annual,
         start_date=date(2024, 1, 1),
@@ -23,7 +54,6 @@ def test_pipeline_instantiation_validates_and_loads_prompt(tmp_path):
         dry_run=True,
     )
     assert p.keyword_lower == "revenue"
-
     assert p.out_path.exists()
     assert p.dl_path.exists()
 
@@ -31,17 +61,22 @@ def test_pipeline_instantiation_validates_and_loads_prompt(tmp_path):
 @patch("sec_nlp.pipelines.pipeline.SECFilingDownloader")
 @patch("sec_nlp.pipelines.pipeline.Preprocessor")
 @patch("sec_nlp.pipelines.pipeline.build_sec_runnable")
-def test_pipeline_run_writes_summary(mock_build_chain, MockPre, MockDL, tmp_path):
+def test_pipeline_run_writes_summary(
+    mock_build_chain: MagicMock,
+    MockPre: MagicMock,
+    MockDL: MagicMock,
+    tmp_path: Path,
+) -> None:
     out_path = tmp_path / "out"
-    out_path.mkdir()
+    out_path.mkdir(parents=True, exist_ok=True)
     dl_path = tmp_path / "dl"
-    dl_path.mkdir()
+    dl_path.mkdir(parents=True, exist_ok=True)
 
-    dl_inst = MockDL.return_value
+    dl_inst = cast(MagicMock, MockDL.return_value)
     dl_inst.add_symbol.return_value = None
     dl_inst.download_filings.return_value = {"AAPL": True}
 
-    pre_inst = MockPre.return_value
+    pre_inst = cast(MagicMock, MockPre.return_value)
     fake_html = (
         dl_path
         / "sec-edgar-filings"
@@ -56,20 +91,26 @@ def test_pipeline_run_writes_summary(mock_build_chain, MockPre, MockDL, tmp_path
     pre_inst.transform_html.return_value = [make_fake_doc("Revenue increased due to X")]
 
     class FakeGraph:
-        def batch(self, batch_inputs):
+        def batch(self, batch_inputs: list[dict[str, Any]]) -> list[ChainOutput]:
             return [
-                {
-                    "status": "ok",
-                    "summary": {
-                        "summary": "Revenue up",
-                        "points": ["X"],
-                        "confidence": 0.9,
+                cast(
+                    ChainOutput,
+                    {
+                        "status": "ok",
+                        "summary": cast(
+                            ChainSummary,
+                            {
+                                "summary": "Revenue up",
+                                "points": ["X"],
+                                "confidence": 0.9,
+                            },
+                        ),
                     },
-                }
+                )
                 for _ in batch_inputs
             ]
 
-    mock_build_chain.return_value = FakeGraph()
+    mock_build_chain.return_value = cast(BatchingGraph, FakeGraph())
 
     pipe = Pipeline(
         mode=FilingMode.annual,
@@ -86,12 +127,12 @@ def test_pipeline_run_writes_summary(mock_build_chain, MockPre, MockDL, tmp_path
     assert len(written) == 1
     out_file = written[0]
     assert out_file.exists()
-    payload = json.loads(out_file.read_text())
+    payload: dict[str, Any] = json.loads(out_file.read_text())
     assert payload["symbol"] == "AAPL"
     assert payload["summaries"][0]["summary"] == "Revenue up"
 
 
-def test_pipeline_date_validators_and_errors(tmp_path):
+def test_pipeline_date_validators_and_errors(tmp_path: Path) -> None:
     with pytest.raises(Exception):
         Pipeline(
             mode=FilingMode.annual,
