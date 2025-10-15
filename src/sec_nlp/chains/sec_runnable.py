@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Any, ClassVar, Literal, NotRequired, Self, TypedDict
+from typing import Any, ClassVar, Literal, Self, TypedDict
 
 from pydantic import Field, TypeAdapter, ValidationError
 from pydantic.dataclasses import dataclass
@@ -29,8 +29,8 @@ class SummarizationResult(TypedDict, total=False):
     summary: str | None
     points: list[str] | None
     confidence: float | None
-    error: NotRequired[str | None]
-    raw_output: NotRequired[str | None]
+    error: str | None
+    raw_output: str | None
 
 
 class SummarizationOutput(TypedDict):
