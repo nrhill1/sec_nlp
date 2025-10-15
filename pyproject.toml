@@ -52,7 +52,8 @@ sec_nlp = ["py.typed"]
 [tool.mypy]
 python_version = "3.11"
 plugins = ["pydantic.mypy"]
-strict = false
+strict = true
+follow_imports = "silent"
 warn_unused_ignores = true
 warn_redundant_casts = true
 warn_unreachable = true
@@ -88,7 +89,7 @@ dev = [
   "pytest-cov",
   "coverage",
   "mypy",
-  "autopep8",
+  "autopep8>=2.10",
   "types-requests",
   "types-PyYAML",
 ]
