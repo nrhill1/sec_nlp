@@ -25,6 +25,7 @@ target/
 Cargo.lock
 *.rlib
 *.dSYM/
+**/.cache/**
 *.pdb
 *.exe
 *.dll
@@ -45,6 +46,7 @@ src/**/*.egg-info/
 python/sec_nlp/data/
 python/sec_nlp/tests/test_logs/
 pytest_tmp/
+**/.ignore/**
 *.log
 *.tmp
 

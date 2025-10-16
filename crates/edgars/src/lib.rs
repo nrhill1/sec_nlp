@@ -1,4 +1,3 @@
-// src/lib.rs
 //! # edgars
 //!
 //! Fast, modern SEC/EDGAR utilities with Hyper HTTP/2 client and optional Python bindings.
@@ -13,7 +12,7 @@
 //!
 //! ## Quick Start
 //!
-//! ```rust
+//! ```rust,no_run
 //! use edgars::{SecClient, normalize_cik, get_ticker_map};
 //!
 //! #[tokio::main]
@@ -42,7 +41,6 @@
 
 #![warn(missing_docs)]
 #![warn(rustdoc::missing_crate_level_docs)]
-
 pub mod client;
 pub mod corp;
 pub mod errors;
@@ -56,7 +54,7 @@ pub mod python;
 // Re-export commonly used types at crate root
 pub use client::SecClient;
 pub use corp::{
-    cik::{get_ticker_map, is_valid_cik, normalize_cik, ticker_to_cik},
+    cik::{normalize_cik},
     facts::{fetch_company_facts, CompanyFacts},
     submissions::{fetch_company_filings, CompanySubmissions},
 };

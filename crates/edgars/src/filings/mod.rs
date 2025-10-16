@@ -1,76 +1,219 @@
-// ============================================================================
-// src/filings/mod.rs - SEC Form Type enum
-// ============================================================================
+//! SEC filing form types and metadata.
+//!
+//! This module provides the [`FormType`] enum which represents all SEC filing types,
+//! along with helper functions for parsing and working with form types.
+
 use std::fmt;
 use std::str::FromStr;
 
 use crate::EdgarError;
 
-
+/// SEC filing form types.
+///
+/// This enum represents all major SEC filing form types including:
+/// - Periodic reports (10-K, 10-Q)
+/// - Current reports (8-K)
+/// - Proxy statements (DEF 14A, etc.)
+/// - Registration statements (S-1, S-3, etc.)
+/// - Foreign issuer forms (20-F, 6-K, etc.)
+/// - Insider trading forms (3, 4, 5)
+/// - And many others
 #[allow(clippy::enum_variant_names)]
 #[rustfmt::skip]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum FormType {
     // Periodic Reports
-    TenK, TenKA, TenQ, TenQA,
+    /// Annual report (10-K)
+    TenK,
+    /// Amended annual report (10-K/A)
+    TenKA,
+    /// Quarterly report (10-Q)
+    TenQ,
+    /// Amended quarterly report (10-Q/A)
+    TenQA,
 
     // Current Reports
-    EightK, EightKA,
+    /// Current report (8-K)
+    EightK,
+    /// Amended current report (8-K/A)
+    EightKA,
 
     // Proxy Statements
-    Def14A, Def14C, DefM14A, DefM14AA, DefC14A, DefC14AA, DefC14C, DefC14CA,
+    /// Definitive proxy statement
+    Def14A,
+    /// Definitive consent solicitation
+    Def14C,
+    /// Definitive merger proxy
+    DefM14A,
+    /// Amended definitive merger proxy
+    DefM14AA,
+    /// Definitive contested proxy
+    DefC14A,
+    /// Amended definitive contested proxy
+    DefC14AA,
+    /// Definitive contested consent
+    DefC14C,
+    /// Amended definitive contested consent
+    DefC14CA,
 
     // Registration Statements - S Series
-    S1, S1A, S3, S3A, S4, S4A, S8, S8A, S11, S11A,
+    /// IPO registration statement
+    S1,
+    /// Amended S-1
+    S1A,
+    /// Shelf registration for existing public companies
+    S3,
+    /// Amended S-3
+    S3A,
+    /// Business combination registration
+    S4,
+    /// Amended S-4
+    S4A,
+    /// Employee benefit plan securities
+    S8,
+    /// Amended S-8
+    S8A,
+    /// REIT registration
+    S11,
+    /// Amended S-11
+    S11A,
 
     // Small Business Forms
-    SB1, SB2, SB1A, SB2A,
+    /// Small business registration
+    SB1,
+    /// Small business registration
+    SB2,
+    /// Amended SB-1
+    SB1A,
+    /// Amended SB-2
+    SB2A,
 
     // Foreign Private Issuers
-    TwentyF, TwentyFA, SixK, SixKA, FortyF, FortyFA,
-    FortyFR12B, FortyFR12BA, FortyFR12G, FortyFR12GA,
+    /// Annual report for foreign issuers
+    TwentyF,
+    /// Amended 20-F
+    TwentyFA,
+    /// Current report for foreign issuers
+    SixK,
+    /// Amended 6-K
+    SixKA,
+    /// Canadian annual report
+    FortyF,
+    /// Amended 40-F
+    FortyFA,
+    /// Registration of Canadian securities
+    FortyFR12B,
+    /// Amended 40-FR12B
+    FortyFR12BA,
+    /// Registration termination for Canadian securities
+    FortyFR12G,
+    /// Amended 40-FR12G
+    FortyFR12GA,
 
     // Foreign Registration - F Series
-    F1, F1A, F3, F3D, F4, F4EF, F6, F6EF,
+    /// Foreign IPO registration
+    F1,
+    /// Amended F-1
+    F1A,
+    /// Foreign shelf registration
+    F3,
+    /// Foreign delayed shelf
+    F3D,
+    /// Foreign business combination
+    F4,
+    /// Foreign business combination (effective)
+    F4EF,
+    /// Foreign depository receipts
+    F6,
+    /// Foreign depository receipts (effective)
+    F6EF,
 
     // Employee Benefit Plans
-    ElevenK, ElevenKA,
+    /// Employee benefit plan annual report
+    ElevenK,
+    /// Amended 11-K
+    ElevenKA,
 
     // Institutional Investment Managers
-    ThirteenFHr, ThirteenFHrA, ThirteenFNT, ThirteenFNTA,
+    /// Institutional holdings report
+    ThirteenFHr,
+    /// Amended 13F-HR
+    ThirteenFHrA,
+    /// Institutional holdings notice
+    ThirteenFNT,
+    /// Amended 13F-NT
+    ThirteenFNTA,
 
     // Beneficial Ownership
-    Sc13D, Sc13DA, Sc13G, Sc13GA,
+    /// 5%+ ownership report
+    Sc13D,
+    /// Amended SC 13D
+    Sc13DA,
+    /// Passive investor 5%+ ownership
+    Sc13G,
+    /// Amended SC 13G
+    Sc13GA,
 
     // Insider Trading
-    Form3, Form3A, Form4, Form4A, Form5, Form5A,
+    /// Initial insider ownership
+    Form3,
+    /// Amended Form 3
+    Form3A,
+    /// Change in insider ownership
+    Form4,
+    /// Amended Form 4
+    Form4A,
+    /// Annual insider ownership
+    Form5,
+    /// Amended Form 5
+    Form5A,
 
     // Offerings & Prospectuses
-    FourTwoFourB5, FourTwoFive, PosEx, Pos462B, Pos462C, PosAsr,
+    /// Prospectus filed under 424(b)(5)
+    FourTwoFourB5,
+    /// Merger prospectus
+    FourTwoFive,
+    /// Post-effective amendment
+    PosEx,
+    /// Post-effective under 462(b)
+    Pos462B,
+    /// Post-effective under 462(c)
+    Pos462C,
+    /// Automatic shelf registration post-effective
+    PosAsr,
 
     // Exempt Offerings
-    OneFortyFour, OneFortyFourA, FormD,
+    /// Sale of restricted securities
+    OneFortyFour,
+    /// Amended 144
+    OneFortyFourA,
+    /// Exempt offering
+    FormD,
 
     // Notifications
-    NT10K, NT10KA, NT10Q, NT10QA, NT11K, NT15D2,
+    /// Late 10-K notification
+    NT10K,
+    /// Amended NT 10-K
+    NT10KA,
+    /// Late 10-Q notification
+    NT10Q,
+    /// Amended NT 10-Q
+    NT10QA,
+    /// Late 11-K notification
+    NT11K,
+    /// Late foreign issuer notification
+    NT15D2,
 
     // Other
-    TwentyFive, TwentyFiveA, Rw, RwWd,
+    /// Investment company filing
+    TwentyFive,
+    /// Amended 25
+    TwentyFiveA,
+    /// Registration withdrawal
+    Rw,
+    /// Registration withdrawal request
+    RwWd,
 }
-
-// impl FormType {
-//     /// Returns true if this is an amended filing
-//     pub fn is_amendment(&self) -> bool { /* ... */ }
-
-//     /// Returns the base form type (strips /A)
-//     pub fn base_type(&self) -> Self { /* ... */ }
-
-//     /// Returns the filing category
-//     pub fn category(&self) -> FilingCategory { /* ... */ }
-
-//     /// Returns typical filing frequency
-//     pub fn frequency(&self) -> FilingFrequency { /* ... */ }
-// }
 
 impl fmt::Display for FormType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -277,29 +420,72 @@ impl FromStr for FormType {
             "25/A" => Ok(FormType::TwentyFiveA),
             "RW" => Ok(FormType::Rw),
             "RW/WD" | "RW/Wd" => Ok(FormType::RwWd),
-            _ => Err(EdgarError::Validation(format!("unknown form type: {}", s)))
+            _ => Err(EdgarError::Validation(format!("unknown form type: {}", s))),
         }
     }
 }
 
+/// Check if a string is a valid SEC filing type.
+///
+/// # Arguments
+///
+/// * `s` - The string to check
+///
+/// # Examples
+///
+/// ```
+/// use edgars::is_valid_filing_type;
+///
+/// assert!(is_valid_filing_type("10-K"));
+/// assert!(is_valid_filing_type("8-K"));
+/// assert!(!is_valid_filing_type("INVALID"));
+/// ```
 pub fn is_valid_filing_type(s: &str) -> bool {
     FormType::from_str(s).is_ok()
 }
 
+/// Filing category classification.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FilingCategory {
+    /// Periodic reports (10-K, 10-Q, etc.)
     PeriodicReport,
+    /// Current reports (8-K, 6-K)
     CurrentReport,
+    /// Proxy statements
     ProxyStatement,
+    /// Registration statements
     Registration,
+    /// Beneficial ownership reports
     BeneficialOwnership,
-    // ...
+    /// Insider trading reports
+    InsiderTrading,
+    /// Institutional holdings reports
+    InstitutionalHoldings,
+    /// Foreign issuer filings
+    ForeignIssuer,
+    /// Securities offering documents
+    Offering,
+    /// Late filing notifications
+    Notification,
+    /// Other filing types
+    Other,
 }
 
+/// Filing frequency classification.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FilingFrequency {
+    /// Filed annually
     Annual,
+    /// Filed quarterly
     Quarterly,
+    /// Filed semi-annually
+    SemiAnnual,
+    /// Filed when events occur
     EventDriven,
+    /// Filed continuously
     Ongoing,
+    /// Filed as needed
+    AsNeeded,
 }
 
 #[cfg(test)]

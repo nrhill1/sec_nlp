@@ -1,48 +1,84 @@
-// src/errors.rs - Simplified and unified error handling
+//! Error types for the edgars crate.
+//!
+//! This module provides a unified error type [`EdgarError`] that encompasses
+//! all possible error conditions in the library.
+
 use std::io;
 use thiserror::Error;
 
-/// Main error type for all operations
+/// Main error type for all operations in the edgars crate.
+///
+/// This enum represents all possible error conditions that can occur
+/// when interacting with the SEC EDGAR API and parsing its data.
 #[derive(Debug, Error)]
 pub enum EdgarError {
-    // Network errors
+    /// Network request failed.
     #[error("network request failed: {0}")]
     Network(String),
 
+    /// HTTP error response received.
     #[error("HTTP {status}: {message}")]
-    HttpStatus { status: u16, message: String },
+    HttpStatus {
+        /// HTTP status code
+        status: u16,
+        /// Error message
+        message: String,
+    },
 
+    /// Request timed out.
     #[error("request timed out after {0}s")]
     Timeout(u64),
 
-    // Parsing errors
+    /// Failed to parse content in the specified format.
     #[error("failed to parse {format}: {reason}")]
-    Parse { format: String, reason: String },
+    Parse {
+        /// Format being parsed (e.g., "JSON", "HTML")
+        format: String,
+        /// Reason for parse failure
+        reason: String,
+    },
 
+    /// Invalid UTF-8 encoding encountered.
     #[error("invalid UTF-8 encoding: {0}")]
     Utf8(#[from] std::string::FromUtf8Error),
 
-    // Validation errors
+    /// Invalid input provided.
     #[error("invalid input: {0}")]
     Validation(String),
 
+    /// Unsupported format encountered.
     #[error("unsupported format: {0}")]
     UnsupportedFormat(String),
 
-    // I/O errors
+    /// I/O error occurred.
     #[error("I/O error: {0}")]
     Io(#[from] io::Error),
 
-    // Data errors
+    /// Requested resource not found.
     #[error("not found: {0}")]
     NotFound(String),
 
+    /// Feature not implemented.
     #[error("not implemented: {0}")]
     NotImplemented(String),
 }
 
 impl EdgarError {
-    /// Check if this error is retryable
+    /// Check if this error is retryable.
+    ///
+    /// Network errors, timeouts, and 5xx HTTP errors are considered retryable.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use edgars::EdgarError;
+    ///
+    /// let err = EdgarError::Network("connection reset".into());
+    /// assert!(err.is_retryable());
+    ///
+    /// let err = EdgarError::http_status(404);
+    /// assert!(!err.is_retryable());
+    /// ```
     pub fn is_retryable(&self) -> bool {
         matches!(
             self,
@@ -50,7 +86,20 @@ impl EdgarError {
         )
     }
 
-    /// Create HTTP status error
+    /// Create an HTTP status error with appropriate message.
+    ///
+    /// # Arguments
+    ///
+    /// * `code` - HTTP status code
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use edgars::EdgarError;
+    ///
+    /// let err = EdgarError::http_status(404);
+    /// assert_eq!(err.to_string(), "HTTP 404: Not Found");
+    /// ```
     pub fn http_status(code: u16) -> Self {
         let message = match code {
             400 => "Bad Request",
@@ -78,7 +127,7 @@ impl From<hyper::Error> for EdgarError {
 }
 
 impl From<tokio::time::error::Elapsed> for EdgarError {
-    fn from(e: tokio::time::error::Elapsed) -> Self {
+    fn from(_e: tokio::time::error::Elapsed) -> Self {
         EdgarError::Timeout(30) // Default timeout
     }
 }
@@ -98,7 +147,25 @@ impl From<url::ParseError> for EdgarError {
     }
 }
 
-/// Result type for all operations
+impl From<rusqlite::Error> for EdgarError {
+    fn from(e: rusqlite::Error) -> Self {
+        EdgarError::Validation(format!("SQL cache error: {}", e))
+    }
+}
+
+/// Result type alias for operations that can return [`EdgarError`].
+///
+/// This is a convenience type alias for `std::result::Result<T, EdgarError>`.
+///
+/// # Examples
+///
+/// ```
+/// use edgars::Result;
+///
+/// fn parse_something() -> Result<String> {
+///     Ok("parsed".to_string())
+/// }
+/// ```
 pub type Result<T> = std::result::Result<T, EdgarError>;
 
 #[cfg(test)]

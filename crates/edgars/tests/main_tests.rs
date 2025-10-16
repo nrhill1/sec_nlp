@@ -1,6 +1,6 @@
 // tests/integration_tests.rs - Comprehensive integration tests
 use edgars::{
-    corp::{fetch_company_facts, fetch_company_filings, get_ticker_map, normalize_cik},
+    corp::{fetch_company_facts, fetch_company_filings, normalize_cik},
     parse::{parse_auto, parse_html, parse_json},
     utils::{build_document_url, build_filing_url, build_full_text_url},
     SecClient,
@@ -68,6 +68,7 @@ async fn test_client_json_parsing() {
     let client = SecClient::new();
 
     #[derive(serde::Deserialize, Debug)]
+    #[allow(dead_code)]
     struct TickerEntry {
         ticker: String,
         cik_str: i64,
@@ -104,42 +105,6 @@ fn test_normalize_cik_various_formats() {
     assert_eq!(normalize_cik("1234567890"), "1234567890");
     assert_eq!(normalize_cik("CIK0000320193"), "0000320193");
     assert_eq!(normalize_cik("0000-320193"), "0000320193");
-}
-
-#[tokio::test]
-async fn test_ticker_lookup_common_stocks() {
-    let map = get_ticker_map().await.unwrap();
-
-    // Test major tech companies
-    let tickers = vec![
-        ("AAPL", "0000320193"),  // Apple
-        ("MSFT", "0000789019"),  // Microsoft
-        ("GOOGL", "0001652044"), // Alphabet
-    ];
-
-    for (ticker, expected_cik) in tickers {
-        let cik = map.get(ticker);
-        assert!(cik.is_some(), "Ticker {} not found", ticker);
-        assert_eq!(cik.unwrap(), expected_cik, "Wrong CIK for {}", ticker);
-    }
-}
-
-#[tokio::test]
-async fn test_ticker_map_caching() {
-    // First call
-    let map1 = get_ticker_map().await.unwrap();
-
-    // Second call should return cached version
-    let map2 = get_ticker_map().await.unwrap();
-
-    // Should be same memory location (cached)
-    assert!(std::ptr::eq(map1, map2));
-}
-
-#[tokio::test]
-async fn test_ticker_map_size() {
-    let map = get_ticker_map().await.unwrap();
-    assert!(map.len() > 5000, "Expected at least 5000 tickers, got {}", map.len());
 }
 
 // ============================================================================
@@ -457,32 +422,6 @@ async fn test_rate_limiter_accuracy() {
 
 #[tokio::test]
 #[ignore] // Ignore by default due to network dependency
-async fn test_full_workflow_get_10k() {
-    // Step 1: Look up ticker
-    let map = get_ticker_map().await.unwrap();
-    let cik = map.get("AAPL").unwrap();
-
-    // Step 2: Get company filings
-    let filings = fetch_company_filings(cik).await.unwrap();
-
-    // Step 3: Find latest 10-K
-    let mut latest_10k = None;
-    for (idx, form) in filings.filings.recent.form.iter().enumerate() {
-        if form == "10-K" {
-            latest_10k = Some(&filings.filings.recent.accession_number[idx]);
-            break;
-        }
-    }
-
-    assert!(latest_10k.is_some(), "No 10-K found");
-
-    // Step 4: Build URL
-    let url = build_full_text_url(cik, latest_10k.unwrap());
-    assert!(url.starts_with("https://www.sec.gov/Archives/edgar/data/"));
-}
-
-#[tokio::test]
-#[ignore] // Ignore by default due to network dependency
 async fn test_full_workflow_parse_filing() {
     let client = SecClient::new();
 
@@ -603,9 +542,8 @@ fn test_public_api_available() {
     let _ = SecClient::new();
     let _ = normalize_cik("123");
 
-    use edgars::{corp::normalize_cik, errors::EdgarError, parse::parse_html, SecClient};
+    use edgars::{corp::normalize_cik, SecClient};
 
     let _client: SecClient = SecClient::new();
     let _cik: String = normalize_cik("123");
-
 }

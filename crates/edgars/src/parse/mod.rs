@@ -1,4 +1,11 @@
-// src/parse/mod.rs - Optimized document parsing
+//! Document parsing utilities for SEC filings.
+//!
+//! This module provides functions to parse various document formats including:
+//! - HTML documents
+//! - JSON data
+//! - Plain text filings
+//! - Auto-detection of format
+
 pub mod infer;
 
 use crate::errors::{EdgarError, Result};
@@ -6,12 +13,16 @@ use crate::filings::FormType;
 use scraper::{Html, Selector};
 use serde_json::Value;
 
-/// Document format types
+/// Supported document format types.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Format {
+    /// HTML document format
     Html,
+    /// JSON data format
     Json,
+    /// XML/XBRL format
     Xml,
+    /// Plain text format
     Text,
 }
 
@@ -26,16 +37,49 @@ impl std::fmt::Display for Format {
     }
 }
 
-/// Parsed document metadata
+/// Parsed document metadata.
+///
+/// Contains information extracted from a parsed SEC filing document.
 #[derive(Debug, Clone)]
 pub struct Document {
+    /// The SEC form type (e.g., 10-K, 10-Q, 8-K)
     pub form_type: FormType,
+    /// The document format
     pub format: Format,
+    /// Optional document title
     pub title: Option<String>,
+    /// Size of the document in bytes
     pub size_bytes: usize,
 }
 
-/// Parse HTML document
+/// Parse an HTML document.
+///
+/// Extracts the form type, title, and other metadata from HTML content.
+///
+/// # Arguments
+///
+/// * `input` - HTML content as a string
+///
+/// # Errors
+///
+/// Returns an error if the form type cannot be determined.
+///
+/// # Examples
+///
+/// ```
+/// use edgars::parse::parse_html;
+///
+/// let html = r#"
+/// <html>
+/// <head><title>Apple Inc. 10-K</title></head>
+/// <body>FORM 10-K</body>
+/// </html>
+/// "#;
+///
+/// let doc = parse_html(html).unwrap();
+/// assert_eq!(doc.form_type.to_string(), "10-K");
+/// assert_eq!(doc.title, Some("Apple Inc. 10-K".to_string()));
+/// ```
 pub fn parse_html(input: &str) -> Result<Document> {
     let doc = Html::parse_document(input);
 
@@ -60,7 +104,29 @@ pub fn parse_html(input: &str) -> Result<Document> {
     })
 }
 
-/// Parse JSON document
+/// Parse a JSON document.
+///
+/// Extracts metadata from JSON-formatted SEC data.
+///
+/// # Arguments
+///
+/// * `input` - JSON content as a string
+///
+/// # Errors
+///
+/// Returns an error if the JSON is invalid.
+///
+/// # Examples
+///
+/// ```
+/// use edgars::parse::parse_json;
+///
+/// let json = r#"{"submissionType": "8-K", "entityName": "Test Corp"}"#;
+///
+/// let doc = parse_json(json).unwrap();
+/// assert_eq!(doc.form_type.to_string(), "8-K");
+/// assert_eq!(doc.title, Some("Test Corp".to_string()));
+/// ```
 pub fn parse_json(input: &str) -> Result<Document> {
     let value: Value = serde_json::from_str(input)?;
 
@@ -83,7 +149,28 @@ pub fn parse_json(input: &str) -> Result<Document> {
     })
 }
 
-/// Parse text document
+/// Parse a plain text document.
+///
+/// Extracts metadata from plain text SEC filings.
+///
+/// # Arguments
+///
+/// * `input` - Text content as a string
+///
+/// # Errors
+///
+/// Returns an error if the form type cannot be determined.
+///
+/// # Examples
+///
+/// ```
+/// use edgars::parse::parse_text;
+///
+/// let text = "CONFORMED SUBMISSION TYPE: 10-Q\nPUBLIC DOCUMENT COUNT: 50";
+///
+/// let doc = parse_text(text).unwrap();
+/// assert_eq!(doc.form_type.to_string(), "10-Q");
+/// ```
 pub fn parse_text(input: &str) -> Result<Document> {
     // Try to infer form type from content
     let form_type = infer::infer_form_type(input).ok_or_else(|| EdgarError::Parse {
@@ -106,7 +193,34 @@ pub fn parse_text(input: &str) -> Result<Document> {
     })
 }
 
-/// Auto-detect format and parse
+/// Auto-detect format and parse document.
+///
+/// Automatically detects the document format (JSON, HTML, XML, or text)
+/// and parses it accordingly.
+///
+/// # Arguments
+///
+/// * `input` - Document content as a string
+///
+/// # Errors
+///
+/// Returns an error if the format cannot be detected or parsing fails.
+///
+/// # Examples
+///
+/// ```
+/// use edgars::parse::parse_auto;
+///
+/// // Automatically detects JSON
+/// let json = r#"{"submissionType": "8-K"}"#;
+/// let doc = parse_auto(json).unwrap();
+/// assert_eq!(doc.format.to_string(), "JSON");
+///
+/// // Automatically detects HTML
+/// let html = "<!DOCTYPE html><html><body>FORM 10-K</body></html>";
+/// let doc = parse_auto(html).unwrap();
+/// assert_eq!(doc.format.to_string(), "HTML");
+/// ```
 pub fn parse_auto(input: &str) -> Result<Document> {
     // Try JSON first (fastest to detect)
     if input.trim_start().starts_with('{') || input.trim_start().starts_with('[') {

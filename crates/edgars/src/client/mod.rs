@@ -1,4 +1,8 @@
-// src/client/mod.rs - Optimized HTTP client
+//! HTTP client module for SEC/EDGAR API interactions.
+//!
+//! This module provides an async HTTP client with built-in rate limiting,
+//! retry logic, and SEC-specific request validation.
+
 mod rate_limit;
 mod retry;
 
@@ -18,9 +22,32 @@ use retry::RetryPolicy;
 
 pub use rate_limit::SecRateLimiter as RateLimiter;
 
-const DEFAULT_UA: &str = "edgars/0.1 (+https://github.com/yourusername/edgars; contact@example.com)";
-const DEFAULT_TIMEOUT: Duration = Duration::from_secs(30);
+pub const DEFAULT_UA: &str = "edgars/0.1 (+https://github.com/yourusername/edgars; contact@example.com)";
+pub const DEFAULT_TIMEOUT: Duration = Duration::from_secs(30);
 
+/// An async HTTP client for SEC/EDGAR API interactions.
+///
+/// This client provides:
+/// - Automatic rate limiting (default: 10 requests/second per SEC requirements)
+/// - Retry logic with exponential backoff for transient failures
+/// - HTTPS-only enforcement for SEC domains
+/// - Configurable timeout and user agent
+///
+/// # Examples
+///
+/// ```rust,no_run
+/// use edgars::SecClient;
+///
+/// #[tokio::main]
+/// async fn main() -> Result<(), Box<dyn std::error::Error>> {
+///     let client = SecClient::new()
+///         .with_user_agent("MyApp/1.0 (contact@example.com)")
+///         .with_timeout(std::time::Duration::from_secs(60));
+///
+///     let text = client.fetch_text("https://www.sec.gov/files/company_tickers.json").await?;
+///     Ok(())
+/// }
+/// ```
 #[derive(Clone)]
 pub struct SecClient {
     client: Arc<Client<HttpsConnector<HttpConnector>, String>>,
@@ -37,7 +64,13 @@ impl Default for SecClient {
 }
 
 impl SecClient {
-    /// Create a new SEC client with sensible defaults
+    /// Create a new SEC client with sensible defaults.
+    ///
+    /// Default configuration:
+    /// - User agent: "edgars/0.1"
+    /// - Timeout: 30 seconds
+    /// - Rate limit: 10 requests/second (SEC requirement)
+    /// - Retry policy: 3 attempts with exponential backoff
     pub fn new() -> Self {
         let https = HttpsConnector::new();
         let client = Client::builder(TokioExecutor::new()).build::<_, String>(https);
@@ -51,35 +84,84 @@ impl SecClient {
         }
     }
 
-    /// Set custom user agent (required by SEC)
+    // Return a reference to the inner client
+    pub fn client(&self) -> &Client<HttpsConnector<HttpConnector>, String> {
+        &self.client
+    }
+
+    /// Returns the configured User-Agent string.
+    pub fn user_agent(&self) -> &str {
+        &self.user_agent
+    }
+
+    /// Provides access to the rate limiter (useful for custom request batching).
+    pub fn rate_limiter(&self) -> &SecRateLimiter {
+        &self.rate_limiter
+    }
+
+    /// Set a custom user agent string.
+    ///
+    /// The SEC requires a valid user agent with contact information.
+    ///
+    /// # Arguments
+    ///
+    /// * `ua` - User agent string (e.g., "MyApp/1.0 (contact@example.com)")
     pub fn with_user_agent(mut self, ua: impl Into<String>) -> Self {
         self.user_agent = ua.into();
         self
     }
 
-    /// Set custom timeout
+    /// Set a custom timeout duration.
+    ///
+    /// # Arguments
+    ///
+    /// * `timeout` - Maximum duration to wait for a response
     pub fn with_timeout(mut self, timeout: Duration) -> Self {
         self.timeout = timeout;
         self
     }
 
-    /// Disable rate limiting (not recommended for SEC API)
+    /// Disable rate limiting (not recommended for SEC API).
+    ///
+    /// The SEC requires rate limiting to 10 requests per second.
+    /// Only disable this if you have explicit permission or are using a local cache.
     pub fn without_rate_limit(mut self) -> Self {
         self.rate_limiter = Arc::new(SecRateLimiter::unlimited());
         self
     }
 
-    /// Disable retry logic
+    /// Disable retry logic.
+    ///
+    /// By default, the client retries failed requests with exponential backoff.
+    /// Use this to disable retries entirely.
     pub fn without_retry(mut self) -> Self {
         self.retry_policy = None;
         self
     }
 
+    /// Set a custom rate limit.
+    ///
+    /// # Arguments
+    ///
+    /// * `requests_per_second` - Maximum requests per second (SEC default is 10)
     pub fn with_rate_limit(mut self, requests_per_second: u32) -> Self {
         self.rate_limiter = Arc::new(SecRateLimiter::with_rate(requests_per_second));
         self
     }
 
+    /// Fetch text content from a URL.
+    ///
+    /// # Arguments
+    ///
+    /// * `url` - The URL to fetch (must be HTTPS and on sec.gov domain)
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// - The URL is not HTTPS
+    /// - The URL is not on the sec.gov domain
+    /// - The request times out
+    /// - The server returns an error status
     pub async fn fetch_text(&self, url: &str) -> Result<String> {
         self.validate_url(url)?;
 
@@ -90,11 +172,33 @@ impl SecClient {
         }
     }
 
+    /// Fetch and parse JSON from a URL.
+    ///
+    /// # Arguments
+    ///
+    /// * `url` - The URL to fetch (must be HTTPS and on sec.gov domain)
+    ///
+    /// # Type Parameters
+    ///
+    /// * `T` - The type to deserialize the JSON into
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the request fails or JSON parsing fails.
     pub async fn fetch_json<T: for<'de> serde::Deserialize<'de>>(&self, url: &str) -> Result<T> {
         let text = self.fetch_text(url).await?;
         serde_json::from_str(&text).map_err(|e| e.into())
     }
 
+    /// Fetch raw bytes from a URL.
+    ///
+    /// # Arguments
+    ///
+    /// * `url` - The URL to fetch (must be HTTPS and on sec.gov domain)
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the request fails.
     pub async fn fetch_bytes(&self, url: &str) -> Result<Vec<u8>> {
         self.validate_url(url)?;
 
