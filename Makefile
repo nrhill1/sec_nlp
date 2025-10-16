@@ -2,7 +2,7 @@ SHELL := /bin/bash
 .DEFAULT_GOAL := test
 
 # Python
-LOG_DIR := src/sec_nlp/tests/test_logs
+LOG_DIR := python/sec_nlp/tests/test_logs
 PYTEST_FLAGS := -v --maxfail=1 --tb=short --color=yes --basetemp .pytest_tmp --cache-clear
 
 # Rust
@@ -13,7 +13,7 @@ CLIPPY_FLAGS ?= -D warnings
 
 # Maturin (PyO3)
 MATURIN := uvx maturin
-MATURIN_FLAGS ?= --release
+MATURIN_FLAGS ?= --uv --release
 MATURIN_MANIFEST := crates/$(RUST_CRATE)/Cargo.toml
 WHEELS_DIR := target/wheels
 
@@ -24,7 +24,7 @@ STAMP_BOOTSTRAP := .bootstrap.stamp
 STAMP_UVSYNC := .uvsync.stamp
 
 # -------------------------
-# Meta / setup targets
+# Environment Setup
 # -------------------------
 
 .PHONY: help
@@ -77,6 +77,7 @@ bootstrap: .uv $(STAMP_BOOTSTRAP)
 
 $(STAMP_BOOTSTRAP): $(BOOTSTRAP_DEPS)
 	@echo "==> Bootstrapping dev tools..."
+	@uv tool list | grep -qE '(^|[[:space:]])maturin([[:space:]]|@)' || uv tool install maturin
 	@uv tool list | grep -qE '(^|[[:space:]])ruff([[:space:]]|@)' || uv tool install ruff
 	@uv tool list | grep -qE '(^|[[:space:]])mypy([[:space:]]|@)' || uv tool install mypy
 	@uv tool list | grep -qE '(^|[[:space:]])pytest([[:space:]]|@)' || uv tool install pytest

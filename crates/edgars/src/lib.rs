@@ -50,9 +50,6 @@ pub mod filings;
 pub mod parse;
 pub mod utils;
 
-#[cfg(feature = "cache")]
-pub mod cache;
-
 #[cfg(feature = "python")]
 pub mod python;
 
@@ -67,9 +64,6 @@ pub use errors::{EdgarError, Result};
 pub use filings::{is_valid_filing_type, FormType};
 pub use parse::{parse_auto, parse_html, parse_json, parse_text, Document, Format};
 pub use utils::{build_document_url, build_filing_url, build_full_text_url};
-
-#[cfg(feature = "cache")]
-pub use cache::DiskCache;
 
 /// Library version
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");

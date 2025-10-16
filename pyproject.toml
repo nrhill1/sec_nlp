@@ -31,14 +31,14 @@ dependencies = [
 ]
 
 [tool.pytest.ini_options]
-testpaths = ["src/sec_nlp/tests"]
+testpaths = ["python/sec_nlp/tests"]
 python_files = "test_*.py"
 python_functions = "test_*"
 filterwarnings = ["ignore::DeprecationWarning"]
 
 [tool.uv_build]
 package = "sec_nlp"
-src-dir = "src"
+src-dir = "python"
 include = ["pyproject.toml", "README.md"]
 
 [tool.setuptools.package-data]
@@ -100,9 +100,9 @@ ignore = [
 
 [tool.maturin]
 features = ["pyo3/extension-module"]
-module-name = "sec_nlp._edga_rs"
+module-name = "sec_nlp._edgars"
 manifest-path = "crates/edgars/Cargo.toml"
-python-source = "src"
+python-source = "python"
 
 [build-system]
 requires = ["maturin>=1.0,<2.0"]
