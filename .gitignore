@@ -7,8 +7,8 @@ __pycache__/
 .eggs/
 .pytest_cache/
 htmlcov/
-.coverage
 coverage.xml
+.coverage
 .pyre/
 .mypy_cache/
 .ruff_cache/
@@ -42,8 +42,8 @@ src/**/*.egg-info/
 *.spec
 
 # Logs / temp output
-src/sec_nlp/data/
-src/sec_nlp/tests/test_logs/
+python/sec_nlp/data/
+python/sec_nlp/tests/test_logs/
 pytest_tmp/
 *.log
 *.tmp
