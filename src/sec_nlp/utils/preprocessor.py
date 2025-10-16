@@ -55,9 +55,7 @@ class Preprocessor(BaseModel):
 
     def _filing_dir(self, symbol: str, mode: FilingMode) -> Path:
         filing_type = mode.form
-        return (
-            self.downloads_folder / "sec-edgar-filings" / symbol.upper() / filing_type
-        )
+        return self.downloads_folder / "sec-edgar-filings" / symbol.upper() / filing_type
 
     def html_paths_for_symbol(
         self,
@@ -68,8 +66,7 @@ class Preprocessor(BaseModel):
         base = self._filing_dir(symbol, mode)
         if not base.exists():
             raise FileNotFoundError(
-                "No filings found for %s in mode %s at %s"
-                % (symbol, mode.value, base.resolve())
+                "No filings found for %s in mode %s at %s" % (symbol, mode.value, base.resolve())
             )
         html_files = sorted(base.rglob("*.html"), key=os.path.getmtime, reverse=True)
         return html_files[:limit] if limit else html_files

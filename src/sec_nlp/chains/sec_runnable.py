@@ -76,9 +76,7 @@ class SummaryPayload:
                 data["summary"] = s or None
             pts = data.get("points")
             if isinstance(pts, list):
-                data["points"] = [
-                    p.strip() for p in pts if isinstance(p, str) and p.strip()
-                ]
+                data["points"] = [p.strip() for p in pts if isinstance(p, str) and p.strip()]
 
         try:
             return cls._adapter().validate_python(data)
@@ -102,9 +100,7 @@ def build_sec_runnable(
 
     coerce_str: Runnable[Any, str] = RunnableLambda(
         lambda t, *_a, **_k: (
-            t.to_string()
-            if hasattr(t, "to_string")
-            else (t if isinstance(t, str) else str(t))
+            t.to_string() if hasattr(t, "to_string") else (t if isinstance(t, str) else str(t))
         )
     )
 
@@ -123,6 +119,4 @@ def build_sec_runnable(
 
     chain: RunnableSequence[Any, Any] = prompt | coerce_str | llm | validate_step
 
-    return chain.with_types(
-        input_type=SummarizationInput, output_type=SummarizationOutput
-    )
+    return chain.with_types(input_type=SummarizationInput, output_type=SummarizationOutput)

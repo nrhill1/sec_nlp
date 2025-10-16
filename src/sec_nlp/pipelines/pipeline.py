@@ -91,9 +91,7 @@ class Pipeline(BaseModel):
     _index: Any | None = PrivateAttr(default=None)
 
     _prompt: BasePromptTemplate | None = PrivateAttr(default=None)
-    _graph: Runnable[SummarizationInput, SummarizationOutput] | None = PrivateAttr(
-        default=None
-    )
+    _graph: Runnable[SummarizationInput, SummarizationOutput] | None = PrivateAttr(default=None)
 
     @field_validator("start_date")
     @classmethod
@@ -176,22 +174,16 @@ class Pipeline(BaseModel):
         self.pinecone_model = self.pinecone_model or os.getenv(
             "PINECONE_MODEL", "multilingual-e5-large"
         )
-        self.pinecone_metric = self.pinecone_metric or os.getenv(
-            "PINECONE_METRIC", "cosine"
-        )
+        self.pinecone_metric = self.pinecone_metric or os.getenv("PINECONE_METRIC", "cosine")
         self.pinecone_cloud = self.pinecone_cloud or os.getenv("PINECONE_CLOUD", "aws")
-        self.pinecone_region = self.pinecone_region or os.getenv(
-            "PINECONE_REGION", "us-east-1"
-        )
+        self.pinecone_region = self.pinecone_region or os.getenv("PINECONE_REGION", "us-east-1")
 
         dim_env = os.getenv("PINECONE_DIMENSION")
         if self.pinecone_dimension is None and dim_env:
             try:
                 self.pinecone_dimension = int(dim_env)
             except ValueError:
-                logger.warning(
-                    "Invalid PINECONE_DIMENSION=%r; will infer at runtime.", dim_env
-                )
+                logger.warning("Invalid PINECONE_DIMENSION=%r; will infer at runtime.", dim_env)
 
         ns_env = os.getenv("PINECONE_NAMESPACE")
         if self.pinecone_namespace is None and ns_env:
@@ -204,9 +196,7 @@ class Pipeline(BaseModel):
             self._prompt = load_prompt(self.prompt_file)
             logger.info("Loaded prompt: %s", self.prompt_file)
         except Exception as e:
-            raise ValueError(
-                f"Failed to load prompt from {self.prompt_file}: {e}"
-            ) from e
+            raise ValueError(f"Failed to load prompt from {self.prompt_file}: {e}") from e
 
         logger.info(
             "Pipeline initialized: sec_nlp %s \n Python %s",
@@ -261,9 +251,7 @@ class Pipeline(BaseModel):
             vecs.get("data", []) if isinstance(vecs, Mapping) else []
         )
         if not data or not (data[0].get("values") or data[0].get("embedding")):
-            raise RuntimeError(
-                f"Could not infer embedding dimension for model: {model}"
-            )
+            raise RuntimeError(f"Could not infer embedding dimension for model: {model}")
         values: Sequence[float] = data[0].get("values") or data[0].get("embedding")
         return len(values)
 
@@ -272,9 +260,7 @@ class Pipeline(BaseModel):
             return []
         pc = self._ensure_pinecone()
         res: Any = pc.inference.embed(model=str(self.pinecone_model), inputs=texts)
-        rows = getattr(res, "data", []) or (
-            res.get("data", []) if isinstance(res, Mapping) else []
-        )
+        rows = getattr(res, "data", []) or (res.get("data", []) if isinstance(res, Mapping) else [])
         return [list(row.get("values") or row.get("embedding") or []) for row in rows]
 
     def _upsert_texts(
@@ -350,9 +336,7 @@ class Pipeline(BaseModel):
             self.dry_run,
         )
 
-        downloader = SECFilingDownloader(
-            email=str(self.email), downloads_folder=self.dl_path
-        )
+        downloader = SECFilingDownloader(email=str(self.email), downloads_folder=self.dl_path)
         downloader.add_symbol(symbol)
         downloader.download_filings(
             start_date=self.start_date,
@@ -373,30 +357,22 @@ class Pipeline(BaseModel):
             index_name = self._index_slug(symbol)
             self._ensure_index(index_name)
         else:
-            logger.info(
-                "Dry-run set: skipping Pinecone index provisioning and upserts."
-            )
+            logger.info("Dry-run set: skipping Pinecone index provisioning and upserts.")
 
         output_files: list[Path] = []
 
         for html_path in html_paths:
             chunks = pre.transform_html(html_path)
-            relevant = [
-                c for c in chunks if self.keyword_lower in c.page_content.lower()
-            ]
+            relevant = [c for c in chunks if self.keyword_lower in c.page_content.lower()]
             if not relevant:
-                logger.warning(
-                    "No chunks matched keyword %r in %s.", self.keyword, html_path.name
-                )
+                logger.warning("No chunks matched keyword %r in %s.", self.keyword, html_path.name)
                 continue
 
             texts = [c.page_content for c in relevant]
             metas = [{"source": html_path.name} for _ in relevant]
 
             if not self.dry_run:
-                self._upsert_texts(
-                    texts, metadata=metas, namespace=self.pinecone_namespace
-                )
+                self._upsert_texts(texts, metadata=metas, namespace=self.pinecone_namespace)
 
             logger.info(
                 "%d relevant chunks found in %s. Summarizing...",
@@ -405,8 +381,7 @@ class Pipeline(BaseModel):
             )
 
             inputs: list[SummarizationInput] = [
-                {"symbol": symbol, "chunk": t, "search_term": self.keyword}
-                for t in texts
+                {"symbol": symbol, "chunk": t, "search_term": self.keyword} for t in texts
             ]
             summaries: list[dict[str, Any]] = []
 
@@ -438,9 +413,7 @@ class Pipeline(BaseModel):
 
             safe_kw = re.sub(r"[^a-z0-9_-]+", "_", self.keyword_lower)
             safe_doc = _safe_name(html_path.stem)
-            out_file = (
-                self.out_path / f"{symbol.lower()}_{safe_kw}_{safe_doc}.summary.json"
-            )
+            out_file = self.out_path / f"{symbol.lower()}_{safe_kw}_{safe_doc}.summary.json"
 
             with open(out_file, "w") as f:
                 json.dump(

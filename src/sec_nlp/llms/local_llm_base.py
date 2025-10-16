@@ -57,9 +57,7 @@ class LocalLLM(BaseModel, Runnable[str, str], ABC):
         logger.info("Initialized %s with %s", self.__class__.__name__, self.model_name)
 
     # Match Runnable[str, str] exactly: (input, config=None, **kwargs) -> str
-    def invoke(
-        self, input: str, config: RunnableConfig | None = None, **kwargs: Any
-    ) -> str:
+    def invoke(self, input: str, config: RunnableConfig | None = None, **kwargs: Any) -> str:
         if self._model is None or self._tokenizer is None:
             logger.warning("Model not initialized; returning prompt passthrough.")
             return input
@@ -75,9 +73,7 @@ class LocalLLM(BaseModel, Runnable[str, str], ABC):
         # Forward config/kwargs to keep signature compatibility
         if isinstance(config, list):
             if len(config) != len(inputs):
-                raise ValueError(
-                    f"len(config)={len(config)} must equal len(inputs)={len(inputs)}"
-                )
+                raise ValueError(f"len(config)={len(config)} must equal len(inputs)={len(inputs)}")
             return [self.invoke(inp, cfg, **kwargs) for inp, cfg in zip(inputs, config)]
 
         # Case 2: single config (or None) → broadcast

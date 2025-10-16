@@ -19,7 +19,7 @@ permissions:
 env:
   RUSTFLAGS: -C target-cpu=native
   CARGO_INCREMENTAL: "0"
-  RUST_CRATE: edga_rs
+  RUST_CRATE: edgars
 
 jobs:
   changes:
@@ -42,7 +42,7 @@ jobs:
         with:
           filters: |
             rust:
-              - 'crates/edga_rs/**'
+              - 'crates/edgars/**'
               - '**/*.rs'
             python:
               - 'pyproject.toml'

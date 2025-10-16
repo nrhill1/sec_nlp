@@ -7,14 +7,14 @@ PYTEST_FLAGS := -v --maxfail=1 --tb=short --color=yes --basetemp .pytest_tmp --c
 
 # Rust
 CARGO ?= cargo
-RUST_CRATE := edga_rs
+RUST_CRATE := edgars
 RUST_PKG_FLAG := -p $(RUST_CRATE)
 CLIPPY_FLAGS ?= -D warnings
 
 # Maturin (PyO3)
 MATURIN := uvx maturin
 MATURIN_FLAGS ?= --release
-MATURIN_MANIFEST := $(RUST_CRATE)/Cargo.toml
+MATURIN_MANIFEST := crates/$(RUST_CRATE)/Cargo.toml
 WHEELS_DIR := target/wheels
 
 # Cache control

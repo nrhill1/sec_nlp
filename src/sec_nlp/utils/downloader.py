@@ -31,9 +31,7 @@ class SECFilingDownloader(BaseModel):
         return v
 
     def model_post_init(self, __ctx) -> None:
-        self._downloader = Downloader(
-            self.company_name, self.email, str(self.downloads_folder)
-        )
+        self._downloader = Downloader(self.company_name, self.email, str(self.downloads_folder))
 
     def add_symbol(self, symbol: str) -> None:
         self._symbols.add(symbol.strip().upper())
@@ -68,9 +66,7 @@ class SECFilingDownloader(BaseModel):
             mode.value,
         )
 
-        for symbol in tqdm(
-            sorted(self._symbols), desc="Downloading %s files..." % filing_type
-        ):
+        for symbol in tqdm(sorted(self._symbols), desc="Downloading %s files..." % filing_type):
             try:
                 self._downloader.get(  # type: ignore[union-attr]
                     filing_type,
@@ -87,13 +83,10 @@ class SECFilingDownloader(BaseModel):
 
     def __repr__(self) -> str:
         symbols = ",".join(sorted(self._symbols)) or "<none>"
-        return (
-            "<SECFilingDownloader company_name=%s symbols=[%s] downloads_folder=%r>"
-            % (
-                self.company_name,
-                symbols,
-                self.downloads_folder,
-            )
+        return "<SECFilingDownloader company_name=%s symbols=[%s] downloads_folder=%r>" % (
+            self.company_name,
+            symbols,
+            self.downloads_folder,
         )
 
     def __str__(self) -> str:

@@ -14,9 +14,7 @@ from sec_nlp.pipelines import Pipeline, _default_prompt_path
 from sec_nlp.types import FilingMode
 
 logger = logging.getLogger(__name__)
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
-)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
 
 def setup_logging(verbose: bool) -> None:
@@ -59,9 +57,7 @@ def parse_args() -> argparse.Namespace:
     one_year_ago = today - timedelta(days=365)
 
     p = argparse.ArgumentParser(description="Run SEC NLP pipeline over filings.")
-    p.add_argument(
-        "symbols", nargs="*", default=["AAPL"], help="Ticker symbols (default: AAPL)."
-    )
+    p.add_argument("symbols", nargs="*", default=["AAPL"], help="Ticker symbols (default: AAPL).")
     p.add_argument(
         "--mode",
         choices=["annual", "quarterly"],
@@ -73,20 +69,14 @@ def parse_args() -> argparse.Namespace:
         default=one_year_ago.strftime("%Y-%m-%d"),
         help="Start date (YYYY-MM-DD).",
     )
-    p.add_argument(
-        "--end_date", default=today.strftime("%Y-%m-%d"), help="End date (YYYY-MM-DD)."
-    )
-    p.add_argument(
-        "--keyword", default="revenue", help="Keyword to filter filing chunks."
-    )
+    p.add_argument("--end_date", default=today.strftime("%Y-%m-%d"), help="End date (YYYY-MM-DD).")
+    p.add_argument("--keyword", default="revenue", help="Keyword to filter filing chunks.")
     p.add_argument(
         "--prompt_file",
         default=_default_prompt_path(),
         help="Prompt YAML path or packaged file.",
     )
-    p.add_argument(
-        "--model_name", default="google/flan-t5-base", help="LLM model name."
-    )
+    p.add_argument("--model_name", default="google/flan-t5-base", help="LLM model name.")
     p.add_argument("--limit", type=int, default=1)
     p.add_argument("--max-new-tokens", type=int, default=1024)
     p.add_argument("--max-retries", type=int, default=2)
@@ -95,9 +85,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--fresh", action="store_true", help="Clear old output/downloads.")
     p.add_argument("--no-cleanup", action="store_true", help="Keep downloaded files.")
     p.add_argument("--verbose", action="store_true", help="Enable debug logging.")
-    p.add_argument(
-        "--dry-run", action="store_true", help="Skip Pinecone provisioning and upserts."
-    )
+    p.add_argument("--dry-run", action="store_true", help="Skip Pinecone provisioning and upserts.")
     return p.parse_args()
 
 
@@ -150,9 +138,7 @@ def main() -> None:
     if not args.no_cleanup:
         cleanup_downloads(downloads_folder)
     else:
-        logger.info(
-            "--no-cleanup set; leaving downloads at %s", downloads_folder.resolve()
-        )
+        logger.info("--no-cleanup set; leaving downloads at %s", downloads_folder.resolve())
 
 
 if __name__ == "__main__":

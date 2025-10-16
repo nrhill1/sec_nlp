@@ -77,14 +77,7 @@ def test_pipeline_run_writes_summary(
     dl_inst.download_filings.return_value = {"AAPL": True}
 
     pre_inst = cast(MagicMock, MockPre.return_value)
-    fake_html = (
-        dl_path
-        / "sec-edgar-filings"
-        / "AAPL"
-        / "10-K"
-        / "0001"
-        / "primary-document.html"
-    )
+    fake_html = dl_path / "sec-edgar-filings" / "AAPL" / "10-K" / "0001" / "primary-document.html"
     fake_html.parent.mkdir(parents=True, exist_ok=True)
     fake_html.write_text("<html>Revenue is up</html>", encoding="utf-8")
     pre_inst.html_paths_for_symbol.return_value = [fake_html]

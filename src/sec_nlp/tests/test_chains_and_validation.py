@@ -24,9 +24,7 @@ class DummyLocalLLM(LocalLLM):
         return prompt
 
     # Match Runnable[str, str] signature
-    def invoke(
-        self, input: str, config: RunnableConfig | None = None, **__: Any
-    ) -> str:
+    def invoke(self, input: str, config: RunnableConfig | None = None, **__: Any) -> str:
         return json.dumps({"summary": "ok", "points": ["x"], "confidence": 0.7})
 
 
@@ -41,9 +39,7 @@ def test_chain_invoke_json_mode() -> None:
         require_json=True,
     )
 
-    out = chain.invoke(
-        {"symbol": "AAPL", "chunk": "Revenue...", "search_term": "revenue"}
-    )
+    out = chain.invoke({"symbol": "AAPL", "chunk": "Revenue...", "search_term": "revenue"})
     assert isinstance(out, dict)
     assert out["status"] == "ok"
     assert out["summary"]["summary"] == "ok"

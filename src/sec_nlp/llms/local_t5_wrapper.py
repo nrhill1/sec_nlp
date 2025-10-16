@@ -24,15 +24,9 @@ class FlanT5LocalLLM(LocalLLM):
         self._model = AutoModelForSeq2SeqLM.from_pretrained(self.model_name)
 
     def _generate(self, prompt: str, gen_kwargs: Dict[str, Any]) -> str:
-        assert (
-            self._torch is not None
-        ), "Torch not initialized; call after model_post_init"
-        assert (
-            self._tokenizer is not None
-        ), "Tokenizer not initialized; call after model_post_init"
-        assert (
-            self._model is not None
-        ), "Model not initialized; call after model_post_init"
+        assert self._torch is not None, "Torch not initialized; call after model_post_init"
+        assert self._tokenizer is not None, "Tokenizer not initialized; call after model_post_init"
+        assert self._model is not None, "Model not initialized; call after model_post_init"
 
         torch = self._torch
         tok = self._tokenizer
