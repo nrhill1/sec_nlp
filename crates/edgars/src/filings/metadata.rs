@@ -1,4 +1,3 @@
-
 //! Module-level metadata and helper utilities for EDGAR filing types.
 //!
 //! This module provides:

@@ -128,16 +128,6 @@ pub struct HistoricalFile {
 ///     Ok(())
 /// }
 /// ```
-
-// TODO: This function
-// pub async fn fetch_company_filings(cik: &str) -> Result<CompanySubmissions> {
-//     let client = SecClient::new();
-//     let normalized_cik = crate::corp::cik::normalize_cik(cik)?;
-//     let url = format!("{}/CIK{}.json", SUBMISSIONS_BASE, normalized_cik);
-
-//     client.fetch_json(&url).await
-// }
-
 /// Filter filings by form type.
 ///
 /// Returns a vector of simplified filing records matching the specified form type.

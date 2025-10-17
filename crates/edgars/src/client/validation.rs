@@ -108,7 +108,7 @@ impl ResponseInfo {
     ///
     /// Returns true if fewer than 2 requests remain.
     pub fn is_rate_limit_low(&self) -> bool {
-        self.rate_limit_remaining.map_or(false, |r| r < 2)
+        self.rate_limit_remaining.is_some_and(|r| r < 2)
     }
 }
 

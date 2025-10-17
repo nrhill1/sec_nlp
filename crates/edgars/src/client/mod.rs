@@ -24,10 +24,10 @@
 //! #[tokio::main]
 //! async fn main() -> Result<(), Box<dyn std::error::Error>> {
 //!     let client = SecClient::new("MyApp", "contact@example.com");
-//!     
+//!
 //!     let response = client.get("https://data.sec.gov/api/xbrl/companyfacts/CIK0000320193.json").await?;
 //!     println!("Got response!");
-//!     
+//!
 //!     Ok(())
 //! }
 //! ```
@@ -112,7 +112,6 @@ impl SecClient {
 
     /// Make a request with the specified method and URI.
     async fn request(&self, method: Method, uri: Uri) -> Result<Response<Body>> {
-
         self.rate_limiter.wait().await;
 
         self.retry_policy
@@ -187,6 +186,5 @@ mod tests {
         assert!(client.user_agent.contains("test@example.com"));
     }
 }
-
 
 pub use crate::client;
