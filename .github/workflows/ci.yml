@@ -119,11 +119,13 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
-        python: ["3.11", "3.12"]
+        python: ["3.11", "3.12", "3.13"]
         include:
           - python: "3.11"
             experimental: false
           - python: "3.12"
+            experimental: true
+          - python: "3.13"
             experimental: true
     steps:
       - uses: actions/checkout@v4
