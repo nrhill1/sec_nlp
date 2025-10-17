@@ -53,14 +53,9 @@ pub mod python;
 
 // Re-export commonly used types at crate root
 pub use client::SecClient;
-pub use corp::{
-    cik::{normalize_cik},
-    facts::{fetch_company_facts, CompanyFacts},
-    submissions::{fetch_company_filings, CompanySubmissions},
-};
-pub use errors::{EdgarError, Result};
+pub use corp::{cik::normalize_cik, facts::CompanyFacts, submissions::CompanySubmissions};
+pub use errors::{Error, Result};
 pub use filings::{is_valid_filing_type, FormType};
-pub use parse::{parse_auto, parse_html, parse_json, parse_text, Document, Format};
 pub use utils::{build_document_url, build_filing_url, build_full_text_url};
 
 /// Library version
@@ -86,7 +81,7 @@ mod tests {
     #[test]
     fn test_public_exports() {
         // Ensure main exports compile
-        let _client: SecClient = SecClient::new();
+        let _client: SecClient = SecClient::new("Nic Hill", "nrhill1@gmail.com");
         let _cik = normalize_cik("320193");
     }
 }

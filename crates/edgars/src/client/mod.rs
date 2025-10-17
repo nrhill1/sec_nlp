@@ -1,313 +1,177 @@
-//! HTTP client module for SEC/EDGAR API interactions.
+//! HTTP client for SEC API requests.
 //!
-//! This module provides an async HTTP client with built-in rate limiting,
-//! retry logic, and SEC-specific request validation.
+//! This module provides a Hyper-based HTTP client with built-in support
+//! for rate limiting, retries, and request validation per SEC guidelines.
+//!
+//! # Submodules
+//!
+//! * [`rate_limit`] - Rate limiting to comply with SEC API limits
+//! * [`retry`] - Retry logic with exponential backoff
+//! * [`validation`] - Request and response validation
+//!
+//! # SEC API Requirements
+//!
+//! The SEC requires all automated requests to:
+//! - Include a User-Agent header with contact information
+//! - Respect rate limits (10 requests per second maximum)
+//! - Handle 429 responses appropriately
+//!
+//! # Examples
+//!
+//! ```no_run
+//! use edgars::client::SecClient;
+//!
+//! #[tokio::main]
+//! async fn main() -> Result<(), Box<dyn std::error::Error>> {
+//!     let client = SecClient::new("MyApp", "contact@example.com");
+//!     
+//!     let response = client.get("https://data.sec.gov/api/xbrl/companyfacts/CIK0000320193.json").await?;
+//!     println!("Got response!");
+//!     
+//!     Ok(())
+//! }
+//! ```
+//!
 
-mod rate_limit;
-mod retry;
+pub mod rate_limit;
+pub mod retry;
+pub mod validation;
 
-use std::sync::Arc;
+use hyper::client::HttpConnector;
+use hyper::{Body, Method, Request, Response, StatusCode, Uri};
+use hyper_tls::HttpsConnector;
 use std::time::Duration;
 
-use http_body_util::BodyExt;
-use hyper::Request;
-use hyper_tls::HttpsConnector;
-use hyper_util::client::legacy::{connect::HttpConnector, Client};
-use hyper_util::rt::TokioExecutor;
-use tokio::time::timeout;
+use crate::errors::{Error, Result};
 
-use crate::errors::{EdgarError, Result};
-use rate_limit::SecRateLimiter;
+use rate_limit::RateLimiter;
 use retry::RetryPolicy;
 
-pub use rate_limit::SecRateLimiter as RateLimiter;
-
-pub const DEFAULT_UA: &str = "edgars/0.1 (+https://github.com/yourusername/edgars; contact@example.com)";
-pub const DEFAULT_TIMEOUT: Duration = Duration::from_secs(30);
-
-/// An async HTTP client for SEC/EDGAR API interactions.
-///
-/// This client provides:
-/// - Automatic rate limiting (default: 10 requests/second per SEC requirements)
-/// - Retry logic with exponential backoff for transient failures
-/// - HTTPS-only enforcement for SEC domains
-/// - Configurable timeout and user agent
-///
-/// # Examples
-///
-/// ```rust,no_run
-/// use edgars::SecClient;
-///
-/// #[tokio::main]
-/// async fn main() -> Result<(), Box<dyn std::error::Error>> {
-///     let client = SecClient::new()
-///         .with_user_agent("MyApp/1.0 (contact@example.com)")
-///         .with_timeout(std::time::Duration::from_secs(60));
-///
-///     let text = client.fetch_text("https://www.sec.gov/files/company_tickers.json").await?;
-///     Ok(())
-/// }
-/// ```
-#[derive(Clone)]
+/// SEC API client with rate limiting and retry support.
 pub struct SecClient {
-    client: Arc<Client<HttpsConnector<HttpConnector>, String>>,
-    timeout: Duration,
+    client: hyper::Client<HttpsConnector<HttpConnector>>,
+    rate_limiter: RateLimiter,
+    retry_policy: RetryPolicy,
     user_agent: String,
-    rate_limiter: Arc<SecRateLimiter>,
-    retry_policy: Option<RetryPolicy>,
-}
-
-impl Default for SecClient {
-    fn default() -> Self {
-        Self::new()
-    }
 }
 
 impl SecClient {
-    /// Create a new SEC client with sensible defaults.
+    /// Create a new SEC client with default settings.
     ///
-    /// Default configuration:
-    /// - User agent: "edgars/0.1"
-    /// - Timeout: 30 seconds
-    /// - Rate limit: 10 requests/second (SEC requirement)
-    /// - Retry policy: 3 attempts with exponential backoff
-    pub fn new() -> Self {
+    /// # Arguments
+    ///
+    /// * `app_name` - Your application name
+    /// * `contact` - Your contact email
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use edgars::client::SecClient;
+    ///
+    /// let client = SecClient::new("MyApp", "contact@example.com");
+    /// ```
+    pub fn new(app_name: &str, contact: &str) -> Self {
         let https = HttpsConnector::new();
-        let client = Client::builder(TokioExecutor::new()).build::<_, String>(https);
+        let client = hyper::Client::builder()
+            .pool_idle_timeout(Duration::from_secs(30))
+            .build::<_, Body>(https);
 
         Self {
-            client: Arc::new(client),
-            timeout: DEFAULT_TIMEOUT,
-            user_agent: DEFAULT_UA.to_string(),
-            rate_limiter: Arc::new(SecRateLimiter::new()),
-            retry_policy: Some(RetryPolicy::default()),
+            client,
+            rate_limiter: RateLimiter::new(10, Duration::from_secs(1)), // 10 req/sec
+            retry_policy: RetryPolicy::default(),
+            user_agent: format!("{} {}", app_name, contact),
         }
     }
 
-    // Return a reference to the inner client
-    pub fn client(&self) -> &Client<HttpsConnector<HttpConnector>, String> {
-        &self.client
-    }
-
-    /// Returns the configured User-Agent string.
-    pub fn user_agent(&self) -> &str {
-        &self.user_agent
-    }
-
-    /// Provides access to the rate limiter (useful for custom request batching).
-    pub fn rate_limiter(&self) -> &SecRateLimiter {
-        &self.rate_limiter
-    }
-
-    /// Set a custom user agent string.
+    /// Make a GET request to the specified URL.
     ///
-    /// The SEC requires a valid user agent with contact information.
+    /// Automatically handles rate limiting, retries, and SEC-required headers.
     ///
     /// # Arguments
     ///
-    /// * `ua` - User agent string (e.g., "MyApp/1.0 (contact@example.com)")
-    pub fn with_user_agent(mut self, ua: impl Into<String>) -> Self {
-        self.user_agent = ua.into();
-        self
-    }
-
-    /// Set a custom timeout duration.
+    /// * `url` - The URL to request
     ///
-    /// # Arguments
+    /// # Returns
     ///
-    /// * `timeout` - Maximum duration to wait for a response
-    pub fn with_timeout(mut self, timeout: Duration) -> Self {
-        self.timeout = timeout;
-        self
-    }
-
-    /// Disable rate limiting (not recommended for SEC API).
-    ///
-    /// The SEC requires rate limiting to 10 requests per second.
-    /// Only disable this if you have explicit permission or are using a local cache.
-    pub fn without_rate_limit(mut self) -> Self {
-        self.rate_limiter = Arc::new(SecRateLimiter::unlimited());
-        self
-    }
-
-    /// Disable retry logic.
-    ///
-    /// By default, the client retries failed requests with exponential backoff.
-    /// Use this to disable retries entirely.
-    pub fn without_retry(mut self) -> Self {
-        self.retry_policy = None;
-        self
-    }
-
-    /// Set a custom rate limit.
-    ///
-    /// # Arguments
-    ///
-    /// * `requests_per_second` - Maximum requests per second (SEC default is 10)
-    pub fn with_rate_limit(mut self, requests_per_second: u32) -> Self {
-        self.rate_limiter = Arc::new(SecRateLimiter::with_rate(requests_per_second));
-        self
-    }
-
-    /// Fetch text content from a URL.
-    ///
-    /// # Arguments
-    ///
-    /// * `url` - The URL to fetch (must be HTTPS and on sec.gov domain)
+    /// The HTTP response on success.
     ///
     /// # Errors
     ///
     /// Returns an error if:
-    /// - The URL is not HTTPS
-    /// - The URL is not on the sec.gov domain
-    /// - The request times out
-    /// - The server returns an error status
-    pub async fn fetch_text(&self, url: &str) -> Result<String> {
-        self.validate_url(url)?;
+    /// - The URL is invalid
+    /// - The request fails after retries
+    /// - The response status is not successful
+    pub async fn get(&self, url: &str) -> Result<Response<Body>> {
+        let uri: Uri = url
+            .parse()
+            .map_err(|_| Error::Custom(format!("Invalid URL: {}", url)))?;
 
-        if let Some(policy) = &self.retry_policy {
-            self.fetch_text_with_retry(url, policy).await
-        } else {
-            self.fetch_text_once(url).await
-        }
+        self.request(Method::GET, uri).await
     }
 
-    /// Fetch and parse JSON from a URL.
-    ///
-    /// # Arguments
-    ///
-    /// * `url` - The URL to fetch (must be HTTPS and on sec.gov domain)
+    /// Make a request with the specified method and URI.
+    async fn request(&self, method: Method, uri: Uri) -> Result<Response<Body>> {
+        self.rate_limiter.wait().await;
+
+        self.retry_policy
+            .execute(|| {
+                let uri = uri.clone();
+                let client = self.client.clone();
+                let user_agent = self.user_agent.clone();
+                let method = method.clone();
+
+                Box::pin(async move {
+                    // Build request
+                    let req = Request::builder()
+                        .method(method)
+                        .uri(uri.clone())
+                        .header("User-Agent", &user_agent)
+                        .header("Accept", "application/json")
+                        .header("Accept-Encoding", "gzip, deflate")
+                        .header("Host", "data.sec.gov")
+                        .body(Body::empty())
+                        .map_err(Error::HttpError)?;
+
+                    let response = client.request(req).await.map_err(Error::HyperError)?;
+
+                    // Check status
+                    match response.status() {
+                        StatusCode::OK => Ok(response),
+                        StatusCode::TOO_MANY_REQUESTS => {
+                            Err(Error::RateLimitExceeded("SEC rate limit exceeded".to_string()))
+                        }
+                        StatusCode::NOT_FOUND => Err(Error::NotFound(format!("Resource not found: {}", uri))),
+                        status => Err(Error::InvalidStatus(status)),
+                    }
+                })
+            })
+            .await
+    }
+
+    /// Fetch JSON data from a URL and deserialize it.
     ///
     /// # Type Parameters
     ///
-    /// * `T` - The type to deserialize the JSON into
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the request fails or JSON parsing fails.
-    pub async fn fetch_json<T: for<'de> serde::Deserialize<'de>>(&self, url: &str) -> Result<T> {
-        let text = self.fetch_text(url).await?;
-        serde_json::from_str(&text).map_err(|e| e.into())
-    }
-
-    /// Fetch raw bytes from a URL.
+    /// * `T` - The type to deserialize into (must implement `serde::Deserialize`)
     ///
     /// # Arguments
     ///
-    /// * `url` - The URL to fetch (must be HTTPS and on sec.gov domain)
+    /// * `url` - The URL to fetch
     ///
-    /// # Errors
+    /// # Returns
     ///
-    /// Returns an error if the request fails.
-    pub async fn fetch_bytes(&self, url: &str) -> Result<Vec<u8>> {
-        self.validate_url(url)?;
-
-        self.rate_limiter.wait().await;
-
-        let req = self.build_request(url, "*/*")?;
-        let res = self.execute_request(req).await?;
-
-        let body = res.into_body();
-        let bytes = body
-            .collect()
+    /// The deserialized data on success.
+    pub async fn get_json<T>(&self, url: &str) -> Result<T>
+    where
+        T: serde::de::DeserializeOwned,
+    {
+        let response = self.get(url).await?;
+        let body = hyper::body::to_bytes(response.into_body())
             .await
-            .map_err(|e| EdgarError::Network(e.to_string()))?
-            .to_bytes();
+            .map_err(Error::HyperError)?;
 
-        Ok(bytes.to_vec())
-    }
-
-    // Private methods
-    async fn fetch_text_once(&self, url: &str) -> Result<String> {
-        self.rate_limiter.wait().await;
-
-        let req = self.build_request(url, "text/plain")?;
-        let res = self.execute_request(req).await?;
-
-        let body = res.into_body();
-        let bytes = body
-            .collect()
-            .await
-            .map_err(|e| EdgarError::Network(e.to_string()))?
-            .to_bytes();
-
-        String::from_utf8(bytes.to_vec()).map_err(|e| e.into())
-    }
-
-    async fn fetch_text_with_retry(&self, url: &str, policy: &RetryPolicy) -> Result<String> {
-        let mut attempt = 0;
-        let mut delay = policy.initial_delay;
-
-        loop {
-            attempt += 1;
-
-            match self.fetch_text_once(url).await {
-                Ok(result) => return Ok(result),
-                Err(e) if e.is_retryable() && attempt < policy.max_attempts => {
-                    tracing::debug!(
-                        "Attempt {}/{} failed: {}. Retrying in {:?}",
-                        attempt,
-                        policy.max_attempts,
-                        e,
-                        delay
-                    );
-                    tokio::time::sleep(delay).await;
-                    delay = std::cmp::min(
-                        Duration::from_secs_f64(delay.as_secs_f64() * policy.multiplier),
-                        policy.max_delay,
-                    );
-                }
-                Err(e) => return Err(e),
-            }
-        }
-    }
-
-    fn build_request(&self, url: &str, accept: &str) -> Result<Request<String>> {
-        Request::builder()
-            .method("GET")
-            .uri(url)
-            .header("User-Agent", &self.user_agent)
-            .header("Accept", accept)
-            .header("Accept-Encoding", "gzip, deflate")
-            .body(String::new())
-            .map_err(|e| EdgarError::Network(e.to_string()))
-    }
-
-    async fn execute_request(&self, req: Request<String>) -> Result<hyper::Response<hyper::body::Incoming>> {
-        let res = timeout(self.timeout, self.client.request(req))
-            .await
-            .map_err(|_| EdgarError::Timeout(self.timeout.as_secs()))?
-            .map_err(|e| EdgarError::Network(e.to_string()))?;
-
-        let status = res.status();
-        if !status.is_success() {
-            return Err(EdgarError::http_status(status.as_u16()));
-        }
-
-        Ok(res)
-    }
-
-    fn validate_url(&self, url: &str) -> Result<()> {
-        let parsed = url::Url::parse(url)?;
-
-        if parsed.scheme() != "https" {
-            return Err(EdgarError::Validation(
-                "Only HTTPS URLs allowed for SEC requests".into(),
-            ));
-        }
-
-        if let Some(host) = parsed.host_str() {
-            if !host.ends_with("sec.gov") {
-                return Err(EdgarError::Validation(format!(
-                    "Only sec.gov URLs allowed, got: {}",
-                    host
-                )));
-            }
-        } else {
-            return Err(EdgarError::Validation("URL missing host".into()));
-        }
-
-        Ok(())
+        serde_json::from_slice(&body).map_err(Error::JsonError)
     }
 }
 
@@ -317,42 +181,11 @@ mod tests {
 
     #[test]
     fn test_client_creation() {
-        let client = SecClient::new();
-        assert_eq!(client.timeout, Duration::from_secs(30));
-    }
-
-    #[test]
-    fn test_client_builder() {
-        let client = SecClient::new()
-            .with_user_agent("custom/1.0")
-            .with_timeout(Duration::from_secs(60));
-
-        assert_eq!(client.timeout, Duration::from_secs(60));
-        assert_eq!(client.user_agent, "custom/1.0");
-    }
-
-    #[test]
-    fn test_url_validation() {
-        let client = SecClient::new();
-
-        // Valid URLs
-        assert!(client.validate_url("https://www.sec.gov/cgi-bin/browse-edgar").is_ok());
-        assert!(client
-            .validate_url("https://data.sec.gov/submissions/CIK0000320193.json")
-            .is_ok());
-
-        // Invalid URLs
-        assert!(client.validate_url("http://www.sec.gov/test").is_err());
-        assert!(client.validate_url("https://example.com/test").is_err());
-        assert!(client.validate_url("not a url").is_err());
-    }
-
-    #[tokio::test]
-    async fn test_client_is_cloneable() {
-        let client = SecClient::new();
-        let client2 = client.clone();
-
-        // Both should work independently
-        assert_eq!(client.user_agent, client2.user_agent);
+        let client = SecClient::new("TestApp", "test@example.com");
+        assert!(client.user_agent.contains("TestApp"));
+        assert!(client.user_agent.contains("test@example.com"));
     }
 }
+
+// Add your client implementation here or re-export the main client type
+pub use crate::client;

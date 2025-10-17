@@ -2,11 +2,12 @@
 //!
 //! This module provides the [`FormType`] enum which represents all SEC filing types,
 //! along with helper functions for parsing and working with form types.
+pub mod metadata;
 
 use std::fmt;
 use std::str::FromStr;
 
-use crate::EdgarError;
+use crate::Error;
 
 /// SEC filing form types.
 ///
@@ -334,7 +335,7 @@ impl fmt::Display for FormType {
 }
 
 impl FromStr for FormType {
-    type Err = EdgarError;
+    type Err = Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let up = s.trim().to_uppercase();
@@ -420,7 +421,7 @@ impl FromStr for FormType {
             "25/A" => Ok(FormType::TwentyFiveA),
             "RW" => Ok(FormType::Rw),
             "RW/WD" | "RW/Wd" => Ok(FormType::RwWd),
-            _ => Err(EdgarError::Validation(format!("unknown form type: {}", s))),
+            _ => Err(Error::NotFound(format!("unknown form type: {}", s))),
         }
     }
 }

@@ -1,31 +1,21 @@
 # sec_nlp/pipelines/pipeline.py
-from sec_nlp import __version__
-from sec_nlp.types import FilingMode
-from sec_nlp.chains import (
-    build_sec_runnable,
-    SummarizationInput,
-    SummarizationOutput,
-)
-from sec_nlp.utils import SECFilingDownloader, Preprocessor
-from sec_nlp.llms import FlanT5LocalLLM
-
 import importlib.resources as resources
-import traceback
-import re
-import os
 import json
 import logging
-from importlib.resources import files
+import os
+import re
+import traceback
+from collections.abc import Mapping, Sequence
 from datetime import date
+from importlib.resources import files
 from os import fspath
 from pathlib import Path
-from typing import Any, Mapping, Sequence, Self
+from typing import Any, Self
 from uuid import uuid4
 
-
-from langchain_core.runnables import Runnable
-from langchain_core.prompts.loading import load_prompt
 from langchain_core.prompts.base import BasePromptTemplate
+from langchain_core.prompts.loading import load_prompt
+from langchain_core.runnables import Runnable
 from pinecone import Pinecone, ServerlessSpec
 from pydantic import (
     BaseModel,
@@ -36,6 +26,15 @@ from pydantic import (
     model_validator,
 )
 
+from sec_nlp import __version__
+from sec_nlp.chains import (
+    SummarizationInput,
+    SummarizationOutput,
+    build_sec_runnable,
+)
+from sec_nlp.llms import FlanT5LocalLLM
+from sec_nlp.types import FilingMode
+from sec_nlp.utils import Preprocessor, SECFilingDownloader
 
 logger = logging.getLogger(__name__)
 
@@ -279,7 +278,7 @@ class Pipeline(BaseModel):
             metadata = [{} for _ in texts]
 
         payload: list[dict[str, Any]] = []
-        for _id, vec, meta in zip(ids, vectors, metadata):
+        for _id, vec, meta in zip(ids, vectors, metadata, strict=True):
             payload.append({"id": _id, "values": vec, "metadata": meta or {}})
 
         assert self._index is not None, "Pinecone index not initialized"

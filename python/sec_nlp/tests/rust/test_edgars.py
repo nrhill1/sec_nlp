@@ -1,5 +1,6 @@
+from typing import Any
+
 import pytest
-from typing import Dict, Any, List, Tuple, Optional
 
 try:
     import edgars
@@ -40,7 +41,7 @@ class TestClient:
     def test_fetch_json(self) -> None:
         """Test fetching and parsing JSON"""
         client: edgars.Client = edgars.Client()
-        data: Dict[str, Any] = client.fetch_json("https://www.sec.gov/files/company_tickers.json")
+        data: dict[str, Any] = client.fetch_json("https://www.sec.gov/files/company_tickers.json")
 
         assert isinstance(data, dict)
         assert len(data) > 5000  # Should have thousands of companies
@@ -101,7 +102,7 @@ class TestCIKTicker:
 
     def test_get_all_tickers(self) -> None:
         """Test fetching all ticker mappings"""
-        tickers: List[Tuple[str, str]] = edgars.get_all_tickers()
+        tickers: list[tuple[str, str]] = edgars.get_all_tickers()
 
         assert isinstance(tickers, list)
         assert len(tickers) > 5000
@@ -116,9 +117,9 @@ class TestCIKTicker:
 
     def test_get_all_tickers_contains_major_stocks(self) -> None:
         """Test that ticker map contains major stocks"""
-        tickers_dict: Dict[str, str] = dict(edgars.get_all_tickers())
+        tickers_dict: dict[str, str] = dict(edgars.get_all_tickers())
 
-        major_stocks: List[str] = ["AAPL", "MSFT", "GOOGL", "AMZN"]
+        major_stocks: list[str] = ["AAPL", "MSFT", "GOOGL", "AMZN"]
         for ticker in major_stocks:
             assert ticker in tickers_dict, f"{ticker} not in ticker map"
 
@@ -131,7 +132,7 @@ class TestCIKTicker:
 class TestCompanyData:
     def test_get_company_facts(self) -> None:
         """Test fetching company XBRL facts"""
-        facts: Dict[str, Any] = edgars.get_company_facts("320193")  # Apple
+        facts: dict[str, Any] = edgars.get_company_facts("320193")  # Apple
 
         assert isinstance(facts, dict)
         assert "cik" in facts
@@ -143,14 +144,14 @@ class TestCompanyData:
 
     def test_get_company_facts_has_taxonomies(self) -> None:
         """Test that company facts include taxonomies"""
-        facts: Dict[str, Any] = edgars.get_company_facts("320193")
+        facts: dict[str, Any] = edgars.get_company_facts("320193")
 
         assert "us-gaap" in facts["facts"]
         assert isinstance(facts["facts"]["us-gaap"], dict)
 
     def test_get_company_filings(self) -> None:
         """Test fetching company filings"""
-        filings: Dict[str, Any] = edgars.get_company_filings("320193")  # Apple
+        filings: dict[str, Any] = edgars.get_company_filings("320193")  # Apple
 
         assert isinstance(filings, dict)
         assert "cik" in filings
@@ -162,9 +163,9 @@ class TestCompanyData:
 
     def test_get_company_filings_recent(self) -> None:
         """Test that recent filings are present"""
-        filings: Dict[str, Any] = edgars.get_company_filings("320193")
+        filings: dict[str, Any] = edgars.get_company_filings("320193")
 
-        recent: Dict[str, Any] = filings["filings"]["recent"]
+        recent: dict[str, Any] = filings["filings"]["recent"]
         assert "form" in recent
         assert "accessionNumber" in recent
         assert "filingDate" in recent
@@ -174,7 +175,7 @@ class TestCompanyData:
 
     def test_get_company_invalid_cik_raises(self) -> None:
         """Test that invalid CIK raises error"""
-        with pytest.raises(Exception):
+        with pytest.raises(ValueError):
             edgars.get_company_facts("9999999999")
 
 
@@ -242,14 +243,14 @@ class TestParsers:
         """Test that HTML without form type raises error"""
         html: str = "<html><body>No form type here</body></html>"
 
-        with pytest.raises(Exception):
+        with pytest.raises(ValueError):
             edgars.parse_html_doc(html)
 
     def test_parse_invalid_json_raises(self) -> None:
         """Test that malformed JSON raises error"""
         invalid_json: str = '{"invalid": json'
 
-        with pytest.raises(Exception):
+        with pytest.raises(ValueError):
             edgars.parse_json_doc(invalid_json)
 
 

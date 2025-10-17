@@ -1,11 +1,10 @@
 from __future__ import annotations
 
-from typing import Any
 import json
+from typing import Any
 
 from langchain_core.prompts import BasePromptTemplate, PromptTemplate
 from langchain_core.runnables import Runnable, RunnableConfig
-
 from sec_nlp.chains.sec_runnable import build_sec_runnable
 from sec_nlp.llms.local_llm_base import LocalLLM
 

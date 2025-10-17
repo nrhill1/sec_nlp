@@ -5,10 +5,10 @@ import json
 import logging
 from typing import Any, ClassVar, Literal, Self, TypedDict
 
-from pydantic import Field, TypeAdapter, ValidationError
-from pydantic.dataclasses import dataclass
 from langchain_core.prompts.base import BasePromptTemplate
 from langchain_core.runnables import Runnable, RunnableLambda, RunnableSequence
+from pydantic import Field, TypeAdapter, ValidationError
+from pydantic.dataclasses import dataclass
 
 from sec_nlp.llms.local_llm_base import LocalLLM
 

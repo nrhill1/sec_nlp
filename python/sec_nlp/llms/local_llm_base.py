@@ -43,8 +43,8 @@ class LocalLLM(BaseModel, Runnable[str, str], ABC):
     def model_post_init(self, __ctx: Any) -> None:
         if not self._lazy_imports():
             return
-        from transformers import AutoTokenizer
         import torch
+        from transformers import AutoTokenizer
 
         self._torch = torch
         self._tokenizer = AutoTokenizer.from_pretrained(self.model_name, use_fast=True)  # type: ignore
@@ -66,12 +66,13 @@ class LocalLLM(BaseModel, Runnable[str, str], ABC):
         inputs: list[str],
         config: RunnableConfig | list[RunnableConfig] | None = None,
         **kwargs: Any | None,
-    ) -> list[str]
+    ) -> list[str]:
         if isinstance(config, list):
             if len(config) != len(inputs):
                 raise ValueError(f"len(config)={len(config)} must equal len(inputs)={len(inputs)}")
-            return [self.invoke(inp, cfg, **kwargs) for inp, cfg in zip(inputs, config)]
-
+            return [
+                self.invoke(inp, cfg, **kwargs) for inp, cfg in zip(inputs, config, strict=True)
+            ]
 
         return [self.invoke(inp, config, **kwargs) for inp in inputs]
 

@@ -3,9 +3,9 @@ import logging
 from datetime import date
 from pathlib import Path
 
-from pydantic import BaseModel, field_validator, PrivateAttr
-from tqdm import tqdm
+from pydantic import BaseModel, PrivateAttr, field_validator
 from sec_edgar_downloader import Downloader  # type: ignore
+from tqdm import tqdm
 
 from sec_nlp.types import FilingMode
 
@@ -66,7 +66,7 @@ class SECFilingDownloader(BaseModel):
             mode.value,
         )
 
-        for symbol in tqdm(sorted(self._symbols), desc="Downloading %s files..." % filing_type):
+        for symbol in tqdm(sorted(self._symbols), desc=f"Downloading {filing_type} files..."):
             try:
                 self._downloader.get(  # type: ignore[union-attr]
                     filing_type,
@@ -83,11 +83,7 @@ class SECFilingDownloader(BaseModel):
 
     def __repr__(self) -> str:
         symbols = ",".join(sorted(self._symbols)) or "<none>"
-        return "<SECFilingDownloader company_name=%s symbols=[%s] downloads_folder=%r>" % (
-            self.company_name,
-            symbols,
-            self.downloads_folder,
-        )
+        return f"<SECFilingDownloader company_name={self.company_name} symbols=[{symbols}] downloads_folder={self.downloads_folder!r}>"
 
     def __str__(self) -> str:
-        return "SECFilingDownloader tracking %d symbol(s)" % len(self._symbols)
+        return f"SECFilingDownloader tracking {len(self._symbols)} symbol(s)"

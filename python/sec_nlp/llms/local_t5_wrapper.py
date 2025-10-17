@@ -2,9 +2,10 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict
+from typing import Any
 
 from pydantic import Field
+
 from sec_nlp.llms.local_llm_base import LocalLLM
 
 logger = logging.getLogger(__name__)
@@ -22,7 +23,7 @@ class FlanT5LocalLLM(LocalLLM):
 
         self._model = AutoModelForSeq2SeqLM.from_pretrained(self.model_name)
 
-    def _generate(self, prompt: str, gen_kwargs: Dict[str, Any]) -> str:
+    def _generate(self, prompt: str, gen_kwargs: dict[str, Any]) -> str:
         assert self._torch is not None, "Torch not initialized; call after model_post_init"
         assert self._tokenizer is not None, "Tokenizer not initialized; call after model_post_init"
         assert self._model is not None, "Model not initialized; call after model_post_init"
@@ -36,7 +37,7 @@ class FlanT5LocalLLM(LocalLLM):
         if self.device is not None:
             inputs = {k: v.to(self.device) for k, v in inputs.items()}
 
-        gen_args: Dict[str, Any] = {
+        gen_args: dict[str, Any] = {
             "max_new_tokens": int(self.max_new_tokens),
             "eos_token_id": self.eos_token_id,
             **gen_kwargs,

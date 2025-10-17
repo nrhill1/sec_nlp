@@ -5,14 +5,13 @@ import logging
 import os
 from pathlib import Path
 
-from pydantic import BaseModel, PrivateAttr, field_validator
-
-from langchain_core.documents import Document
 from langchain_community.document_loaders import BSHTMLLoader
 from langchain_community.document_transformers import MarkdownifyTransformer
+from langchain_core.documents import Document
 from langchain_core.documents.transformers import BaseDocumentTransformer
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_text_splitters.base import TextSplitter
+from pydantic import BaseModel, PrivateAttr, field_validator
 
 from sec_nlp.types import FilingMode
 
@@ -66,14 +65,15 @@ class Preprocessor(BaseModel):
         base = self._filing_dir(symbol, mode)
         if not base.exists():
             raise FileNotFoundError(
-                "No filings found for %s in mode %s at %s" % (symbol, mode.value, base.resolve())
+                "No filings found for %s in mode %s at %s", symbol, mode.value, base.resolve()
             )
+
         html_files = sorted(base.rglob("*.html"), key=os.path.getmtime, reverse=True)
         return html_files[:limit] if limit else html_files
 
     def transform_html(self, html_path: Path) -> list[Document]:
         if not html_path.exists():
-            raise FileNotFoundError("File not found: %s" % html_path.resolve())
+            raise FileNotFoundError("File not found: %s", html_path.resolve())
         loader = BSHTMLLoader(file_path=html_path, bs_kwargs={"features": "lxml"})
         html_docs = loader.load_and_split(self._splitter_impl)
         finished_docs = self._transformer_impl.transform_documents(html_docs)

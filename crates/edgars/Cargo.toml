@@ -2,81 +2,37 @@
 name = "edgars"
 version = "0.1.0"
 edition = "2021"
-license = "MIT OR Apache-2.0"
-description = "Fast SEC/EDGAR utilities with Hyper client and optional Python bindings via PyO3"
-readme = "README.md"
-keywords = ["sec", "edgar", "xbrl", "filings", "python"]
-authors = ["Nicolas Hill <your-email@example.com>"]
-repository = "https://github.com/nrhill1/sec-nlp"
-
-[lib]
-name = "edgars"
-crate-type = ["rlib", "cdylib"]
 
 [dependencies]
-# Error handling
-thiserror = "1.0"
+# HTTP client
+hyper = { version = "0.14", features = ["full"] }
+hyper-tls = "0.5"
+http-body-util = "0.1"
+
+# Async runtime
+tokio = { version = "1.0", features = ["full"] }
 
 # Serialization
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 
-# Text processing
-regex = "1"
-memchr = "2.7"
+# Error handling
+thiserror = "1.0"
 
-# Data structures
-bytes = "1.6"
-once_cell = "1.19"
+# Parsing
+regex = "1.10"
+futures = "0.3.31"
+tracing = "0.1.41"
+scraper = "0.24.0"
 
-# Logging
-tracing = "0.1"
-
-# Async runtime
-tokio = { version = "1.40", features = ["rt-multi-thread", "macros", "time"] }
-futures = "0.3"
-
-# HTTP client (Hyper stack)
-hyper = { version = "1", features = ["http1", "http2", "client"] }
-hyper-util = { version = "0.1", features = ["full"] }
-hyper-tls = "0.6"
-http-body-util = "0.1"
-
-# HTML parsing
-scraper = "0.20"
-
-# Rate limiting
-governor = "0.6"
-
-# URL handling
-url = "2.5"
-
-# Python bindings (optional)
-pyo3 = { version = "0.22", features = ["extension-module"], optional = true }
-aho-corasick = "1.1.3"
-rusqlite = "0.37.0"
-time = "0.3.44"
-moka = {version = "0.12.11", features = ["sync", "future"]}
+[dev-dependencies]
+tempfile = "3.8"
 
 [features]
 default = []
 python = ["pyo3"]
-cache = []
-full = ["python"]
 
-[dev-dependencies]
-criterion = { version = "0.5", features = ["html_reports"] }
-ahash = "0.8"
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
-sysinfo = "0.30"
-
-[profile.release]
-opt-level = 3
-lto = true
-codegen-units = 1
-strip = true
-
-[profile.dev]
-opt-level = 0
-debug = true
+[dependencies.pyo3]
+version = "0.20"
+features = ["extension-module"]
+optional = true

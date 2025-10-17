@@ -1,16 +1,14 @@
 from __future__ import annotations
 
+import json
 from datetime import date
 from pathlib import Path
 from typing import Any, Protocol, TypedDict, cast
-
-import json
-import pytest
 from unittest.mock import MagicMock, patch
 
+import pytest
 from sec_nlp.pipelines.pipeline import Pipeline
 from sec_nlp.types import FilingMode
-
 
 # --- Minimal structural types used in mocks ---------------------------------
 
@@ -32,9 +30,6 @@ class ChainOutput(TypedDict):
 
 class BatchingGraph(Protocol):
     def batch(self, batch_inputs: list[dict[str, Any]]) -> list[ChainOutput]: ...
-
-
-# ---------------------------------------------------------------------------
 
 
 def make_fake_doc(text: str) -> HasPageContent:
@@ -126,7 +121,7 @@ def test_pipeline_run_writes_summary(
 
 
 def test_pipeline_date_validators_and_errors(tmp_path: Path) -> None:
-    with pytest.raises(Exception):
+    with pytest.raises(ValueError):
         Pipeline(
             mode=FilingMode.annual,
             start_date=date(2025, 1, 2),

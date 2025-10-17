@@ -1,167 +1,155 @@
-//! Optimized rate limiting for SEC EDGAR requests.
+//! Rate limiting for SEC API compliance.
 //!
-//! The SEC allows at most **10 requests per second** per client.  
-//! This module wraps the [`governor`](https://docs.rs/governor) crate to provide
-//! async rate limiting with an optional "unlimited" mode for testing.
-//!
-//! # Examples
-//! ```rust,no_run
-//! use sec_nlp::client::rate_limit::SecRateLimiter;
-//!
-//! #[tokio::main]
-//! async fn main() {
-//!     let limiter = SecRateLimiter::new(); // Default 10 req/s
-//!     limiter.wait().await; // Wait until allowed
-//!     assert!(limiter.check()); // Check if a request can be made immediately
-//! }
-//! ```
+//! The SEC enforces a rate limit of 10 requests per second for automated
+//! requests. This module provides a token bucket rate limiter to ensure
+//! compliance.
 
-use governor::{clock::DefaultClock, state::InMemoryState, state::NotKeyed, Quota, RateLimiter};
-use std::num::NonZeroU32;
+use std::sync::Arc;
+use std::time::{Duration, Instant};
+use tokio::sync::Mutex;
+use tokio::time::sleep;
 
-/// Default SEC request rate limit (10 requests per second).
-const SEC_RATE_LIMIT: u32 = 10;
-
-/// A lightweight asynchronous rate limiter for SEC EDGAR requests.
+/// Token bucket rate limiter.
 ///
-/// Wraps [`governor::RateLimiter`] with convenience constructors for
-/// the SEC default rate and an unlimited (disabled) mode.
-///
-/// When created with [`SecRateLimiter::unlimited`], all calls are no-ops.
-///
-/// # Example
-/// ```rust,no_run
-/// # use sec_nlp::client::rate_limit::SecRateLimiter;
-/// # #[tokio::main]
-/// # async fn main() {
-/// let limiter = SecRateLimiter::with_rate(5); // 5 req/s
-/// limiter.wait().await; // Throttles to 5 requests per second
-/// # }
-/// ```
-#[derive(Debug)]
-pub struct SecRateLimiter {
-    /// Optional internal [`RateLimiter`]. `None` = unlimited mode.
-    limiter: Option<RateLimiter<NotKeyed, InMemoryState, DefaultClock>>,
+/// Implements a token bucket algorithm to limit the rate of requests.
+/// Tokens are added to the bucket at a fixed rate, and each request
+/// consumes one token.
+pub struct RateLimiter {
+    state: Arc<Mutex<RateLimiterState>>,
+    tokens_per_interval: u32,
+    interval: Duration,
 }
 
-impl SecRateLimiter {
-    /// Creates a rate limiter with the **SEC default rate** of 10 requests per second.
-    ///
-    /// Equivalent to `SecRateLimiter::with_rate(10)`.
-    #[must_use]
-    pub fn new() -> Self {
-        Self::with_rate(SEC_RATE_LIMIT)
-    }
+struct RateLimiterState {
+    tokens: f64,
+    last_update: Instant,
+}
 
-    /// Creates a rate limiter with a **custom request rate** (per second).
+impl RateLimiter {
+    /// Create a new rate limiter.
     ///
     /// # Arguments
-    /// * `requests_per_second` - Maximum number of requests allowed per second.
     ///
-    /// # Panics
-    /// Panics if `requests_per_second` is zero (since it cannot be `NonZeroU32`).
-    #[must_use]
-    pub fn with_rate(requests_per_second: u32) -> Self {
-        let quota = Quota::per_second(NonZeroU32::new(requests_per_second).unwrap());
+    /// * `tokens_per_interval` - Number of tokens to add per interval
+    /// * `interval` - Duration of each interval
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use edgars::client::rate_limit::RateLimiter;
+    /// use std::time::Duration;
+    ///
+    /// // SEC limit: 10 requests per second
+    /// let limiter = RateLimiter::new(10, Duration::from_secs(1));
+    /// ```
+    pub fn new(tokens_per_interval: u32, interval: Duration) -> Self {
         Self {
-            limiter: Some(RateLimiter::direct(quota)),
+            state: Arc::new(Mutex::new(RateLimiterState {
+                tokens: tokens_per_interval as f64,
+                last_update: Instant::now(),
+            })),
+            tokens_per_interval,
+            interval,
         }
     }
 
-    /// Creates an **unlimited** rate limiter that does not throttle requests.
+    /// Wait until a token is available, then consume it.
     ///
-    /// Useful for testing or for offline/local modes.
-    #[must_use]
-    pub fn unlimited() -> Self {
-        Self { limiter: None }
-    }
-
-    /// Waits asynchronously until a request is permitted under the rate limit.
+    /// This method blocks until a token becomes available, ensuring that
+    /// the rate limit is not exceeded.
     ///
-    /// Does nothing if the limiter is unlimited.
+    /// # Examples
     ///
-    /// # Example
-    /// ```rust,no_run
-    /// # use sec_nlp::client::rate_limit::SecRateLimiter;
-    /// # #[tokio::main] async fn main() {
-    /// let limiter = SecRateLimiter::new();
-    /// limiter.wait().await; // Wait until allowed
+    /// ```no_run
+    /// # use edgars::client::rate_limit::RateLimiter;
+    /// # use std::time::Duration;
+    /// # async fn example() {
+    /// let limiter = RateLimiter::new(10, Duration::from_secs(1));
+    ///
+    /// // This will wait if no tokens are available
+    /// limiter.wait().await;
+    /// // Now safe to make a request
     /// # }
     /// ```
     pub async fn wait(&self) {
-        if let Some(limiter) = &self.limiter {
-            limiter.until_ready().await;
+        loop {
+            let mut state = self.state.lock().await;
+
+            // Add tokens based on time elapsed
+            let now = Instant::now();
+            let elapsed = now.duration_since(state.last_update);
+            let tokens_to_add = elapsed.as_secs_f64() / self.interval.as_secs_f64() * self.tokens_per_interval as f64;
+
+            state.tokens = (state.tokens + tokens_to_add).min(self.tokens_per_interval as f64);
+            state.last_update = now;
+
+            // Try to consume a token
+            if state.tokens >= 1.0 {
+                state.tokens -= 1.0;
+                return;
+            }
+
+            // Calculate wait time for next token
+            let tokens_needed = 1.0 - state.tokens;
+            let wait_duration =
+                Duration::from_secs_f64(tokens_needed / self.tokens_per_interval as f64 * self.interval.as_secs_f64());
+
+            drop(state); // Release lock before sleeping
+            sleep(wait_duration).await;
         }
     }
 
-    /// Checks synchronously whether a request can be made **immediately**.
+    /// Try to acquire a token without waiting.
     ///
-    /// Returns `true` if no throttling is in effect or if the limiter
-    /// currently allows a request.
-    #[must_use]
-    pub fn check(&self) -> bool {
-        self.limiter.as_ref().is_none_or(|l| l.check().is_ok())
-    }
-}
+    /// # Returns
+    ///
+    /// * `true` - If a token was acquired
+    /// * `false` - If no tokens are available
+    pub async fn try_acquire(&self) -> bool {
+        let mut state = self.state.lock().await;
 
-impl Default for SecRateLimiter {
-    fn default() -> Self {
-        Self::new()
+        // Add tokens based on time elapsed
+        let now = Instant::now();
+        let elapsed = now.duration_since(state.last_update);
+        let tokens_to_add = elapsed.as_secs_f64() / self.interval.as_secs_f64() * self.tokens_per_interval as f64;
+
+        state.tokens = (state.tokens + tokens_to_add).min(self.tokens_per_interval as f64);
+        state.last_update = now;
+
+        if state.tokens >= 1.0 {
+            state.tokens -= 1.0;
+            true
+        } else {
+            false
+        }
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::time::Instant;
 
     #[tokio::test]
-    async fn test_rate_limiter_allows_first_request() {
-        let limiter = SecRateLimiter::new();
-        assert!(limiter.check());
-    }
+    async fn test_rate_limiter_basic() {
+        let limiter = RateLimiter::new(2, Duration::from_secs(1));
 
-    #[tokio::test]
-    async fn test_rate_limiter_wait() {
-        let limiter = SecRateLimiter::with_rate(100); // High rate for testing
-
-        // Should not block significantly
+        // Should acquire immediately
         let start = Instant::now();
+        limiter.wait().await;
+        limiter.wait().await;
+
+        // Third request should wait
         limiter.wait().await;
         let elapsed = start.elapsed();
 
-        assert!(elapsed.as_millis() < 100);
+        assert!(elapsed >= Duration::from_millis(400)); // Some wait occurred
     }
 
     #[tokio::test]
-    async fn test_unlimited_rate_limiter() {
-        let limiter = SecRateLimiter::unlimited();
+    async fn test_try_acquire() {
+        let limiter = RateLimiter::new(1, Duration::from_secs(1));
 
-        // Should always allow requests
-        for _ in 0..100 {
-            assert!(limiter.check());
-            limiter.wait().await;
-        }
-    }
-
-    #[tokio::test]
-    async fn test_rate_limiter_enforcement() {
-        let limiter = SecRateLimiter::with_rate(2); // 2 req/s
-
-        // First two should be fast
-        limiter.wait().await;
-        limiter.wait().await;
-
-        // Third should be delayed
-        let start = Instant::now();
-        limiter.wait().await;
-        let elapsed = start.elapsed();
-
-        // Should wait approximately 500ms (1s / 2 req)
-        assert!(
-            elapsed.as_millis() >= 400,
-            "Expected throttling delay, got {:?}",
-            elapsed
-        );
+        assert!(limiter.try_acquire().await); // First succeeds
+        assert!(!limiter.try_acquire().await); // Second fails immediately
     }
 }

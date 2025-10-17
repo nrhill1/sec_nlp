@@ -1,248 +1,236 @@
-//! Document parsing utilities for SEC filings.
+//! Parsing utilities for SEC documents.
 //!
-//! This module provides functions to parse various document formats including:
-//! - HTML documents
-//! - JSON data
-//! - Plain text filings
-//! - Auto-detection of format
+//! This module provides functionality for parsing various SEC document formats,
+//! including SGML, XML, HTML, and plain text filings.
+//!
+//! # Document Formats
+//!
+//! SEC filings can be in multiple formats:
+//! - **SGML**: Legacy format (pre-2000s)
+//! - **XML/XBRL**: Structured financial data
+//! - **HTML**: Modern filings with embedded exhibits
+//! - **Plain text**: Header information and indexes
+//!
+//! # Examples
+//!
+//! ```no_run
+//! use edgars::parse::{extract_document_text, strip_html};
+//!
+//! let html = "<html><body><p>Financial data...</p></body></html>";
+//! let text = strip_html(html);
+//! ```
 
-pub mod infer;
+use regex::Regex;
+use std::sync::OnceLock;
 
-use crate::errors::{EdgarError, Result};
-use crate::filings::FormType;
-use scraper::{Html, Selector};
-use serde_json::Value;
-
-/// Supported document format types.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Format {
-    /// HTML document format
-    Html,
-    /// JSON data format
-    Json,
-    /// XML/XBRL format
-    Xml,
-    /// Plain text format
-    Text,
-}
-
-impl std::fmt::Display for Format {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Format::Html => write!(f, "HTML"),
-            Format::Json => write!(f, "JSON"),
-            Format::Xml => write!(f, "XML"),
-            Format::Text => write!(f, "Text"),
-        }
-    }
-}
-
-/// Parsed document metadata.
+/// Extract the primary document from a complete submission text file.
 ///
-/// Contains information extracted from a parsed SEC filing document.
-#[derive(Debug, Clone)]
-pub struct Document {
-    /// The SEC form type (e.g., 10-K, 10-Q, 8-K)
-    pub form_type: FormType,
-    /// The document format
-    pub format: Format,
-    /// Optional document title
-    pub title: Option<String>,
-    /// Size of the document in bytes
-    pub size_bytes: usize,
-}
-
-/// Parse an HTML document.
-///
-/// Extracts the form type, title, and other metadata from HTML content.
+/// SEC submissions contain multiple documents. This extracts the main filing
+/// document from the complete submission text.
 ///
 /// # Arguments
 ///
-/// * `input` - HTML content as a string
+/// * `submission_text` - Complete submission text including all documents
 ///
-/// # Errors
+/// # Returns
 ///
-/// Returns an error if the form type cannot be determined.
+/// The primary document text, or None if not found.
+///
+/// # Examples
+///
+/// ```no_run
+/// use edgars::parse::extract_primary_document;
+///
+/// let submission = std::fs::read_to_string("filing.txt")?;
+/// if let Some(document) = extract_primary_document(&submission) {
+///     println!("Found primary document");
+/// }
+/// # Ok::<(), std::io::Error>(())
+/// ```
+pub fn extract_primary_document(submission_text: &str) -> Option<String> {
+    // Pattern for document boundaries in SEC filings
+    static DOC_PATTERN: OnceLock<Regex> = OnceLock::new();
+    let pattern = DOC_PATTERN
+        .get_or_init(|| Regex::new(r"<DOCUMENT>.*?<TYPE>([^\n]+).*?<TEXT>(.*?)</TEXT>.*?</DOCUMENT>").unwrap());
+
+    // Find the first document (usually the primary filing)
+    pattern
+        .captures(submission_text)
+        .and_then(|caps| caps.get(2).map(|m| m.as_str().to_string()))
+}
+
+/// Strip HTML tags from text.
+///
+/// Removes all HTML tags and decodes common HTML entities.
+///
+/// # Arguments
+///
+/// * `html` - HTML text to strip
+///
+/// # Returns
+///
+/// Plain text with HTML removed.
 ///
 /// # Examples
 ///
 /// ```
-/// use edgars::parse::parse_html;
+/// use edgars::parse::strip_html;
 ///
-/// let html = r#"
-/// <html>
-/// <head><title>Apple Inc. 10-K</title></head>
-/// <body>FORM 10-K</body>
-/// </html>
-/// "#;
-///
-/// let doc = parse_html(html).unwrap();
-/// assert_eq!(doc.form_type.to_string(), "10-K");
-/// assert_eq!(doc.title, Some("Apple Inc. 10-K".to_string()));
+/// let html = "<p>Hello <b>world</b>!</p>";
+/// assert_eq!(strip_html(html), "Hello world!");
 /// ```
-pub fn parse_html(input: &str) -> Result<Document> {
-    let doc = Html::parse_document(input);
+pub fn strip_html(html: &str) -> String {
+    static HTML_TAG_PATTERN: OnceLock<Regex> = OnceLock::new();
+    let pattern = HTML_TAG_PATTERN.get_or_init(|| Regex::new(r"<[^>]+>").unwrap());
 
-    // Extract title
-    let title = Selector::parse("title")
-        .ok()
-        .and_then(|sel| doc.select(&sel).next())
-        .map(|el| el.text().collect::<String>().trim().to_string())
-        .filter(|s| !s.is_empty());
+    let text = pattern.replace_all(html, " ");
 
-    // Infer form type
-    let form_type = infer::infer_form_type(input).ok_or_else(|| EdgarError::Parse {
-        format: "HTML".to_string(),
-        reason: "Could not determine SEC form type".to_string(),
-    })?;
+    // Decode common HTML entities
+    let text = text
+        .replace("&nbsp;", " ")
+        .replace("&amp;", "&")
+        .replace("&lt;", "<")
+        .replace("&gt;", ">")
+        .replace("&quot;", "\"")
+        .replace("&#39;", "'");
 
-    Ok(Document {
-        form_type,
-        format: Format::Html,
-        title,
-        size_bytes: input.len(),
-    })
+    // Normalize whitespace
+    normalize_whitespace(&text)
 }
 
-/// Parse a JSON document.
+/// Normalize whitespace in text.
 ///
-/// Extracts metadata from JSON-formatted SEC data.
+/// Replaces multiple whitespace characters with a single space
+/// and trims leading/trailing whitespace.
 ///
 /// # Arguments
 ///
-/// * `input` - JSON content as a string
+/// * `text` - Text to normalize
 ///
-/// # Errors
+/// # Returns
 ///
-/// Returns an error if the JSON is invalid.
+/// Text with normalized whitespace.
 ///
 /// # Examples
 ///
 /// ```
-/// use edgars::parse::parse_json;
+/// use edgars::parse::normalize_whitespace;
 ///
-/// let json = r#"{"submissionType": "8-K", "entityName": "Test Corp"}"#;
-///
-/// let doc = parse_json(json).unwrap();
-/// assert_eq!(doc.form_type.to_string(), "8-K");
-/// assert_eq!(doc.title, Some("Test Corp".to_string()));
+/// let text = "Hello    world\n\n\ntest";
+/// assert_eq!(normalize_whitespace(text), "Hello world test");
 /// ```
-pub fn parse_json(input: &str) -> Result<Document> {
-    let value: Value = serde_json::from_str(input)?;
+pub fn normalize_whitespace(text: &str) -> String {
+    static WHITESPACE_PATTERN: OnceLock<Regex> = OnceLock::new();
+    let pattern = WHITESPACE_PATTERN.get_or_init(|| Regex::new(r"\s+").unwrap());
 
-    // Extract title if present
-    let title = value
-        .get("title")
-        .or_else(|| value.get("name"))
-        .or_else(|| value.get("entityName"))
-        .and_then(|v| v.as_str())
-        .map(String::from);
-
-    // Infer form type
-    let form_type = infer::infer_form_type(input).unwrap_or(FormType::TenQ); // Default fallback
-
-    Ok(Document {
-        form_type,
-        format: Format::Json,
-        title,
-        size_bytes: input.len(),
-    })
+    pattern.replace_all(text, " ").trim().to_string()
 }
 
-/// Parse a plain text document.
+/// Extract section from filing by header pattern.
 ///
-/// Extracts metadata from plain text SEC filings.
+/// Finds a section in an SEC filing by matching a header pattern
+/// and extracting text until the next section header.
 ///
 /// # Arguments
 ///
-/// * `input` - Text content as a string
+/// * `text` - Filing text
+/// * `section_header` - Regex pattern for the section header
 ///
-/// # Errors
+/// # Returns
 ///
-/// Returns an error if the form type cannot be determined.
+/// The section text, or None if not found.
 ///
 /// # Examples
 ///
 /// ```
-/// use edgars::parse::parse_text;
+/// use edgars::parse::extract_section;
 ///
-/// let text = "CONFORMED SUBMISSION TYPE: 10-Q\nPUBLIC DOCUMENT COUNT: 50";
-///
-/// let doc = parse_text(text).unwrap();
-/// assert_eq!(doc.form_type.to_string(), "10-Q");
+/// let filing = "ITEM 1. BUSINESS\n\nWe are a company...\n\nITEM 2. PROPERTIES";
+/// let section = extract_section(filing, r"ITEM\s+1\.\s+BUSINESS");
+/// assert!(section.is_some());
 /// ```
-pub fn parse_text(input: &str) -> Result<Document> {
-    // Try to infer form type from content
-    let form_type = infer::infer_form_type(input).ok_or_else(|| EdgarError::Parse {
-        format: "Text".to_string(),
-        reason: "Could not determine SEC form type".to_string(),
-    })?;
+pub fn extract_section(text: &str, section_header: &str) -> Option<String> {
+    let pattern = Regex::new(section_header).ok()?;
+    let start_match = pattern.find(text)?;
+    let start = start_match.start();
 
-    // Try to extract title from first few lines
-    let title = input
-        .lines()
-        .take(20)
-        .find(|line| line.to_uppercase().contains("FORM"))
-        .map(|s| s.trim().to_string());
+    // Find the next section header (ITEM followed by a number)
+    static NEXT_SECTION: OnceLock<Regex> = OnceLock::new();
+    let next_pattern = NEXT_SECTION.get_or_init(|| Regex::new(r"\n\s*ITEM\s+\d+[A-Z]?\.").unwrap());
 
-    Ok(Document {
-        form_type,
-        format: Format::Text,
-        title,
-        size_bytes: input.len(),
-    })
+    let end = next_pattern
+        .find(&text[start + start_match.len()..])
+        .map(|m| start + start_match.len() + m.start())
+        .unwrap_or(text.len());
+
+    Some(text[start..end].to_string())
 }
 
-/// Auto-detect format and parse document.
+/// Extract tabular data from text.
 ///
-/// Automatically detects the document format (JSON, HTML, XML, or text)
-/// and parses it accordingly.
+/// Identifies table-like structures in plain text and returns them
+/// as a 2D vector of strings.
 ///
 /// # Arguments
 ///
-/// * `input` - Document content as a string
+/// * `text` - Text containing tables
+/// * `min_columns` - Minimum number of columns to consider as a table
 ///
-/// # Errors
+/// # Returns
 ///
-/// Returns an error if the format cannot be detected or parsing fails.
-///
-/// # Examples
-///
-/// ```
-/// use edgars::parse::parse_auto;
-///
-/// // Automatically detects JSON
-/// let json = r#"{"submissionType": "8-K"}"#;
-/// let doc = parse_auto(json).unwrap();
-/// assert_eq!(doc.format.to_string(), "JSON");
-///
-/// // Automatically detects HTML
-/// let html = "<!DOCTYPE html><html><body>FORM 10-K</body></html>";
-/// let doc = parse_auto(html).unwrap();
-/// assert_eq!(doc.format.to_string(), "HTML");
-/// ```
-pub fn parse_auto(input: &str) -> Result<Document> {
-    // Try JSON first (fastest to detect)
-    if input.trim_start().starts_with('{') || input.trim_start().starts_with('[') {
-        if let Ok(doc) = parse_json(input) {
-            return Ok(doc);
+/// Vector of tables, where each table is a vector of rows,
+/// and each row is a vector of cells.
+pub fn extract_tables(text: &str, min_columns: usize) -> Vec<Vec<Vec<String>>> {
+    let mut tables = Vec::new();
+    let lines: Vec<&str> = text.lines().collect();
+
+    let mut current_table: Vec<Vec<String>> = Vec::new();
+
+    for line in lines {
+        // Simple heuristic: lines with multiple consecutive spaces might be table rows
+        let cells: Vec<String> = line
+            .split_whitespace()
+            .filter(|s| !s.is_empty())
+            .map(|s| s.to_string())
+            .collect();
+
+        if cells.len() >= min_columns {
+            current_table.push(cells);
+        } else if !current_table.is_empty() {
+            // End of table
+            tables.push(current_table.clone());
+            current_table.clear();
         }
     }
 
-    // Try HTML
-    if input.contains("<!DOCTYPE") || input.contains("<html") || input.contains("<HTML") {
-        return parse_html(input);
+    if !current_table.is_empty() {
+        tables.push(current_table);
     }
 
-    // Try XML/XBRL
-    if input.trim_start().starts_with("<?xml") {
-        return Err(EdgarError::NotImplemented(
-            "XBRL/XML parsing not yet implemented".to_string(),
-        ));
-    }
+    tables
+}
 
-    // Default to text
-    parse_text(input)
+/// Remove SEC header information from filing text.
+///
+/// SEC filings begin with header information before the actual document.
+/// This function removes that header.
+///
+/// # Arguments
+///
+/// * `text` - Complete filing text
+///
+/// # Returns
+///
+/// Filing text with header removed.
+pub fn remove_sec_header(text: &str) -> String {
+    // Header typically ends with a line of dashes or equals signs
+    static HEADER_END: OnceLock<Regex> = OnceLock::new();
+    let pattern = HEADER_END.get_or_init(|| Regex::new(r"\n[-=]{40,}\n").unwrap());
+
+    pattern
+        .find(text)
+        .map(|m| text[m.end()..].to_string())
+        .unwrap_or_else(|| text.to_string())
 }
 
 #[cfg(test)]
@@ -250,86 +238,45 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_parse_html() {
-        let html = r#"
-<!DOCTYPE html>
-<html>
-<head><title>Apple Inc. 10-K</title></head>
-<body>
-<p>FORM 10-K</p>
-</body>
-</html>
-        "#;
-
-        let doc = parse_html(html).unwrap();
-        assert_eq!(doc.format, Format::Html);
-        assert_eq!(doc.form_type, FormType::TenK);
-        assert_eq!(doc.title, Some("Apple Inc. 10-K".to_string()));
+    fn test_strip_html() {
+        let html = "<html><body><p>Hello <b>world</b>!</p></body></html>";
+        let text = strip_html(html);
+        assert!(text.contains("Hello"));
+        assert!(text.contains("world"));
+        assert!(!text.contains("<"));
     }
 
     #[test]
-    fn test_parse_json() {
-        let json = r#"{"title":"Filing","submissionType":"8-K","cik":"0001234567"}"#;
-
-        let doc = parse_json(json).unwrap();
-        assert_eq!(doc.format, Format::Json);
-        assert_eq!(doc.form_type, FormType::EightK);
-        assert_eq!(doc.title, Some("Filing".to_string()));
+    fn test_normalize_whitespace() {
+        let text = "Hello    world\n\n\ntest";
+        assert_eq!(normalize_whitespace(text), "Hello world test");
     }
 
     #[test]
-    fn test_parse_text() {
-        let text = r#"
-CONFORMED SUBMISSION TYPE: 10-Q
-PUBLIC DOCUMENT COUNT: 50
-FILED AS OF DATE: 20231115
-        "#;
-
-        let doc = parse_text(text).unwrap();
-        assert_eq!(doc.format, Format::Text);
-        assert_eq!(doc.form_type, FormType::TenQ);
+    fn test_strip_html_entities() {
+        let html = "AT&amp;T &nbsp; Test &lt;tag&gt;";
+        let text = strip_html(html);
+        assert_eq!(text, "AT&T Test <tag>");
     }
 
     #[test]
-    fn test_parse_auto_json() {
-        let json = r#"{"submissionType":"8-K"}"#;
+    fn test_extract_section() {
+        let filing = "ITEM 1. BUSINESS\n\nWe are a company...\n\nITEM 2. PROPERTIES\n\nWe own...";
+        let section = extract_section(filing, r"ITEM\s+1\.\s+BUSINESS");
 
-        let doc = parse_auto(json).unwrap();
-        assert_eq!(doc.format, Format::Json);
-        assert_eq!(doc.form_type, FormType::EightK);
+        assert!(section.is_some());
+        let section_text = section.unwrap();
+        assert!(section_text.contains("We are a company"));
+        assert!(!section_text.contains("We own"));
     }
 
     #[test]
-    fn test_parse_auto_html() {
-        let html = r#"<!DOCTYPE html><html><body>FORM 10-K</body></html>"#;
+    fn test_extract_tables() {
+        let text = "Header\n2023    100    50\n2022    90     45\n\nFooter";
+        let tables = extract_tables(text, 3);
 
-        let doc = parse_auto(html).unwrap();
-        assert_eq!(doc.format, Format::Html);
-        assert_eq!(doc.form_type, FormType::TenK);
-    }
-
-    #[test]
-    fn test_parse_auto_text() {
-        let text = "CONFORMED SUBMISSION TYPE: 10-Q";
-
-        let doc = parse_auto(text).unwrap();
-        assert_eq!(doc.format, Format::Text);
-        assert_eq!(doc.form_type, FormType::TenQ);
-    }
-
-    #[test]
-    fn test_parse_invalid_json() {
-        let invalid = r#"{"invalid json"#;
-
-        let result = parse_json(invalid);
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn test_parse_no_form_type() {
-        let html = r#"<html><body>No form type here</body></html>"#;
-
-        let result = parse_html(html);
-        assert!(result.is_err());
+        assert_eq!(tables.len(), 1);
+        assert_eq!(tables[0].len(), 2); // 2 rows
+        assert_eq!(tables[0][0].len(), 3); // 3 columns
     }
 }

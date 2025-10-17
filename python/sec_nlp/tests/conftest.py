@@ -1,11 +1,12 @@
 # src/sec_nlp/tests/conftest.py
 from __future__ import annotations
-from sec_nlp.llms.local_llm_base import LocalLLM
 
+from collections.abc import Callable, Generator
 from pathlib import Path
-from typing import Any, Callable, Generator, Protocol
+from typing import Any, Protocol
 
 import pytest
+from sec_nlp.llms.local_llm_base import LocalLLM
 
 
 class HasPageContent(Protocol):
