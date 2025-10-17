@@ -175,12 +175,12 @@ fn get_meta(conn: &Connection, key: &str) -> Result<Option<String>> {
     Ok(v)
 }
 
-// /// TODO: Fetch the SEC `company_tickers.json` file, using a cached ETag when available.
-// async fn fetch_company_tickers(cached_etag: &Option<String>) -> Result<&str> {
-//     use hyper::header::{ETAG, IF_NONE_MATCH};
-//     use hyper::StatusCode;
-//     Ok("todo!")
-// }
+/// Fetch the SEC `company_tickers.json` file, using a cached ETag when available.
+async fn fetch_company_tickers(cached_etag: &Option<String>) -> Result<&str> {
+    use hyper::header::{ETAG, IF_NONE_MATCH};
+    use hyper::StatusCode;
+    Ok("todo!")
+}
 
 
 
