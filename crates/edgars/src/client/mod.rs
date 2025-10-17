@@ -188,5 +188,5 @@ mod tests {
     }
 }
 
-// Add your client implementation here or re-export the main client type
+
 pub use crate::client;
