@@ -13,7 +13,7 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_text_splitters.base import TextSplitter
 from pydantic import BaseModel, PrivateAttr, field_validator
 
-from sec_nlp.types import FilingMode
+from sec_nlp.utils.types import FilingMode
 
 logger = logging.getLogger(__name__)
 

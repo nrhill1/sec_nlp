@@ -2,7 +2,7 @@ SHELL := /bin/bash
 .DEFAULT_GOAL := test
 
 # Python
-LOG_DIR := python/sec_nlp/tests/test_logs
+LOG_DIR := python/tests/test_logs
 PYTEST_FLAGS := -v --maxfail=1 --tb=short --color=yes --basetemp .pytest_tmp --cache-clear
 
 # Rust
@@ -122,7 +122,8 @@ py-ext-sdist:
 .PHONY: python-lint
 python-lint: preflight
 	@echo "==> Ruff lint..."
-	@uvx ruff check .
+	@uvx ruff check . --fix
+	@uvx ruff check . --unsafe-fixes
 
 .PHONY: python-typecheck
 python-typecheck: preflight

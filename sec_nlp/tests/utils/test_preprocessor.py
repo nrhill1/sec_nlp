@@ -1,7 +1,9 @@
 # sec_nlp/tests/utils/test_preprocessor.py
+from pathlib import Path
+
 import pytest
-from sec_nlp.utils.preprocessor import Preprocessor
 from sec_nlp.types import FilingMode
+from sec_nlp.utils.preprocessor import Preprocessor
 
 
 def test_html_paths_for_symbol_and_limit(tmp_path: Path, write_html_tree) -> None:
