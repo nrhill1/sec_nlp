@@ -4,7 +4,7 @@ Type stubs for edgars module
 This file provides type hints for the Rust-based edgars module.
 """
 
-from typing import Dict, List, Tuple, Optional, Any, Union
+from typing import Any
 
 __version__: str
 __author__: str
@@ -18,8 +18,8 @@ class Client:
 
     def __init__(
         self,
-        user_agent: Optional[str] = None,
-        timeout: Optional[int] = None,
+        user_agent: str | None = None,
+        timeout: int | None = None,
     ) -> None:
         """
         Create a new SEC client.
@@ -46,7 +46,7 @@ class Client:
         """
         ...
 
-    def fetch_json(self, url: str) -> Dict[str, Any]:
+    def fetch_json(self, url: str) -> dict[str, Any]:
         """
         Fetch and parse JSON from URL.
 
@@ -91,7 +91,7 @@ class Document:
     format: str
     """Document format ('HTML', 'JSON', 'Text', 'XML')"""
 
-    title: Optional[str]
+    title: str | None
     """Document title if available"""
 
     size_bytes: int
@@ -139,7 +139,7 @@ def lookup_ticker(ticker: str) -> str:
     """
     ...
 
-def get_all_tickers() -> List[Tuple[str, str]]:
+def get_all_tickers() -> list[tuple[str, str]]:
     """
     Get all ticker-to-CIK mappings.
 
@@ -162,7 +162,7 @@ def get_all_tickers() -> List[Tuple[str, str]]:
 # Company Data Functions
 # ============================================================================
 
-def get_company_facts(cik: str) -> Dict[str, Any]:
+def get_company_facts(cik: str) -> dict[str, Any]:
     """
     Fetch company XBRL facts from SEC API.
 
@@ -187,7 +187,7 @@ def get_company_facts(cik: str) -> Dict[str, Any]:
     """
     ...
 
-def get_company_filings(cik: str) -> Dict[str, Any]:
+def get_company_filings(cik: str) -> dict[str, Any]:
     """
     Fetch company submissions/filings from SEC API.
 

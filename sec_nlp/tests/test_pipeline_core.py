@@ -7,8 +7,9 @@ from typing import Any, Protocol, TypedDict, cast
 from unittest.mock import MagicMock, patch
 
 import pytest
-from sec_nlp.pipelines.pipeline import Pipeline
 from sec_nlp.types import FilingMode
+
+from sec_nlp.pipelines.pipeline import Pipeline
 
 # --- Minimal structural types used in mocks ---------------------------------
 

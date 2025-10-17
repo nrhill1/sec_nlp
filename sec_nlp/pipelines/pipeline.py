@@ -27,14 +27,14 @@ from pydantic import (
 )
 
 from sec_nlp import __version__
-from sec_nlp.chains import (
+from sec_nlp.pipelines.utils import Preprocessor, SECFilingDownloader
+from sec_nlp.pipelines.utils.chains import (
     SummarizationInput,
     SummarizationOutput,
     build_sec_runnable,
 )
-from sec_nlp.llms import FlanT5LocalLLM
-from sec_nlp.types import FilingMode
-from sec_nlp.utils import Preprocessor, SECFilingDownloader
+from sec_nlp.pipelines.utils.llms import FlanT5LocalLLM
+from sec_nlp.pipelines.utils.types import FilingMode
 
 logger = logging.getLogger(__name__)
 

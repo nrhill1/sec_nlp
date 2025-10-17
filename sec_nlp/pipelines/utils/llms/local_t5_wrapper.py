@@ -6,7 +6,7 @@ from typing import Any
 
 from pydantic import Field
 
-from sec_nlp.llms.local_llm_base import LocalLLM
+from .local_llm_base import LocalLLM
 
 logger = logging.getLogger(__name__)
 

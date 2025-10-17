@@ -31,14 +31,13 @@ dependencies = [
 ]
 
 [tool.pytest.ini_options]
-testpaths = ["python/sec_nlp/tests"]
+testpaths = ["sec_nlp/tests"]
 python_files = "test_*.py"
 python_functions = "test_*"
 filterwarnings = ["ignore::DeprecationWarning"]
 
 [tool.uv_build]
 package = "sec_nlp"
-src-dir = "python"
 include = ["pyproject.toml", "README.md"]
 
 [tool.setuptools.package-data]
@@ -102,7 +101,7 @@ ignore = [
 features = ["pyo3/extension-module"]
 module-name = "sec_nlp._edgars"
 manifest-path = "crates/edgars/Cargo.toml"
-python-source = "python"
+python-source = "sec_nlp"
 
 [build-system]
 requires = ["maturin>=1.0,<2.0"]
@@ -118,4 +117,5 @@ dev = [
   "types-requests",
   "types-PyYAML",
   "maturin>=1.0,<2.0",
+  "typer>=0.19.2",
 ]

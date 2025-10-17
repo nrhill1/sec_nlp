@@ -10,7 +10,7 @@ from langchain_core.runnables import Runnable, RunnableLambda, RunnableSequence
 from pydantic import Field, TypeAdapter, ValidationError
 from pydantic.dataclasses import dataclass
 
-from sec_nlp.llms.local_llm_base import LocalLLM
+from sec_nlp.pipelines.llms import LocalLLM
 
 logger = logging.getLogger(__name__)
 
