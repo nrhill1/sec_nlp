@@ -1683,6 +1683,7 @@ dependencies = [
     { name = "torch" },
     { name = "tqdm" },
     { name = "transformers" },
+    { name = "typer" },
     { name = "uuid" },
 ]
 
@@ -1721,6 +1722,7 @@ requires-dist = [
     { name = "torch" },
     { name = "tqdm" },
     { name = "transformers" },
+    { name = "typer", specifier = ">=0.19.2" },
     { name = "uuid", specifier = ">=1.30" },
 ]
 
