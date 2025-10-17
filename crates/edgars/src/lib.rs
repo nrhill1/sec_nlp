@@ -20,11 +20,11 @@
 //!     // Look up ticker
 //!     let map = get_ticker_map().await?;
 //!     let cik = map.get("AAPL").unwrap();
-//!     
+//!
 //!     // Fetch company data
 //!     let client = SecClient::new();
 //!     let facts = edgars::fetch_company_facts(cik).await?;
-//!     
+//!
 //!     println!("Company: {}", facts.entity_name);
 //!     Ok(())
 //! }

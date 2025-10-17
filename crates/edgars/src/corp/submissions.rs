@@ -114,17 +114,17 @@ pub struct HistoricalFile {
 /// #[tokio::main]
 /// async fn main() -> Result<(), Box<dyn std::error::Error>> {
 ///     let submissions = fetch_company_filings("320193").await?;
-///     
+///
 ///     println!("Company: {}", submissions.name);
 ///     println!("Tickers: {:?}", submissions.tickers);
-///     
+///
 ///     // List recent 10-K filings
 ///     for (i, form) in submissions.filings.recent.form.iter().enumerate() {
 ///         if form == "10-K" {
 ///             println!("10-K filed on {}", submissions.filings.recent.filing_date[i]);
 ///         }
 ///     }
-///     
+///
 ///     Ok(())
 /// }
 /// ```

@@ -88,14 +88,14 @@ pub struct Fact {
 /// #[tokio::main]
 /// async fn main() -> Result<(), Box<dyn std::error::Error>> {
 ///     let facts = fetch_company_facts("320193").await?;
-///     
+///
 ///     println!("Company: {}", facts.entity_name);
-///     
+///
 ///     // Access revenue data
 ///     if let Some(us_gaap) = facts.facts.get("us-gaap") {
 ///         if let Some(revenues) = us_gaap.concepts.get("Revenues") {
 ///             println!("Revenue label: {}", revenues.label);
-///             
+///
 ///             if let Some(usd_data) = revenues.units.get("USD") {
 ///                 for fact in usd_data.iter().take(3) {
 ///                     println!("  {} (FY {}): ${}", fact.form, fact.fy, fact.val);
@@ -103,7 +103,7 @@ pub struct Fact {
 ///             }
 ///         }
 ///     }
-///     
+///
 ///     Ok(())
 /// }
 /// ```
