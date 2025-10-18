@@ -33,7 +33,7 @@ from sec_nlp.llm import FlanT5LocalLLM
 from sec_nlp.llm.chains import (
     SummarizationInput,
     SummarizationOutput,
-    build_sec_runnable,
+    build_summarization_runnable,
 )
 
 logger = logging.getLogger(__name__)
@@ -306,7 +306,7 @@ class Pipeline(BaseModel):
                 max_new_tokens=int(self.max_new_tokens),
             )
 
-            self._graph = build_sec_runnable(
+            self._graph = build_summarization_runnable(
                 prompt=self._prompt,
                 llm=llm,
                 require_json=bool(self.require_json),

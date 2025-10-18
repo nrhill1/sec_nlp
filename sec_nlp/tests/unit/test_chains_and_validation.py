@@ -7,7 +7,7 @@ from langchain_core.prompts import BasePromptTemplate, PromptTemplate
 from langchain_core.runnables import Runnable, RunnableConfig
 
 from sec_nlp.llm.base import LocalLLM
-from sec_nlp.llm.chains import build_sec_runnable
+from sec_nlp.llm.chains import build_summarization_runnable
 
 
 class DummyLocalLLM(LocalLLM):
@@ -33,7 +33,7 @@ def test_chain_invoke_json_mode() -> None:
 
     llm: LocalLLM = DummyLocalLLM()
 
-    chain: Runnable[Any, Any] = build_sec_runnable(
+    chain: Runnable[Any, Any] = build_summarization_runnable(
         prompt=prompt,
         llm=llm,
         require_json=True,

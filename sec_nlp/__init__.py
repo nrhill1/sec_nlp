@@ -16,7 +16,7 @@ from sec_nlp.llm import FlanT5LocalLLM, LocalLLM, OllamaLLM
 from sec_nlp.llm.chains import (
     SummarizationInput,
     SummarizationOutput,
-    build_sec_runnable,
+    build_summarization_runnable,
 )
 
 __all__: list[str] = [
@@ -32,7 +32,7 @@ __all__: list[str] = [
     "OllamaLLM",
     "SummarizationInput",
     "SummarizationOutput",
-    "build_sec_runnable",
+    "build_summarization_runnable",
     # Config
     "settings",
 ]

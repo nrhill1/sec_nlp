@@ -13,7 +13,7 @@ from pydantic.dataclasses import dataclass
 logger = logging.getLogger(__name__)
 
 
-__all__: list[str] = ["SummarizationInput", "SummarizationOutput", "build_sec_runnable"]
+__all__: list[str] = ["SummarizationInput", "SummarizationOutput", "build_summarization_runnable"]
 
 
 class SummarizationInput(TypedDict):
@@ -86,7 +86,7 @@ class SummaryPayload:
             return cls(error="Schema validation failed", raw_output=raw)
 
 
-def build_sec_runnable(
+def build_summarization_runnable(
     *,
     prompt: BasePromptTemplate,
     llm: Runnable[str, str],
