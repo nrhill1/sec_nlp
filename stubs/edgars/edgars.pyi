@@ -1,7 +1,7 @@
 """
-Type stubs for edgars module
+Type stubs for sec_o3 module
 
-This file provides type hints for the Rust-based edgars module.
+This file provides type hints for the Rust-based sec_o3 module.
 """
 
 from typing import Any

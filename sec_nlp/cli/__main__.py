@@ -10,8 +10,8 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-from sec_nlp.pipelines import Pipeline, _default_prompt_path
-from sec_nlp.types import FilingMode
+from sec_nlp.core import Pipeline, _default_prompt_path
+from sec_nlp.core.types import FilingMode
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")

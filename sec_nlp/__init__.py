@@ -1,6 +1,4 @@
-# ==============================================================================
 # sec_nlp/__init__.py
-# ==============================================================================
 """SEC NLP - CLI tool for SEC filing analysis."""
 
 from importlib.metadata import PackageNotFoundError
@@ -11,30 +9,30 @@ try:
 except PackageNotFoundError:
     __version__ = "0.0.0"
 
-from sec_nlp.cli import main as cli_main
-from sec_nlp.pipelines import Pipeline
-from sec_nlp.pipelines.utils import FilingMode, Preprocessor, SECFilingDownloader
-from sec_nlp.pipelines.utils.chains import (
+
+from sec_nlp.config import settings
+from sec_nlp.core import FilingMode, Pipeline, Preprocessor, SECFilingDownloader
+from sec_nlp.llm import FlanT5LocalLLM, LocalLLM, OllamaLLM
+from sec_nlp.llm.chains import (
     SummarizationInput,
     SummarizationOutput,
-    SummarizationResult,
-    SummaryPayload,
     build_sec_runnable,
 )
-from sec_nlp.pipelines.utils.llms import FlanT5LocalLLM, LocalLLM
 
 __all__: list[str] = [
     "__version__",
-    "cli_main",
+    # Core
     "Pipeline",
-    "FilingMode",
     "SECFilingDownloader",
     "Preprocessor",
+    "FilingMode",
+    # LLM
     "LocalLLM",
     "FlanT5LocalLLM",
+    "OllamaLLM",
     "SummarizationInput",
     "SummarizationOutput",
-    "SummarizationResult",
-    "SummaryPayload",
     "build_sec_runnable",
+    # Config
+    "settings",
 ]

@@ -1,0 +1,39 @@
+[package]
+name = "sec_o3"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+# HTTP client
+hyper = { version = "0.14", features = ["full"] }
+hyper-tls = "0.5"
+http-body-util = "0.1"
+
+# Async runtime
+tokio = { version = "1.0", features = ["full"] }
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# Error handling
+thiserror = "1.0"
+
+# Parsing
+regex = "1.10"
+futures = "0.3.31"
+tracing = "0.1.41"
+scraper = "0.24.0"
+dotenvy = "0.15.7"
+
+[dev-dependencies]
+tempfile = "3.8"
+
+[features]
+default = []
+python = ["pyo3"]
+
+[dependencies.pyo3]
+version = "0.20"
+features = ["extension-module"]
+optional = true

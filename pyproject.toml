@@ -102,7 +102,7 @@ ignore = [
 [tool.maturin]
 features = ["pyo3/extension-module"]
 module-name = "sec_nlp._edgars"
-manifest-path = "crates/edgars/Cargo.toml"
+manifest-path = "crates/sec_o3/Cargo.toml"
 python-source = "sec_nlp"
 
 [build-system]

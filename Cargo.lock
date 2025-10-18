@@ -162,26 +162,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "edgars"
-version = "0.1.0"
-dependencies = [
- "dotenvy",
- "futures",
- "http-body-util",
- "hyper",
- "hyper-tls",
- "pyo3",
- "regex",
- "scraper",
- "serde",
- "serde_json",
- "tempfile",
- "thiserror",
- "tokio",
- "tracing",
-]
-
-[[package]]
 name = "ego-tree"
 version = "0.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1021,6 +1001,26 @@ dependencies = [
  "precomputed-hash",
  "selectors",
  "tendril",
+]
+
+[[package]]
+name = "sec_o3"
+version = "0.1.0"
+dependencies = [
+ "dotenvy",
+ "futures",
+ "http-body-util",
+ "hyper",
+ "hyper-tls",
+ "pyo3",
+ "regex",
+ "scraper",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror",
+ "tokio",
+ "tracing",
 ]
 
 [[package]]
