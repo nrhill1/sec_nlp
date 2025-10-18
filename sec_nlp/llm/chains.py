@@ -10,8 +10,6 @@ from langchain_core.runnables import Runnable, RunnableLambda, RunnableSequence
 from pydantic import Field, TypeAdapter, ValidationError
 from pydantic.dataclasses import dataclass
 
-from sec_nlp.llm import LocalLLM
-
 logger = logging.getLogger(__name__)
 
 
@@ -43,9 +41,9 @@ class SummarizationOutput(TypedDict):
     summary: SummarizationResult
 
 
-@dataclass(slots=True, frozen=True)
+@dataclass(slots=True)
 class SummaryPayload:
-    """Immutable Pydantic dataclass representing a validated LLM summary payload."""
+    """Pydantic dataclass representing a validated LLM summary payload."""
 
     summary: str | None = Field(default=None)
     points: list[str] | None = Field(default=None, min_items=0)
@@ -90,8 +88,8 @@ class SummaryPayload:
 
 def build_sec_runnable(
     *,
-    prompt: BasePromptTemplate,  # Runnable[SummarizationInput, PromptValue]
-    llm: LocalLLM,  # Runnable[str, str]
+    prompt: BasePromptTemplate,
+    llm: Runnable[str, str],
     require_json: bool = True,
 ) -> Runnable[SummarizationInput, SummarizationOutput]:
     """

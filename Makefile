@@ -4,7 +4,7 @@ SHELL := /bin/bash
 # Python
 LOG_DIR := python/tests/test_logs
 PYTEST_FLAGS := -v --maxfail=1 --tb=short --color=yes --basetemp .pytest_tmp --cache-clear
-MYPY := uvx mypy .
+MYPY := uv runmypy .
 
 # Rust
 CARGO ?= cargo
@@ -13,7 +13,7 @@ RUST_PKG_FLAG := -p $(RUST_CRATE)
 CLIPPY_FLAGS ?= -D warnings
 
 # Maturin (PyO3)
-MATURIN := uvx maturin
+MATURIN := uv runmaturin
 MATURIN_FLAGS ?= --uv --release
 MATURIN_MANIFEST := crates/$(RUST_CRATE)/Cargo.toml
 WHEELS_DIR := target/wheels
@@ -123,22 +123,22 @@ py-ext-sdist:
 .PHONY: python-lint
 python-lint: preflight
 	@echo "==> Ruff lint..."
-	@uvx ruff check . --fix
+	@uv runruff check . --fix
 	@echo "==> Finding unsafe fixes..."
-	@uvx ruff check . --unsafe-fixes
+	@uv runruff check . --unsafe-fixes
 
 .PHONY: python-typecheck
 python-typecheck: preflight
 	@echo "==> Mypy type check..."
 	@uv run mypy . 2>&1 | tee /dev/tty | \
 	grep -o 'types-[a-zA-Z0-9._-]\+' | sort -u | \
-	xargs -r uv add -D && uvx mypy .
+	xargs -r uv add -D && uv runmypy .
 
 
 .PHONY: python-format
 python-format: preflight
 	@echo "==> Ruff format..."
-	@uvx ruff format .
+	@uv runruff format .
 
 .PHONY: python-test
 python-test: py-ext-develop
@@ -205,7 +205,7 @@ coverage-report: preflight
 .PHONY: fix
 fix: preflight
 	@echo "==> Auto-fixing Python..."
-	@uvx ruff check --fix .
+	@uv runruff check --fix .
 	@uv run ruff format .
 	@echo "==> Auto-fixing Rust..."
 	@$(CARGO) fmt --all

@@ -2,7 +2,7 @@ from typing import Any, Protocol
 
 from langchain_core.runnables import Runnable, RunnableConfig
 
-class BaseLLM(Runnable[str, str], Protocol):
+class LocalLLM(Runnable[str, str], Protocol):
     model_name: str
     max_new_tokens: int
     temperature: float

@@ -17,16 +17,44 @@ class FlanT5LocalLLM(LocalLLM):
     """
 
     model_name: str = Field(default="google/flan-t5-base")
+    do_sample: bool = Field(default=False, description="Enable sampling")
+    top_p: float = Field(default=1.0, ge=0.0, le=1.0, description="Nucleus sampling")s
+    device: str | None = Field(default=None, description="Device: 'cpu', 'cuda', 'mps'")
+    eos_token_id: int | None = Field(default=None, description="End-of-sequence token ID")
 
-    def _load_backend(self) -> None:
+    _torch = PrivateAttr(default=None)
+    _tokenizer = PrivateAttr(default=None)
+    _model = PrivateAttr(default=None)
+
+    def model_post_init(self, _ctx: Any) -> None:
+        try:
+            import torch
+            from transformers import AutoTokenizer
+
+            self._torch = torch
+            self._tokenizer = AutoTokenizer.from_pretrained(self.model_name, use_fast=True)
+
+            self._load_model()
+
+            if self.device is not None and self._model is not None:
+                self._model.to(self.device)
+
+            logger.info("Initialized %s with model %s", self.__class__.__name__, self.model_name)
+
+        except Exception as e:
+            logger.error("Failed to initialize FlanT5 model: %s", e)
+            raise
+
+    def _load_model(self) -> None:
         from transformers import AutoModelForSeq2SeqLM
 
         self._model = AutoModelForSeq2SeqLM.from_pretrained(self.model_name)
+        logger.info("Loaded FLAN-T5 model: %s", self.model_name)
 
     def _generate(self, prompt: str, gen_kwargs: dict[str, Any]) -> str:
-        assert self._torch is not None, "Torch not initialized; call after model_post_init"
-        assert self._tokenizer is not None, "Tokenizer not initialized; call after model_post_init"
-        assert self._model is not None, "Model not initialized; call after model_post_init"
+        assert self._torch is not None, "Torch not initialized"
+        assert self._tokenizer is not None, "Tokenizer not initialized"
+        assert self._model is not None, "Model not initialized"
 
         torch = self._torch
         tok = self._tokenizer

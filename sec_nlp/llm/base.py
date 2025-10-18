@@ -10,7 +10,7 @@ from pydantic import BaseModel, Field
 logger = logging.getLogger(__name__)
 
 
-class BaseLLM(BaseModel, Runnable[str, str], ABC):
+class LocalLLM(BaseModel, Runnable[str, str], ABC):
     """
     Abstract base class for all LLM implementations.
 
