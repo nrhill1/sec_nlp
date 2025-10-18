@@ -16,6 +16,6 @@ logger = logging.getLogger(__name__)
 def get_ollama_runnable() -> Runnable[str, str]:
     return OllamaLLM(
         model="llama3.1",
-        temperature=0.7,
+        temperature=0.4,
         num_predict=256,
     )
