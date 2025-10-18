@@ -29,7 +29,6 @@ from pydantic import (
 from sec_nlp import __version__
 from sec_nlp.core import Preprocessor, SECFilingDownloader
 from sec_nlp.core.types import FilingMode
-from sec_nlp.llm import FlanT5LocalLLM
 from sec_nlp.llm.chains import (
     SummarizationInput,
     SummarizationOutput,
@@ -210,6 +209,9 @@ class Pipeline(BaseModel):
         self._graph = None
         logger.info("Reloaded prompt: %s", self.prompt_file)
 
+    def _prompt_as_str(self) -> str:
+        return self._prompt.to_string()
+
     def _get_preprocessor(self) -> Preprocessor:
         if self._pre is None:
             self._pre = Preprocessor(downloads_folder=self.dl_path)
@@ -292,19 +294,23 @@ class Pipeline(BaseModel):
         return ids
 
     def _get_graph(self) -> Runnable[SummarizationInput, SummarizationOutput]:
-        """
-        Build once, reuse across symbols. Rebuilt only if reload_prompt() is called.
-        """
         if self._graph is None:
             if self._prompt is None:
-                # Defensive: should be set in model_post_init
                 self._prompt = load_prompt(self.prompt_file)
 
-            llm = FlanT5LocalLLM(
-                model_name=self.model_name,
-                device="cpu",
-                max_new_tokens=int(self.max_new_tokens),
-            )
+            if self.model_name.startswith("ollama:"):
+                from sec_nlp.llms import build_ollama_llm
+
+                model_id = self.model_name.split(":", 1)[1]
+                llm = build_ollama_llm(model_name=model_id)
+            else:
+                from sec_nlp.llm import FlanT5LocalLLM
+
+                llm = FlanT5LocalLLM(
+                    model_name=self.model_name,
+                    device="cpu",
+                    max_new_tokens=int(self.max_new_tokens),
+                )
 
             self._graph = build_summarization_runnable(
                 prompt=self._prompt,

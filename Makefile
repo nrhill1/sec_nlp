@@ -123,22 +123,20 @@ py-ext-sdist:
 .PHONY: python-lint
 python-lint: preflight
 	@echo "==> Ruff lint..."
-	@uv runruff check . --fix
+	@uv run ruff check . --fix
 	@echo "==> Finding unsafe fixes..."
-	@uv runruff check . --unsafe-fixes
+	@uv run ruff check . --unsafe-fixes
 
 .PHONY: python-typecheck
 python-typecheck: preflight
 	@echo "==> Mypy type check..."
-	@uv run mypy . 2>&1 | tee /dev/tty | \
-	grep -o 'types-[a-zA-Z0-9._-]\+' | sort -u | \
-	xargs -r uv add -D && uv runmypy .
+	@uv run mypy .
 
 
 .PHONY: python-format
 python-format: preflight
 	@echo "==> Ruff format..."
-	@uv runruff format .
+	@uv run ruff format .
 
 .PHONY: python-test
 python-test: py-ext-develop

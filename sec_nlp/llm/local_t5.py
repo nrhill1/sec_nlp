@@ -4,21 +4,21 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from pydantic import Field
+from pydantic import Field, PrivateAttr
 
-from .base import LocalLLM
+from .base import LocalLLMBase
 
 logger = logging.getLogger(__name__)
 
 
-class FlanT5LocalLLM(LocalLLM):
+class FlanT5LocalLLM(LocalLLMBase):
     """
     Local-only FLAN-T5 (seq2seq) wrapper.
     """
 
     model_name: str = Field(default="google/flan-t5-base")
     do_sample: bool = Field(default=False, description="Enable sampling")
-    top_p: float = Field(default=1.0, ge=0.0, le=1.0, description="Nucleus sampling")s
+    top_p: float = Field(default=1.0, ge=0.0, le=1.0, description="Nucleus sampling")
     device: str | None = Field(default=None, description="Device: 'cpu', 'cuda', 'mps'")
     eos_token_id: int | None = Field(default=None, description="End-of-sequence token ID")
 

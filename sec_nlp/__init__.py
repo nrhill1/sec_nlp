@@ -12,7 +12,7 @@ except PackageNotFoundError:
 
 from sec_nlp.config import settings
 from sec_nlp.core import FilingMode, Pipeline, Preprocessor, SECFilingDownloader
-from sec_nlp.llm import FlanT5LocalLLM, LocalLLM, OllamaLLM
+from sec_nlp.llm import FlanT5LocalLLM, LocalLLMBase, OllamaLLM
 from sec_nlp.llm.chains import (
     SummarizationInput,
     SummarizationOutput,
@@ -27,9 +27,9 @@ __all__: list[str] = [
     "Preprocessor",
     "FilingMode",
     # LLM
-    "LocalLLM",
+    "LocalLLMBase",
     "FlanT5LocalLLM",
-    "OllamaLLM",
+    "build_ollama_llm",
     "SummarizationInput",
     "SummarizationOutput",
     "build_summarization_runnable",

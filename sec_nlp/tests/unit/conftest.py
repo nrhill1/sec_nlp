@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any, Protocol
 
 import pytest
-from sec_nlp.llms.local_llm_base import LocalLLM
+from sec_nlp.llms.local_llm_base import LocalLLMBase
 
 
 class HasPageContent(Protocol):
@@ -112,10 +112,10 @@ def write_html_tree(tmp_dirs: tuple[Path, Path]) -> Callable[..., Path]:
     return _mk
 
 
-class DummyLLM(LocalLLM):
-    """Minimal LocalLLM for tests.
+class DummyLLM(LocalLLMBase):
+    """Minimal LocalLLMBase for tests.
 
-    Default behavior keeps the backend uninitialized so that LocalLLM.invoke
+    Default behavior keeps the backend uninitialized so that LocalLLMBase.invoke
     returns the input (passthrough). Call .force_init() to simulate an initialized
     model so that invoke() uses _generate().
     """

@@ -1,66 +1,100 @@
+# sec_nlp/pipelines/utils/llms/local_llm_base.py
 from __future__ import annotations
 
 import logging
 from abc import ABC, abstractmethod
 from typing import Any
 
+from langchain_core.prompt_values import PromptValue
 from langchain_core.runnables import Runnable, RunnableConfig
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, PrivateAttr
 
 logger = logging.getLogger(__name__)
 
 
-class LocalLLM(BaseModel, Runnable[str, str], ABC):
+class LocalLLM(BaseModel, Runnable[str | PromptValue, str], ABC):
     """
-    Abstract base class for all LLM implementations.
-
-    Provides common interface for both local (HuggingFace) and API-based (Ollama) models.
+    Base class for local-only HF models that plugs directly into LangChain as a Runnable.
+    Accepts either str or PromptValue inputs.
     """
 
-    name: str = Field(default="base-llm", description="LLM name")
-    model_name: str = Field(..., description="Model identifier")
-    max_new_tokens: int = Field(default=512, description="Maximum tokens to generate")
-    temperature: float = Field(default=0.0, ge=0.0, le=2.0, description="Sampling temperature")
+    name: str = Field(default="local-llm", description="LLM base class name")
+    model_name: str = Field(..., description="HF model id or local path")
+    max_new_tokens: int = 512
+    do_sample: bool = False
+    temperature: float = 0.0
+    top_p: float = 1.0
+    device: str | None = Field(default=None, description="e.g. 'cuda', 'cpu', 'mps'")
+    eos_token_id: int | None = None
 
-    class Config:
-        arbitrary_types_allowed = True
+    _tokenizer: Any | None = PrivateAttr(default=None)
+    _model: Any | None = PrivateAttr(default=None)
+    _torch: Any | None = PrivateAttr(default=None)
 
-    @abstractmethod
-    def invoke(self, input: str, config: RunnableConfig | None = None, **kwargs: Any) -> str:
-        """
-        Generate text from input prompt.
+    @staticmethod
+    def _lazy_imports() -> bool:
+        try:
+            import torch  # noqa: F401
+            from transformers import AutoTokenizer  # noqa: F401
+            return True
+        except Exception as e:
+            logger.error("Transformers/torch not available: %s", e)
+            return False
 
-        Args:
-            input: Input prompt text
-            config: Optional runtime configuration
-            **kwargs: Additional generation arguments
+    def model_post_init(self, __ctx: Any) -> None:
+        if not self._lazy_imports():
+            return
+        import torch
+        from transformers import AutoTokenizer
 
-        Returns:
-            Generated text
-        """
-        ...
+        self._torch = torch
+        self._tokenizer = AutoTokenizer.from_pretrained(self.model_name, use_fast=True)
+        self._load_backend()
+
+        if self.device is not None and self._model is not None:
+            self._model.to(self.device)
+
+        logger.info("Initialized %s with %s", self.__class__.__name__, self.model_name)
+
+    def input_to_string(self, input: str | PromptValue) -> str:
+        """Convert PromptValue to string, or pass through string."""
+        if isinstance(input, str):
+            return input
+        # PromptValue has to_string() method
+        return input.to_string()
+
+    def invoke(
+        self,
+        input: str | PromptValue,
+        config: RunnableConfig | None = None,
+        **kwargs: Any
+    ) -> str:
+        """Accept str or PromptValue, convert to string, then generate."""
+        prompt_str = self.input_to_string(input)
+
+        if self._model is None or self._tokenizer is None:
+            logger.warning("Model not initialized; returning prompt passthrough.")
+            return prompt_str
+
+        return self._generate(prompt_str, kwargs or {})
 
     def batch(
         self,
-        inputs: list[str],
+        inputs: list[str | PromptValue],
         config: RunnableConfig | list[RunnableConfig] | None = None,
         **kwargs: Any,
     ) -> list[str]:
-        """
-        Generate text for multiple prompts.
-
-        Args:
-            inputs: List of input prompts
-            config: Optional runtime configuration(s)
-            **kwargs: Additional generation arguments
-
-        Returns:
-            List of generated texts
-        """
         if isinstance(config, list):
             if len(config) != len(inputs):
                 raise ValueError(f"len(config)={len(config)} must equal len(inputs)={len(inputs)}")
             return [
                 self.invoke(inp, cfg, **kwargs) for inp, cfg in zip(inputs, config, strict=True)
             ]
+
         return [self.invoke(inp, config, **kwargs) for inp in inputs]
+
+    @abstractmethod
+    def _load_backend(self) -> None: ...
+
+    @abstractmethod
+    def _generate(self, prompt: str, gen_kwargs: dict[str, Any]) -> str: ...

@@ -7,6 +7,7 @@ from typing import Any, ClassVar, Literal, Self, TypedDict
 
 from langchain_core.prompts.base import BasePromptTemplate
 from langchain_core.runnables import Runnable, RunnableLambda, RunnableSequence
+from langchain_core.schema import PromptValue
 from pydantic import Field, TypeAdapter, ValidationError
 from pydantic.dataclasses import dataclass
 
@@ -89,21 +90,15 @@ class SummaryPayload:
 def build_summarization_runnable(
     *,
     prompt: BasePromptTemplate,
-    llm: Runnable[str, str],
+    llm: Runnable[str | PromptValue, str],
     require_json: bool = True,
 ) -> Runnable[SummarizationInput, SummarizationOutput]:
     """
     Build the SEC summarization chain:
       input:  SummarizationInput
-      pipe:   prompt(as string) -> llm -> validation
+      pipe:   prompt(to string) -> llm -> validation
       output: SummarizationOutput
     """
-
-    coerce_str: Runnable[Any, str] = RunnableLambda(
-        lambda t, *_a, **_k: (
-            t.to_string() if hasattr(t, "to_string") else (t if isinstance(t, str) else str(t))
-        )
-    )
 
     def _validate(raw: str) -> SummarizationOutput:
         if require_json:
@@ -116,8 +111,8 @@ def build_summarization_runnable(
         result: SummarizationResult = payload_dict
         return {"status": status, "summary": result}
 
-    validate_step: Runnable[str, SummarizationOutput] = RunnableLambda(_validate)
+    validate: Runnable[str, SummarizationOutput] = RunnableLambda(_validate)
 
-    chain: RunnableSequence[Any, Any] = prompt | coerce_str | llm | validate_step
+    chain: RunnableSequence[Any, Any] = prompt | llm | validate
 
     return chain.with_types(input_type=SummarizationInput, output_type=SummarizationOutput)
