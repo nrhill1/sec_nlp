@@ -23,8 +23,6 @@ repos:
   - id: python-typecheck
     name: Python Typecheck (Mypy)
     entry: make python-typecheck
-    additional_dependencies:
-        - "pydantic>=1.10.4"
     types: [python]
     language: system
     pass_filenames: false
