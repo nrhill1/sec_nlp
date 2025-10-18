@@ -3,13 +3,13 @@
 //! This module defines the error types that can occur when fetching and
 //! processing SEC data using Hyper as the HTTP client.
 
-use thiserror::Error;
+use thiserror::Error as ThisError;
 
 /// Result type alias using this crate's Error type.
 pub type Result<T> = std::result::Result<T, Error>;
 
 /// Errors that can occur when working with SEC data.
-#[derive(Error, Debug)]
+#[derive(ThisError, Debug)]
 pub enum Error {
     /// Invalid CIK format or value.
     #[error("Invalid CIK: {0}")]

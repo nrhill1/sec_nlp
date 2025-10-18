@@ -3,7 +3,7 @@
 //! This module provides functions to build proper URLs for accessing
 //! various SEC filing resources on the EDGAR system.
 
-use crate::corp::cik::normalize_cik;
+use crate::normalize_cik;
 use crate::errors::Result;
 
 const ARCHIVES_BASE: &str = "https://www.sec.gov/Archives/edgar/data";
@@ -29,13 +29,13 @@ const ARCHIVES_BASE: &str = "https://www.sec.gov/Archives/edgar/data";
 /// );
 /// ```
 pub fn build_filing_url(cik: &str, accession_number: &str) -> Result<String> {
-    let normalized_cik = normalize_cik(cik);
+    let normalized_cik = normalize_cik(cik)?;
     let accession_no_dashes = accession_number.replace('-', "");
 
     let filing_url = format!(
         "{}/{}/{}-index.html",
         ARCHIVES_BASE,
-        normalized_cik?.trim_start_matches('0'),
+        normalized_cik.trim_start_matches('0'),
         accession_no_dashes
     );
 

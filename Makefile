@@ -130,7 +130,7 @@ python-lint: preflight
 .PHONY: python-typecheck
 python-typecheck: preflight
 	@echo "==> Mypy type check..."
-	@uvx mypy . 2>&1 | tee /dev/tty | \
+	@uv run mypy . 2>&1 | tee /dev/tty | \
 	grep -o 'types-[a-zA-Z0-9._-]\+' | sort -u | \
 	xargs -r uv add -D && uvx mypy .
 

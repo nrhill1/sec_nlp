@@ -31,5 +31,7 @@
 //! parser, and CLI layers.
 
 pub mod urls;
+pub mod cik;
 
 pub use urls::{build_document_url, build_filing_url, build_full_text_url};
+pub use cik::normalize_cik;

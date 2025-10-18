@@ -42,10 +42,8 @@
 #![warn(missing_docs)]
 #![warn(rustdoc::missing_crate_level_docs)]
 pub mod client;
-pub mod corp;
 pub mod errors;
 pub mod filings;
-pub mod parse;
 pub mod utils;
 
 #[cfg(feature = "python")]
@@ -53,10 +51,9 @@ pub mod python;
 
 // Re-export commonly used types at crate root
 pub use client::SecClient;
-pub use corp::{cik::normalize_cik, facts::CompanyFacts, submissions::CompanySubmissions};
 pub use errors::{Error, Result};
 pub use filings::{is_valid_filing_type, FormType};
-pub use utils::{build_document_url, build_filing_url, build_full_text_url};
+pub use utils::{build_document_url, build_filing_url, build_full_text_url, normalize_cik};
 
 /// Library version
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
