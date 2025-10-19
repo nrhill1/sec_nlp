@@ -1,4 +1,4 @@
-name: auto-squash-enable
+name: Auto-merge
 
 on:
     pull_request:
@@ -10,14 +10,14 @@ permissions:
     pull-requests: write
 
 jobs:
-    enable-automerge:
-        name: Enable PR auto-merge (squash) when labeled
+    automerge:
+        name: Enable auto-merge (squash) when enabled
         if: >
             github.event_name == 'pull_request' &&
             contains(github.event.pull_request.labels.*.name, 'automerge')
         runs-on: ubuntu-latest
         steps:
-            - name: Enable auto-merge on this PR
+            - name: Enable PR auto-merge
               uses: peter-evans/enable-pull-request-automerge@v3
               with:
                   token: ${{ secrets.GITHUB_TOKEN }}

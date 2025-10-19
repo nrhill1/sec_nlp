@@ -55,7 +55,7 @@ jobs:
               - '.pre-commit-config.yaml'
 
   # ---------------------------------------------------------------------------
-  # FULL SUITES on push to main
+  # FULL SUITES
   # ---------------------------------------------------------------------------
   full_rust:
     name: "Rust (Full) — ${{ matrix.os }}"
@@ -83,12 +83,10 @@ jobs:
           cache-all-crates: true
 
       - name: Build (release)
-        run: cargo build --release -p ${{ env.RUST_CRATE }}
+        run: make build-rs
 
-      - name: Lint (fmt + clippy)
-        run: |
-          cargo fmt --all -- --check
-          cargo clippy -p ${{ env.RUST_CRATE }} --all-features -- -D warnings
+      - name: Lint
+        run: make rs-lint
 
       - name: Test (release)
         run: cargo test --release -p ${{ env.RUST_CRATE }} --all-features -- --nocapture
@@ -141,20 +139,20 @@ jobs:
         with:
           enable-cache: true
 
-      - name: Install dependencies
-        run: make install-dev
+      - name: Setup environment
+        run: make sync
 
       - name: Lint
-        run: make python-lint
+        run: make py-lint
 
       - name: Type check
-        run: make python-typecheck
+        run: make py-types
 
-      - name: Build PyO3 extension
-        run: make py-ext-develop
+      - name: Build extension
+        run: make build-ext
 
       - name: Test
-        run: make python-test
+        run: make test-py
 
       - name: Coverage
         run: |
@@ -171,7 +169,7 @@ jobs:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
   # ---------------------------------------------------------------------------
-  # TARGETED JOBS (only changed modules)
+  # TARGETED JOBS
   # ---------------------------------------------------------------------------
   rust_targeted:
     name: "Rust (Quick) — ${{ matrix.os }}"
@@ -199,12 +197,10 @@ jobs:
           workspaces: ${{ env.RUST_CRATE }} -> target
 
       - name: Lint
-        run: |
-          cargo fmt --all -- --check
-          cargo clippy -p ${{ env.RUST_CRATE }} -- -D warnings
+        run: make rs-lint
 
       - name: Test
-        run: cargo test -p ${{ env.RUST_CRATE }} -- --nocapture
+        run: make test-rs
 
   python_targeted:
     name: "Python (Quick) — ${{ matrix.os }} / py${{ matrix.python }}"
@@ -230,20 +226,17 @@ jobs:
         with:
           enable-cache: true
 
-      - name: Install dependencies
-        run: make install-dev
+      - name: Setup and lint
+        run: make check
 
-      - name: Lint
-        run: make python-lint
-
-      - name: Build PyO3 extension
-        run: make py-ext-develop
+      - name: Build extension
+        run: make build-ext
 
       - name: Test
-        run: make python-test
+        run: make test-py
 
   # ---------------------------------------------------------------------------
-  # PRE-COMMIT (lint all files)
+  # PRE-COMMIT
   # ---------------------------------------------------------------------------
   pre_commit:
     name: Pre-commit hooks
@@ -259,13 +252,13 @@ jobs:
 
       - uses: astral-sh/setup-uv@v3
 
-      - name: Install dependencies
-        run: make bootstrap
+      - name: Setup tools
+        run: make setup
 
       - uses: pre-commit/action@v3.0.1
 
   # ---------------------------------------------------------------------------
-  # INTEGRATION TESTS (always run on push)
+  # INTEGRATION TESTS
   # ---------------------------------------------------------------------------
   integration:
     name: "Integration — ${{ matrix.os }} / py${{ matrix.python }}"
@@ -289,11 +282,11 @@ jobs:
         with:
           enable-cache: true
 
-      - name: Install dependencies
-        run: make install-dev
+      - name: Setup environment
+        run: make sync
 
-      - name: Build PyO3 extension
-        run: make py-ext-develop
+      - name: Build extension
+        run: make build-ext
 
       - name: Run integration tests
         run: uv run pytest -v tests/integration
@@ -324,3 +317,5 @@ jobs:
             exit 1
           else
             echo "All jobs passed"
+            exit 0
+          fi

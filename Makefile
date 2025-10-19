@@ -13,7 +13,7 @@ RUST_PKG_FLAG := -p $(RUST_CRATE)
 CLIPPY_FLAGS ?= -D warnings
 
 # Maturin (PyO3)
-MATURIN := uv runmaturin
+MATURIN := uv run maturin
 MATURIN_FLAGS ?= --uv --release
 MATURIN_MANIFEST := crates/$(RUST_CRATE)/Cargo.toml
 WHEELS_DIR := target/wheels
