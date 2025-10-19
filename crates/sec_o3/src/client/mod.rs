@@ -169,8 +169,7 @@ impl Client {
             .map(|s| s.to_lowercase());
 
         let body = response.into_body();
-        let mut reader =
-            tokio_util::io::StreamReader::new(body.map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e)));
+        let mut reader = tokio_util::io::StreamReader::new(body.map_err(std::io::Error::other));
 
         let mut file = fs::File::create(path).await.map_err(Error::IoError)?;
 

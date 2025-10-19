@@ -7,7 +7,6 @@
 
 use crate::{Client, Error, Result};
 use serde::Deserialize;
-use serde_with::skip_serializing_none;
 use std::path::{Path, PathBuf};
 
 /// Company submissions metadata from SEC API
@@ -200,10 +199,10 @@ pub async fn get_recent_filings(client: &Client, cik: &str) -> Result<Vec<Filing
         filings.push(Filing {
             cik: submissions.cik.clone(),
             accession_number: recent.accession_number[i].clone(),
-            form_type: recent.form[i].clone(),
-            filing_date: recent.filing_date[i].clone(),
-            primary_document: recent.primary_document[i].clone(),
-            is_xbrl: recent.is_xbrl[i] == 1,
+            form_type: recent.form.get(i).cloned().unwrap_or_default(),
+            filing_date: recent.filing_date.get(i).cloned().unwrap_or_default(),
+            primary_document: recent.primary_document.get(i).cloned().unwrap_or_default(),
+            is_xbrl: recent.is_xbrl.get(i).copied().unwrap_or(0) == 1,
         });
     }
 
@@ -231,9 +230,7 @@ pub async fn get_recent_filings(client: &Client, cik: &str) -> Result<Vec<Filing
 /// ```
 pub async fn download_filing(client: &Client, filing: &Filing, output_dir: impl AsRef<Path>) -> Result<PathBuf> {
     let output_dir = output_dir.as_ref();
-    tokio::fs::create_dir_all(output_dir)
-        .await
-        .map_err(|e| Error::IoError(e))?;
+    tokio::fs::create_dir_all(output_dir).await.map_err(Error::IoError)?;
 
     let filename = &filing.primary_document;
     let output_path = output_dir.join(filename);
@@ -273,9 +270,7 @@ pub async fn download_submission_text(
     output_dir: impl AsRef<Path>,
 ) -> Result<PathBuf> {
     let output_dir = output_dir.as_ref();
-    tokio::fs::create_dir_all(output_dir)
-        .await
-        .map_err(|e| Error::IoError(e))?;
+    tokio::fs::create_dir_all(output_dir).await.map_err(Error::IoError)?;
 
     let filename = format!("{}.txt", filing.accession_number);
     let output_path = output_dir.join(filename);

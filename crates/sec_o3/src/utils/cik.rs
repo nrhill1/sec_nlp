@@ -80,7 +80,6 @@ pub async fn ticker_to_cik(ticker: &str) -> Result<String> {
 /// async fn main() -> sec_o3::Result<()> {
 ///     let tickers = vec!["AAPL", "MSFT", "GOOGL"];
 ///     let results = batch_ticker_lookup(&tickers).await?;
-
 ///     for (ticker, cik) in results {
 ///         println!("{}: {}", ticker, cik);
 ///     }
