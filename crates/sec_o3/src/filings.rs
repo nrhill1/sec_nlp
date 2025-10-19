@@ -7,6 +7,7 @@
 
 use crate::{Client, Error, Result};
 use serde::Deserialize;
+use serde_with::skip_serializing_none;
 use std::path::{Path, PathBuf};
 
 /// Company submissions metadata from SEC API
@@ -54,32 +55,45 @@ pub struct RecentFilings {
     /// Accession numbers (e.g., "0000320193-23-000106")
     pub accession_number: Vec<String>,
     /// Filing dates in YYYY-MM-DD format
+    #[serde(default)]
     pub filing_date: Vec<String>,
     /// Report period end dates in YYYY-MM-DD format
+    #[serde(default)]
     pub report_date: Vec<String>,
     /// Acceptance timestamps (ISO 8601 format)
+    #[serde(default)]
     pub acceptance_date_time: Vec<String>,
     /// Securities Act under which filed (e.g., "33", "34")
+    #[serde(default)]
     pub act: Vec<String>,
     /// Form types (e.g., "10-K", "8-K", "DEF 14A")
+    #[serde(default)]
     pub form: Vec<String>,
     /// SEC file numbers
+    #[serde(default)]
     pub file_number: Vec<String>,
     /// Film numbers (legacy identifier)
+    #[serde(default)]
     pub film_number: Vec<String>,
     /// Items disclosed (for 8-K filings)
+    #[serde(default)]
     pub items: Vec<String>,
     /// Filing sizes in bytes
+    #[serde(default)]
     pub size: Vec<i64>,
     /// Whether filing contains XBRL data (1 = yes, 0 = no)
     #[serde(rename(deserialize = "isXRBL"))]
+    #[serde(default)]
     pub is_xbrl: Vec<i32>,
     /// Whether filing contains Inline XBRL (1 = yes, 0 = no)
     #[serde(rename(deserialize = "isInlineXRBL"))]
+    #[serde(default)]
     pub is_inline_xbrl: Vec<i32>,
     /// Primary document filename (e.g., "aapl-20230930.htm")
+    #[serde(default)]
     pub primary_document: Vec<String>,
     /// Description of primary document
+    #[serde(default)]
     pub primary_doc_description: Vec<String>,
 }
 
@@ -367,7 +381,7 @@ mod tests {
         );
 
         let submissions = result.unwrap();
-        assert_eq!(submissions.cik, "320193");
+        assert_eq!(submissions.cik, "0000320193");
         assert!(submissions.name.contains("Apple"));
     }
 
