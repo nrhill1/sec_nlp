@@ -120,7 +120,6 @@ pub async fn batch_ticker_lookup(tickers: &[&str]) -> Result<Vec<(String, String
 pub async fn populate_cache() -> Result<()> {
     let data = fetch_ticker_data().await?;
 
-    // Process inserts concurrently without collecting into a Vec
     futures::stream::iter(data)
         .for_each_concurrent(None, |(ticker, entry)| async move {
             CACHE.insert(ticker, entry.cik).await;
@@ -231,8 +230,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_populate_cache() {
-        populate_cache().await.unwrap();
-        assert!(cache_size() > 1000);
+        let result = populate_cache().await;
+        assert!(result.is_ok(), "populate_cache failed: {:?}", result.err());
+        assert!(cache_size() > 10000);
     }
 
     #[tokio::test]

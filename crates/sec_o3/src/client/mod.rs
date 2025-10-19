@@ -120,7 +120,6 @@ impl Client {
     }
 
     /// Get response body as decompressed bytes.
-    ///
     /// Automatically handles gzip and deflate based on Content-Encoding header.
     pub async fn get_bytes(&self, url: &str) -> Result<bytes::Bytes> {
         let response = self.get(url).await?;
