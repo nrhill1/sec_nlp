@@ -32,8 +32,5 @@
 
 pub mod cik;
 pub mod form_type;
-pub mod urls;
-
 pub use cik::{batch_ticker_lookup, ticker_to_cik};
 pub use form_type::{FilingCategory, FilingFrequency, FormType};
-pub use urls::{build_document_url, build_filing_url, build_full_text_url};

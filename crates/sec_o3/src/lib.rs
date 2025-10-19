@@ -43,15 +43,14 @@
 #![warn(rustdoc::missing_crate_level_docs)]
 pub mod client;
 pub mod errors;
+pub mod filings;
 pub mod utils;
 
 #[cfg(feature = "python")]
 pub mod python;
 
-// Re-export commonly used types at crate root
 pub use client::Client;
 pub use errors::{Error, Result};
-pub use utils::{build_document_url, build_filing_url, build_full_text_url};
 
 /// Library version
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");

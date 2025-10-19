@@ -22,14 +22,14 @@ repos:
 
   - id: python-typecheck
     name: Python Typecheck (Mypy)
-    entry: make python-typecheck
+    entry: make py-types
     types: [python]
     language: system
     pass_filenames: false
 
   - id: rust-lint
     name: Rust Lint (fmt + clippy)
-    entry: make rust-lint
+    entry: make rs-lint
     types: [rust]
     language: system
     pass_filenames: false
