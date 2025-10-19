@@ -25,7 +25,7 @@ use crate::{Client, Error, Result};
 /// - ahash for speed
 static CACHE: Lazy<Cache<String, String, RandomState>> = Lazy::new(|| {
     Cache::builder()
-        .max_capacity(10_000)
+        .max_capacity(15_000)
         .time_to_live(Duration::from_secs(3600 * 24))
         .build_with_hasher(RandomState::default())
 });
@@ -33,6 +33,7 @@ static CACHE: Lazy<Cache<String, String, RandomState>> = Lazy::new(|| {
 /// Ticker entry from ticker.txt (tab-delimited: ticker\tcik)
 #[derive(Debug, Clone)]
 struct TickerEntry {
+    #[allow(dead_code)]
     ticker: String,
     cik: String,
 }
