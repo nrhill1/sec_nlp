@@ -4,7 +4,7 @@ SHELL := /bin/bash
 # Python
 LOG_DIR := python/tests/test_logs
 PYTEST_FLAGS := -v --maxfail=1 --tb=short --color=yes --basetemp .pytest_tmp --cache-clear
-MYPY := uv runmypy .
+MYPY := uv run mypy .
 
 # Rust
 CARGO ?= cargo
@@ -31,40 +31,49 @@ STAMP_UVSYNC := .uvsync.stamp
 .PHONY: help
 help:
 	@echo "Setup:"
-	@echo "  bootstrap              Install/upgrade dev tools (ruff, mypy, pytest, coverage)"
-	@echo "  install-dev            Sync project dependencies (uv sync --dev)"
-	@echo "  preflight              bootstrap + install-dev (cached)"
+	@echo "  setup                  Install/upgrade dev tools"
+	@echo "  sync                   Sync project dependencies"
+	@echo "  ready                  setup + sync (cached)"
+	@echo "  update                 Update all dependencies"
 	@echo ""
 	@echo "Development:"
-	@echo "  lint                   Run all linters (Rust + Python)"
-	@echo "  typecheck              Run mypy type checking"
-	@echo "  format                 Auto-format all code (Rust + Python)"
+	@echo "  lint                   Run all linters"
+	@echo "  types                  Run type checking"
+	@echo "  fmt                    Auto-format all code"
 	@echo "  fix                    Auto-fix all issues + format"
-	@echo "  test                   Run all tests (Rust + Python)"
-	@echo "  coverage               Run Python tests with coverage"
-	@echo "  coverage-report        Show coverage report"
+	@echo "  test                   Run all tests"
+	@echo "  test-rs                Run Rust tests only"
+	@echo "  test-py                Run Python tests only"
+	@echo "  watch                  Run tests on file changes (requires cargo-watch)"
+	@echo ""
+	@echo "Quality:"
+	@echo "  check                  ready + lint (pre-commit)"
+	@echo "  cov                    Run tests with coverage"
+	@echo "  cov-html               Generate HTML coverage report"
+	@echo "  bench                  Run benchmarks"
+	@echo ""
+	@echo "Build & Release:"
+	@echo "  build                  Build everything (lib + extension + wheels)"
+	@echo "  build-rs               Build Rust library only"
+	@echo "  build-ext              Build Python extension"
+	@echo "  build-wheel            Build distribution wheels"
+	@echo "  build-sdist            Build source distribution"
+	@echo ""
+	@echo "Language-specific:"
+	@echo "  py-lint                Python: ruff check"
+	@echo "  py-fmt                 Python: ruff format"
+	@echo "  py-types               Python: mypy type check"
+	@echo "  rs-lint                Rust: fmt + clippy"
+	@echo "  rs-fmt                 Rust: cargo fmt"
+	@echo "  rs-clippy              Rust: cargo clippy"
 	@echo ""
 	@echo "CI/CD:"
-	@echo "  verify                 preflight + lint (for CI)"
-	@echo "  ci                     verify + test (full CI pipeline)"
-	@echo ""
-	@echo "Python specific:"
-	@echo "  python-lint            ruff check"
-	@echo "  python-test            pytest"
-	@echo "  python-format          ruff format"
-	@echo ""
-	@echo "Rust specific:"
-	@echo "  rust-lint              rustfmt + clippy"
-	@echo "  rust-test              cargo test"
-	@echo "  rust-fmt               cargo fmt"
-	@echo ""
-	@echo "Maturin:"
-	@echo "  py-ext-develop         Build PyO3 extension in dev mode"
-	@echo "  py-ext-build           Build PyO3 wheels"
-	@echo "  py-ext-sdist           Build source distribution"
+	@echo "  ci                     Full CI pipeline (check + test)"
+	@echo "  ci-quick               Quick CI check (lint only)"
 	@echo ""
 	@echo "Cleanup:"
-	@echo "  clean                  Remove build artifacts and stamps"
+	@echo "  clean                  Remove build artifacts"
+	@echo "  clean-all              Deep clean (including caches)"
 
 .PHONY: .uv
 .uv:
@@ -73,8 +82,8 @@ help:
 		python3 -m pip install --upgrade uv; \
 	fi
 
-.PHONY: bootstrap
-bootstrap: .uv $(STAMP_BOOTSTRAP)
+.PHONY: setup
+setup: .uv $(STAMP_BOOTSTRAP)
 
 $(STAMP_BOOTSTRAP): $(BOOTSTRAP_DEPS)
 	@echo "==> Bootstrapping dev tools..."
@@ -86,67 +95,72 @@ $(STAMP_BOOTSTRAP): $(BOOTSTRAP_DEPS)
 	@uv tool upgrade --all || true
 	@touch $(STAMP_BOOTSTRAP)
 
-.PHONY: install-dev
-install-dev: $(STAMP_UVSYNC)
+.PHONY: sync
+sync: $(STAMP_UVSYNC)
 
 $(STAMP_UVSYNC): $(UV_DEPS)
 	@echo "==> Syncing dev dependencies..."
 	@uv sync --dev
 	@touch $(STAMP_UVSYNC)
 
-.PHONY: preflight
-preflight: bootstrap install-dev
+.PHONY: ready
+ready: setup sync
 
-.PHONY: verify
-verify: preflight lint
+.PHONY: update
+update: setup
+	@echo "==> Updating dependencies..."
+	@uv sync --upgrade
+	@$(CARGO) update
+	@rm -f $(STAMP_UVSYNC)
+
+.PHONY: check
+check: ready lint
 
 # -------------------------
-# Maturin (PyO3)
+# Build Targets
 # -------------------------
 
-.PHONY: py-ext-develop
-py-ext-develop:
+.PHONY: build
+build: build-rs build-ext build-wheel
+
+.PHONY: build-rs
+build-rs: ready
+	@echo "==> Building Rust library..."
+	@$(CARGO) build --release $(RUST_PKG_FLAG)
+
+.PHONY: build-ext
+build-ext:
 	@$(MATURIN) develop $(MATURIN_FLAGS) -m $(MATURIN_MANIFEST)
 
-.PHONY: py-ext-build
-py-ext-build:
+.PHONY: build-wheel
+build-wheel:
 	@$(MATURIN) build $(MATURIN_FLAGS) -m $(MATURIN_MANIFEST)
 
-.PHONY: py-ext-sdist
-py-ext-sdist:
+.PHONY: build-sdist
+build-sdist:
 	@$(MATURIN) sdist -m $(MATURIN_MANIFEST)
 
 # -------------------------
 # Python
 # -------------------------
 
-.PHONY: python-lint
-python-lint: preflight
+.PHONY: py-lint
+py-lint: ready
 	@echo "==> Ruff lint..."
-	@uv run ruff check . --fix
-	@echo "==> Finding unsafe fixes..."
-	@uv run ruff check . --unsafe-fixes
+	@uv run ruff check .
 
-.PHONY: python-typecheck
-python-typecheck: preflight
+.PHONY: py-types
+py-types: ready
 	@echo "==> Mypy type check..."
 	@uv run mypy .
 
-.PHONY: python-add-types
-types-install: preflight
-	@uv run mypy --install-types --non-interactive || true
-
-.PHONY: python-stubgen
-types-gen: preflight
-	@uv run stubgen -p faiss -o typings || true
-
-.PHONY: python-format
-python-format: preflight
+.PHONY: py-fmt
+py-fmt: ready
 	@echo "==> Ruff format..."
 	@uv run ruff format .
 
-.PHONY: python-test
-python-test: py-ext-develop
+.PHONY: test-py
+test-py: build-ext
 	@mkdir -p $(LOG_DIR)
 	@ts=$$(date +"%Y-%m-%dT%H-%M-%S"); \
 	log="$(LOG_DIR)/test_$${ts}.log"; \
@@ -154,8 +168,8 @@ python-test: py-ext-develop
 	set -o pipefail; \
 	uv run pytest $(PYTEST_FLAGS) 2>&1 | tee "$$log"
 
-.PHONY: python-coverage
-python-coverage: py-ext-develop
+.PHONY: py-cov
+py-cov: build-ext
 	@mkdir -p $(LOG_DIR)
 	@ts=$$(date +"%Y-%m-%dT%H-%M-%S"); \
 	log="$(LOG_DIR)/coverage_$${ts}.log"; \
@@ -167,64 +181,105 @@ python-coverage: py-ext-develop
 # Rust
 # -------------------------
 
-.PHONY: rust-lint
-rust-lint: preflight
-	@echo "==> rustfmt check..."
+.PHONY: rs-lint
+rs-lint: rs-fmt rs-clippy
+
+.PHONY: rs-fmt
+rs-fmt: ready
+	@echo "==> cargo fmt check..."
 	@$(CARGO) fmt --all -- --check
+
+.PHONY: rs-clippy
+rs-clippy: ready
 	@echo "==> cargo clippy..."
 	@$(CARGO) clippy $(RUST_PKG_FLAG) -- $(CLIPPY_FLAGS)
 
-.PHONY: rust-test
-rust-test: preflight
+.PHONY: test-rs
+test-rs: ready
 	@echo "==> Rust tests..."
 	@$(CARGO) test $(RUST_PKG_FLAG) -- --nocapture
 
-.PHONY: rust-fmt
-rust-fmt: preflight
-	@echo "==> cargo fmt..."
-	@$(CARGO) fmt --all
+.PHONY: bench
+bench: ready
+	@echo "==> Running benchmarks..."
+	@$(CARGO) bench $(RUST_PKG_FLAG)
 
 # -------------------------
-# Combined commands
+# Combined Commands
 # -------------------------
 
 .PHONY: lint
-lint: rust-lint python-lint
+lint: rs-lint py-lint
 
-.PHONY: typecheck
-typecheck: python-typecheck
+.PHONY: types
+types: py-types
 
-.PHONY: format
-format: rust-fmt python-format
+.PHONY: fmt
+fmt: ready
+	@echo "==> Formatting Rust..."
+	@$(CARGO) fmt --all
+	@echo "==> Formatting Python..."
+	@uv run ruff format .
 
 .PHONY: test
-test: rust-test python-test
+test: test-rs test-py
 
-.PHONY: coverage
-coverage: rust-test python-coverage
+.PHONY: cov
+cov: test-rs py-cov
 
-.PHONY: coverage-report
-coverage-report: preflight
+.PHONY: cov-html
+cov-html: cov
+	@echo "==> Generating HTML coverage report..."
+	@uv run coverage html
+	@echo "==> Coverage report: htmlcov/index.html"
+
+.PHONY: cov-report
+cov-report: ready
 	@uv run coverage report -m
 
 .PHONY: fix
-fix: preflight
+fix: ready
 	@echo "==> Auto-fixing Python..."
 	@uv run ruff check --fix .
 	@uv run ruff format .
-	@uv run mypy --install-types --non-interactive
 	@echo "==> Auto-fixing Rust..."
 	@$(CARGO) fmt --all
 	@cargo +nightly clippy --fix --workspace --allow-dirty --allow-staged 2>/dev/null || $(CARGO) clippy $(RUST_PKG_FLAG) --fix --allow-dirty --allow-staged
 
+.PHONY: watch
+watch:
+	@if command -v cargo-watch >/dev/null 2>&1; then \
+		$(CARGO) watch -x 'test $(RUST_PKG_FLAG)'; \
+	else \
+		echo "cargo-watch not installed. Run: cargo install cargo-watch"; \
+		exit 1; \
+	fi
+
+# -------------------------
+# CI/CD
+# -------------------------
+
 .PHONY: ci
-ci: verify test
+ci: check test
+
+.PHONY: ci-quick
+ci-quick: check
+
+# -------------------------
+# Cleanup
+# -------------------------
 
 .PHONY: clean
 clean:
 	@echo "==> Cleaning build artifacts..."
-	@rm -rf $(WHEELS_DIR) ./*.egg-info ./**/.eggs target/
+	@rm -rf $(WHEELS_DIR) ./*.egg-info ./**/.eggs target/release target/debug
 	@rm -f $(STAMP_BOOTSTRAP) $(STAMP_UVSYNC)
-	@rm -rf .pytest_tmp .pytest_cache .ruff_cache .mypy_cache
+	@rm -rf .pytest_tmp .pytest_cache
 	@find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
 	@find . -type f -name "*.pyc" -delete 2>/dev/null || true
+
+.PHONY: clean-all
+clean-all: clean
+	@echo "==> Deep cleaning caches..."
+	@rm -rf .ruff_cache .mypy_cache htmlcov .coverage
+	@$(CARGO) clean
