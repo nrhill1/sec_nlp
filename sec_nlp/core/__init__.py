@@ -1,8 +1,20 @@
-# sec_nlp/core/__init__.py
+# sec_nlp/core/llm/__init__.py
+"""LLM integrations."""
 
-from sec_nlp.core.downloader import SECFilingDownloader
-from sec_nlp.core.pipeline import Pipeline
-from sec_nlp.core.preprocessor import Preprocessor
-from sec_nlp.core.types import FilingMode
+from sec_nlp.core.llm.base import LocalLLMBase
+from sec_nlp.core.llm.chains import (
+    SummarizationInput,
+    SummarizationOutput,
+    build_summarization_runnable,
+)
+from sec_nlp.core.llm.local_t5 import FlanT5LocalLLM
+from sec_nlp.core.llm.ollama import build_ollama_llm
 
-__all__: list[str] = ["Pipeline", "SECFilingDownloader", "Preprocessor", "FilingMode"]
+__all__: list[str] = [
+    "LocalLLMBase",
+    "FlanT5LocalLLM",
+    "build_ollama_llm",
+    "SummarizationInput",
+    "SummarizationOutput",
+    "build_summarization_runnable",
+]

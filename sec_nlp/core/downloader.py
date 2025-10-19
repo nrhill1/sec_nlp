@@ -1,5 +1,4 @@
 # sec_nlp/utils/downloader.py
-import logging
 from datetime import date
 from pathlib import Path
 
@@ -7,9 +6,10 @@ from pydantic import BaseModel, PrivateAttr, field_validator
 from sec_edgar_downloader import Downloader  # type: ignore
 from tqdm import tqdm
 
+from sec_nlp.core.config import get_logger
 from sec_nlp.core.types import FilingMode
 
-logger = logging.getLogger(__name__)
+logger = get_logger()
 
 
 class SECFilingDownloader(BaseModel):

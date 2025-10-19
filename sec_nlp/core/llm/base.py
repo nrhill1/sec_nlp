@@ -1,7 +1,6 @@
 # sec_nlp/pipelines/utils/llms/local_llm_base.py
 from __future__ import annotations
 
-import logging
 from abc import ABC, abstractmethod
 from typing import Any
 
@@ -9,7 +8,9 @@ from langchain_core.prompt_values import PromptValue
 from langchain_core.runnables import Runnable, RunnableConfig
 from pydantic import BaseModel, Field, PrivateAttr
 
-logger = logging.getLogger(__name__)
+from sec_nlp.core.config import get_logger
+
+logger = get_logger()
 
 
 class LocalLLM(BaseModel, Runnable[str | PromptValue, str], ABC):
@@ -36,6 +37,7 @@ class LocalLLM(BaseModel, Runnable[str | PromptValue, str], ABC):
         try:
             import torch  # noqa: F401
             from transformers import AutoTokenizer  # noqa: F401
+
             return True
         except Exception as e:
             logger.error("Transformers/torch not available: %s", e)
@@ -64,10 +66,7 @@ class LocalLLM(BaseModel, Runnable[str | PromptValue, str], ABC):
         return input.to_string()
 
     def invoke(
-        self,
-        input: str | PromptValue,
-        config: RunnableConfig | None = None,
-        **kwargs: Any
+        self, input: str | PromptValue, config: RunnableConfig | None = None, **kwargs: Any
     ) -> str:
         """Accept str or PromptValue, convert to string, then generate."""
         prompt_str = self.input_to_string(input)

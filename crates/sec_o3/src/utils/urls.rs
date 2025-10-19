@@ -3,7 +3,6 @@
 //! This module provides functions to build proper URLs for accessing
 //! various SEC filing resources on the EDGAR system.
 
-use crate::normalize_cik;
 use crate::errors::Result;
 
 const ARCHIVES_BASE: &str = "https://www.sec.gov/Archives/edgar/data";
@@ -29,15 +28,9 @@ const ARCHIVES_BASE: &str = "https://www.sec.gov/Archives/edgar/data";
 /// );
 /// ```
 pub fn build_filing_url(cik: &str, accession_number: &str) -> Result<String> {
-    let normalized_cik = normalize_cik(cik)?;
     let accession_no_dashes = accession_number.replace('-', "");
 
-    let filing_url = format!(
-        "{}/{}/{}-index.html",
-        ARCHIVES_BASE,
-        normalized_cik.trim_start_matches('0'),
-        accession_no_dashes
-    );
+    let filing_url = format!("{}/{}/{}-index.html", ARCHIVES_BASE, cik, accession_no_dashes);
 
     Ok(filing_url)
 }
@@ -64,16 +57,9 @@ pub fn build_filing_url(cik: &str, accession_number: &str) -> Result<String> {
 /// );
 /// ```
 pub fn build_document_url(cik: &str, accession_number: &str, document: &str) -> Result<String> {
-    let normalized_cik = normalize_cik(cik)?;
     let accession_no_dashes = accession_number.replace('-', "");
 
-    let filing_url = format!(
-        "{}/{}/{}/{}",
-        ARCHIVES_BASE,
-        normalized_cik.trim_start_matches('0'),
-        accession_no_dashes,
-        document
-    );
+    let filing_url = format!("{}/{}/{}/{}", ARCHIVES_BASE, cik, accession_no_dashes, document);
 
     Ok(filing_url)
 }
@@ -100,14 +86,7 @@ pub fn build_document_url(cik: &str, accession_number: &str, document: &str) -> 
 /// );
 /// ```
 pub fn build_full_text_url(cik: &str, accession_number: &str) -> Result<String> {
-    let normalized_cik = normalize_cik(cik)?;
-
-    let full_text_url = format!(
-        "{}/{}/{}.txt",
-        ARCHIVES_BASE,
-        normalized_cik.trim_start_matches('0'),
-        accession_number
-    );
+    let full_text_url = format!("{}/{}/{}.txt", ARCHIVES_BASE, cik, accession_number);
 
     Ok(full_text_url)
 }

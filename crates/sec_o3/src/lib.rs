@@ -13,7 +13,7 @@
 //! ## Quick Start
 //!
 //! ```rust,no_run
-//! use sec_o3::{SecClient, normalize_cik, get_ticker_map};
+//! use sec_o3::{Client, normalize_cik, get_ticker_map};
 //!
 //! #[tokio::main]
 //! async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -22,7 +22,7 @@
 //!     let cik = map.get("AAPL").unwrap();
 //!
 //!     // Fetch company data
-//!     let client = SecClient::new();
+//!     let client = Client::new();
 //!     let facts = sec_o3::fetch_company_facts(cik).await?;
 //!
 //!     println!("Company: {}", facts.entity_name);
@@ -43,17 +43,15 @@
 #![warn(rustdoc::missing_crate_level_docs)]
 pub mod client;
 pub mod errors;
-pub mod filings;
 pub mod utils;
 
 #[cfg(feature = "python")]
 pub mod python;
 
 // Re-export commonly used types at crate root
-pub use client::SecClient;
+pub use client::Client;
 pub use errors::{Error, Result};
-pub use filings::{is_valid_filing_type, FormType};
-pub use utils::{build_document_url, build_filing_url, build_full_text_url, normalize_cik};
+pub use utils::{build_document_url, build_filing_url, build_full_text_url};
 
 /// Library version
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -78,7 +76,6 @@ mod tests {
     #[test]
     fn test_public_exports() {
         // Ensure main exports compile
-        let _client: SecClient = SecClient::new("Nic Hill", "nrhill1@gmail.com");
-        let _cik = normalize_cik("320193");
+        let _client: Client = Client::new("Nic Hill", "nrhill1@gmail.com");
     }
 }

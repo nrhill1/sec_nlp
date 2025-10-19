@@ -7,7 +7,7 @@ use std::sync::OnceLock;
 use tokio::runtime::Runtime;
 
 use crate::{
-    client::SecClient,
+    client::Client,
     corp::{
         cik::{get_ticker_map, normalize_cik, ticker_to_cik},
         facts::fetch_company_facts,
@@ -23,10 +23,10 @@ fn runtime() -> &'static Runtime {
     RUNTIME.get_or_init(|| Runtime::new().expect("Failed to create Tokio runtime"))
 }
 
-/// Python wrapper for SecClient
+/// Python wrapper for Client
 #[pyclass(name = "Client")]
 struct PyClient {
-    inner: SecClient,
+    inner: Client,
 }
 
 #[pymethods]
@@ -34,7 +34,7 @@ impl PyClient {
     #[new]
     #[pyo3(signature = (user_agent=None, timeout=None))]
     fn new(user_agent: Option<String>, timeout: Option<u64>) -> Self {
-        let mut client = SecClient::new();
+        let mut client = Client::new();
 
         if let Some(ua) = user_agent {
             client = client.with_user_agent(ua);

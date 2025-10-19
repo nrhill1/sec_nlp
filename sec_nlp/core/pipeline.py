@@ -1,7 +1,6 @@
 # sec_nlp/pipelines/pipeline.py
 import importlib.resources as resources
 import json
-import logging
 import os
 import re
 import traceback
@@ -28,14 +27,15 @@ from pydantic import (
 
 from sec_nlp import __version__
 from sec_nlp.core import Preprocessor, SECFilingDownloader
-from sec_nlp.core.types import FilingMode
-from sec_nlp.llm.chains import (
+from sec_nlp.core.config import get_logger
+from sec_nlp.core.llm.chains import (
     SummarizationInput,
     SummarizationOutput,
     build_summarization_runnable,
 )
+from sec_nlp.core.types import FilingMode
 
-logger = logging.getLogger(__name__)
+logger = get_logger()
 
 
 def _slugify(s: str) -> str:

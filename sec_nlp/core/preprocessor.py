@@ -1,7 +1,6 @@
 # sec_nlp/utils/preprocessor.py
 from __future__ import annotations
 
-import logging
 import os
 from pathlib import Path
 
@@ -13,9 +12,10 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_text_splitters.base import TextSplitter
 from pydantic import BaseModel, PrivateAttr, field_validator
 
+from sec_nlp.core.config import get_logger
 from sec_nlp.core.types import FilingMode
 
-logger = logging.getLogger(__name__)
+logger = get_logger()
 
 
 class Preprocessor(BaseModel):

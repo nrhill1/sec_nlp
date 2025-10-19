@@ -132,6 +132,13 @@ python-typecheck: preflight
 	@echo "==> Mypy type check..."
 	@uv run mypy .
 
+.PHONY: python-add-types
+types-install: preflight
+	@uv run mypy --install-types --non-interactive || true
+
+.PHONY: python-stubgen
+types-gen: preflight
+	@uv run stubgen -p faiss -o typings || true
 
 .PHONY: python-format
 python-format: preflight
@@ -203,8 +210,9 @@ coverage-report: preflight
 .PHONY: fix
 fix: preflight
 	@echo "==> Auto-fixing Python..."
-	@uv runruff check --fix .
+	@uv run ruff check --fix .
 	@uv run ruff format .
+	@uv run mypy --install-types --non-interactive
 	@echo "==> Auto-fixing Rust..."
 	@$(CARGO) fmt --all
 	@cargo +nightly clippy --fix --workspace --allow-dirty --allow-staged 2>/dev/null || $(CARGO) clippy $(RUST_PKG_FLAG) --fix --allow-dirty --allow-staged

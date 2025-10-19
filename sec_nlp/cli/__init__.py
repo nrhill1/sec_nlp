@@ -1,8 +1,6 @@
-# ==============================================================================
 # sec_nlp/cli/__init__.py
-# ==============================================================================
-"""CLI entry for sec_nlp."""
+"""CLI entry point."""
 
-from .__main__ import main
+from sec_nlp.cli.__main__ import main
 
 __all__: list[str] = ["main"]

@@ -2,6 +2,7 @@
 //!
 //! This module provides the [`FormType`] enum which represents all SEC filing types,
 //! along with helper functions for parsing and working with form types.
+
 use std::fmt;
 use std::str::FromStr;
 

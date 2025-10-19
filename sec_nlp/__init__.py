@@ -9,13 +9,21 @@ try:
 except PackageNotFoundError:
     __version__ = "0.0.0"
 
-
-from sec_nlp.config import settings
-from sec_nlp.core import FilingMode, Pipeline, Preprocessor, SECFilingDownloader
-from sec_nlp.llm import FlanT5LocalLLM, LocalLLMBase, OllamaLLM
-from sec_nlp.llm.chains import (
+from sec_nlp.core import (
+    FilingMode,
+    Pipeline,
+    Preprocessor,
+    SECFilingDownloader,
+    get_logger,
+    settings,
+    setup_logging,
+)
+from sec_nlp.core.llm import (
+    FlanT5LocalLLM,
+    LocalLLMBase,
     SummarizationInput,
     SummarizationOutput,
+    build_ollama_llm,
     build_summarization_runnable,
 )
 
@@ -26,6 +34,10 @@ __all__: list[str] = [
     "SECFilingDownloader",
     "Preprocessor",
     "FilingMode",
+    # Config
+    "settings",
+    "get_logger",
+    "setup_logging",
     # LLM
     "LocalLLMBase",
     "FlanT5LocalLLM",
@@ -33,6 +45,4 @@ __all__: list[str] = [
     "SummarizationInput",
     "SummarizationOutput",
     "build_summarization_runnable",
-    # Config
-    "settings",
 ]

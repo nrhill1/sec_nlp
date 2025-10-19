@@ -1,8 +1,7 @@
-# src/cli/__main__.py
+# sec_nlp/cli/__main__.py
 from __future__ import annotations
 
 import argparse
-import logging
 import shutil
 import time
 from datetime import date, datetime, timedelta
@@ -10,17 +9,42 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-from sec_nlp.core import Pipeline, _default_prompt_path
-from sec_nlp.core.types import FilingMode
+from sec_nlp.core import (
+    FilingMode,
+    Pipeline,
+    _default_prompt_path,
+    get_logger,
+    settings,
+    setup_logging,
+)
 
-logger = logging.getLogger(__name__)
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+logger = get_logger(__name__)
 
 
-def setup_logging(verbose: bool) -> None:
-    if verbose:
-        logging.getLogger().setLevel(logging.DEBUG)
-        logger.debug("Verbose logging enabled (DEBUG).")
+def parse_args() -> argparse.Namespace:
+    today = datetime.today()
+    one_year_ago = today - timedelta(days=365)
+
+    p = argparse.ArgumentParser(description="Run SEC NLP pipeline over filings.")
+    p.add_argument("symbols", nargs="*", default=["AAPL"], help="Ticker symbols")
+    p.add_argument("--mode", choices=["annual", "quarterly"], default="annual")
+    p.add_argument("--start_date", default=one_year_ago.strftime("%Y-%m-%d"))
+    p.add_argument("--end_date", default=today.strftime("%Y-%m-%d"))
+    p.add_argument("--keyword", default="revenue")
+    p.add_argument("--prompt_file", default=_default_prompt_path())
+    p.add_argument("--model_name", default="google/flan-t5-base")
+    p.add_argument("--limit", type=int, default=1)
+    p.add_argument("--max-new-tokens", type=int, default=1024)
+    p.add_argument("--max-retries", type=int, default=2)
+    p.add_argument("--batch-size", type=int, default=16)
+    p.add_argument("--no-require-json", action="store_true")
+    p.add_argument("--fresh", action="store_true")
+    p.add_argument("--no-cleanup", action="store_true")
+    p.add_argument("--verbose", action="store_true")
+    p.add_argument("--dry-run", action="store_true")
+    p.add_argument("--log-format", choices=["simple", "detailed", "json"])
+    p.add_argument("--log-file", type=Path, help="Write logs to file")
+    return p.parse_args()
 
 
 def setup_folders(fresh: bool) -> tuple[Path, Path]:
@@ -52,52 +76,23 @@ def cleanup_downloads(downloads_folder: Path) -> None:
         logger.error("Cleanup failed: %s: %s", type(e).__name__, e)
 
 
-def parse_args() -> argparse.Namespace:
-    today = datetime.today()
-    one_year_ago = today - timedelta(days=365)
-
-    p = argparse.ArgumentParser(description="Run SEC NLP pipeline over filings.")
-    p.add_argument("symbols", nargs="*", default=["AAPL"], help="Ticker symbols (default: AAPL).")
-    p.add_argument(
-        "--mode",
-        choices=["annual", "quarterly"],
-        default="annual",
-        help="10-K or 10-Q mode.",
-    )
-    p.add_argument(
-        "--start_date",
-        default=one_year_ago.strftime("%Y-%m-%d"),
-        help="Start date (YYYY-MM-DD).",
-    )
-    p.add_argument("--end_date", default=today.strftime("%Y-%m-%d"), help="End date (YYYY-MM-DD).")
-    p.add_argument("--keyword", default="revenue", help="Keyword to filter filing chunks.")
-    p.add_argument(
-        "--prompt_file",
-        default=_default_prompt_path(),
-        help="Prompt YAML path or packaged file.",
-    )
-    p.add_argument("--model_name", default="google/flan-t5-base", help="LLM model name.")
-    p.add_argument("--limit", type=int, default=1)
-    p.add_argument("--max-new-tokens", type=int, default=1024)
-    p.add_argument("--max-retries", type=int, default=2)
-    p.add_argument("--batch-size", type=int, default=16)
-    p.add_argument("--no-require-json", action="store_true")
-    p.add_argument("--fresh", action="store_true", help="Clear old output/downloads.")
-    p.add_argument("--no-cleanup", action="store_true", help="Keep downloaded files.")
-    p.add_argument("--verbose", action="store_true", help="Enable debug logging.")
-    p.add_argument("--dry-run", action="store_true", help="Skip Pinecone provisioning and upserts.")
-    return p.parse_args()
-
-
 def main() -> None:
     load_dotenv()
 
     args = parse_args()
-    setup_logging(args.verbose)
+
+    setup_logging(
+        level="DEBUG" if args.verbose else None,
+        format_type=args.log_format,
+        log_file=args.log_file,
+    )
+
+    logger.info("SEC NLP Pipeline - Environment: %s", settings.environment)
+
     output_folder, downloads_folder = setup_folders(fresh=args.fresh)
 
-    start: date = date.fromisoformat(args.start_date)
-    end: date = date.fromisoformat(args.end_date)
+    start_date: date = date.fromisoformat(args.start_date)
+    end_date: date = date.fromisoformat(args.end_date)
     mode: FilingMode = FilingMode(args.mode)
     symbols: list[str] = [str(s).upper() for s in args.symbols]
 
@@ -109,8 +104,8 @@ def main() -> None:
 
     pipe = Pipeline(
         mode=mode,
-        start_date=start,
-        end_date=end,
+        start_date=start_date,
+        end_date=end_date,
         keyword=args.keyword,
         prompt_file=prompt_path,
         model_name=args.model_name,

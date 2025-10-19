@@ -1,14 +1,15 @@
 # sec_nlp/llms/local_t5_wrapper.py
 from __future__ import annotations
 
-import logging
 from typing import Any
 
 from pydantic import Field, PrivateAttr
 
+from sec_nlp.core.config import get_logger
+
 from .base import LocalLLMBase
 
-logger = logging.getLogger(__name__)
+logger = get_logger()
 
 
 class FlanT5LocalLLM(LocalLLMBase):

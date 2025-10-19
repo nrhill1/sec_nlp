@@ -25,7 +25,6 @@ target/
 Cargo.lock
 *.rlib
 *.dSYM/
-**/.cache/**
 **/fixtures/**
 *.pdb
 *.exe
@@ -50,6 +49,7 @@ pytest_tmp/
 **/.ignore/**
 *.log
 *.tmp
+**/.data
 
 # History / backups
 .history

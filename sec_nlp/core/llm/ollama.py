@@ -1,12 +1,13 @@
 # sec_nlp/pipelines/utils/llms/ollama_factory.py
 from __future__ import annotations
 
-import logging
 import os
 
 from langchain_core.runnables import Runnable
 
-logger = logging.getLogger(__name__)
+from sec_nlp.core.config import get_logger
+
+logger = get_logger()
 
 
 def build_ollama_llm(
