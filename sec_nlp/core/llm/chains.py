@@ -4,15 +4,15 @@ from __future__ import annotations
 import json
 from typing import Any, ClassVar, Literal, Self, TypedDict
 
+from langchain_core.prompt_values import PromptValue
 from langchain_core.prompts.base import BasePromptTemplate
 from langchain_core.runnables import Runnable, RunnableLambda, RunnableSequence
-from langchain_core.schema import PromptValue
 from pydantic import Field, TypeAdapter, ValidationError
 from pydantic.dataclasses import dataclass
 
 from sec_nlp.core.config import get_logger
 
-logger = get_logger()
+logger = get_logger(__name__)
 
 
 __all__: list[str] = ["SummarizationInput", "SummarizationOutput", "build_summarization_runnable"]

@@ -10,10 +10,10 @@ from pydantic import BaseModel, Field, PrivateAttr
 
 from sec_nlp.core.config import get_logger
 
-logger = get_logger()
+logger = get_logger(__name__)
 
 
-class LocalLLM(BaseModel, Runnable[str | PromptValue, str], ABC):
+class LocalLLMBase(BaseModel, Runnable[str | PromptValue, str], ABC):
     """
     Base class for local-only HF models that plugs directly into LangChain as a Runnable.
     Accepts either str or PromptValue inputs.

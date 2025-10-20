@@ -12,7 +12,7 @@ def test_sec_downloader_calls_client(monkeypatch, tmp_path):
         def get(self, **k):
             calls.append(k)
 
-    monkeypatch.setattr("sec_nlp.utils.downloader.Downloader", FakeClient)
+    monkeypatch.setattr("sec_nlp.core.downloader.Downloader", FakeClient)
 
     from sec_nlp.core.downloader import SECFilingDownloader
     from sec_nlp.core.types import FilingMode

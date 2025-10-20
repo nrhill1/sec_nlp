@@ -52,9 +52,9 @@ def test_pipeline_instantiation_validates_and_loads_prompt(tmp_path: Path) -> No
     assert p.dl_path.exists()
 
 
-@patch("sec_nlp.pipelines.pipeline.SECFilingDownloader")
-@patch("sec_nlp.pipelines.pipeline.Preprocessor")
-@patch("sec_nlp.pipelines.pipeline.build_summarization_runnable")
+@patch("sec_nlp.core.pipeline.SECFilingDownloader")
+@patch("sec_nlp.core.pipeline.Preprocessor")
+@patch("sec_nlp.core.pipeline.build_summarization_runnable")
 def test_pipeline_run_writes_summary(
     mock_build_chain: MagicMock,
     MockPre: MagicMock,

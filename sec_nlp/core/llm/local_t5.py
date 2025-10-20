@@ -9,7 +9,7 @@ from sec_nlp.core.config import get_logger
 
 from .base import LocalLLMBase
 
-logger = get_logger()
+logger = get_logger(__name__)
 
 
 class FlanT5LocalLLM(LocalLLMBase):

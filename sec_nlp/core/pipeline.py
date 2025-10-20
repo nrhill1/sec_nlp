@@ -26,7 +26,6 @@ from pydantic import (
 )
 
 from sec_nlp import __version__
-from sec_nlp.core import Preprocessor, SECFilingDownloader
 from sec_nlp.core.config import get_logger
 from sec_nlp.core.llm.chains import (
     SummarizationInput,
@@ -35,7 +34,10 @@ from sec_nlp.core.llm.chains import (
 )
 from sec_nlp.core.types import FilingMode
 
-logger = get_logger()
+from .downloader import SECFilingDownloader
+from .preprocessor import Preprocessor
+
+logger = get_logger(__name__)
 
 
 def _slugify(s: str) -> str:
@@ -46,8 +48,8 @@ def _safe_name(s: str, allow: str = r"a-zA-Z0-9._-") -> str:
     return re.sub(rf"[^{allow}]+", "_", s)[:120]
 
 
-def _default_prompt_path() -> Path:
-    return Path(fspath(files("sec_nlp.prompts").joinpath("sample_prompt_1.yml")))
+def default_prompt_path() -> Path:
+    return Path(fspath(files("sec_nlp.core.config.prompts").joinpath("sample_prompt_1.yml")))
 
 
 class Pipeline(BaseModel):
@@ -62,7 +64,7 @@ class Pipeline(BaseModel):
     keyword: str
     model_name: str = "google/flan-t5-base"
 
-    prompt_file: Path = Field(default_factory=_default_prompt_path)
+    prompt_file: Path = Field(default_factory=default_prompt_path)
     out_path: Path = Field(default_factory=lambda: Path("./.data/output"))
     dl_path: Path = Field(default_factory=lambda: Path("./.data/downloads"))
 
@@ -119,7 +121,7 @@ class Pipeline(BaseModel):
         if p.exists():
             return p
         try:
-            prompt_path = resources.files("sec_nlp.prompts") / "sample_prompt_1.yml"
+            prompt_path = resources.files("sec_nlp.core.config.prompts") / "sample_prompt_1.yml"
             if prompt_path.exists():
                 logger.warning("Using built-in prompt file: %s", fspath(prompt_path))
                 return Path(fspath(prompt_path))

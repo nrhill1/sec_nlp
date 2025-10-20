@@ -15,7 +15,7 @@ from pydantic import BaseModel, PrivateAttr, field_validator
 from sec_nlp.core.config import get_logger
 from sec_nlp.core.types import FilingMode
 
-logger = get_logger()
+logger = get_logger(__name__)
 
 
 class Preprocessor(BaseModel):

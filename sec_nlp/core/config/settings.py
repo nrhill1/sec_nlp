@@ -16,7 +16,7 @@ class Settings(BaseSettings):
     Application settings loaded from environment variables.
 
     Usage:
-        from sec_nlp.config import settings
+        from sec_nlp.core.config import settings
 
         print(settings.email)
     """

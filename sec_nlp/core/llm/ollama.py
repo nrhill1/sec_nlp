@@ -7,7 +7,7 @@ from langchain_core.runnables import Runnable
 
 from sec_nlp.core.config import get_logger
 
-logger = get_logger()
+logger = get_logger(__name__)
 
 
 def build_ollama_llm(

@@ -33,12 +33,12 @@ dependencies = [
 ]
 
 [tool.pytest.ini_options]
-testpaths = ["sec_nlp/tests/unit"]
+testpaths = ["sec_nlp/tests"]
 python_files = "test_*.py"
 python_functions = "test_*"
 pythonpath = ["."]
 filterwarnings = ["ignore::DeprecationWarning"]
-addopts = "-v --tb=short"
+addopts = "-v --tb=short --import-mode=importlib"
 
 [tool.uv_build]
 package = "sec_nlp"
@@ -104,7 +104,7 @@ ignore = [
 features = ["pyo3/extension-module"]
 module-name = "sec_o3"
 manifest-path = "crates/sec_o3/Cargo.toml"
-python-source = "."
+python-source = "sec_nlp"
 
 [build-system]
 requires = ["maturin>=1.0,<2.0"]

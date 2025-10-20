@@ -12,7 +12,7 @@ from dotenv import load_dotenv
 from sec_nlp.core import (
     FilingMode,
     Pipeline,
-    _default_prompt_path,
+    default_prompt_path,
     get_logger,
     settings,
     setup_logging,
@@ -31,7 +31,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--start_date", default=one_year_ago.strftime("%Y-%m-%d"))
     p.add_argument("--end_date", default=today.strftime("%Y-%m-%d"))
     p.add_argument("--keyword", default="revenue")
-    p.add_argument("--prompt_file", default=_default_prompt_path())
+    p.add_argument("--prompt_file", default=default_prompt_path())
     p.add_argument("--model_name", default="google/flan-t5-base")
     p.add_argument("--limit", type=int, default=1)
     p.add_argument("--max-new-tokens", type=int, default=1024)
@@ -99,7 +99,7 @@ def main() -> None:
     prompt_path = (
         Path(args.prompt_file).resolve()
         if Path(args.prompt_file).is_file()
-        else _default_prompt_path()
+        else default_prompt_path()
     )
 
     pipe = Pipeline(

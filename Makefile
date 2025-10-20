@@ -4,7 +4,7 @@ SHELL := /bin/bash
 # Python
 PYTHON_DIR := sec_nlp/
 LOG_DIR := sec_nlp/tests/test_logs
-PYTEST_FLAGS := -v --maxfail=1 --tb=short --color=yes --basetemp .pytest_tmp --cache-clear
+PYTEST_FLAGS := --maxfail=1 --color=yes --basetemp .pytest_tmp --cache-clear
 MYPY := uv run mypy .
 
 # Rust
@@ -163,16 +163,16 @@ py-fmt: ready
 	@uv run ruff format .
 
 .PHONY: test-py
-test-py: build-ext
+test-py: ready build-ext
 	@mkdir -p $(LOG_DIR)
 	@ts=$$(date +"%Y-%m-%dT%H-%M-%S"); \
 	log="$(LOG_DIR)/test_$${ts}.log"; \
 	echo "==> Running Python tests (log: $$log)..."; \
 	set -o pipefail; \
-	PYTHONPATH=. uv run pytest $(PYTEST_FLAGS) 2>&1 | tee "$$log"
+	uv run pytest $(PYTEST_FLAGS) 2>&1 | tee "$$log"
 
 .PHONY: py-cov
-py-cov: build-ext
+py-cov: ready build-ext
 	@mkdir -p $(LOG_DIR)
 	@ts=$$(date +"%Y-%m-%dT%H-%M-%S"); \
 	log="$(LOG_DIR)/coverage_$${ts}.log"; \
