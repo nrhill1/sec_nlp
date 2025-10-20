@@ -30,6 +30,7 @@ from sec_nlp.core.config import get_logger
 from sec_nlp.core.llm.chains import (
     SummarizationInput,
     SummarizationOutput,
+    SummarizationResult,
     build_summarization_runnable,
 )
 from sec_nlp.core.types import FilingMode
@@ -65,7 +66,7 @@ class Pipeline(BaseModel):
     model_name: str = "google/flan-t5-base"
 
     prompt_file: Path = Field(default_factory=default_prompt_path)
-    out_path: Path = Field(default_factory=lambda: Path("./.data/output"))
+    out_path: Path = Field(default_factory=lambda: Path("./output"))
     dl_path: Path = Field(default_factory=lambda: Path("./.data/downloads"))
 
     limit: int | None = None
@@ -390,28 +391,25 @@ class Pipeline(BaseModel):
             inputs: list[SummarizationInput] = [
                 {"symbol": symbol, "chunk": t, "search_term": self.keyword} for t in texts
             ]
-            summaries: list[dict[str, Any]] = []
+            summaries: list[SummarizationResult] = []
 
             for i in range(0, len(inputs), int(self.batch_size)):
                 window = inputs[i : i + int(self.batch_size)]
                 try:
                     results: list[SummarizationOutput] = graph.batch(window)
                     for r in results:
-                        payload_dict = r.get(
+                        result_dict: SummarizationResult = r.get(
                             "summary",
-                            {
-                                "summary": "(null)",
-                                "error": "No summary payload returned.",
-                            },
+                            SummarizationResult(),
                         )
-                        summaries.append(payload_dict)
+                        summaries.append(result_dict)
                 except Exception as e:
                     logger.error("Batch invocation failed: %s: %s", type(e).__name__, e)
                     traceback.print_exc()
                     summaries.extend(
                         [
                             {
-                                "summary": None,
+                                "summary": "(null)",
                                 "error": f"Exception: {type(e).__name__}: {e}",
                             }
                             for _ in window

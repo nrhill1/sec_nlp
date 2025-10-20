@@ -27,7 +27,7 @@ from sec_nlp.core.llm import (
     build_summarization_runnable,
 )
 
-__all__ = [
+__all__: list[str] = [
     "__version__",
     # Core
     "Pipeline",

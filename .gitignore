@@ -1,11 +1,11 @@
 # Python / uv / testing
-__pycache__/
 *.py[cod]
 *.pyo
 *.pyd
 *.egg-info/
+__pycache__/
 .eggs/
-.pytest_cache/
+_cache/
 htmlcov/
 coverage.xml
 .coverage
@@ -44,7 +44,8 @@ target/wheels/
 # Logs / temp output
 *.log
 *.tmp
-**/pytest_tmp/
+**/.pytest_cache/
+**/.pytest_tmp/
 **/test_logs/
 **/.ignore/
 **/.data

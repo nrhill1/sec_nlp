@@ -51,8 +51,8 @@ class SummaryPayload:
     points: list[str] | None = Field(default=None, min_items=0)
     confidence: float | None = Field(default=None, ge=0.0, le=1.0)
 
-    error: str | None = None
-    raw_output: str | None = None
+    error: str | None = Field(default=None)
+    raw_output: str | None = Field(default=None)
 
     _ADAPTER: ClassVar[TypeAdapter[SummaryPayload] | None] = None
 
@@ -72,7 +72,6 @@ class SummaryPayload:
             return cls(error="JSON parse failed", raw_output=raw)
 
         if isinstance(data, dict):
-            # Normalize before validation (can't mutate frozen instances later)
             s = data.get("summary")
             if isinstance(s, str):
                 s = s.strip()
@@ -108,8 +107,8 @@ def build_summarization_runnable(
             payload = SummaryPayload(summary=raw)
 
         status: Literal["ok", "error"] = "ok" if payload.error is None else "error"
-        payload_dict = SummaryPayload._adapter().dump_python(payload)
-        result: SummarizationResult = payload_dict
+        result_dict = SummaryPayload._adapter().dump_python(payload)
+        result: SummarizationResult = result_dict
         return {"status": status, "summary": result}
 
     validate: Runnable[str, SummarizationOutput] = RunnableLambda(_validate)

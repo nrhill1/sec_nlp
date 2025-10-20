@@ -7,7 +7,7 @@ from sec_nlp.core.pipeline import Pipeline, default_prompt_path
 from sec_nlp.core.preprocessor import Preprocessor
 from sec_nlp.core.types import FilingMode
 
-__all__ = [
+__all__: list[str] = [
     "FilingMode",
     "Pipeline",
     "default_prompt_path",
