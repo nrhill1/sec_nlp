@@ -34,7 +34,7 @@ dependencies = [
 
 [tool.pytest.ini_options]
 testpaths = ["src/tests"]
-pythonpath = "src/"
+pythonpath = [".", "src"]
 python_files = "test_*.py"
 python_functions = "test_*"
 filterwarnings = ["ignore::DeprecationWarning"]
