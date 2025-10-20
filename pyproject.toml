@@ -33,8 +33,8 @@ dependencies = [
 ]
 
 [tool.pytest.ini_options]
-testpaths = ["src/tests"]
-pythonpath = [".", "src"]
+testpaths = ["sec_nlp/tests/unit"]
+pythonpath = "sec_nlp"
 python_files = "test_*.py"
 python_functions = "test_*"
 filterwarnings = ["ignore::DeprecationWarning"]

@@ -1,6 +1,6 @@
 from collections.abc import Callable
 
-from sec_nlp.tests.conftest import DummyLLM
+from .conftest import DummyLLM
 
 
 def test_llm_passthrough(dummy_llm: Callable[[bool], DummyLLM]) -> None:
