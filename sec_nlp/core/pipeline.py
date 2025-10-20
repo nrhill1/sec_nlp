@@ -213,7 +213,9 @@ class Pipeline(BaseModel):
         logger.info("Reloaded prompt: %s", self.prompt_file)
 
     def _prompt_as_str(self) -> str:
-        return self._prompt.to_string()
+        if self._prompt is not None:
+            return self._prompt.to_string()
+        return ""
 
     def _get_preprocessor(self) -> Preprocessor:
         if self._pre is None:
