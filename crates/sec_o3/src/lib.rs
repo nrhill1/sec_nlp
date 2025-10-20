@@ -52,6 +52,9 @@ pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 /// Library name
 pub const NAME: &str = env!("CARGO_PKG_NAME");
 
+// Root directory
+pub const ROOT_DIR: &str = env!("CARGO_MANIFEST_DIR");
+
 #[cfg(test)]
 mod tests {
     use super::*;
