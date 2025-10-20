@@ -405,7 +405,7 @@ pub async fn download_filings_in_date_range(
     let filings = get_recent_filings(client, cik).await?;
     let _filtered = filter_by_form(&filings, form_type);
 
-    Ok(Vec::new())
+    todo!()
 }
 
 #[cfg(test)]

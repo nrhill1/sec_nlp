@@ -5,7 +5,6 @@ from typing import Any
 
 from langchain_core.prompts import BasePromptTemplate, PromptTemplate
 from langchain_core.runnables import Runnable, RunnableConfig
-
 from sec_nlp.llm.base import LocalLLMBase
 from sec_nlp.llm.chains import build_summarization_runnable
 

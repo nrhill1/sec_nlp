@@ -103,7 +103,7 @@ ignore = [
 features = ["pyo3/extension-module"]
 module-name = "sec_nlp._edgars"
 manifest-path = "crates/sec_o3/Cargo.toml"
-python-source = "sec_nlp"
+python-source = "src/sec_nlp"
 
 [build-system]
 requires = ["maturin>=1.0,<2.0"]
