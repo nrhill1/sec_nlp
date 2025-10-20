@@ -2,8 +2,8 @@
 from pathlib import Path
 
 import pytest
-from sec_nlp.utils.preprocessor import Preprocessor
 
+from sec_nlp.core.preprocessor import Preprocessor
 from sec_nlp.core.types import FilingMode
 
 
