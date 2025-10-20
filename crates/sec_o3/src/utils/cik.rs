@@ -1,15 +1,14 @@
-//! Retrieval of CIK based on ticker symbol
-//!
-//! This module uses an asynchronous cache to store
-//! pairs of ticker symbols and Central Index Keys.
-//!
-//! Data is fetched from the SEC's ticker.txt file which has format:
-//! ```text
-//! ticker\tcik
-//! aapl\t320193
-//! msft\t789019
-//! ```
-
+/// Retrieval of CIK based on ticker symbol
+///
+/// This module uses an asynchronous cache to store
+/// pairs of ticker symbols and Central Index Keys.
+///
+/// Data is fetched from the SEC's ticker.txt file which has format:
+/// ```text
+/// ticker\tcik
+/// aapl\t320193
+/// msft\t789019
+/// ```
 use ahash::RandomState;
 use futures::StreamExt;
 use moka::future::Cache;

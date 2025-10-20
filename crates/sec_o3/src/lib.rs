@@ -1,49 +1,43 @@
-//! # sec_o3
-//!
-//! Fast, modern SEC/EDGAR utilities with Hyper HTTP/2 client and optional Python bindings.
-//!
-//! ## Features
-//!
-//! - **High Performance**: Modern async HTTP client with HTTP/2 support
-//! - **Rate Limiting**: Automatic SEC API rate limit compliance (10 req/s)
-//! - **Retry Logic**: Exponential backoff for transient failures
-//! - **Type Safe**: Comprehensive error handling with detailed error types
-//! - **Python Bindings**: Optional PyO3 bindings for Python integration
-//!
-//! ## Quick Start
-//!
-//! ```rust,no_run
-//! use sec_o3::{Client, normalize_cik, get_ticker_map};
-//!
-//! #[tokio::main]
-//! async fn main() -> Result<(), Box<dyn std::error::Error>> {
-//!     // Look up ticker
-//!     let map = get_ticker_map().await?;
-//!     let cik = map.get("AAPL").unwrap();
-//!
-//!     // Fetch company data
-//!     let client = Client::new();
-//!     let facts = sec_o3::fetch_company_facts(cik).await?;
-//!
-//!     println!("Company: {}", facts.entity_name);
-//!     Ok(())
-//! }
-//! ```
-//!
-//! ## Architecture
-//!
-//! - `client` - HTTP client with rate limiting and retry logic
-//! - `corp` - Company data (CIK lookup, submissions, XBRL facts)
-//! - `filings` - SEC form types and metadata
-//! - `parse` - Document parsing (HTML, JSON, text)
-//! - `utils` - URL construction helpers
-//! - `errors` - Unified error handling
-
-#![warn(missing_docs)]
-#![warn(rustdoc::missing_crate_level_docs)]
+/// # sec_o3
+///
+/// Fast, modern SEC/EDGAR utilities with Hyper HTTP/2 client and optional Python bindings.
+///
+/// ## Features
+///
+/// - **High Performance**: Modern async HTTP client with HTTP/2 support
+/// - **Rate Limiting**: Automatic SEC API rate limit compliance (10 req/s)
+/// - **Retry Logic**: Exponential backoff for transient failures
+/// - **Type Safe**: Comprehensive error handling with detailed error types
+/// - **Python Bindings**: Optional PyO3 bindings for Python integration
+///
+/// ## Quick Start
+///
+/// ```rust,no_run
+/// use sec_o3::{Client, normalize_cik, get_ticker_map};
+///
+/// #[tokio::main]
+/// async fn main() -> Result<(), Box<dyn std::error::Error>> {
+///     // Look up ticker
+///     let map = get_ticker_map().await?;
+///     let cik = map.get("AAPL").unwrap();
+///
+///     // Fetch company data
+///     let client = Client::new();
+///     let facts = sec_o3::fetch_company_facts(cik).await?;
+///
+///     println!("Company: {}", facts.entity_name);
+///     Ok(())
+/// }
+/// ```
+///
+/// ## Architecture
+/// - `client` - HTTP client with rate limiting and retry logic
 pub mod client;
+/// - `errors` - Unified error handling
 pub mod errors;
+/// - `filings` - Functions for fetching and downloading filings.
 pub mod filings;
+/// - `utils` - Utility functions for standardizing dates and retrieving CIKs.
 pub mod utils;
 
 #[cfg(feature = "python")]

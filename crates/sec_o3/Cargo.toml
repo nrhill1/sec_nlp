@@ -41,6 +41,7 @@ ahash = "0.8.12"
 
 # Optional: sync compression fallback
 flate2 = "1.1.4"
+chrono = "0.4.42"
 
 [dependencies.pyo3]
 version = "0.20"

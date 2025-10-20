@@ -1,36 +1,35 @@
-//! Retry logic with exponential backoff.
-//!
-//! This module provides a simple asynchronous retry policy that can be used to
-//! automatically retry fallible async operations with exponential backoff.
-//!
-//! Built for use in SEC EDGAR clients or other network-bound code where
-//! transient errors (like rate limits or timeouts) are expected.
-//!
-//! # Example
-//! ```rust,no_run
-//! use sec_nlp::client::retry::RetryPolicy;
-//!
-//! #[tokio::main]
-//! async fn main() {
-//!     let policy = RetryPolicy::new(3);
-//!
-//!     // Simulated network call with retries
-//!     let result = policy
-//!         .execute(|| async {
-//!             // Replace with your actual operation (e.g., reqwest call)
-//!             if rand::random::<f32>() > 0.7 {
-//!                 Ok::<_, String>("success")
-//!             } else {
-//!                 Err::<&str, String>("temporary failure".to_string())
-//!             }
-//!         }
-//!         .boxed())
-//!         .await;
-//!
-//!     println!("Result: {:?}", result);
-//! }
-//! ```
-
+/// Retry logic with exponential backoff.
+///
+/// This module provides a simple asynchronous retry policy that can be used to
+/// automatically retry fallible async operations with exponential backoff.
+///
+/// Built for use in SEC EDGAR clients or other network-bound code where
+/// transient errors (like rate limits or timeouts) are expected.
+///
+/// # Example
+/// ```rust,no_run
+/// use sec_nlp::client::retry::RetryPolicy;
+///
+/// #[tokio::main]
+/// async fn main() {
+///     let policy = RetryPolicy::new(3);
+///
+///     // Simulated network call with retries
+///     let result = policy
+///         .execute(|| async {
+///             // Replace with your actual operation (e.g., reqwest call)
+///             if rand::random::<f32>() > 0.7 {
+///                 Ok::<_, String>("success")
+///             } else {
+///                 Err::<&str, String>("temporary failure".to_string())
+///             }
+///         }
+///         .boxed())
+///         .await;
+///
+///     println!("Result: {:?}", result);
+/// }
+/// ```
 use std::time::Duration;
 use tokio::time::sleep;
 

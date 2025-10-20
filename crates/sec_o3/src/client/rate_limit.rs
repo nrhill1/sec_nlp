@@ -1,9 +1,8 @@
-//! Rate limiting for SEC API compliance.
-//!
-//! The SEC enforces a rate limit of 10 requests per second for automated
-//! requests. This module provides a token bucket rate limiter to ensure
-//! compliance.
-
+/// Rate limiting for SEC API compliance.
+///
+/// The SEC enforces a rate limit of 10 requests per second for automated
+/// requests. This module provides a token bucket rate limiter to ensure
+/// compliance.
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::Mutex;
@@ -39,7 +38,7 @@ impl RateLimiter {
     /// use sec_o3::client::rate_limit::RateLimiter;
     /// use std::time::Duration;
     ///
-    /// // SEC limit: 10 requests per second
+    /// SEC limit: 10 requests per second
     /// let limiter = RateLimiter::new(10, Duration::from_secs(1));
     /// ```
     pub fn new(tokens_per_interval: u32, interval: Duration) -> Self {
@@ -66,9 +65,9 @@ impl RateLimiter {
     /// # async fn example() {
     /// let limiter = RateLimiter::new(10, Duration::from_secs(1));
     ///
-    /// // This will wait if no tokens are available
+    /// This will wait if no tokens are available
     /// limiter.wait().await;
-    /// // Now safe to make a request
+    /// Now safe to make a request
     /// # }
     /// ```
     pub async fn wait(&self) {

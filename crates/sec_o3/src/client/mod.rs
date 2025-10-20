@@ -1,38 +1,37 @@
-//! HTTP client for SEC API requests.
-//!
-//! This module provides a Hyper-based HTTP client with built-in support
-//! for rate limiting, retries, and request validation per SEC guidelines.
-//!
-//! # Submodules
-//!
-//! * [`rate_limit`] - Rate limiting to comply with SEC API limits
-//! * [`retry`] - Retry logic with exponential backoff
-//! * [`validation`] - Request and response validation
-//!
-//! # SEC API Requirements
-//!
-//! The SEC requires all automated requests to:
-//! - Include a User-Agent header with contact_email information
-//! - Respect rate limits (10 requests per second maximum)
-//! - Handle 429 responses appropriately
-//!
-//! # Examples
-//!
-//! ```no_run
-//! use sec_o3::client::Client;
-//!
-//! #[tokio::main]
-//! async fn main() -> Result<(), Box<dyn std::error::Error>> {
-//!     let client = Client::new("MyApp", "contact_email@example.com");
-//!
-//!     let response = client.get("https://data.sec.gov/api/xbrl/companyfacts/CIK0000320193.json").await?;
-//!     println!("Got response!");
-//!
-//!     Ok(())
-//! }
-//! ```
-//!
-
+/// HTTP client for SEC API requests.
+///
+/// This module provides a Hyper-based HTTP client with built-in support
+/// for rate limiting, retries, and request validation per SEC guidelines.
+///
+/// # Submodules
+///
+/// * [`rate_limit`] - Rate limiting to comply with SEC API limits
+/// * [`retry`] - Retry logic with exponential backoff
+/// * [`validation`] - Request and response validation
+///
+/// # SEC API Requirements
+///
+/// The SEC requires all automated requests to:
+/// - Include a User-Agent header with contact_email information
+/// - Respect rate limits (10 requests per second maximum)
+/// - Handle 429 responses appropriately
+///
+/// # Examples
+///
+/// ```no_run
+/// use sec_o3::client::Client;
+///
+/// #[tokio::main]
+/// async fn main() -> Result<(), Box<dyn std::error::Error>> {
+///     let client = Client::new("MyApp", "contact_email@example.com");
+///
+///     let response = client.get("https://data.sec.gov/api/xbrl/companyfacts/CIK0000320193.json").await?;
+///     println!("Got response!");
+///
+///     Ok(())
+/// }
+/// ```
+///
 pub mod rate_limit;
 pub mod retry;
 pub mod validation;

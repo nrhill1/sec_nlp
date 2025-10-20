@@ -1,11 +1,9 @@
-//! Request and response validation for SEC API compliance.
-//!
-//! Ensures requests meet SEC requirements and validates responses
-//! before processing.
-
-use hyper::{HeaderMap, StatusCode};
-
 use crate::errors::{Error, Result};
+/// Request and response validation for SEC API compliance.
+///
+/// Ensures requests meet SEC requirements and validates responses
+/// before processing.
+use hyper::{HeaderMap, StatusCode};
 
 /// Validate that a User-Agent header meets SEC requirements.
 ///
@@ -27,10 +25,10 @@ use crate::errors::{Error, Result};
 /// ```
 /// use sec_o3::client::validation::validate_user_agent;
 ///
-/// // Valid User-Agent
+/// Valid User-Agent
 /// assert!(validate_user_agent("MyApp contact@example.com").is_ok());
 ///
-/// // Invalid - missing email
+/// Invalid - missing email
 /// assert!(validate_user_agent("MyApp").is_err());
 /// ```
 pub fn validate_user_agent(user_agent: &str) -> Result<()> {

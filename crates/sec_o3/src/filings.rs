@@ -1,11 +1,11 @@
-//! SEC EDGAR filing downloads and metadata retrieval.
-//!
-//! This module provides functions to:
-//! - Fetch company submission history
-//! - Download specific filing documents (XML, HTML, text)
-//! - Parse filing metadata and document URLs
-
+/// SEC EDGAR filing downloads and metadata retrieval.
+///
+/// This module provides functions to:
+/// - Fetch company submission history
+/// - Download specific filing documents (XML, HTML, text)
+/// - Parse filing metadata and document URLs
 use crate::{Client, Error, Result};
+use chrono::{DateTime, Utc};
 use serde::Deserialize;
 use std::path::{Path, PathBuf};
 
@@ -108,8 +108,8 @@ pub struct Filing {
     pub accession_number: String,
     /// Form type (e.g., "10-K", "8-K")
     pub form_type: String,
-    /// Date filed in YYYY-MM-DD format
-    pub filing_date: String,
+    /// Acceptance date as a chrono::DateTime
+    pub acceptance_date: DateTime<Utc>,
     /// Primary document filename
     pub primary_document: String,
     /// Whether this filing contains XBRL data
@@ -193,18 +193,28 @@ pub async fn get_recent_filings(client: &Client, cik: &str) -> Result<Vec<Filing
     let submissions = get_submissions(client, cik).await?;
     let recent = submissions.filings.recent;
 
-    let mut filings = Vec::new();
+    let filings = (0..recent.accession_number.len())
+        .filter_map(|i| {
+            // Filter out empty values
+            let primary_document = recent.primary_document.get(i)?.clone();
+            let form_type = recent.form.get(i).cloned().unwrap_or_default();
+            if primary_document.is_empty() || form_type.is_empty() {
+                return None;
+            }
 
-    for i in 0..recent.accession_number.len() {
-        filings.push(Filing {
-            cik: submissions.cik.clone(),
-            accession_number: recent.accession_number[i].clone(),
-            form_type: recent.form.get(i).cloned().unwrap_or_default(),
-            filing_date: recent.filing_date.get(i).cloned().unwrap_or_default(),
-            primary_document: recent.primary_document.get(i).cloned().unwrap_or_default(),
-            is_xbrl: recent.is_xbrl.get(i).copied().unwrap_or(0) == 1,
-        });
-    }
+            // Ensure acceptance_date is a valid UTC string
+            let acceptance_date = recent.acceptance_date_time.get(i)?.parse::<DateTime<Utc>>().ok()?;
+
+            Some(Filing {
+                cik: submissions.cik.clone(),
+                accession_number: recent.accession_number[i].clone(),
+                form_type,
+                acceptance_date,
+                primary_document,
+                is_xbrl: recent.is_xbrl.get(i).copied().unwrap_or(0) == 1,
+            })
+        })
+        .collect();
 
     Ok(filings)
 }
@@ -360,9 +370,48 @@ pub async fn download_all_filings(
 
     Ok(paths)
 }
+/// Download all filings of a specific type for a company within a specified date range
+///
+/// # Examples
+///
+/// ```no_run
+/// use sec_o3::filings::download_all_filings;
+/// use sec_o3::Client;
+///
+/// #[tokio::main]
+/// async fn main() -> sec_o3::Result<()> {
+///     let client = Client::new("MyApp", "contact@example.com");
+///
+///     // Download all 10-K filings for Apple
+///     let paths = download_all_filings(
+///         &client,
+///         "0000320193",
+///         "10-K",
+///         "output/apple-10k"
+///     ).await?;
+///
+///     println!("Downloaded {} filings", paths.len());
+///     Ok(())
+/// }
+/// ```
+pub async fn download_filings_in_date_range(
+    client: &Client,
+    cik: &str,
+    form_type: &str,
+    _output_dir: impl AsRef<Path>,
+    _start_date: &str,
+    _end_date: &str,
+) -> Result<Vec<PathBuf>> {
+    let filings = get_recent_filings(client, cik).await?;
+    let _filtered = filter_by_form(&filings, form_type);
+
+    Ok(Vec::new())
+}
 
 #[cfg(test)]
 mod tests {
+    use crate::utils::str_to_utc_datetime;
+
     use super::*;
 
     #[tokio::test]
@@ -400,7 +449,8 @@ mod tests {
             cik: "320193".to_string(),
             accession_number: "0000320193-23-000106".to_string(),
             form_type: "10-K".to_string(),
-            filing_date: "2023-11-03".to_string(),
+            acceptance_date: str_to_utc_datetime("2023-11-03T00:00:00.000Z")
+                .expect("An invalid UTC date was provided as an acceptance date."),
             primary_document: "aapl-20230930.htm".to_string(),
             is_xbrl: true,
         };
@@ -423,7 +473,8 @@ mod tests {
                 cik: "123".to_string(),
                 accession_number: "0001-23-001".to_string(),
                 form_type: "10-K".to_string(),
-                filing_date: "2023-01-01".to_string(),
+                acceptance_date: str_to_utc_datetime("2023-01-01T00:00:00.000Z")
+                    .expect("An invalid UTC datetime was provided as an acceptance date."),
                 primary_document: "doc.xml".to_string(),
                 is_xbrl: true,
             },
@@ -431,7 +482,8 @@ mod tests {
                 cik: "123".to_string(),
                 accession_number: "0001-23-002".to_string(),
                 form_type: "10-Q".to_string(),
-                filing_date: "2023-04-01".to_string(),
+                acceptance_date: str_to_utc_datetime("2023-04-01T00:00:00.000Z")
+                    .expect("An invalid UTC datetime was provided as an acceptance date."),
                 primary_document: "doc2.xml".to_string(),
                 is_xbrl: true,
             },

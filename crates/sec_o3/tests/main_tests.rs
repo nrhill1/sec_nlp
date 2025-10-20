@@ -1,5 +1,5 @@
-//! Generated placeholder tests for the `sec_o3` crate integration tests.
-//! Replace the assert!(true) bodies with real assertions against the crate's API.
+/// Generated placeholder tests for the `sec_o3` crate integration tests.
+/// Replace the assert!(true) bodies with real assertions against the crate's API.
 
 #[test]
 fn parse_valid_input_returns_expected_structure() {
