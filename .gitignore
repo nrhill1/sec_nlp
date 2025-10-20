@@ -43,8 +43,8 @@ src/**/*.egg-info/
 *.spec
 
 # Logs / temp output
-python/sec_nlp/data/
-python/sec_nlp/tests/test_logs/
+**/sec_nlp/.data/
+**/test_logs/
 pytest_tmp/
 **/.ignore/**
 *.log
