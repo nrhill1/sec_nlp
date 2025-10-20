@@ -63,8 +63,8 @@ class Pipeline(BaseModel):
     model_name: str = "google/flan-t5-base"
 
     prompt_file: Path = Field(default_factory=_default_prompt_path)
-    out_path: Path = Field(default_factory=lambda: Path("./data/output"))
-    dl_path: Path = Field(default_factory=lambda: Path("./data/downloads"))
+    out_path: Path = Field(default_factory=lambda: Path("./.data/output"))
+    dl_path: Path = Field(default_factory=lambda: Path("./.data/downloads"))
 
     limit: int | None = None
     max_new_tokens: int = 1024

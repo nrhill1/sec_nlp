@@ -34,21 +34,19 @@ Cargo.lock
 
 # Maturin build artifacts
 target/wheels/
-*.whl
-dist/
-build/
-*.egg
-*.egg-info/
-src/**/*.egg-info/
-*.spec
+**/.whl
+**/dist/
+**/build/
+**/.egg
+**/.egg-info/
+**/.spec
 
 # Logs / temp output
-**/sec_nlp/.data/
-**/test_logs/
-pytest_tmp/
-**/.ignore/**
 *.log
 *.tmp
+**/pytest_tmp/
+**/test_logs/
+**/.ignore/
 **/.data
 
 # History / backups
@@ -66,12 +64,11 @@ pytest_tmp/
 *.tmp~
 
 # IDE / Editor
-.vscode/
-.idea/
-*.code-workspace
-.DS_Store
 Thumbs.db
+*.code-workspace
+**/.vscode/
+**/.idea/
+**.DS_Store**
 
 # Misc / OS / Packaging
 .env
-.env.*
