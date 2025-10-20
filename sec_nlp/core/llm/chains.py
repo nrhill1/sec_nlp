@@ -96,7 +96,7 @@ def build_summarization_runnable(
     """
     Build the SEC summarization chain:
       input:  SummarizationInput
-      pipe:   prompt(to string) -> llm -> validation
+      pipe:   prompt -> llm -> validation
       output: SummarizationOutput
     """
 
