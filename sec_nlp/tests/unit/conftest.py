@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any, Protocol
 
 import pytest
+
 from sec_nlp.core.llm.base import LocalLLMBase
 
 

@@ -169,7 +169,7 @@ test-py: build-ext
 	log="$(LOG_DIR)/test_$${ts}.log"; \
 	echo "==> Running Python tests (log: $$log)..."; \
 	set -o pipefail; \
-	uv run pytest $(PYTEST_FLAGS) 2>&1 | tee "$$log"
+	PYTHONPATH=. uv run pytest $(PYTEST_FLAGS) 2>&1 | tee "$$log"
 
 .PHONY: py-cov
 py-cov: build-ext

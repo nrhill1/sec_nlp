@@ -34,10 +34,11 @@ dependencies = [
 
 [tool.pytest.ini_options]
 testpaths = ["sec_nlp/tests/unit"]
-pythonpath = "sec_nlp"
 python_files = "test_*.py"
 python_functions = "test_*"
+pythonpath = ["."]
 filterwarnings = ["ignore::DeprecationWarning"]
+addopts = "-v --tb=short"
 
 [tool.uv_build]
 package = "sec_nlp"
