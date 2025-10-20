@@ -33,7 +33,8 @@ dependencies = [
 ]
 
 [tool.pytest.ini_options]
-testpaths = ["sec_nlp/tests"]
+testpaths = ["src/tests"]
+pythonpath = "src/"
 python_files = "test_*.py"
 python_functions = "test_*"
 filterwarnings = ["ignore::DeprecationWarning"]
@@ -59,7 +60,6 @@ check_untyped_defs = true
 show_error_codes = true
 pretty = true
 exclude = [
-  '^sec_nlp/tests/.*',
   '^dist/.*',
   '^build/.*',
 ]
@@ -101,7 +101,7 @@ ignore = [
 
 [tool.maturin]
 features = ["pyo3/extension-module"]
-module-name = "sec_nlp._edgars"
+module-name = "sec_o3"
 manifest-path = "crates/sec_o3/Cargo.toml"
 python-source = "src/sec_nlp"
 

@@ -9,6 +9,7 @@
 /// # Example
 /// ```rust,no_run
 /// use sec_nlp::client::retry::RetryPolicy;
+/// use futures::FutureExt;
 ///
 /// #[tokio::main]
 /// async fn main() {

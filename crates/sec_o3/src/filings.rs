@@ -1,9 +1,9 @@
-/// SEC EDGAR filing downloads and metadata retrieval.
-///
-/// This module provides functions to:
-/// - Fetch company submission history
-/// - Download specific filing documents (XML, HTML, text)
-/// - Parse filing metadata and document URLs
+//! SEC EDGAR filing downloads and metadata retrieval.
+//!
+//! This module provides functions to:
+//! - Fetch company submission history
+//! - Download specific filing documents (XML, HTML, text)
+//! - Parse filing metadata and document URLs
 use crate::{Client, Error, Result};
 use chrono::{DateTime, Utc};
 use serde::Deserialize;

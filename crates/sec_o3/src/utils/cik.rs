@@ -106,7 +106,7 @@ pub async fn batch_ticker_lookup(tickers: &[&str]) -> Result<Vec<(String, String
 /// # Examples
 ///
 /// ```no_run
-/// use sec_o3::cik::populate_cache;
+/// use sec_o3::utils::cik::populate_cache;
 ///
 /// #[tokio::main]
 /// async fn main() -> sec_o3::Result<()> {
@@ -144,7 +144,7 @@ async fn fetch_cik_by_ticker(ticker: &str) -> Result<String> {
 async fn fetch_ticker_data() -> Result<HashMap<String, TickerEntry>> {
     let client = Client::from_env().unwrap_or_else(|_| Client::new("sec_o3", "default@example.com"));
 
-    let url = "https://www.sec.gov/include/ticker.txt";
+    let url = "https://www.sec.gov/include/ticker.txt"; // TODO: CHANGE THIS TO exchange.json
 
     let text = client
         .get_text(url)

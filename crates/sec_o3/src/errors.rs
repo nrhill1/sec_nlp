@@ -1,7 +1,7 @@
-/// Error types for the SEC data downloader.
-///
-/// This module defines the error types that can occur when fetching and
-/// processing SEC data using Hyper as the HTTP client.
+//! Error types for the SEC data downloader.
+//!
+//! This module defines the error types that can occur when fetching
+//! and processing SEC data using Hyper as the HTTP client.
 use thiserror::Error as ThisError;
 
 /// Result type alias using this crate's Error type.

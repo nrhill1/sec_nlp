@@ -1,4 +1,9 @@
-// src/python.rs - Optimized Python bindings via PyO3
+//! This module details the PyO3 bindings,
+//! after which this crate is aptly named.
+//!
+//!
+//!
+//!
 #![cfg(feature = "python")]
 
 use pyo3::exceptions::{PyException, PyRuntimeError, PyValueError};

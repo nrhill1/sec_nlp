@@ -42,6 +42,7 @@ ahash = "0.8.12"
 # Optional: sync compression fallback
 flate2 = "1.1.4"
 chrono = "0.4.42"
+quick-xml = { version = "0.38.3", features = ["tokio", "async-tokio", "encoding"] }
 
 [dependencies.pyo3]
 version = "0.20"

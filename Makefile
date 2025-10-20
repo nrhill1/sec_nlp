@@ -2,7 +2,8 @@ SHELL := /bin/bash
 .DEFAULT_GOAL := test
 
 # Python
-LOG_DIR := python/tests/test_logs
+PYTHON_DIR := src/
+LOG_DIR := src/tests/test_logs
 PYTEST_FLAGS := -v --maxfail=1 --tb=short --color=yes --basetemp .pytest_tmp --cache-clear
 MYPY := uv run mypy .
 
@@ -63,9 +64,11 @@ help:
 	@echo "  py-lint                Python: ruff check"
 	@echo "  py-fmt                 Python: ruff format"
 	@echo "  py-types               Python: mypy type check"
+	@echo "  python-al 				Python: all language-specific Python commands."
 	@echo "  rs-lint                Rust: fmt + clippy"
 	@echo "  rs-fmt                 Rust: cargo fmt"
 	@echo "  rs-clippy              Rust: cargo clippy"
+	@echo "  rust-all				Rust: all language-specific Rust commands"
 	@echo ""
 	@echo "CI/CD:"
 	@echo "  ci                     Full CI pipeline (check + test)"
@@ -100,7 +103,7 @@ sync: $(STAMP_UVSYNC)
 
 $(STAMP_UVSYNC): $(UV_DEPS)
 	@echo "==> Syncing dev dependencies..."
-	@uv sync --dev
+	@uv sync
 	@touch $(STAMP_UVSYNC)
 
 .PHONY: ready
@@ -177,6 +180,9 @@ py-cov: build-ext
 	set -o pipefail; \
 	uv run coverage run -m pytest -q --basetemp .pytest_tmp --cache-clear 2>&1 | tee "$$log"
 
+.PHONY: python-all
+python-all: py-lint py-types py-fmt test-py py-cov
+
 # -------------------------
 # Rust
 # -------------------------
@@ -197,12 +203,15 @@ rs-clippy: ready
 .PHONY: test-rs
 test-rs: ready
 	@echo "==> Rust tests..."
-	@$(CARGO) test $(RUST_PKG_FLAG) -- --nocapture
+	@$(CARGO) test $(RUST_PKG_FLAG)
 
-.PHONY: bench
-bench: ready
+.PHONY: rs-bench
+rs-bench: ready
 	@echo "==> Running benchmarks..."
 	@$(CARGO) bench $(RUST_PKG_FLAG)
+
+.PHONY: rust-all
+rust-all: rs-lint test-rs rs-bench
 
 # -------------------------
 # Combined Commands

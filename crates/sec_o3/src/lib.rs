@@ -22,7 +22,7 @@
 ///     let cik = map.get("AAPL").unwrap();
 ///
 ///     // Fetch company data
-///     let client = Client::new();
+///     let client = Client::new("John F. Kennedy", "jfk@<whitehouse>.gov");
 ///     let facts = sec_o3::fetch_company_facts(cik).await?;
 ///
 ///     println!("Company: {}", facts.entity_name);
