@@ -1,0 +1,6 @@
+from pathlib import Path
+from sec_nlp.core.preprocessor import Preprocessor as Preprocessor
+from sec_nlp.core.types import FilingMode as FilingMode
+
+def test_html_paths_for_symbol_and_limit(tmp_path: Path, write_html_tree) -> None: ...
+def test_html_paths_for_symbol_missing_raises(tmp_path) -> None: ...

@@ -122,7 +122,7 @@ class Pipeline(BaseModel):
         if p.exists():
             return p
         try:
-            prompt_path = resources.files("sec_nlp.core.config.prompts") / "sample_prompt_1.yml"
+            prompt_path = resources.as_file("sec_nlp.core.config.prompts") / "sample_prompt_1.yml"
             if prompt_path.exists():
                 logger.warning("Using built-in prompt file: %s", fspath(prompt_path))
                 return Path(fspath(prompt_path))

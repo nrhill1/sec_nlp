@@ -66,6 +66,23 @@ exclude = [
   '^build/.*',
 ]
 
+[[tool.mypy.overrides]]
+module = [
+    "langchain.*",
+    "langchain_community.*",
+    "langchain_core.*",
+    "langchain_text_splitters.*",
+    "langchain_huggingface.*",
+    "langchain_pinecone.*",
+    "langchain_ollama.*",
+    "sec_edgar_downloader.*",
+    "pinecone.*",
+    "transformers.*",
+    "torch.*",
+    "pytest.*"
+]
+ignore_missing_imports = true
+
 [tool.pydantic-mypy]
 init_forbid_extra = true
 init_typed = true
