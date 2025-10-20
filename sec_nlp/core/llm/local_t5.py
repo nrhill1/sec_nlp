@@ -1,4 +1,4 @@
-# sec_nlp/llms/local_t5_wrapper.py
+# sec_nlp/llm/local_t5_wrapper.py
 from __future__ import annotations
 
 from typing import Any

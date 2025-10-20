@@ -299,7 +299,7 @@ class Pipeline(BaseModel):
                 self._prompt = load_prompt(self.prompt_file)
 
             if self.model_name.startswith("ollama:"):
-                from sec_nlp.llms import build_ollama_llm
+                from sec_nlp.llm import build_ollama_llm
 
                 model_id = self.model_name.split(":", 1)[1]
                 llm = build_ollama_llm(model_name=model_id)

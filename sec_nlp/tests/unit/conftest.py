@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any, Protocol
 
 import pytest
-from sec_nlp.core.llms.base import LocalLLMBase
+from sec_nlp.core.llm.base import LocalLLMBase
 
 
 class HasPageContent(Protocol):

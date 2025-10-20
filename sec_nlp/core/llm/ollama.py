@@ -1,4 +1,4 @@
-# sec_nlp/pipelines/utils/llms/ollama_factory.py
+# sec_nlp/pipelines/utils/llm/ollama_factory.py
 from __future__ import annotations
 
 import os

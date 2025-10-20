@@ -2288,7 +2288,7 @@ dev = [
     { name = "coverage", extras = ["toml"], specifier = ">=7.0.0" },
     { name = "maturin", specifier = ">=1.0,<2.0" },
     { name = "mypy", specifier = ">=1.8.0" },
-    { name = "pytest", specifier = ">=8.0.0" },
+    { name = "pytest", specifier = ">=8.4.2" },
     { name = "pytest-cov", specifier = ">=7.0.0" },
     { name = "ruff", specifier = ">=0.6.0" },
     { name = "types-pyyaml" },

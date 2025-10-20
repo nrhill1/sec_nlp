@@ -1,4 +1,4 @@
-# sec_nlp/pipelines/utils/llms/local_llm_base.py
+# sec_nlp/pipelines/utils/llm/local_llm_base.py
 from __future__ import annotations
 
 from abc import ABC, abstractmethod

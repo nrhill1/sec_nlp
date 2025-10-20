@@ -1,7 +1,7 @@
 [project]
 name = "sec-nlp"
 version = "0.1.0"
-description = "Summarize SEC filings using local LLMs"
+description = "Summarize SEC filings using local llm"
 authors = [
   { name = "Nicolas Hill", email = "your-email@example.com" }
 ]
@@ -111,7 +111,6 @@ build-backend = "maturin"
 
 [dependency-groups]
 dev = [
-  "pytest>=8.0.0",
   "pytest-cov>=7.0.0",
   "coverage[toml]>=7.0.0",
   "mypy>=1.8.0",
@@ -120,4 +119,5 @@ dev = [
   "types-tqdm",
   "types-PyYAML",
   "maturin>=1.0,<2.0",
+  "pytest>=8.4.2",
 ]
