@@ -46,7 +46,7 @@ jobs:
               - '**/*.rs'
             python:
               - 'pyproject.toml'
-              - 'src/sec_nlp/**'
+              - 'sec_nlp/**'
               - '**/*.py'
               - 'uv.lock'
             config:

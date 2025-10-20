@@ -2,8 +2,8 @@ SHELL := /bin/bash
 .DEFAULT_GOAL := test
 
 # Python
-PYTHON_DIR := src/
-LOG_DIR := src/tests/test_logs
+PYTHON_DIR := sec_nlp/
+LOG_DIR := sec_nlp/tests/test_logs
 PYTEST_FLAGS := -v --maxfail=1 --tb=short --color=yes --basetemp .pytest_tmp --cache-clear
 MYPY := uv run mypy .
 

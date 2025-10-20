@@ -97,13 +97,13 @@ ignore = [
 
 [tool.ruff.lint.per-file-ignores]
 "__init__.py" = ["F401"]
-"src/sec_nlp/tests/*" = ["F401", "F811"]
+"sec_nlp/tests/*" = ["F401", "F811"]
 
 [tool.maturin]
 features = ["pyo3/extension-module"]
 module-name = "sec_o3"
 manifest-path = "crates/sec_o3/Cargo.toml"
-python-source = "src/sec_nlp"
+python-source = "sec_nlp"
 
 [build-system]
 requires = ["maturin>=1.0,<2.0"]
