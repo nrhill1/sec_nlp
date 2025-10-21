@@ -8,8 +8,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from sec_nlp.core.enums import FilingMode
 from sec_nlp.core.pipeline import Pipeline
-from sec_nlp.core.types import FilingMode
 
 
 class HasPageContent(Protocol):

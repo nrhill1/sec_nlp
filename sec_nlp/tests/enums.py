@@ -1,6 +1,6 @@
 import pytest
 
-from sec_nlp.core.types import FilingMode
+from sec_nlp.core.enums import FilingMode
 
 
 def test_enum_values_are_expected() -> None:
@@ -17,7 +17,7 @@ def test_form_property_returns_correct_form_codes() -> None:
 @pytest.mark.parametrize(
     "mode,expected", [(FilingMode.annual, "10-K"), (FilingMode.quarterly, "10-Q")]
 )
-def test_form_property_consistency(mode, expected) -> None:
+def test_form_property_consistency(mode: FilingMode, expected: str) -> None:
     assert mode.form == expected
     assert mode.form == expected
 

@@ -5,7 +5,7 @@ SHELL := /bin/bash
 PYTHON_DIR := sec_nlp/
 LOG_DIR := sec_nlp/tests/test_logs
 PYTEST_FLAGS := --maxfail=1 --color=yes --basetemp .pytest_tmp --cache-clear
-MYPY := uv run mypy .
+MYPY_FLAGS := -p sec_nlp --exclude-gitignore --warn-unreachable --install-types
 
 # Rust
 CARGO ?= cargo
@@ -113,6 +113,7 @@ ready: setup sync
 update: setup
 	@echo "==> Updating dependencies..."
 	@uv sync --upgrade
+	@uv lock --upgrade
 	@$(CARGO) update
 	@rm -f $(STAMP_UVSYNC)
 
@@ -126,21 +127,25 @@ check: ready lint
 .PHONY: build
 build: build-rs build-ext build-wheel
 
+.PHONY: prebuild
+prebuild: ready
+	@rm -f sec_nlp/*.so
+
 .PHONY: build-rs
-build-rs: ready
+build-rs: prebuild
 	@echo "==> Building Rust library..."
 	@$(CARGO) build --release $(RUST_PKG_FLAG)
 
 .PHONY: build-ext
-build-ext:
+build-ext: prebuild
 	@$(MATURIN) develop $(MATURIN_FLAGS) -m $(MATURIN_MANIFEST)
 
 .PHONY: build-wheel
-build-wheel:
+build-wheel: prebuild
 	@$(MATURIN) build $(MATURIN_FLAGS) -m $(MATURIN_MANIFEST)
 
 .PHONY: build-sdist
-build-sdist:
+build-sdist: prebuild
 	@$(MATURIN) sdist -m $(MATURIN_MANIFEST)
 
 # -------------------------
@@ -155,7 +160,7 @@ py-lint: ready
 .PHONY: py-types
 py-types: ready
 	@echo "==> Mypy type check..."
-	@uv run mypy .
+	@uv run mypy $(MYPY_FLAGS)
 
 .PHONY: py-fmt
 py-fmt: ready
@@ -286,6 +291,8 @@ clean:
 	@rm -rf .pytest_tmp .pytest_cache
 	@find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
 	@find . -type f -name "*.pyc" -delete 2>/dev/null || true
+	@find -f . -type f -name "*~" -delete 2>/dev/null || true
+	@find -f . -type f -name ".*~" -delete 2>/dev/null || true
 
 .PHONY: clean-all
 clean-all: clean

@@ -7,7 +7,7 @@ from sec_edgar_downloader import Downloader  # type: ignore
 from tqdm import tqdm
 
 from sec_nlp.core.config import get_logger
-from sec_nlp.core.types import FilingMode
+from sec_nlp.core.enums import FilingMode
 
 logger = get_logger(__name__)
 

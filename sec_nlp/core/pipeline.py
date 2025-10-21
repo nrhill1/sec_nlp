@@ -27,13 +27,13 @@ from pydantic import (
 
 from sec_nlp import __version__
 from sec_nlp.core.config import get_logger
+from sec_nlp.core.enums import FilingMode
 from sec_nlp.core.llm.chains import (
     SummarizationInput,
     SummarizationOutput,
     SummarizationResult,
     build_summarization_runnable,
 )
-from sec_nlp.core.types import FilingMode
 
 from .downloader import SECFilingDownloader
 from .preprocessor import Preprocessor
@@ -122,7 +122,7 @@ class Pipeline(BaseModel):
         if p.exists():
             return p
         try:
-            prompt_path = resources.files("sec_nlp.core.config.prompts") / "sample_prompt_1.yml"
+            prompt_path = resources.as_file("sec_nlp.core.config.prompts") / "sample_prompt_1.yml"
             if prompt_path.exists():
                 logger.warning("Using built-in prompt file: %s", fspath(prompt_path))
                 return Path(fspath(prompt_path))
@@ -213,7 +213,9 @@ class Pipeline(BaseModel):
         logger.info("Reloaded prompt: %s", self.prompt_file)
 
     def _prompt_as_str(self) -> str:
-        return self._prompt.to_string()
+        if self._prompt is not None:
+            return self._prompt.to_string()
+        return ""
 
     def _get_preprocessor(self) -> Preprocessor:
         if self._pre is None:
@@ -302,12 +304,12 @@ class Pipeline(BaseModel):
                 self._prompt = load_prompt(self.prompt_file)
 
             if self.model_name.startswith("ollama:"):
-                from sec_nlp.llm import build_ollama_llm
+                from sec_nlp.core.llm import build_ollama_llm
 
                 model_id = self.model_name.split(":", 1)[1]
                 llm = build_ollama_llm(model_name=model_id)
             else:
-                from sec_nlp.llm import FlanT5LocalLLM
+                from sec_nlp.core.llm import FlanT5LocalLLM
 
                 llm = FlanT5LocalLLM(
                     model_name=self.model_name,
@@ -400,7 +402,10 @@ class Pipeline(BaseModel):
                     for r in results:
                         result_dict: SummarizationResult = r.get(
                             "summary",
-                            SummarizationResult(),
+                            {
+                                "summary": "(null)",
+                                "error": "No summary payload returned.",
+                            },
                         )
                         summaries.append(result_dict)
                 except Exception as e:
