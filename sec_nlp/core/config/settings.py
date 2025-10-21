@@ -30,82 +30,123 @@ class Settings(BaseSettings):
 
     # SEC API
     email: str = Field(
-        default="user@example.com", description="Email for SEC EDGAR API (required by SEC)"
+        default="user@example.com",
+        description="Email for SEC EDGAR API (required by SEC)",
+        alias="email",
     )
 
     # Qdrant Vector Database
-    qdrant_host: str = Field(default="localhost", description="Qdrant server host")
-    qdrant_port: int = Field(default=6333, description="Qdrant server port", ge=1, le=65535)
+    qdrant_host: str = Field(
+        default="localhost", description="Qdrant server host", alias="qdrant_host"
+    )
+    qdrant_port: int = Field(
+        default=6333, description="Qdrant server port", ge=1, le=65535, alias="qdrant_port"
+    )
     qdrant_grpc_port: int = Field(
-        default=6334, description="Qdrant gRPC port (for better performance)", ge=1, le=65535
+        default=6334,
+        description="Qdrant gRPC port (for better performance)",
+        ge=1,
+        le=65535,
+        alias="qdrant_grpc_port",
     )
     qdrant_api_key: str | None = Field(
-        default=None, description="Qdrant API key (for Qdrant Cloud or secured instances)"
+        default=None,
+        description="Qdrant API key (for Qdrant Cloud or secured instances)",
+        alias="qdrant_api_key",
     )
     qdrant_url: str | None = Field(
-        default=None, description="Full Qdrant URL (overrides host/port if set)"
+        default=None, description="Full Qdrant URL (overrides host/port if set)", alias="qdrant_url"
     )
     qdrant_prefer_grpc: bool = Field(
-        default=False, description="Use gRPC instead of REST API for better performance"
+        default=False,
+        description="Use gRPC instead of REST API for better performance",
+        alias="qdrant_prefer_grpc",
     )
-    qdrant_https: bool = Field(default=False, description="Use HTTPS for Qdrant connection")
-    qdrant_timeout: int = Field(default=60, description="Qdrant request timeout in seconds", ge=1)
+    qdrant_https: bool = Field(
+        default=False, description="Use HTTPS for Qdrant connection", alias="qdrant_https"
+    )
+    qdrant_timeout: int = Field(
+        default=60, description="Qdrant request timeout in seconds", ge=1, alias="qdrant_timeout"
+    )
 
     # Qdrant Collection Settings
     qdrant_collection_prefix: str = Field(
-        default="sec_nlp", description="Prefix for Qdrant collection names"
+        default="sec_nlp",
+        description="Prefix for Qdrant collection names",
+        alias="qdrant_collection_prefix",
     )
     qdrant_distance: Literal["Cosine", "Euclid", "Dot"] = Field(
-        default="Cosine", description="Distance metric for vector similarity"
+        default="Cosine",
+        description="Distance metric for vector similarity",
+        alias="qdrant_distance",
     )
     qdrant_vector_size: int | None = Field(
-        default=None, description="Vector dimension (auto-inferred from embedding model if not set)"
+        default=None,
+        description="Vector dimension (auto-inferred from embedding model if not set)",
+        alias="qdrant_vec_size",
     )
     qdrant_on_disk_payload: bool = Field(
-        default=False, description="Store payload on disk to save RAM"
+        default=False,
+        description="Store payload on disk to save RAM",
+        alias="qdrant_on_disk_payload",
     )
     qdrant_replication_factor: int = Field(
-        default=1, description="Number of replicas for each shard (Qdrant Cloud)", ge=1
+        default=1,
+        description="Number of replicas for each shard (Qdrant Cloud)",
+        ge=1,
+        alias="qdrant_replication_factor",
     )
     qdrant_write_consistency_factor: int = Field(
-        default=1, description="Minimum number of replicas to confirm write", ge=1
+        default=1,
+        description="Minimum number of replicas to confirm write",
+        ge=1,
+        alias="qdrant_write_consistency_factor",
     )
 
     embedding_model: str = Field(
         default="sentence-transformers/all-MiniLM-L6-v2",
         description="Hugging Face embedding model name",
+        alias="embedding_model",
     )
     embedding_device: Literal["cpu", "cuda", "mps"] = Field(
-        default="cpu", description="Device for embedding model"
+        default="cpu", description="Device for embedding model", alias="embedding_device"
     )
     embedding_batch_size: int = Field(
-        default=32, description="Batch size for embedding generation", ge=1
+        default=32,
+        description="Batch size for embedding generation",
+        ge=1,
+        alias="embedding_batch_size",
     )
 
     # Ollama
     ollama_base_url: str = Field(
-        default="http://localhost:11434", description="Ollama server base URL"
+        default="http://localhost:11434",
+        description="Ollama server base URL",
+        alias="ollama_base_url",
     )
-    ollama_timeout: int = Field(default=120, description="Ollama request timeout in seconds", ge=1)
+    ollama_timeout: int = Field(
+        default=120, description="Ollama request timeout in seconds", ge=1, alias="ollama_timeout"
+    )
 
     # Hugging Face
-    hf_home: Path | None = Field(default=None, description="Hugging Face cache directory")
-    transformers_cache: Path | None = Field(
-        default=None, description="Transformers model cache directory"
+    hf_cache: Path | None = Field(
+        default=None, description="Hugging Face cache directory", alias="hf_cache"
     )
-    transformers_offline: bool = Field(
-        default=False, description="Run transformers in offline mode"
+    transformers_cache: Path | None = Field(
+        default=None, description="Transformers model cache directory", alias="transformers_cache"
     )
 
     # Application
     log_level: str = Field(
-        default="INFO", description="Logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)"
+        default="INFO",
+        description="Logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)",
+        alias="log_level",
     )
     log_format: Literal["simple", "detailed", "json"] = Field(
-        default="simple", description="Log output format"
+        default="simple", description="Log output format", alias="log_format"
     )
     environment: Literal["development", "production", "test"] = Field(
-        default="development", description="Application environment"
+        default="development", description="Application environment", alias="environment"
     )
 
     @field_validator("log_level")
@@ -144,7 +185,7 @@ class Settings(BaseSettings):
 
 
 @lru_cache
-def get_settings() -> Settings:
+def _get_settings() -> Settings:
     """
     Get cached settings instance.
 
@@ -157,4 +198,4 @@ def get_settings() -> Settings:
 
 
 # Singleton instance for convenient import
-settings = get_settings()
+settings = _get_settings()

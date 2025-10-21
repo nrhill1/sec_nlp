@@ -26,7 +26,7 @@ from pydantic import (
 )
 
 from sec_nlp import __version__
-from sec_nlp.core.config import get_logger
+from sec_nlp.core.config import get_logger, settings
 from sec_nlp.core.enums import FilingMode
 from sec_nlp.core.llm.chains import (
     SummarizationInput,
@@ -76,14 +76,6 @@ class Pipeline(BaseModel):
     batch_size: int = 16
 
     email: str | None = None
-    pinecone_api_key: str | None = None
-
-    pinecone_model: str | None = None
-    pinecone_metric: str | None = None
-    pinecone_cloud: str | None = None
-    pinecone_region: str | None = None
-    pinecone_dimension: int | None = None
-    pinecone_namespace: str | None = None
 
     dry_run: bool = False
 
@@ -168,30 +160,6 @@ class Pipeline(BaseModel):
     def model_post_init(self, __ctx: Any) -> None:
         if self.email is None:
             self.email = os.getenv("EMAIL", "xxxxxx_xxxx@gmail.com")
-
-        if self.pinecone_api_key is None:
-            self.pinecone_api_key = os.getenv("PINECONE_API_KEY")
-
-        self.pinecone_model = self.pinecone_model or os.getenv(
-            "PINECONE_MODEL", "multilingual-e5-large"
-        )
-        self.pinecone_metric = self.pinecone_metric or os.getenv("PINECONE_METRIC", "cosine")
-        self.pinecone_cloud = self.pinecone_cloud or os.getenv("PINECONE_CLOUD", "aws")
-        self.pinecone_region = self.pinecone_region or os.getenv("PINECONE_REGION", "us-east-1")
-
-        dim_env = os.getenv("PINECONE_DIMENSION")
-        if self.pinecone_dimension is None and dim_env:
-            try:
-                self.pinecone_dimension = int(dim_env)
-            except ValueError:
-                logger.warning("Invalid PINECONE_DIMENSION=%r; will infer at runtime.", dim_env)
-
-        ns_env = os.getenv("PINECONE_NAMESPACE")
-        if self.pinecone_namespace is None and ns_env:
-            self.pinecone_namespace = ns_env
-
-        if not self.dry_run and not self.pinecone_api_key:
-            raise ValueError("PINECONE_API_KEY not set and dry_run is False.")
 
         try:
             self._prompt = load_prompt(self.prompt_file)
