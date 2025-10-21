@@ -28,14 +28,14 @@ class FlanT5LocalLLM(LocalLLMBase):
     _model = PrivateAttr(default=None)
 
     def model_post_init(self, _ctx: Any) -> None:
-        try:
+        try:  # TODO: HANDLE EXCEPTIONS
             import torch
             from transformers import AutoTokenizer
 
             self._torch = torch
             self._tokenizer = AutoTokenizer.from_pretrained(self.model_name, use_fast=True)
 
-            self._load_model()
+            self._load_backend()
 
             if self.device is not None and self._model is not None:
                 self._model.to(self.device)
@@ -46,7 +46,7 @@ class FlanT5LocalLLM(LocalLLMBase):
             logger.error("Failed to initialize FlanT5 model: %s", e)
             raise
 
-    def _load_model(self) -> None:
+    def _load_backend(self) -> None:
         from transformers import AutoModelForSeq2SeqLM
 
         self._model = AutoModelForSeq2SeqLM.from_pretrained(self.model_name)

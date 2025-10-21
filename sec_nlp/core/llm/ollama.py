@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import os
 
+from langchain_core.prompt_values import PromptValue
 from langchain_core.runnables import Runnable
 
 from sec_nlp.core.config import get_logger
@@ -15,7 +16,7 @@ def build_ollama_llm(
     base_url: str | None = None,
     temperature: float = 0.1,
     **kwargs,
-) -> Runnable[str, str]:
+) -> Runnable[str | PromptValue, str]:
     """
     Factory function to create an Ollama LLM runnable.
 
@@ -26,7 +27,7 @@ def build_ollama_llm(
         **kwargs: Additional parameters for OllamaLLM
 
     Returns:
-        OllamaLLM: LLM object that implements <Runnable[str, str]>
+        OllamaLLM: LLM object that implements <Runnable[str | PromptValue, str]>
     """
     try:
         from langchain_ollama import OllamaLLM

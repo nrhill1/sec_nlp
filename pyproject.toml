@@ -30,6 +30,7 @@ dependencies = [
   "sentence-transformers>=5.1.0",
   "typer>=0.19.2",
   "qdrant-client>=1.15.1",
+  "platformdirs>=4.5.0",
 ]
 
 [tool.pytest.ini_options]
@@ -50,7 +51,7 @@ sec_nlp = ["py.typed"]
 [tool.mypy]
 python_version = "3.11"
 plugins = ["pydantic.mypy"]
-mypy_path = "$MYPY_CONFIG_FILE_DIR/stubs"
+mypy_path = "$MYPY_CONFIG_FILE_DIR/typings"
 strict = true
 follow_imports = "silent"
 warn_unused_ignores = true
@@ -62,6 +63,7 @@ check_untyped_defs = true
 show_error_codes = true
 pretty = true
 exclude = [
+  'sec_nlp/tests/*',
   '^dist/.*',
   '^build/.*',
 ]
@@ -97,6 +99,10 @@ ignore = ["E203", "W503"]
 [tool.ruff]
 line-length = 100
 target-version = "py311"
+
+[tool.ruff.format]
+docstring-code-format = true
+docstring-code-line-length = 20
 
 [tool.ruff.lint]
 select = [

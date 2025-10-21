@@ -5,7 +5,9 @@ SHELL := /bin/bash
 PYTHON_DIR := sec_nlp/
 LOG_DIR := sec_nlp/tests/test_logs
 PYTEST_FLAGS := --maxfail=1 --color=yes --basetemp .pytest_tmp --cache-clear
-MYPY_FLAGS := -p sec_nlp --exclude-gitignore --warn-unreachable --install-types
+MYPY_FLAGS := -p sec_nlp --exclude-gitignore --warn-unreachable
+STUBS_DIR := typings/
+STUBGEN_FLAGS := -p sec_nlp -o $(STUBS_DIR) --ignore-errors --include-private
 
 # Rust
 CARGO ?= cargo
@@ -157,8 +159,17 @@ py-lint: ready
 	@echo "==> Ruff lint..."
 	@uv run ruff check .
 
+.PHONY: py-stubs
+py-stubs: build-ext
+	@echo "==> Generating stubs into $(STUBS_DIR)..."
+	@rm -rf $(STUBS_DIR) && mkdir -p $(STUBS_DIR)
+	@uv run stubgen $(STUBGEN_FLAGS)
+	@find $(STUBS_DIR) -type f -name "__init__.pyi" -delete
+
 .PHONY: py-types
-py-types: ready
+py-types: py-stubs
+	@echo "==> Installing missing types using Mypy..."
+	@uv run mypy --install-types --non-interactive
 	@echo "==> Mypy type check..."
 	@uv run mypy $(MYPY_FLAGS)
 

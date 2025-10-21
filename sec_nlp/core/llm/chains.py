@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import json
-from typing import Any, ClassVar, Literal, Self, TypedDict
+from typing import Any, ClassVar, Literal, TypedDict
 
 from langchain_core.prompt_values import PromptValue
 from langchain_core.prompts.base import BasePromptTemplate
@@ -63,7 +63,7 @@ class SummaryPayload:
         return cls._ADAPTER
 
     @classmethod
-    def validate_from_json(cls, raw: str) -> Self:
+    def validate_from_json(cls, raw: str) -> SummaryPayload:
         """Strictly parse JSON string → dict → validate into a frozen instance."""
         try:
             data = json.loads(raw)

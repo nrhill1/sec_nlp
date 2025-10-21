@@ -2,7 +2,9 @@
 from __future__ import annotations
 
 import os
+from collections.abc import Sequence
 from pathlib import Path
+from typing import Any
 
 from langchain_community.document_loaders import BSHTMLLoader
 from langchain_community.document_transformers import MarkdownifyTransformer
@@ -45,7 +47,7 @@ class Preprocessor(BaseModel):
             raise ValueError("must be positive")
         return v
 
-    def model_post_init(self, __ctx) -> None:
+    def model_post_init(self, __ctx: Any) -> None:
         self._splitter_impl = RecursiveCharacterTextSplitter(
             chunk_size=self.chunk_size,
             chunk_overlap=self.chunk_overlap,
@@ -71,7 +73,7 @@ class Preprocessor(BaseModel):
         html_files = sorted(base.rglob("*.html"), key=os.path.getmtime, reverse=True)
         return html_files[:limit] if limit else html_files
 
-    def transform_html(self, html_path: Path) -> list[Document]:
+    def transform_html(self, html_path: Path) -> Sequence[Document]:
         if not html_path.exists():
             raise FileNotFoundError("File not found: %s", html_path.resolve())
         loader = BSHTMLLoader(file_path=html_path, bs_kwargs={"features": "lxml"})

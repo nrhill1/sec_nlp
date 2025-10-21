@@ -68,7 +68,7 @@ def setup_logging(
         format_type = settings.log_format
 
     # Format strings
-    formats = {
+    formats: dict[str, str] = {
         "simple": "%(levelname)s - %(message)s",
         "detailed": "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
         "json": '{"time":"%(asctime)s","name":"%(name)s","level":"%(levelname)s","message":"%(message)s"}',
@@ -77,11 +77,11 @@ def setup_logging(
     log_format = formats.get(format_type, formats["simple"])
     date_format = "%Y-%m-%d %H:%M:%S"
 
-    # Create formatter
-    if enable_colors and log_file is None and format_type != "json":
-        formatter = ColoredFormatter(log_format, datefmt=date_format)
-    else:
-        formatter = logging.Formatter(log_format, datefmt=date_format)
+    formatter: logging.Formatter = (
+        ColoredFormatter(log_format, datefmt=date_format)
+        if enable_colors and log_file is None and format_type != "json"
+        else logging.Formatter(log_format, datefmt=date_format)
+    )
 
     # Configure root logger
     root_logger = logging.getLogger()
@@ -103,7 +103,7 @@ def setup_logging(
 
         file_handler = logging.FileHandler(log_path, encoding="utf-8")
         file_handler.setLevel(level)
-        # File logs always use plain formatter (no colors)
+
         file_formatter = logging.Formatter(log_format, datefmt=date_format)
         file_handler.setFormatter(file_formatter)
         root_logger.addHandler(file_handler)
@@ -162,6 +162,6 @@ class LogContext:
         self.logger.setLevel(self.level)
         return self.logger
 
-    def __exit__(self, *args) -> None:
+    def __exit__(self, *args: object) -> None:
         """Restore original log level."""
         self.logger.setLevel(self.original_level)
