@@ -3,9 +3,9 @@
 
 from sec_nlp.core.config import get_logger, settings, setup_logging
 from sec_nlp.core.downloader import SECFilingDownloader
+from sec_nlp.core.enums import FilingMode
 from sec_nlp.core.pipeline import Pipeline, default_prompt_path
 from sec_nlp.core.preprocessor import Preprocessor
-from sec_nlp.core.types import FilingMode
 
 __all__: list[str] = [
     "FilingMode",

@@ -1,8 +1,11 @@
-import pytest
-from collections.abc import Callable as Callable, Generator
+from collections.abc import Callable as Callable
+from collections.abc import Generator
 from pathlib import Path
-from sec_nlp.core.llm.base import LocalLLMBase as LocalLLMBase
 from typing import Protocol
+
+import pytest
+
+from sec_nlp.core.llm.base import LocalLLMBase as LocalLLMBase
 
 class HasPageContent(Protocol):
     page_content: str

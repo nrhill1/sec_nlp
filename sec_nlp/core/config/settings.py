@@ -71,7 +71,6 @@ class Settings(BaseSettings):
         default=1, description="Minimum number of replicas to confirm write", ge=1
     )
 
-    # Embedding Model (for Qdrant)
     embedding_model: str = Field(
         default="sentence-transformers/all-MiniLM-L6-v2",
         description="Hugging Face embedding model name",

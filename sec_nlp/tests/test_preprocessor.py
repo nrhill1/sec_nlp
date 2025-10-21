@@ -3,8 +3,8 @@ from pathlib import Path
 
 import pytest
 
+from sec_nlp.core.enums import FilingMode
 from sec_nlp.core.preprocessor import Preprocessor
-from sec_nlp.core.types import FilingMode
 
 
 def test_html_paths_for_symbol_and_limit(tmp_path: Path, write_html_tree) -> None:

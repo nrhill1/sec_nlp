@@ -5,7 +5,7 @@ SHELL := /bin/bash
 PYTHON_DIR := sec_nlp/
 LOG_DIR := sec_nlp/tests/test_logs
 PYTEST_FLAGS := --maxfail=1 --color=yes --basetemp .pytest_tmp --cache-clear
-MYPY := uv run mypy .
+MYPY_FLAGS := --exclude-gitignore --warn-unreachable --install-types
 
 # Rust
 CARGO ?= cargo
@@ -155,7 +155,7 @@ py-lint: ready
 .PHONY: py-types
 py-types: ready
 	@echo "==> Mypy type check..."
-	@uv run mypy .
+	@uv run mypy $(MYPY_FLAGS)
 
 .PHONY: py-fmt
 py-fmt: ready
