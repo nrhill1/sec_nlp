@@ -7,11 +7,8 @@ from pathlib import Path
 from typing import Any
 
 from langchain_community.document_loaders import BSHTMLLoader
-from langchain_community.document_transformers import MarkdownifyTransformer
 from langchain_core.documents import Document
-from langchain_core.documents.transformers import BaseDocumentTransformer
-from langchain_text_splitters import RecursiveCharacterTextSplitter
-from langchain_text_splitters.base import TextSplitter
+from langchain_text_splitters import CharacterTextSplitter, RecursiveCharacterTextSplitter
 from pydantic import BaseModel, PrivateAttr, field_validator
 
 from sec_nlp.core.config import get_logger
@@ -31,8 +28,7 @@ class Preprocessor(BaseModel):
     splitter: str = "default"
     transformer: str = "default"
 
-    _splitter_impl: TextSplitter = PrivateAttr()
-    _transformer_impl: BaseDocumentTransformer = PrivateAttr()
+    _splitter_impl: RecursiveCharacterTextSplitter = PrivateAttr()
 
     @field_validator("downloads_folder")
     @classmethod
@@ -48,11 +44,7 @@ class Preprocessor(BaseModel):
         return v
 
     def model_post_init(self, __ctx: Any) -> None:
-        self._splitter_impl = RecursiveCharacterTextSplitter(
-            chunk_size=self.chunk_size,
-            chunk_overlap=self.chunk_overlap,
-        )
-        self._transformer_impl = MarkdownifyTransformer()
+        self._transformer_impl = CharacterTextSplitter()
 
     def _filing_dir(self, symbol: str, mode: FilingMode) -> Path:
         filing_type = mode.form
