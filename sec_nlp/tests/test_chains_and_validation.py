@@ -6,11 +6,10 @@ from typing import Any
 from langchain_core.prompts import BasePromptTemplate
 from langchain_core.runnables import Runnable, RunnableConfig
 
-from sec_nlp.core.llm.base import LocalLLMBase
 from sec_nlp.core.llm.chains import build_summarization_runnable
 
 
-class DummyLocalLLM(LocalLLMBase):
+class DummyLocalLLM(Runnable[str, str]):
     """Minimal LocalLLMBase for tests: always returns a JSON string that the chain parses."""
 
     def __init__(self, model_name: str = "dummy", **_: Any) -> None:
@@ -31,7 +30,7 @@ class DummyLocalLLM(LocalLLMBase):
 def test_chain_invoke_json_mode() -> None:
     prompt: BasePromptTemplate[Any] = BasePromptTemplate.from_template("{chunk}")
 
-    llm: LocalLLMBase = DummyLocalLLM()
+    llm: Runnable[str, str] = DummyLocalLLM()
 
     chain: Runnable[Any, Any] = build_summarization_runnable(
         prompt=prompt,
