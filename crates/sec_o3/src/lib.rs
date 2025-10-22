@@ -13,7 +13,7 @@
 /// ## Quick Start
 ///
 /// ```rust,no_run
-/// use sec_o3::{Client, normalize_cik, get_ticker_map, LazyCache};
+/// use sec_o3::{Client};
 ///
 /// #[tokio::main]
 /// async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -21,9 +21,8 @@
 ///
 ///     // Fetch company data
 ///     let client = Client::new("John F. Kennedy", "jfk@<whitehouse>.gov");
-///     let facts = sec_o3::fetch_company_facts(cik).await?;
+///     let facts = sec_o3::get_recent_filings("0001045810").await?;
 ///
-///     println!("Company: {}", facts.entity_name);
 ///     Ok(())
 /// }
 /// ```

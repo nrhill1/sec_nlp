@@ -46,7 +46,7 @@ struct TickerEntry {
 /// # Examples
 ///
 /// ```no_run
-/// use sec_o3::cik::ticker_to_cik;
+/// use sec_o3::utils::cik::ticker_to_cik;
 ///
 /// #[tokio::main]
 /// async fn main() -> sec_o3::Result<()> {

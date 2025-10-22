@@ -225,7 +225,7 @@ rs-clippy: ready
 .PHONY: test-rs
 test-rs: ready
 	@echo "==> Rust tests..."
-	@$(CARGO) test $(RUST_PKG_FLAG)
+	@$(CARGO) test $(RUST_PKG_FLAG) --lib --bins --tests
 
 .PHONY: rs-bench
 rs-bench: ready
