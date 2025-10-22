@@ -7,7 +7,7 @@ LOG_DIR := sec_nlp/tests/test_logs
 PYTEST_FLAGS := --maxfail=1 --color=yes --basetemp .pytest_tmp --cache-clear
 MYPY_FLAGS := -p sec_nlp --exclude-gitignore --warn-unreachable
 STUBS_DIR := typings/
-STUBGEN_FLAGS := -p sec_nlp -o $(STUBS_DIR) --ignore-errors --include-private
+STUBGEN_FLAGS := sec_nlp -o $(STUBS_DIR) --ignore-errors --include-private
 
 # Rust
 CARGO ?= cargo
@@ -160,14 +160,15 @@ py-lint: ready
 	@uv run ruff check .
 
 .PHONY: py-stubs
-py-stubs: build-ext
+py-stubs: ready
 	@echo "==> Generating stubs into $(STUBS_DIR)..."
 	@rm -rf $(STUBS_DIR) && mkdir -p $(STUBS_DIR)
 	@uv run stubgen $(STUBGEN_FLAGS)
 	@find $(STUBS_DIR) -type f -name "__init__.pyi" -delete
+	@uv run ruff check typings/ --fix --quiet
 
 .PHONY: py-types
-py-types: py-stubs
+py-types: ready
 	@echo "==> Installing missing types using Mypy..."
 	@uv run mypy --install-types --non-interactive
 	@echo "==> Mypy type check..."
@@ -197,7 +198,7 @@ py-cov: ready build-ext
 	uv run coverage run -m pytest -q --basetemp .pytest_tmp --cache-clear 2>&1 | tee "$$log"
 
 .PHONY: python-all
-python-all: py-lint py-types py-fmt test-py py-cov
+python-all: py-lint py-types py-fmt test-py
 
 # -------------------------
 # Rust
@@ -226,6 +227,11 @@ rs-bench: ready
 	@echo "==> Running benchmarks..."
 	@$(CARGO) bench $(RUST_PKG_FLAG)
 
+
+.PHONY: rs-cov
+rs-cov: ready
+	@$(CARGO) llvm-cov --json --output-path cov.json
+
 .PHONY: rust-all
 rust-all: rs-lint test-rs rs-bench
 
@@ -237,7 +243,7 @@ rust-all: rs-lint test-rs rs-bench
 lint: rs-lint py-lint
 
 .PHONY: types
-types: py-types
+types: py-stubs py-types
 
 .PHONY: fmt
 fmt: ready
@@ -250,7 +256,7 @@ fmt: ready
 test: test-rs test-py
 
 .PHONY: cov
-cov: test-rs py-cov
+cov: rs-cov py-cov
 
 .PHONY: cov-html
 cov-html: cov
@@ -310,3 +316,4 @@ clean-all: clean
 	@echo "==> Deep cleaning caches..."
 	@rm -rf .ruff_cache .mypy_cache htmlcov .coverage
 	@$(CARGO) clean
+	@$(CARGO) llvm-cov clean --workspace

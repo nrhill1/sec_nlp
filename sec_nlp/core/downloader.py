@@ -1,6 +1,7 @@
 # sec_nlp/utils/downloader.py
 from datetime import date
 from pathlib import Path
+from typing import Any
 
 from pydantic import BaseModel, PrivateAttr, field_validator
 from sec_edgar_downloader import Downloader  # type: ignore
@@ -30,7 +31,7 @@ class SECFilingDownloader(BaseModel):
         v.mkdir(parents=True, exist_ok=True)
         return v
 
-    def model_post_init(self, __ctx) -> None:
+    def model_post_init(self, __ctx: Any) -> None:
         self._downloader = Downloader(self.company_name, self.email, str(self.downloads_folder))
 
     def add_symbol(self, symbol: str) -> None:

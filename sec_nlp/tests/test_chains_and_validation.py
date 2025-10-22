@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from langchain_core.prompts import BasePromptTemplate, PromptTemplate
+from langchain_core.prompts import BasePromptTemplate
 from langchain_core.runnables import Runnable, RunnableConfig
 
 from sec_nlp.core.llm.base import LocalLLMBase
@@ -29,7 +29,7 @@ class DummyLocalLLM(LocalLLMBase):
 
 
 def test_chain_invoke_json_mode() -> None:
-    prompt: BasePromptTemplate = PromptTemplate.from_template("{chunk}")
+    prompt: BasePromptTemplate[Any] = BasePromptTemplate.from_template("{chunk}")
 
     llm: LocalLLMBase = DummyLocalLLM()
 

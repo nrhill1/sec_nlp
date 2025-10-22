@@ -48,7 +48,7 @@ class SummaryPayload:
     """Pydantic dataclass representing a validated LLM summary payload."""
 
     summary: str | None = Field(default=None)
-    points: list[str] | None = Field(default=None, min_items=0)
+    points: list[str] | None = Field(default=None)
     confidence: float | None = Field(default=None, ge=0.0, le=1.0)
 
     error: str | None = Field(default=None)
@@ -89,7 +89,7 @@ class SummaryPayload:
 
 def build_summarization_runnable(
     *,
-    prompt: BasePromptTemplate,
+    prompt: BasePromptTemplate[Any],
     llm: Runnable[str | PromptValue, str],
     require_json: bool = True,
 ) -> Runnable[SummarizationInput, SummarizationOutput]:
@@ -113,6 +113,6 @@ def build_summarization_runnable(
 
     validate: Runnable[str, SummarizationOutput] = RunnableLambda(_validate)
 
-    chain: RunnableSequence[Any, Any] = prompt | llm | validate
+    chain: RunnableSequence[Any, SummarizationOutput] = prompt | llm | validate
 
     return chain.with_types(input_type=SummarizationInput, output_type=SummarizationOutput)

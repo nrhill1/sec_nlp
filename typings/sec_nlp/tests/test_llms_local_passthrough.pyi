@@ -1,0 +1,6 @@
+from collections.abc import Callable as Callable
+
+from .conftest import DummyLLM as DummyLLM
+
+def test_llm_passthrough(dummy_llm: Callable[[bool], DummyLLM]) -> None: ...
+def test_llm_generate(dummy_llm: Callable[[bool], DummyLLM]) -> None: ...

@@ -23,6 +23,7 @@ coverage.xml
 # Rust / Cargo
 target/
 Cargo.lock
+cov.json
 *.rlib
 *.dSYM/
 **/fixtures/**

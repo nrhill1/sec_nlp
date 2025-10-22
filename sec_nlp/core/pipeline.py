@@ -29,6 +29,7 @@ from qdrant_client import QdrantClient
 from qdrant_client.models import Distance, PointStruct, VectorParams
 
 from sec_nlp.core.config import get_logger, settings
+from sec_nlp.core.downloader import SECFilingDownloader
 from sec_nlp.core.enums import FilingMode
 from sec_nlp.core.llm.chains import (
     SummarizationInput,
@@ -36,9 +37,7 @@ from sec_nlp.core.llm.chains import (
     SummarizationResult,
     build_summarization_runnable,
 )
-
-from .downloader import SECFilingDownloader
-from .preprocessor import Preprocessor
+from sec_nlp.core.preprocessor import Preprocessor
 
 logger = get_logger(__name__)
 
@@ -151,11 +150,11 @@ class Pipeline(BaseModel):
 
     dry_run: bool = False
 
+    _prompt: BasePromptTemplate[Any]
     _pre: Preprocessor | None = PrivateAttr(default=None)
     _qdrant: QdrantClient | None = PrivateAttr(default=None)
     _embedder: Any | None = PrivateAttr(default=None)
     _embedding_dim: int | None = PrivateAttr(default=None)
-    _prompt: BasePromptTemplate | None = PrivateAttr(default=None)
     _graph: Runnable[SummarizationInput, SummarizationOutput] | None = PrivateAttr(default=None)
 
     @field_validator("start_date")
@@ -441,9 +440,6 @@ class Pipeline(BaseModel):
     def _get_graph(self) -> Runnable[SummarizationInput, SummarizationOutput]:
         """Get or create LLM processing graph."""
         if self._graph is None:
-            if self._prompt is None:
-                self._prompt = load_prompt(str(self.prompt_file))
-
             if self.model_name.startswith("ollama:"):
                 from sec_nlp.core.llm import build_ollama_llm
 

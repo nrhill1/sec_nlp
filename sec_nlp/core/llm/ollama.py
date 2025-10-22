@@ -2,9 +2,9 @@
 from __future__ import annotations
 
 import os
+from typing import Any
 
-from langchain_core.prompt_values import PromptValue
-from langchain_core.runnables import Runnable
+from langchain_core.language_models.llm import BaseLLM
 
 from sec_nlp.core.config import get_logger
 
@@ -15,8 +15,8 @@ def build_ollama_llm(
     model_name: str,
     base_url: str | None = None,
     temperature: float = 0.1,
-    **kwargs,
-) -> Runnable[str | PromptValue, str]:
+    **kwargs: dict[str, Any],
+) -> BaseLLM:
     """
     Factory function to create an Ollama LLM runnable.
 

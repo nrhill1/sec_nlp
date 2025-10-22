@@ -6,8 +6,7 @@ from typing import Any
 from pydantic import Field, PrivateAttr
 
 from sec_nlp.core.config import get_logger
-
-from .base import LocalLLMBase
+from sec_nlp.core.llm.base import LocalLLMBase
 
 logger = get_logger(__name__)
 
@@ -28,29 +27,29 @@ class FlanT5LocalLLM(LocalLLMBase):
     _model = PrivateAttr(default=None)
 
     def model_post_init(self, _ctx: Any) -> None:
-        try:  # TODO: HANDLE EXCEPTIONS
+        self._load_backend()
+
+    def _load_backend(self) -> None:
+        try:
             import torch
-            from transformers import AutoTokenizer
+            from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
 
             self._torch = torch
             self._tokenizer = AutoTokenizer.from_pretrained(self.model_name, use_fast=True)
+            self._model = AutoModelForSeq2SeqLM.from_pretrained(self.model_name)
 
-            self._load_backend()
+            logger.info("Loaded FLAN-T5 model: %s", self.model_name)
 
-            if self.device is not None and self._model is not None:
+            if self.device is not None:
                 self._model.to(self.device)
 
             logger.info("Initialized %s with model %s", self.__class__.__name__, self.model_name)
-
+        except ImportError as e:
+            logger.error("%s: %s was not found -- %s", type(e).__name__, e.name, e)
+            raise ImportError from e
         except Exception as e:
-            logger.error("Failed to initialize FlanT5 model: %s", e)
-            raise
-
-    def _load_backend(self) -> None:
-        from transformers import AutoModelForSeq2SeqLM
-
-        self._model = AutoModelForSeq2SeqLM.from_pretrained(self.model_name)
-        logger.info("Loaded FLAN-T5 model: %s", self.model_name)
+            logger.error("%s while initializing FlanT5 -- %s", type(e).__name__, e)
+            raise Exception from e
 
     def _generate(self, prompt: str, gen_kwargs: dict[str, Any]) -> str:
         assert self._torch is not None, "Torch not initialized"

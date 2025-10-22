@@ -1,7 +1,9 @@
-from .base import LocalLLMBase as LocalLLMBase
-from _typeshed import Incomplete
-from sec_nlp.core.config import get_logger as get_logger
 from typing import Any
+
+from _typeshed import Incomplete
+
+from sec_nlp.core.config import get_logger as get_logger
+from sec_nlp.core.llm.base import LocalLLMBase as LocalLLMBase
 
 logger: Incomplete
 

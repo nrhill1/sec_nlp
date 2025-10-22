@@ -112,9 +112,13 @@ def normalize_cik_str(cik: str) -> str:
         10-digit zero-padded CIK
 
     Examples:
-        >>> normalize_cik_str("320193")
+        >>> normalize_cik_str(
+        ...     "320193"
+        ... )
         '0000320193'
-        >>> normalize_cik_str("CIK0000320193")
+        >>> normalize_cik_str(
+        ...     "CIK0000320193"
+        ... )
         '0000320193'
     """
     ...
@@ -134,7 +138,9 @@ def lookup_ticker(ticker: str) -> str:
         RuntimeError: On network errors
 
     Examples:
-        >>> lookup_ticker("AAPL")
+        >>> lookup_ticker(
+        ...     "AAPL"
+        ... )
         '0000320193'
     """
     ...
@@ -153,7 +159,10 @@ def get_all_tickers() -> list[tuple[str, str]]:
         >>> tickers = get_all_tickers()
         >>> len(tickers) > 5000
         True
-        >>> ("AAPL", "0000320193") in tickers
+        >>> (
+        ...     "AAPL",
+        ...     "0000320193",
+        ... ) in tickers
         True
     """
     ...
@@ -179,10 +188,14 @@ def get_company_facts(cik: str) -> dict[str, Any]:
         RuntimeError: On network or parsing errors
 
     Examples:
-        >>> facts = get_company_facts("320193")
+        >>> facts = get_company_facts(
+        ...     "320193"
+        ... )
         >>> facts["entityName"]
         'Apple Inc.'
-        >>> "us-gaap" in facts["facts"]
+        >>> "us-gaap" in facts[
+        ...     "facts"
+        ... ]
         True
     """
     ...
@@ -209,10 +222,14 @@ def get_company_filings(cik: str) -> dict[str, Any]:
         RuntimeError: On network or parsing errors
 
     Examples:
-        >>> filings = get_company_filings("320193")
+        >>> filings = get_company_filings(
+        ...     "320193"
+        ... )
         >>> filings["name"]
         'Apple Inc.'
-        >>> "10-K" in filings["filings"]["recent"]["form"]
+        >>> "10-K" in filings[
+        ...     "filings"
+        ... ]["recent"]["form"]
         True
     """
     ...
@@ -235,7 +252,9 @@ def parse_html_doc(html: str) -> Document:
         RuntimeError: If form type cannot be determined or parsing fails
 
     Examples:
-        >>> doc = parse_html_doc("<html><body>FORM 10-K</body></html>")
+        >>> doc = parse_html_doc(
+        ...     "<html><body>FORM 10-K</body></html>"
+        ... )
         >>> doc.form_type
         '10-K'
         >>> doc.format
@@ -257,7 +276,9 @@ def parse_json_doc(json: str) -> Document:
         RuntimeError: On JSON parsing errors
 
     Examples:
-        >>> doc = parse_json_doc('{"submissionType":"8-K"}')
+        >>> doc = parse_json_doc(
+        ...     '{"submissionType":"8-K"}'
+        ... )
         >>> doc.form_type
         '8-K'
         >>> doc.format
@@ -282,10 +303,14 @@ def parse_document(content: str) -> Document:
             RuntimeError: If format cannot be detected or parsing fails
 
         Examples:
-            >>> doc = parse_document('{"submissionType":"10-K"}')
+            >>> doc = parse_document(
+            ...     '{"submissionType":"10-K"}'
+            ... )
             >>> doc.format
             'JSON'
-            >>> doc = parse_document("<html>FORM 8-K</html>")
+            >>> doc = parse_document(
+            ...     "<html>FORM 8-K</html>"
+            ... )
             >>> doc.format
             'HTML'
     """
