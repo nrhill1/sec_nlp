@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Any
 
 from pydantic import BaseModel, PrivateAttr, field_validator
-from sec_edgar_downloader import Downloader  # type: ignore
+from sec_edgar_downloader import Downloader as SecEdgarDownloader  # type: ignore
 from tqdm import tqdm
 
 from sec_nlp.core.config import get_logger
@@ -13,7 +13,7 @@ from sec_nlp.core.enums import FilingMode
 logger = get_logger(__name__)
 
 
-class SECFilingDownloader(BaseModel):
+class FilingManager(BaseModel):
     """
     Downloads SEC filings for provided ticker symbols.
     """
@@ -23,7 +23,7 @@ class SECFilingDownloader(BaseModel):
     company_name: str = "My Company Inc."
 
     _symbols: set[str] = PrivateAttr(default_factory=set)
-    _downloader: Downloader | None = PrivateAttr(default=None)
+    _downloader: SecEdgarDownloader | None = PrivateAttr(default=None)
 
     @field_validator("downloads_folder")
     @classmethod
@@ -32,7 +32,9 @@ class SECFilingDownloader(BaseModel):
         return v
 
     def model_post_init(self, __ctx: Any) -> None:
-        self._downloader = Downloader(self.company_name, self.email, str(self.downloads_folder))
+        self._downloader = SecEdgarDownloader(
+            self.company_name, self.email, str(self.downloads_folder)
+        )
 
     def add_symbol(self, symbol: str) -> None:
         self._symbols.add(symbol.strip().upper())
@@ -84,7 +86,7 @@ class SECFilingDownloader(BaseModel):
 
     def __repr__(self) -> str:
         symbols = ",".join(sorted(self._symbols)) or "<none>"
-        return f"<SECFilingDownloader company_name={self.company_name} symbols=[{symbols}] downloads_folder={self.downloads_folder!r}>"
+        return f"<FilingManager company_name={self.company_name} symbols=[{symbols}] downloads_folder={self.downloads_folder!r}>"
 
     def __str__(self) -> str:
-        return f"SECFilingDownloader tracking {len(self._symbols)} symbol(s)"
+        return f"FilingManager tracking {len(self._symbols)} symbol(s)"

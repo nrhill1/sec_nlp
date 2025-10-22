@@ -10,10 +10,10 @@ except PackageNotFoundError:
     __version__ = "0.0.0"
 
 from sec_nlp.core import (
+    FilingManager,
     FilingMode,
     Pipeline,
     Preprocessor,
-    SECFilingDownloader,
     get_logger,
     settings,
     setup_logging,
@@ -30,7 +30,7 @@ __all__: list[str] = [
     "__version__",
     # Core
     "Pipeline",
-    "SECFilingDownloader",
+    "FilingManager",
     "Preprocessor",
     "FilingMode",
     # Config

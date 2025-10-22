@@ -14,10 +14,10 @@ def test_sec_downloader_calls_client(monkeypatch, tmp_path):
 
     monkeypatch.setattr("sec_nlp.core.downloader.Downloader", FakeClient)
 
-    from sec_nlp.core.downloader import SECFilingDownloader
+    from sec_nlp.core.downloader import FilingManager
     from sec_nlp.core.enums import FilingMode
 
-    d = SECFilingDownloader(email="x@y.com", downloads_folder=tmp_path)
+    d = FilingManager(email="x@y.com", downloads_folder=tmp_path)
     d.add_symbols(["AAPL", "MSFT"])
     res = d.download_filings(
         mode=FilingMode.quarterly,

@@ -13,13 +13,11 @@
 /// ## Quick Start
 ///
 /// ```rust,no_run
-/// use sec_o3::{Client, normalize_cik, get_ticker_map};
+/// use sec_o3::{Client, normalize_cik, get_ticker_map, LazyCache};
 ///
 /// #[tokio::main]
 /// async fn main() -> Result<(), Box<dyn std::error::Error>> {
 ///     // Look up ticker
-///     let map = get_ticker_map().await?;
-///     let cik = map.get("AAPL").unwrap();
 ///
 ///     // Fetch company data
 ///     let client = Client::new("John F. Kennedy", "jfk@<whitehouse>.gov");

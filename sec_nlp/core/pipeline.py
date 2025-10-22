@@ -29,7 +29,7 @@ from qdrant_client import QdrantClient
 from qdrant_client.models import Distance, PointStruct, VectorParams
 
 from sec_nlp.core.config import get_logger, settings
-from sec_nlp.core.downloader import SECFilingDownloader
+from sec_nlp.core.downloader import FilingManager
 from sec_nlp.core.enums import FilingMode
 from sec_nlp.core.llm.chains import (
     SummarizationInput,
@@ -507,7 +507,7 @@ class Pipeline(BaseModel):
             self.dry_run,
         )
 
-        downloader = SECFilingDownloader(email=str(self.email), downloads_folder=self.dl_path)
+        downloader = FilingManager(email=str(self.email), downloads_folder=self.dl_path)
         downloader.add_symbol(symbol)
         downloader.download_filings(
             start_date=self.start_date,

@@ -22,7 +22,9 @@ use crate::{Client, Error, Result};
 /// - Max 10,000 entries
 /// - 24 hour TTL
 /// - ahash for speed
-static CACHE: Lazy<Cache<String, String, RandomState>> = Lazy::new(|| {
+pub type LazyCache = Lazy<Cache<String, String, RandomState>>;
+
+static CACHE: LazyCache = Lazy::new(|| {
     Cache::builder()
         .max_capacity(15_000)
         .time_to_live(Duration::from_secs(3600 * 24))
@@ -106,7 +108,7 @@ pub async fn batch_ticker_lookup(tickers: &[&str]) -> Result<Vec<(String, String
 /// # Examples
 ///
 /// ```no_run
-/// use sec_o3::utils::cik::populate_cache;
+/// use sec_o3::utils::cik::{populate_cache, cache_size};
 ///
 /// #[tokio::main]
 /// async fn main() -> sec_o3::Result<()> {
