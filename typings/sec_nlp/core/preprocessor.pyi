@@ -4,8 +4,7 @@ from typing import Any
 
 from _typeshed import Incomplete
 from langchain_core.documents import Document as Document
-from langchain_core.documents.transformers import BaseDocumentTransformer as BaseDocumentTransformer
-from langchain_text_splitters.base import TextSplitter as TextSplitter
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 from pydantic import BaseModel
 
 from sec_nlp.core.config import get_logger as get_logger
@@ -19,8 +18,7 @@ class Preprocessor(BaseModel):
     chunk_overlap: int
     splitter: str
     transformer: str
-    _splitter_impl: TextSplitter
-    _transformer_impl: BaseDocumentTransformer
+    _splitter_impl: RecursiveCharacterTextSplitter
     @classmethod
     def _ensure_root(cls, v: Path) -> Path: ...
     @classmethod

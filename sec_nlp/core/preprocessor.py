@@ -8,7 +8,7 @@ from typing import Any
 
 from langchain_community.document_loaders import BSHTMLLoader
 from langchain_core.documents import Document
-from langchain_text_splitters import CharacterTextSplitter, RecursiveCharacterTextSplitter
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 from pydantic import BaseModel, PrivateAttr, field_validator
 
 from sec_nlp.core.config import get_logger
@@ -44,7 +44,9 @@ class Preprocessor(BaseModel):
         return v
 
     def model_post_init(self, __ctx: Any) -> None:
-        self._transformer_impl = CharacterTextSplitter()
+        self._splitter_impl = RecursiveCharacterTextSplitter(
+            chunk_size=2000, chunk_overlap=200, add_start_index=True
+        )
 
     def _filing_dir(self, symbol: str, mode: FilingMode) -> Path:
         filing_type = mode.form
@@ -68,9 +70,9 @@ class Preprocessor(BaseModel):
     def transform_html(self, html_path: Path) -> Sequence[Document]:
         if not html_path.exists():
             raise FileNotFoundError("File not found: %s", html_path.resolve())
-        loader = BSHTMLLoader(file_path=html_path, bs_kwargs={"features": "lxml"})
+        loader = BSHTMLLoader(file_path=html_path)
         html_docs = loader.load_and_split(self._splitter_impl)
-        finished_docs = self._transformer_impl.transform_documents(html_docs)
+        finished_docs = self._splitter_impl.transform_documents(html_docs)
         logger.info(
             "Loaded %d transformed documents from %s",
             len(finished_docs),

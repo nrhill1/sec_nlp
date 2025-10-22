@@ -324,6 +324,6 @@ clean:
 .PHONY: clean-all
 clean-all: clean
 	@echo "==> Deep cleaning caches..."
-	@rm -rf .ruff_cache .mypy_cache htmlcov .coverage
+	@rm -rf .ruff_cache .mypy_cache htmlcov .coverage .venv
 	@$(CARGO) clean
 	@$(CARGO) llvm-cov clean --workspace
