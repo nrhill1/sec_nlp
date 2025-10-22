@@ -146,13 +146,13 @@ jobs:
         run: make py-lint
 
       - name: Type check
-        run: make py-types
+        run: make types
 
       - name: Build extension
         run: make build-ext
 
       - name: Test
-        run: make test-py
+        run: make test
 
       - name: Coverage
         run: |

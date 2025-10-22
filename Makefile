@@ -260,6 +260,9 @@ fmt: ready
 .PHONY: test
 test: test-rs test-py
 
+.PHONY: clean-test
+clean-test: clean-all types test
+
 .PHONY: cov
 cov: rs-cov py-cov
 

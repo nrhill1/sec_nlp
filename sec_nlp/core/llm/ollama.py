@@ -36,7 +36,6 @@ def build_ollama_llm(
         model=model_name,
         base_url=base_url,
         temperature=temperature,
-        **kwargs,
     )
 
     logger.info("Created Ollama LLM: model=%s, base_url=%s", model_name, base_url)

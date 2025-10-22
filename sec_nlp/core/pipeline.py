@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any, Self
 from uuid import uuid4
 
+from langchain_core.language_models import BaseLanguageModel
 from langchain_core.prompts.base import BasePromptTemplate
 from langchain_core.prompts.loading import load_prompt
 from langchain_core.runnables import Runnable
@@ -151,6 +152,7 @@ class Pipeline(BaseModel):
     dry_run: bool = False
 
     _prompt: BasePromptTemplate[Any]
+    _llm: BaseLanguageModel[Any]
     _pre: Preprocessor | None = PrivateAttr(default=None)
     _qdrant: QdrantClient | None = PrivateAttr(default=None)
     _embedder: Any | None = PrivateAttr(default=None)
@@ -206,7 +208,7 @@ class Pipeline(BaseModel):
         except Exception as e:
             logger.error("Failed to load default prompt: %s", e)
 
-        raise FileNotFoundError(f"Prompt file not found: {p}")
+        raise FileNotFoundError("Prompt file not found: %s", p)
 
     @field_validator("out_path", "dl_path")
     @classmethod
@@ -272,7 +274,26 @@ class Pipeline(BaseModel):
             self._prompt = load_prompt(str(self.prompt_file))
             logger.info("Loaded prompt: %s", self.prompt_file)
         except Exception as e:
-            raise ValueError(f"Failed to load prompt from {self.prompt_file}: {e}") from e
+            raise ValueError("Failed to load prompt from %s: %s", self.prompt_file, e) from e
+
+        try:
+            if self.model_name.startswith("ollama:"):
+                from sec_nlp.core.llm import build_ollama_llm
+
+                model_id = self.model_name.split(":", 1)[1]
+                self._llm = build_ollama_llm(model_name=model_id)
+            else:
+                from sec_nlp.core.llm import FlanT5LocalLLM
+
+                self._llm = FlanT5LocalLLM(
+                    model_name=self.model_name,
+                    device="cpu",
+                    max_new_tokens=int(self.max_new_tokens),
+                )
+        except Exception as e:
+            raise RuntimeError(
+                "%s -- LLM failed to load %s", type(e).__name__, self.model_name
+            ) from e
 
         pkg_version = _get_version()
         python_version = sys.version.split()[0]
@@ -440,23 +461,9 @@ class Pipeline(BaseModel):
     def _get_graph(self) -> Runnable[SummarizationInput, SummarizationOutput]:
         """Get or create LLM processing graph."""
         if self._graph is None:
-            if self.model_name.startswith("ollama:"):
-                from sec_nlp.core.llm import build_ollama_llm
-
-                model_id = self.model_name.split(":", 1)[1]
-                llm = build_ollama_llm(model_name=model_id)
-            else:
-                from sec_nlp.core.llm import FlanT5LocalLLM
-
-                llm = FlanT5LocalLLM(
-                    model_name=self.model_name,
-                    device="cpu",
-                    max_new_tokens=int(self.max_new_tokens),
-                )
-
             self._graph = build_summarization_runnable(
                 prompt=self._prompt,
-                llm=llm,
+                llm=self._llm,
                 require_json=bool(self.require_json),
             )
             logger.info("Built summarization runnable graph.")

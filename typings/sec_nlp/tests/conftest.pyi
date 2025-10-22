@@ -5,6 +5,7 @@ from typing import Any, Protocol
 
 import pytest
 from _typeshed import Incomplete
+
 from sec_nlp.core.llm.base import LocalLLMBase as LocalLLMBase
 
 class HasPageContent(Protocol):
