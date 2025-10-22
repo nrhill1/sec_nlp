@@ -35,7 +35,7 @@ class FlanT5LocalLLM(LocalLLMBase):
             from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
 
             self._torch = torch
-            self._tokenizer = AutoTokenizer.from_pretrained(self.model_name, use_fast=True)
+            self._tokenizer = AutoTokenizer.from_pretrained(self.model_name, use_fast=True)  # type: ignore[no-untyped-call]
             self._model = AutoModelForSeq2SeqLM.from_pretrained(self.model_name)
 
             logger.info("Loaded FLAN-T5 model: %s", self.model_name)
@@ -60,7 +60,7 @@ class FlanT5LocalLLM(LocalLLMBase):
         tok = self._tokenizer
         model = self._model
 
-        inputs = tok(prompt, return_tensors="pt")  # type: ignore[call-arg]
+        inputs = tok(prompt, return_tensors="pt")
 
         if self.device is not None:
             inputs = {k: v.to(self.device) for k, v in inputs.items()}

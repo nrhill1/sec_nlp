@@ -50,7 +50,7 @@ class LocalLLMBase(BaseModel, Runnable[str | PromptValue, str], ABC):
         from transformers import AutoTokenizer
 
         self._torch = torch
-        self._tokenizer = AutoTokenizer.from_pretrained(self.model_name, use_fast=True)
+        self._tokenizer = AutoTokenizer.from_pretrained(self.model_name, use_fast=True)  # type: ignore[no-untyped-call]
         self._load_backend()
 
         if self.device is not None and self._model is not None:
@@ -62,7 +62,6 @@ class LocalLLMBase(BaseModel, Runnable[str | PromptValue, str], ABC):
         """Convert PromptValue to string, or pass through string."""
         if isinstance(input, str):
             return input
-        # PromptValue has to_string() method
         return input.to_string()
 
     def invoke(

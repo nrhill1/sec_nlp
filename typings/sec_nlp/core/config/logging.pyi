@@ -11,12 +11,7 @@ class ColoredFormatter(logging.Formatter):
     RESET: str
     def format(self, record: logging.LogRecord) -> str: ...
 
-def setup_logging(
-    level: str | int | None = None,
-    format_type: Literal["simple", "detailed", "json"] | None = None,
-    log_file: Path | str | None = None,
-    enable_colors: bool = True,
-) -> None: ...
+def setup_logging(level: str | int | None = None, format_type: Literal['simple', 'detailed', 'json'] | None = None, log_file: Path | str | None = None, enable_colors: bool = True) -> None: ...
 def get_logger(name: str) -> logging.Logger: ...
 
 class LogContext:
