@@ -11,6 +11,11 @@ STUBGEN_FLAGS := sec_nlp -o $(STUBS_DIR) --ignore-errors --include-private
 
 # Rust
 CARGO ?= cargo
+RUST_NIGHTLY = +nightly
+CARGO_NIGHTLY = $(CARGO) $(RUST_NIGHTLY)
+RUSTFLAGS_DEBUG =
+RUSTFLAGS_RELEASE =
+RUSTFLAGS_COV = -C instrument-coverage
 RUST_CRATE := sec_o3
 RUST_PKG_FLAG := -p $(RUST_CRATE)
 CLIPPY_FLAGS ?= -D warnings
@@ -260,9 +265,11 @@ cov: rs-cov py-cov
 
 .PHONY: cov-html
 cov-html: cov
-	@echo "==> Generating HTML coverage report..."
+	@echo "==> Generating HTML coverage reports..."
 	@uv run coverage html
-	@echo "==> Coverage report: htmlcov/index.html"
+	@echo "==> Python coverage report: htmlcov/index.html"
+	@$(CARGO) llvm-cov --html
+	@echo "==> Rust coverage report target/llvm-cov/html/index.html"
 
 .PHONY: cov-report
 cov-report: ready
@@ -275,7 +282,7 @@ fix: ready
 	@uv run ruff format .
 	@echo "==> Auto-fixing Rust..."
 	@$(CARGO) fmt --all
-	@cargo +nightly clippy --fix --workspace --allow-dirty --allow-staged 2>/dev/null || $(CARGO) clippy $(RUST_PKG_FLAG) --fix --allow-dirty --allow-staged
+	@$(CARGO_NIGHTLY) clippy --fix --workspace --allow-dirty --allow-staged 2>/dev/null || $(CARGO) clippy $(RUST_PKG_FLAG) --fix --allow-dirty --allow-staged
 
 .PHONY: watch
 watch:

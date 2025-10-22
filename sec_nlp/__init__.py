@@ -20,7 +20,6 @@ from sec_nlp.core import (
 )
 from sec_nlp.core.llm import (
     FlanT5LocalLLM,
-    LocalLLMBase,
     SummarizationInput,
     SummarizationOutput,
     build_ollama_llm,

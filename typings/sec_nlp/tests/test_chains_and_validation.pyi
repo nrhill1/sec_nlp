@@ -3,8 +3,8 @@ from typing import Any
 from _typeshed import Incomplete
 from langchain_core.runnables import Runnable as Runnable
 from langchain_core.runnables import RunnableConfig as RunnableConfig
-
 from sec_nlp.core.llm.base import LocalLLMBase as LocalLLMBase
+
 from sec_nlp.core.llm.chains import build_summarization_runnable as build_summarization_runnable
 
 class DummyLocalLLM(LocalLLMBase):

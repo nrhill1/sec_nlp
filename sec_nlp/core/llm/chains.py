@@ -4,9 +4,9 @@ from __future__ import annotations
 import json
 from typing import Any, ClassVar, Literal, TypedDict
 
-from langchain_core.prompt_values import PromptValue
+from langchain_core.language_models import LLM
 from langchain_core.prompts.base import BasePromptTemplate
-from langchain_core.runnables import Runnable, RunnableLambda, RunnableSequence
+from langchain_core.runnables import Runnable, RunnableLambda, RunnableSerializable
 from pydantic import Field, TypeAdapter, ValidationError
 from pydantic.dataclasses import dataclass
 
@@ -90,7 +90,7 @@ class SummaryPayload:
 def build_summarization_runnable(
     *,
     prompt: BasePromptTemplate[Any],
-    llm: Runnable[str | PromptValue, str],
+    llm: LLM,
     require_json: bool = True,
 ) -> Runnable[SummarizationInput, SummarizationOutput]:
     """
@@ -113,6 +113,6 @@ def build_summarization_runnable(
 
     validate: Runnable[str, SummarizationOutput] = RunnableLambda(_validate)
 
-    chain: RunnableSequence[Any, SummarizationOutput] = prompt | llm | validate
+    chain: RunnableSerializable[Any, SummarizationOutput] = prompt | llm | validate
 
     return chain.with_types(input_type=SummarizationInput, output_type=SummarizationOutput)

@@ -1,6 +1,6 @@
 from typing import Any, ClassVar, Literal, TypedDict
 
-from langchain_core.prompt_values import PromptValue
+from langchain_core.language_models import LLM
 from langchain_core.prompts.base import BasePromptTemplate
 from langchain_core.runnables import Runnable
 from pydantic import TypeAdapter
@@ -35,4 +35,4 @@ class SummaryPayload:
     @classmethod
     def validate_from_json(cls, raw: str) -> SummaryPayload: ...
 
-def build_summarization_runnable(*, prompt: BasePromptTemplate[Any], llm: Runnable[str | PromptValue, str], require_json: bool = True) -> Runnable[SummarizationInput, SummarizationOutput]: ...
+def build_summarization_runnable(*, prompt: BasePromptTemplate[Any], llm: LLM, require_json: bool = True) -> Runnable[SummarizationInput, SummarizationOutput]: ...

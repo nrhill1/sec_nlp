@@ -4,7 +4,7 @@ from __future__ import annotations
 import os
 from typing import Any
 
-from langchain_core.language_models.llm import BaseLLM
+from langchain_ollama.llms import OllamaLLM
 
 from sec_nlp.core.config import get_logger
 
@@ -16,7 +16,7 @@ def build_ollama_llm(
     base_url: str | None = None,
     temperature: float = 0.1,
     **kwargs: dict[str, Any],
-) -> BaseLLM:
+) -> OllamaLLM:
     """
     Factory function to create an Ollama LLM runnable.
 
@@ -29,12 +29,6 @@ def build_ollama_llm(
     Returns:
         OllamaLLM: LLM object that implements <Runnable[str | PromptValue, str]>
     """
-    try:
-        from langchain_ollama import OllamaLLM
-    except ImportError as e:
-        raise ImportError(
-            "langchain-ollama not installed. Run: uv pip install langchain-ollama"
-        ) from e
 
     base_url = base_url or os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
 
