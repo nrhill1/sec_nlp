@@ -5,8 +5,9 @@ from typing import Any, Protocol
 
 import pytest
 from _typeshed import Incomplete
-
-from sec_nlp.core.llm.base import LocalLLMBase as LocalLLMBase
+from langchain_core.language_models import LLM
+from langchain_core.runnables import Runnable as Runnable
+from langchain_core.runnables import RunnableConfig as RunnableConfig
 
 class HasPageContent(Protocol):
     page_content: str
@@ -20,12 +21,13 @@ def make_fake_doc() -> Callable[[str], HasPageContent]: ...
 @pytest.fixture
 def write_html_tree(tmp_dirs: tuple[Path, Path]) -> Callable[..., Path]: ...
 
-class DummyLLM(LocalLLMBase):
+class DummyLLM(LLM):
     _model: Incomplete
     _tokenizer: Incomplete
     def _load_backend(self) -> None: ...
     def _generate(self, prompt: str, gen_kwargs: dict[str, Any]) -> str: ...
     def force_init(self) -> None: ...
+    def invoke(self, input: str, config: RunnableConfig | None = None, **__: Any) -> str: ...
 
 @pytest.fixture
 def dummy_llm() -> Callable[[bool], DummyLLM]: ...

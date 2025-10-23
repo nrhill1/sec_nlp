@@ -232,7 +232,7 @@ class Pipeline(BaseModel):
 
     @field_validator("max_new_tokens", "max_retries", "batch_size")
     @classmethod
-    def _positive_ints(cls, v: int) -> int:
+    def _positive_int(cls, v: int) -> int:
         """Validate integer fields are positive."""
         if v <= 0:
             raise ValueError("must be a positive integer")
@@ -292,7 +292,7 @@ class Pipeline(BaseModel):
                 )
         except Exception as e:
             raise RuntimeError(
-                "%s -- LLM failed to load %s", type(e).__name__, self.model_name
+                "%s -- LLM failed to load %s: %s", type(e).__name__, self.model_name, e
             ) from e
 
         pkg_version = _get_version()

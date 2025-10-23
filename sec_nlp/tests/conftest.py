@@ -1,13 +1,14 @@
 # sec_nlp/tests/conftest.py
 from __future__ import annotations
 
+import json
 from collections.abc import Callable, Generator
 from pathlib import Path
 from typing import Any, Protocol
 
 import pytest
-
-from sec_nlp.core.llm.base import LocalLLMBase
+from langchain_core.language_models import LLM
+from langchain_core.runnables import Runnable, RunnableConfig
 
 
 class HasPageContent(Protocol):
@@ -113,10 +114,10 @@ def write_html_tree(tmp_dirs: tuple[Path, Path]) -> Callable[..., Path]:
     return _mk
 
 
-class DummyLLM(LocalLLMBase):
-    """Minimal LocalLLMBase for tests.
+class DummyLLM(LLM):
+    """Minimal LLM for tests.
 
-    Default behavior keeps the backend uninitialized so that LocalLLMBase.invoke
+    Default behavior keeps the backend uninitialized so that LLM.invoke
     returns the input (passthrough). Call .force_init() to simulate an initialized
     model so that invoke() uses _generate().
     """
@@ -131,6 +132,9 @@ class DummyLLM(LocalLLMBase):
     def force_init(self) -> None:
         self._model = object()  # type: ignore[attr-defined]
         self._tokenizer = object()  # type: ignore[attr-defined]
+
+    def invoke(self, input: str, config: RunnableConfig | None = None, **__: Any) -> str:
+        return json.dumps({"summary": "ok", "points": ["x"], "confidence": 0.7})
 
 
 @pytest.fixture
