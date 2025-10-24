@@ -1,4 +1,4 @@
-# sec_nlp/chains/sec_runnable.py
+# sec_nlp/core/llm/chains.py
 from __future__ import annotations
 
 from typing import Any

@@ -7,6 +7,7 @@ from typing import Any, Protocol, TypedDict, cast
 from unittest.mock import MagicMock, patch
 
 import pytest
+from pydantic import BaseModel
 
 from sec_nlp.core.enums import FilingMode
 from sec_nlp.core.pipeline import Pipeline
@@ -16,13 +17,13 @@ class HasPageContent(Protocol):
     page_content: str
 
 
-class ChainSummary(TypedDict):
+class ChainSummary(BaseModel):
     summary: str
     points: list[str]
     confidence: float
 
 
-class ChainOutput(TypedDict):
+class ChainOutput(BaseModel):
     status: str
     summary: ChainSummary
 

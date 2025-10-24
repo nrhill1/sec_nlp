@@ -1,4 +1,4 @@
-# sec_nlp/utils/preprocessor.py
+# sec_nlp/core/preprocessor.py
 from __future__ import annotations
 
 import os
