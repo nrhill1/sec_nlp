@@ -145,4 +145,5 @@ dev = [
   "maturin>=1.0,<2.0",
   "pytest>=8.4.2",
   "pip>=25.2",
+  "typing-extensions>=4.15.0",
 ]

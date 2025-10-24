@@ -9,6 +9,7 @@ from langchain_core.output_parsers import PydanticOutputParser
 from langchain_core.prompts.base import BasePromptTemplate
 from langchain_core.runnables import Runnable, RunnableSerializable
 from pydantic import BaseModel, Field
+from typing_extensions import override
 
 from sec_nlp.core.config import get_logger
 
@@ -37,13 +38,27 @@ class SummarizationOutput(BaseModel):
     raw_output: str | None = Field(default=None)
 
 
-class SummarizationParser(PydanticOutputParser[SummarizationOutput]):
+class SummarizationOutputParser(PydanticOutputParser[SummarizationOutput]):
+    """Output parser to validate and format LLM output."""
+
+    pydantic_object: type[SummarizationOutput] = SummarizationOutput
+
     def parse(self, text: str) -> SummarizationOutput:
         try:
             output: SummarizationOutput = super().parse(text)
             return output
         except OutputParserException as e:
             return SummarizationOutput(error=e.observation, raw_output=e.llm_output)
+
+    @property
+    def _type(self) -> str:
+        return "sec_nlp.core.llm.chains.SummarizationOutputParser"
+
+    @property
+    @override
+    def OutputType(self) -> type[SummarizationOutput]:
+        """Return the Pydantic model."""
+        return self.pydantic_object
 
 
 def build_summarization_runnable(
@@ -59,6 +74,8 @@ def build_summarization_runnable(
       output: SummarizationOutput
     """
 
-    chain: RunnableSerializable[Any, SummarizationOutput] = prompt | llm | SummarizationOutput()
+    parser = SummarizationOutputParser()
+
+    chain: RunnableSerializable[Any, SummarizationOutput] = prompt | llm | parser
 
     return chain.with_types(input_type=SummarizationInput, output_type=SummarizationOutput)

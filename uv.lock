@@ -2216,6 +2216,7 @@ dev = [
     { name = "types-pyyaml" },
     { name = "types-requests" },
     { name = "types-tqdm" },
+    { name = "typing-extensions" },
 ]
 
 [package.metadata]
@@ -2257,6 +2258,7 @@ dev = [
     { name = "types-pyyaml" },
     { name = "types-requests" },
     { name = "types-tqdm" },
+    { name = "typing-extensions", specifier = ">=4.15.0" },
 ]
 
 [[package]]

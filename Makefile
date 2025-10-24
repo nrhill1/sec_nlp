@@ -17,6 +17,7 @@ RUSTFLAGS = -C instrument-coverage
 RUST_CRATE := sec_o3
 RUST_PKG_FLAG := -p $(RUST_CRATE)
 CLIPPY_FLAGS ?= -D warnings
+LLVM_COV_DIR := .coverage/llvm/
 
 # Maturin (PyO3)
 MATURIN := uv run maturin
@@ -233,7 +234,8 @@ rs-bench: ready
 
 .PHONY: rs-cov
 rs-cov: ready
-	@$(CARGO) llvm-cov --json --output-path .coverage/llvm/cov.json
+	@ts=$$(date +"%Y-%m-%dT%H-%M-%S");
+	@$(CARGO) llvm-cov --json --output-path $(LLVM_COV_DIR)/coverage_$${ts}.json
 
 .PHONY: rust-all
 rust-all: rs-lint test-rs rs-bench
