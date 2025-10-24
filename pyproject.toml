@@ -144,4 +144,5 @@ dev = [
   "types-PyYAML",
   "maturin>=1.0,<2.0",
   "pytest>=8.4.2",
+  "pip>=25.2",
 ]

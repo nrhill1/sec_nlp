@@ -19,9 +19,9 @@ from sec_nlp.core import (
     setup_logging,
 )
 from sec_nlp.core.llm import (
-    FlanT5LocalLLM,
     SummarizationInput,
     SummarizationOutput,
+    build_hf_pipeline,
     build_ollama_llm,
     build_summarization_runnable,
 )

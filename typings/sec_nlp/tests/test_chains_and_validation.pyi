@@ -5,6 +5,4 @@ from langchain_core.runnables import RunnableConfig as RunnableConfig
 
 from sec_nlp.core.llm.chains import build_summarization_runnable as build_summarization_runnable
 
-from .conftest import dummy_llm as dummy_llm
-
-def test_chain_invoke_json_mode() -> None: ...
+def test_chain_invoke_json_mode(fake_llm) -> None: ...

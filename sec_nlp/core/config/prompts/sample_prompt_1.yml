@@ -11,11 +11,11 @@ template: |
   Your job is to produce a single **valid JSON object** following this schema:
 
   {{
-    "summary": <string or null>,
-    "points": <list of short bullet points or null>,
-    "confidence": <float between 0.0 and 1.0 or null>,
-    "error": <string or null>,
-    "raw_output": <string or null>
+    "summary": <string or null if error>,
+    "points": <list of short bullet points or null if error>,
+    "confidence": <float between 0.0 and 1.0 or null if error>,
+    "error": <string if an error occurs during generation or null>,
+    "raw_output": <string containing the raw output or null>
   }}
 
   Rules:

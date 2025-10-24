@@ -114,7 +114,7 @@ def write_html_tree(tmp_dirs: tuple[Path, Path]) -> Callable[..., Path]:
     return _mk
 
 
-class DummyLLM(LLM):
+class FakeLLM(LLM):
     """Minimal LLM for tests.
 
     Default behavior keeps the backend uninitialized so that LLM.invoke
@@ -122,12 +122,16 @@ class DummyLLM(LLM):
     model so that invoke() uses _generate().
     """
 
+    @property
+    def _llm_type(self) -> str:
+        "Fake LLM-derived used for testing purposes"
+
     def _load_backend(self) -> None:
         self._model = None  # type: ignore[attr-defined]
         self._tokenizer = None  # type: ignore[attr-defined]
 
-    def _generate(self, prompt: str, gen_kwargs: dict[str, Any]) -> str:
-        return f"gen:{prompt}"
+    def _call(self, prompt: str, gen_kwargs: dict[str, Any]) -> str:
+        return f"call:{prompt}"
 
     def force_init(self) -> None:
         self._model = object()  # type: ignore[attr-defined]
@@ -138,16 +142,16 @@ class DummyLLM(LLM):
 
 
 @pytest.fixture
-def dummy_llm() -> Callable[[bool], DummyLLM]:
-    """Factory for DummyLLM.
+def fake_llm() -> Callable[[bool], FakeLLM]:
+    """Factory for FakeLLM.
 
     Usage in a test:
-        llm = dummy_llm(initialized=False)  # passthrough (default)
-        llm = dummy_llm(True)               # initialized -> uses _generate
+        llm = fake_llm(initialized=False)  # passthrough (default)
+        llm = fake_llm(True)               # initialized -> uses _generate
     """
 
-    def _make(initialized: bool = False) -> DummyLLM:
-        llm = DummyLLM(model_name="dummy")
+    def _make(initialized: bool = False) -> FakeLLM:
+        llm = FakeLLM(model_name="dummy")
         if initialized:
             llm.force_init()
         return llm

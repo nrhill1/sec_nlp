@@ -9,13 +9,11 @@ from langchain_core.runnables import Runnable, RunnableConfig
 
 from sec_nlp.core.llm.chains import build_summarization_runnable
 
-from .conftest import dummy_llm
 
-
-def test_chain_invoke_json_mode() -> None:
+def test_chain_invoke_json_mode(fake_llm) -> None:
     prompt: BasePromptTemplate[Any] = PromptTemplate.from_template("{chunk}")
 
-    llm: LLM = dummy_llm(True)
+    llm: LLM = fake_llm(True)
 
     chain: Runnable[Any, Any] = build_summarization_runnable(
         prompt=prompt,
