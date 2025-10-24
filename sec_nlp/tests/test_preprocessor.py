@@ -9,7 +9,7 @@ from sec_nlp.core.preprocessor import Preprocessor
 
 def test_html_paths_for_symbol_and_limit(tmp_path: Path, write_html_tree) -> None:
     dl = tmp_path / "dl"
-    dl.mkdir()
+    dl.mkdir(exist_ok=True)
     write_html_tree(symbol="AAPL", form="10-K", acc="0001", html="<html>R</html>")
     write_html_tree(symbol="AAPL", form="10-K", acc="0002", html="<html>R</html>")
     pre = Preprocessor(downloads_folder=dl, chunk_size=200, chunk_overlap=20)

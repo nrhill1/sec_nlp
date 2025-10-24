@@ -4,7 +4,7 @@ SHELL := /bin/bash
 # Python
 PYTHON_DIR := sec_nlp/
 LOG_DIR := $(PYTHON_DIR)/tests/test_logs
-PYTEST_FLAGS := --maxfail=1 --color=yes --basetemp .pytest_tmp --cache-clear
+PYTEST_FLAGS := --show-capture=no --color=yes --basetemp .pytest_tmp --cache-clear --log-cli-level=INFO -s
 MYPY_FLAGS := -p sec_nlp --exclude-gitignore --warn-unreachable
 STUBS_DIR := typings/
 STUBGEN_FLAGS := sec_nlp -o $(STUBS_DIR) --ignore-errors --include-private
