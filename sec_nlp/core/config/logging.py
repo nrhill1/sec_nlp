@@ -1,4 +1,4 @@
-# sec_nlp/config/logging.py
+# sec_nlp/core/config/logging.py
 """Centralized logging configuration."""
 
 from __future__ import annotations

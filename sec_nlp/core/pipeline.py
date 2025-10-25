@@ -35,7 +35,6 @@ from sec_nlp.core.enums import FilingMode
 from sec_nlp.core.llm.chains import (
     SummarizationInput,
     SummarizationOutput,
-    SummarizationResult,
     build_summarization_runnable,
 )
 from sec_nlp.core.preprocessor import Preprocessor
@@ -232,7 +231,7 @@ class Pipeline(BaseModel):
 
     @field_validator("max_new_tokens", "max_retries", "batch_size")
     @classmethod
-    def _positive_ints(cls, v: int) -> int:
+    def _positive_int(cls, v: int) -> int:
         """Validate integer fields are positive."""
         if v <= 0:
             raise ValueError("must be a positive integer")
@@ -274,7 +273,9 @@ class Pipeline(BaseModel):
             self._prompt = load_prompt(str(self.prompt_file))
             logger.info("Loaded prompt: %s", self.prompt_file)
         except Exception as e:
-            raise ValueError("Failed to load prompt from %s: %s", self.prompt_file, e) from e
+            raise ValueError(
+                "%s: Failed to load prompt from %s: %s", type(e).__name__, self.prompt_file, e
+            ) from e
 
         try:
             if self.model_name.startswith("ollama:"):
@@ -283,16 +284,13 @@ class Pipeline(BaseModel):
                 model_id = self.model_name.split(":", 1)[1]
                 self._llm = build_ollama_llm(model_name=model_id)
             else:
-                from sec_nlp.core.llm import FlanT5LocalLLM
+                from sec_nlp.core.llm import build_hf_pipeline
 
-                self._llm = FlanT5LocalLLM(
-                    model_name=self.model_name,
-                    device="cpu",
-                    max_new_tokens=int(self.max_new_tokens),
-                )
+                self._llm = build_hf_pipeline(self.model_name)
+
         except Exception as e:
             raise RuntimeError(
-                "%s -- LLM failed to load %s", type(e).__name__, self.model_name
+                "%s -- LLM failed to load %s: %s", type(e).__name__, self.model_name, e
             ) from e
 
         pkg_version = _get_version()
@@ -542,19 +540,20 @@ class Pipeline(BaseModel):
 
         for html_path in html_paths:
             chunks = pre.transform_html(html_path)
-            relevant = [c for c in chunks if self.keyword_lower in c.page_content.lower()]
+            relevant = [
+                c.page_content for c in chunks if self.keyword_lower in c.page_content.lower()
+            ]
 
             if not relevant:
                 logger.warning("No chunks matched keyword %r in %s.", self.keyword, html_path.name)
                 continue
 
-            texts = [c.page_content for c in relevant]
             metas = [
                 {"source": html_path.name, "symbol": symbol, "keyword": self.keyword}
                 for _ in relevant
             ]
 
-            self._upsert_texts(collection_name, texts, metadata=metas)
+            self._upsert_texts(collection_name, relevant, metadata=metas)
 
             logger.info(
                 "%d relevant chunks found in %s. Summarizing...",
@@ -563,30 +562,26 @@ class Pipeline(BaseModel):
             )
 
             inputs: list[SummarizationInput] = [
-                {"symbol": symbol, "chunk": t, "search_term": self.keyword} for t in texts
+                SummarizationInput(symbol=symbol, chunk=chunk, search_term=self.keyword)
+                for chunk in relevant
             ]
-            summaries: list[SummarizationResult] = []
+
+            summaries: list[dict[str, Any]] = []
 
             for i in range(0, len(inputs), int(self.batch_size)):
                 window = inputs[i : i + int(self.batch_size)]
                 try:
                     results: list[SummarizationOutput] = graph.batch(window)
                     for r in results:
-                        result_dict: SummarizationResult = r.get(
-                            "summary",
-                            SummarizationResult(
-                                summary="(null)", error="No summary payload returned."
-                            ),
-                        )
-                        summaries.append(result_dict)
+                        summaries.append(r.model_dump())
                 except Exception as e:
-                    logger.error("Batch invocation failed: %s: %s", type(e).__name__, e)
+                    logger.error("Batch invocation failed: %s: %s", type(e).__name__, e.__cause__)
                     traceback.print_exc()
                     summaries.extend(
                         [
-                            SummarizationResult(
-                                summary="(null)", error=f"Exception: {type(e).__name__}: {e}"
-                            )
+                            {
+                                "error": f"Exception: {type(e).__name__}: {e.__traceback__} -- {e.__cause__}"
+                            }
                             for _ in window
                         ]
                     )

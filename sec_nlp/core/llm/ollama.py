@@ -1,4 +1,4 @@
-# sec_nlp/pipelines/utils/llm/ollama_factory.py
+# sec_nlp/core/llm/ollama.py
 from __future__ import annotations
 
 import os
@@ -15,7 +15,7 @@ def build_ollama_llm(
     model_name: str,
     base_url: str | None = None,
     temperature: float = 0.1,
-    **kwargs: dict[str, Any],
+    **kwargs: Any,
 ) -> OllamaLLM:
     """
     Factory function to create an Ollama LLM runnable.
@@ -32,11 +32,7 @@ def build_ollama_llm(
 
     base_url = base_url or os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
 
-    llm = OllamaLLM(
-        model=model_name,
-        base_url=base_url,
-        temperature=temperature,
-    )
+    llm = OllamaLLM(model=model_name, base_url=base_url, temperature=temperature, **kwargs)
 
     logger.info("Created Ollama LLM: model=%s, base_url=%s", model_name, base_url)
     return llm

@@ -1,4 +1,4 @@
-# sec_nlp/utils/downloader.py
+# sec_nlp/core/downloader.py
 from datetime import date
 from pathlib import Path
 from typing import Any

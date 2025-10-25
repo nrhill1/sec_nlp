@@ -3,8 +3,8 @@ SHELL := /bin/bash
 
 # Python
 PYTHON_DIR := sec_nlp/
-LOG_DIR := sec_nlp/tests/test_logs
-PYTEST_FLAGS := --maxfail=1 --color=yes --basetemp .pytest_tmp --cache-clear
+LOG_DIR := $(PYTHON_DIR)/tests/test_logs
+PYTEST_FLAGS := --color=yes --basetemp .pytest_tmp --cache-clear --log-cli-level=INFO
 MYPY_FLAGS := -p sec_nlp --exclude-gitignore --warn-unreachable
 STUBS_DIR := typings/
 STUBGEN_FLAGS := sec_nlp -o $(STUBS_DIR) --ignore-errors --include-private
@@ -13,12 +13,11 @@ STUBGEN_FLAGS := sec_nlp -o $(STUBS_DIR) --ignore-errors --include-private
 CARGO ?= cargo
 RUST_NIGHTLY = +nightly
 CARGO_NIGHTLY = $(CARGO) $(RUST_NIGHTLY)
-RUSTFLAGS_DEBUG =
-RUSTFLAGS_RELEASE =
-RUSTFLAGS_COV = -C instrument-coverage
+RUSTFLAGS = -C instrument-coverage
 RUST_CRATE := sec_o3
 RUST_PKG_FLAG := -p $(RUST_CRATE)
 CLIPPY_FLAGS ?= -D warnings
+LLVM_COV_DIR := .coverage/llvm/
 
 # Maturin (PyO3)
 MATURIN := uv run maturin
@@ -185,7 +184,7 @@ py-fmt: ready
 	@uv run ruff format .
 
 .PHONY: test-py
-test-py: ready build-ext
+test-py: ready
 	@mkdir -p $(LOG_DIR)
 	@ts=$$(date +"%Y-%m-%dT%H-%M-%S"); \
 	log="$(LOG_DIR)/test_$${ts}.log"; \
@@ -194,7 +193,7 @@ test-py: ready build-ext
 	uv run pytest $(PYTEST_FLAGS) 2>&1 | tee "$$log"
 
 .PHONY: py-cov
-py-cov: ready build-ext
+py-cov: ready
 	@mkdir -p $(LOG_DIR)
 	@ts=$$(date +"%Y-%m-%dT%H-%M-%S"); \
 	log="$(LOG_DIR)/coverage_$${ts}.log"; \
@@ -235,7 +234,8 @@ rs-bench: ready
 
 .PHONY: rs-cov
 rs-cov: ready
-	@$(CARGO) llvm-cov --json --output-path cov.json
+	@ts=$$(date +"%Y-%m-%dT%H-%M-%S");
+	@$(CARGO) llvm-cov --json --output-path $(LLVM_COV_DIR)/coverage_$${ts}.json
 
 .PHONY: rust-all
 rust-all: rs-lint test-rs rs-bench
@@ -313,17 +313,24 @@ ci-quick: check
 .PHONY: clean
 clean:
 	@echo "==> Cleaning build artifacts..."
-	@rm -rf $(WHEELS_DIR) ./*.egg-info ./**/.eggs target/release target/debug
+	@rm -rf $(WHEELS_DIR) ./*.egg-info ./**/.eggs target/release target/debug dist/
 	@rm -f $(STAMP_BOOTSTRAP) $(STAMP_UVSYNC)
-	@rm -rf .pytest_tmp .pytest_cache
+	@echo "==> Removing Pytest cache/temp files..."
+	@rm -rf .pytest_tmp .pytest_cachedeep
 	@find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
 	@find . -type f -name "*.pyc" -delete 2>/dev/null || true
 	@find -f . -type f -name "*~" -delete 2>/dev/null || true
 	@find -f . -type f -name ".*~" -delete 2>/dev/null || true
 
-.PHONY: clean-all
-clean-all: clean
+.PHONY: deep-clean
+deep-clean: clean
 	@echo "==> Deep cleaning caches..."
-	@rm -rf .ruff_cache .mypy_cache htmlcov .coverage
+	@rm -rf .ruff_cache htmlcov .coverage .mypy_cache
 	@$(CARGO) clean
 	@$(CARGO) llvm-cov clean --workspace
+
+.PHONY: clean-all
+clean-all: deep-clean
+	@echo "==> Cleaning .venv..."
+	@rm -rf .venv
+	@make ready

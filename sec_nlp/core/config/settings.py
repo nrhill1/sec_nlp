@@ -1,4 +1,4 @@
-# sec_nlp/config/settings.py
+# sec_nlp/core/config/settings.py
 """Centralized application settings using Pydantic."""
 
 from __future__ import annotations
