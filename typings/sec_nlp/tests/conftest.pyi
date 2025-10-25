@@ -4,10 +4,10 @@ from pathlib import Path
 from typing import Any, Protocol
 
 import pytest
-from _typeshed import Incomplete
 from langchain_core.language_models import LLM
 from langchain_core.runnables import Runnable as Runnable
 from langchain_core.runnables import RunnableConfig as RunnableConfig
+from pydantic import Field as Field
 
 class HasPageContent(Protocol):
     page_content: str
@@ -22,12 +22,11 @@ def make_fake_doc() -> Callable[[str], HasPageContent]: ...
 def write_html_tree(tmp_dirs: tuple[Path, Path]) -> Callable[..., Path]: ...
 
 class FakeLLM(LLM):
+    _model: object | None
+    _tokenizer: object | None
     @property
     def _llm_type(self) -> str: ...
-    _model: Incomplete
-    _tokenizer: Incomplete
     def _load_backend(self) -> None: ...
-    def _call(self, prompt: str, gen_kwargs: dict[str, Any]) -> str: ...
     def force_init(self) -> None: ...
     def invoke(self, input: str, config: RunnableConfig | None = None, **__: Any) -> str: ...
 

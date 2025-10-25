@@ -4,7 +4,7 @@ SHELL := /bin/bash
 # Python
 PYTHON_DIR := sec_nlp/
 LOG_DIR := $(PYTHON_DIR)/tests/test_logs
-PYTEST_FLAGS := --show-capture=no --color=yes --basetemp .pytest_tmp --cache-clear --log-cli-level=INFO -s
+PYTEST_FLAGS := --color=yes --basetemp .pytest_tmp --cache-clear --log-cli-level=INFO
 MYPY_FLAGS := -p sec_nlp --exclude-gitignore --warn-unreachable
 STUBS_DIR := typings/
 STUBGEN_FLAGS := sec_nlp -o $(STUBS_DIR) --ignore-errors --include-private
@@ -315,6 +315,7 @@ clean:
 	@echo "==> Cleaning build artifacts..."
 	@rm -rf $(WHEELS_DIR) ./*.egg-info ./**/.eggs target/release target/debug dist/
 	@rm -f $(STAMP_BOOTSTRAP) $(STAMP_UVSYNC)
+	@echo "==> Removing Pytest cache/temp files..."
 	@rm -rf .pytest_tmp .pytest_cachedeep
 	@find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
 	@find . -type f -name "*.pyc" -delete 2>/dev/null || true

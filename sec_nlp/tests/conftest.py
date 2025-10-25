@@ -9,6 +9,7 @@ from typing import Any, Protocol
 import pytest
 from langchain_core.language_models import LLM
 from langchain_core.runnables import Runnable, RunnableConfig
+from pydantic import Field
 
 
 class HasPageContent(Protocol):
@@ -122,16 +123,23 @@ class FakeLLM(LLM):
     model so that invoke() uses _generate().
     """
 
+    _model: object | None
+    _tokenizer: object | None
+
     @property
     def _llm_type(self) -> str:
         "Fake LLM-derived used for testing purposes"
 
+    def _call(
+        self,
+        prompt: str,
+        **kwargs: Any,
+    ) -> str:
+        self.invoke(prompt)
+
     def _load_backend(self) -> None:
         self._model = None  # type: ignore[attr-defined]
         self._tokenizer = None  # type: ignore[attr-defined]
-
-    def _call(self, prompt: str, gen_kwargs: dict[str, Any]) -> str:
-        return f"call:{prompt}"
 
     def force_init(self) -> None:
         self._model = object()  # type: ignore[attr-defined]

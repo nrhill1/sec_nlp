@@ -1,12 +1,10 @@
 from __future__ import annotations
 
-import importlib
-import importlib.util
 import sys
 from collections.abc import Iterable, Mapping
 from pathlib import Path
 from typing import Any
-from unittest.mock import patch
+from unittest.mock import MagicMock, call, patch
 
 import pytest
 
@@ -27,8 +25,6 @@ def test_cli_main_wires_pipeline_and_cleans(
             return {s: [out / f"{s.lower()}_x.json"] for s in symbols}
 
     argv: list[str] = [
-        "python",
-        "-m",
         "sec_nlp.cli",
         "AAPL",
         "MSFT",
@@ -46,16 +42,19 @@ def test_cli_main_wires_pipeline_and_cleans(
         "--no-cleanup",
     ]
 
+    monkeypatch.setattr(sys, "argv", argv)
+
+    # Import first to see the module structure
+    import sec_nlp.cli.__main__ as cli_main
+
+    # Patch on the actual module object
     with (
-        patch("sec_nlp.cli.__main__.setup_folders", return_value=(out, dl)),
-        patch("sec_nlp.cli.__main__.Pipeline", FakePipeline),
-        patch("sec_nlp.cli.__main__.load_dotenv", lambda: None),
+        patch.object(cli_main, "setup_folders", return_value=(out, dl)),
+        patch.object(cli_main, "Pipeline", FakePipeline),
+        patch.object(cli_main, "load_dotenv", MagicMock()),
     ):
-        monkeypatch.setattr(sys, "argv", argv)
+        cli_main.main()
 
-        import sec_nlp.cli.__main__ as entry
-
-        importlib.reload(entry)
-        entry.main()
-
-    assert out.exists() and dl.exists()
+    # Verify directories exist
+    assert out.exists()
+    assert dl.exists()
