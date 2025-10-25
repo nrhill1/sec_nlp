@@ -7,7 +7,7 @@ from langchain_core.runnables import Runnable
 from pydantic import BaseModel
 from typing_extensions import override
 
-__all__ = ["SummarizationInput", "SummarizationOutput", "build_summarization_runnable"]
+__all__ = ['SummarizationInput', 'SummarizationOutput', 'build_summarization_runnable']
 
 class SummarizationInput(BaseModel):
     chunk: str
@@ -30,6 +30,4 @@ class SummarizationOutputParser(PydanticOutputParser[SummarizationOutput]):
     @override
     def OutputType(self) -> type[SummarizationOutput]: ...
 
-def build_summarization_runnable(
-    *, prompt: BasePromptTemplate[Any], llm: BaseLanguageModel[Any], require_json: bool = True
-) -> Runnable[SummarizationInput, SummarizationOutput]: ...
+def build_summarization_runnable(*, prompt: BasePromptTemplate[Any], llm: BaseLanguageModel[Any], require_json: bool = True) -> Runnable[SummarizationInput, SummarizationOutput]: ...

@@ -6,7 +6,7 @@ PYTHON_DIR := sec_nlp/
 LOG_DIR := $(PYTHON_DIR)/tests/test_logs
 PYTEST_FLAGS := --color=yes --basetemp .pytest_tmp --cache-clear --log-cli-level=INFO
 MYPY_FLAGS := -p sec_nlp --exclude-gitignore --warn-unreachable
-STUBS_DIR := typings/
+STUBS_DIR := types/
 STUBGEN_FLAGS := sec_nlp -o $(STUBS_DIR) --ignore-errors --include-private
 
 # Rust
@@ -169,7 +169,7 @@ py-stubs: ready
 	@rm -rf $(STUBS_DIR) && mkdir -p $(STUBS_DIR)
 	@uv run stubgen $(STUBGEN_FLAGS)
 	@find $(STUBS_DIR) -type f -name "__init__.pyi" -delete
-	@uv run ruff check typings/ --fix --quiet
+	@uv run ruff check types/ --fix --quiet
 
 .PHONY: py-types
 py-types: ready

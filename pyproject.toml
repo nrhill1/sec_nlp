@@ -30,6 +30,7 @@ dependencies = [
   "platformdirs>=4.5.0",
   "pydantic-settings>=2.11.0",
   "langchain-ollama>=1.0.0",
+  "rich>=14.2.0",
 ]
 
 [tool.pytest.ini_options]
@@ -50,7 +51,7 @@ sec_nlp = ["py.typed"]
 [tool.mypy]
 python_version = "3.11"
 plugins = ["pydantic.mypy"]
-mypy_path = "$MYPY_CONFIG_FILE_DIR/typings"
+mypy_path = "$MYPY_CONFIG_FILE_DIR/types"
 strict = true
 follow_imports = "silent"
 warn_unused_ignores = true
