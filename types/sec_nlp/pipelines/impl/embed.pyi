@@ -9,7 +9,7 @@ from sec_nlp.pipelines.base import BasePipelineConfig as BasePipelineConfig
 
 class EmbeddingConfig(BasePipelineConfig):
     model_config: Incomplete
-    pipeline_type: Literal['embedding']
+    pipeline_type: Literal["embedding"]
     documents_path: Path
     collection_name: str
     embedding_model: str

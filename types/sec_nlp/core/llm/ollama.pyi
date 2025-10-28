@@ -6,4 +6,6 @@ from sec_nlp.core.config import get_logger as get_logger
 
 logger: Incomplete
 
-def build_ollama_llm(model_name: str, base_url: str | None = None, temperature: float = 0.1, **kwargs: Any) -> OllamaLLM: ...
+def build_ollama_llm(
+    model_name: str, base_url: str | None = None, temperature: float = 0.1, **kwargs: Any
+) -> OllamaLLM: ...

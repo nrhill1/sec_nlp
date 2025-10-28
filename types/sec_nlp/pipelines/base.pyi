@@ -15,7 +15,7 @@ class BaseConfig(BaseSettings):
     pipeline_type: str
     verbose: bool
     dry_run: bool
-    log_format: Literal['simple', 'detailed', 'json']
+    log_format: Literal["simple", "detailed", "json"]
     log_file: Path | None
     def get_log_level(self) -> str: ...
     @classmethod
@@ -30,8 +30,9 @@ class BaseResult(ABC, BaseModel):
     @computed_field
     @property
     def has_outputs(self) -> bool: ...
-C = TypeVar('C', bound=BaseConfig)
-R = TypeVar('R', bound=BaseResult)
+
+C = TypeVar("C", bound=BaseConfig)
+R = TypeVar("R", bound=BaseResult)
 
 class BasePipeline(ABC, BaseModel, Generic[C, R], metaclass=abc.ABCMeta):
     config: C
