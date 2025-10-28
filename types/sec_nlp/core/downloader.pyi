@@ -5,8 +5,8 @@ from typing import Any
 from _typeshed import Incomplete
 from pydantic import BaseModel
 from sec_edgar_downloader import Downloader as SecEdgarDownloader
-
 from sec_nlp.core.config import get_logger as get_logger
+
 from sec_nlp.core.enums import FilingMode as FilingMode
 
 logger: Incomplete

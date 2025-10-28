@@ -1,47 +1,56 @@
-/// # sec_o3
-///
-/// Fast, modern SEC/EDGAR utilities with Hyper HTTP/2 client and optional Python bindings.
-///
-/// ## Features
-///
-/// - **High Performance**: Modern async HTTP client with HTTP/2 support
-/// - **Rate Limiting**: Automatic SEC API rate limit compliance (10 req/s)
-/// - **Retry Logic**: Exponential backoff for transient failures
-/// - **Type Safe**: Comprehensive error handling with detailed error types
-/// - **Python Bindings**: Optional PyO3 bindings for Python integration
-///
-/// ## Quick Start
-///
-/// ```rust,no_run
-/// use sec_o3::{Client};
-///
-/// #[tokio::main]
-/// async fn main() -> Result<(), Box<dyn std::error::Error>> {
-///     // Look up ticker
-///
-///     // Fetch company data
-///     let client = Client::new("John F. Kennedy", "jfk@<whitehouse>.gov");
-///     let facts = sec_o3::get_recent_filings("0001045810").await?;
-///
-///     Ok(())
-/// }
-/// ```
-///
-/// ## Architecture
-/// - `client` - HTTP client with rate limiting and retry logic
-pub mod client;
-/// - `errors` - Unified error handling
+//! # sec_o3
+//!
+//! Fast, modern SEC/EDGAR utilities with HTTP/2 client and optional Python bindings.
+//!
+//! ## Modules
+//!
+//! - [`download`] - HTTP client, rate limiting, and data fetching
+//! - [`parse`] - Document parsing and text extraction
+//! - [`errors`] - Unified error handling
+//! - [`utils`] - Shared utility functions
+//!
+//! ## Features
+//!
+//! - **High Performance**: Modern async HTTP client with HTTP/2 support
+//! - **Rate Limiting**: Automatic SEC API rate limit compliance (10 req/s)
+//! - **Retry Logic**: Exponential backoff for transient failures
+//! - **Type Safe**: Comprehensive error handling with detailed error types
+//! - **Python Bindings**: Optional PyO3 bindings for Python integration
+//!
+//! ## Quick Start
+//!
+//! ```rust,no_run
+//! use sec_o3::download::{Client, ticker_to_cik};
+//!
+//! #[tokio::main]
+//! async fn main() -> sec_o3::Result<()> {
+//!     // Look up ticker
+//!     let cik = ticker_to_cik("AAPL").await?;
+//!
+//!     // Create client
+//!     let client = Client::new("MyApp", "contact@example.com");
+//!
+//!     // Fetch company data
+//!     let url = format!("https://data.sec.gov/submissions/CIK{}.json", cik);
+//!     let data = client.get_json(&url).await?;
+//!
+//!     Ok(())
+//! }
+//! ```
+
+pub mod download;
 pub mod errors;
-/// - `filings` - Functions for fetching and downloading filings.
-pub mod filings;
-/// - `utils` - Utility functions for standardizing dates and retrieving CIKs.
+pub mod parse;
 pub mod utils;
 
 #[cfg(feature = "python")]
 pub mod python;
 
-pub use client::Client;
+// Re-export commonly used types at crate root for convenience
+pub use download::Client;
 pub use errors::{Error, Result};
+pub use parse::{parse_html, parse_json, Document, DocumentFormat};
+pub use utils::str_to_utc_datetime;
 
 /// Library version
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -49,7 +58,7 @@ pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 /// Library name
 pub const NAME: &str = env!("CARGO_PKG_NAME");
 
-// Root directory
+/// Root directory
 pub const ROOT_DIR: &str = env!("CARGO_MANIFEST_DIR");
 
 #[cfg(test)]
@@ -69,6 +78,6 @@ mod tests {
     #[test]
     fn test_public_exports() {
         // Ensure main exports compile
-        let _client: Client = Client::new("Nic Hill", "nrhill1@gmail.com");
+        let _client: Client = Client::new("Test", "test@example.com");
     }
 }

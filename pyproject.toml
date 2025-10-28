@@ -31,10 +31,11 @@ dependencies = [
   "pydantic-settings>=2.11.0",
   "langchain-ollama>=1.0.0",
   "rich>=14.2.0",
+  "questionary>=2.1.1",
 ]
 
 [tool.pytest.ini_options]
-testpaths = ["sec_nlp/tests"]
+testpaths = ["tests"]
 python_files = "test_*.py"
 python_functions = "test_*"
 pythonpath = ["."]
@@ -62,8 +63,11 @@ no_implicit_optional = true
 check_untyped_defs = true
 show_error_codes = true
 pretty = true
+files = [
+    "src/**/*.py",
+    "tests/**/*.py",
+]
 exclude = [
-  'sec_nlp/tests/*',
   '^dist/.*',
   '^build/.*',
 ]
@@ -128,7 +132,7 @@ ignore = [
 features = ["pyo3/extension-module"]
 module-name = "sec_o3"
 manifest-path = "crates/sec_o3/Cargo.toml"
-python-source = "sec_nlp"
+python-source = "src"
 
 [build-system]
 requires = ["maturin>=1.0,<2.0"]

@@ -6,19 +6,17 @@
 //!
 #![cfg(feature = "python")]
 
-use pyo3::exceptions::{PyException, PyRuntimeError, PyValueError};
-use pyo3::prelude::*;
 use std::sync::OnceLock;
+
+use pyo3::{
+    exceptions::{PyException, PyRuntimeError, PyValueError},
+    prelude::*,
+};
 use tokio::runtime::Runtime;
 
 use crate::{
     client::Client,
-    corp::{
-        cik::{get_ticker_map, normalize_cik, ticker_to_cik},
-        facts::fetch_company_facts,
-        submissions::fetch_company_filings,
-    },
-    parse::{parse_auto, parse_html, parse_json, Format},
+    parse::{parse_auto, parse_html, parse_json, Document, DocumentFormat},
 };
 
 // Tokio runtime singleton
@@ -43,23 +41,16 @@ impl PyClient {
 #[pyclass(name = "Document")]
 #[derive(Clone)]
 struct PyDocument {
-    #[pyo3(get)]
-    form_type: String,
-    #[pyo3(get)]
-    format: String,
-    #[pyo3(get)]
-    title: Option<String>,
-    #[pyo3(get)]
-    size_bytes: usize,
+    _title: String,
 }
 
 /// Convert Rust error to Python exception
-fn to_py_err(err: crate::errors::EdgarError) -> PyErr {
-    use crate::errors::EdgarError;
+fn to_py_err(err: crate::Error) -> PyErr {
+    use crate::Error;
 
     match err {
-        EdgarError::Validation(msg) => PyValueError::new_err(msg),
-        EdgarError::NotFound(msg) => PyValueError::new_err(msg),
+        Error::Validation(msg) => PyValueError::new_err(msg),
+        Error::NotFound(msg) => PyValueError::new_err(msg),
         _ => PyRuntimeError::new_err(err.to_string()),
     }
 }

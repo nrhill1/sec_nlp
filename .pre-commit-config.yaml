@@ -13,23 +13,16 @@ repos:
 
 - repo: local
   hooks:
-  - id: py-lint
-    name: Python Lint (Ruff)
-    entry: make py-lint
-    types: [python]
+  - id: lint
+    name: Rust and Python Linting
+    entry: make lint
+    types: [python, rust]
     language: system
     pass_filenames: false
 
-  - id: py-types
-    name: Python Typecheck (Mypy)
-    entry: make py-types
+  - id: types
+    name: Python Typecheck & Stubgen (Mypy)
+    entry: make types
     types: [python]
-    language: system
-    pass_filenames: false
-
-  - id: rs-lint
-    name: Rust Lint (fmt + clippy)
-    entry: make rs-lint
-    types: [rust]
     language: system
     pass_filenames: false

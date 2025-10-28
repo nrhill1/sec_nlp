@@ -1,18 +1,14 @@
-import argparse
-from pathlib import Path
-
 from _typeshed import Incomplete
 
-from sec_nlp.core import FilingMode as FilingMode
-from sec_nlp.core import Pipeline as Pipeline
-from sec_nlp.core import default_prompt_path as default_prompt_path
-from sec_nlp.core import get_logger as get_logger
-from sec_nlp.core import settings as settings
-from sec_nlp.core import setup_logging as setup_logging
+from sec_nlp.cli.commands import analyze_command as analyze_command
+from sec_nlp.cli.commands import embed_command as embed_command
+from sec_nlp.cli.commands import info_command as info_command
+from sec_nlp.cli.commands import run_command as run_command
+from sec_nlp.cli.commands import version_command as version_command
 
-logger: Incomplete
+console: Incomplete
+app: Incomplete
 
-def parse_args() -> argparse.Namespace: ...
-def setup_folders(fresh: bool) -> tuple[Path, Path]: ...
-def cleanup_downloads(downloads_folder: Path) -> None: ...
+def version_callback(value: bool) -> None: ...
+def main_callback(version: bool = ...) -> None: ...
 def main() -> None: ...

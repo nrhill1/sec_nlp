@@ -6,8 +6,8 @@ from _typeshed import Incomplete
 from langchain_core.documents import Document as Document
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from pydantic import BaseModel
-
 from sec_nlp.core.config import get_logger as get_logger
+
 from sec_nlp.core.enums import FilingMode as FilingMode
 
 logger: Incomplete

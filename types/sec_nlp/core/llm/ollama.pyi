@@ -2,7 +2,6 @@ from typing import Any
 
 from _typeshed import Incomplete
 from langchain_ollama.llms import OllamaLLM
-
 from sec_nlp.core.config import get_logger as get_logger
 
 logger: Incomplete

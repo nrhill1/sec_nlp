@@ -2,12 +2,13 @@ SHELL := /bin/bash
 .DEFAULT_GOAL := test
 
 # Python
-PYTHON_DIR := sec_nlp/
-LOG_DIR := $(PYTHON_DIR)/tests/test_logs
+PYTHON_DIR := src/
+TEST_DIR := tests/
+LOG_DIR := $(TEST_DIR)/test_logs
 PYTEST_FLAGS := --color=yes --basetemp .pytest_tmp --cache-clear --log-cli-level=INFO
-MYPY_FLAGS := -p sec_nlp --exclude-gitignore --warn-unreachable
+MYPY_FLAGS :=  --exclude-gitignore --warn-unreachable
 STUBS_DIR := types/
-STUBGEN_FLAGS := sec_nlp -o $(STUBS_DIR) --ignore-errors --include-private
+STUBGEN_FLAGS := src/sec_nlp tests -o $(STUBS_DIR) --include-private
 
 # Rust
 CARGO ?= cargo
@@ -19,7 +20,7 @@ RUST_PKG_FLAG := -p $(RUST_CRATE)
 CLIPPY_FLAGS ?= -D warnings
 LLVM_COV_DIR := .coverage/llvm/
 
-# Maturin (PyO3)
+# Maturin/PyO3
 MATURIN := uv run maturin
 MATURIN_FLAGS ?= --uv --release
 MATURIN_MANIFEST := crates/$(RUST_CRATE)/Cargo.toml
@@ -45,7 +46,7 @@ help:
 	@echo ""
 	@echo "Development:"
 	@echo "  lint                   Run all linters"
-	@echo "  types                  Run type checking"
+	@echo "  types                  Run type checking (including tests)"
 	@echo "  fmt                    Auto-format all code"
 	@echo "  fix                    Auto-fix all issues + format"
 	@echo "  test                   Run all tests"
@@ -69,12 +70,13 @@ help:
 	@echo "Language-specific:"
 	@echo "  py-lint                Python: ruff check"
 	@echo "  py-fmt                 Python: ruff format"
-	@echo "  py-types               Python: mypy type check"
-	@echo "  python-al 				Python: all language-specific Python commands."
+	@echo "  py-types               Python: mypy type check (src + tests)"
+	@echo "  py-stubs               Python: generate type stubs (src + tests)"
+	@echo "  python-all             Python: all language-specific Python commands"
 	@echo "  rs-lint                Rust: fmt + clippy"
 	@echo "  rs-fmt                 Rust: cargo fmt"
 	@echo "  rs-clippy              Rust: cargo clippy"
-	@echo "  rust-all				Rust: all language-specific Rust commands"
+	@echo "  rust-all               Rust: all language-specific Rust commands"
 	@echo ""
 	@echo "CI/CD:"
 	@echo "  ci                     Full CI pipeline (check + test)"
@@ -135,7 +137,7 @@ build: build-rs build-ext build-wheel
 
 .PHONY: prebuild
 prebuild: ready
-	@rm -f sec_nlp/*.so
+	@rm -f src/sec_nlp/**/*.so 2>/dev/null || true
 
 .PHONY: build-rs
 build-rs: prebuild
@@ -144,14 +146,22 @@ build-rs: prebuild
 
 .PHONY: build-ext
 build-ext: prebuild
+	@echo "==> Building Python extension (release)..."
 	@$(MATURIN) develop $(MATURIN_FLAGS) -m $(MATURIN_MANIFEST)
+
+.PHONY: build-ext-dev
+build-ext-dev: prebuild
+	@echo "==> Building Python extension (debug, faster)..."
+	@$(MATURIN) develop -m $(MATURIN_MANIFEST)
 
 .PHONY: build-wheel
 build-wheel: prebuild
+	@echo "==> Building distribution wheel..."
 	@$(MATURIN) build $(MATURIN_FLAGS) -m $(MATURIN_MANIFEST)
 
 .PHONY: build-sdist
 build-sdist: prebuild
+	@echo "==> Building source distribution..."
 	@$(MATURIN) sdist -m $(MATURIN_MANIFEST)
 
 # -------------------------
@@ -159,23 +169,24 @@ build-sdist: prebuild
 # -------------------------
 
 .PHONY: py-lint
-py-lint: ready
-	@echo "==> Ruff lint..."
-	@uv run ruff check .
+py-lint: ready py-fmt
+	@echo "==> Ruff check..."
+	@uv run ruff check . --fix
+	@uv run ruff check . --unsafe-fixes
 
 .PHONY: py-stubs
 py-stubs: ready
-	@echo "==> Generating stubs into $(STUBS_DIR)..."
+	@echo "==> Generating stubs for src + tests into $(STUBS_DIR)..."
 	@rm -rf $(STUBS_DIR) && mkdir -p $(STUBS_DIR)
 	@uv run stubgen $(STUBGEN_FLAGS)
 	@find $(STUBS_DIR) -type f -name "__init__.pyi" -delete
-	@uv run ruff check types/ --fix --quiet
+	@uv run ruff check $(STUBS_DIR) --fix --quiet
 
 .PHONY: py-types
 py-types: ready
 	@echo "==> Installing missing types using Mypy..."
 	@uv run mypy --install-types --non-interactive
-	@echo "==> Mypy type check..."
+	@echo "==> Mypy type check (src + tests)..."
 	@uv run mypy $(MYPY_FLAGS)
 
 .PHONY: py-fmt
@@ -184,7 +195,7 @@ py-fmt: ready
 	@uv run ruff format .
 
 .PHONY: test-py
-test-py: ready
+test-py: ready build-ext-dev
 	@mkdir -p $(LOG_DIR)
 	@ts=$$(date +"%Y-%m-%dT%H-%M-%S"); \
 	log="$(LOG_DIR)/test_$${ts}.log"; \
@@ -193,7 +204,7 @@ test-py: ready
 	uv run pytest $(PYTEST_FLAGS) 2>&1 | tee "$$log"
 
 .PHONY: py-cov
-py-cov: ready
+py-cov: ready build-ext-dev
 	@mkdir -p $(LOG_DIR)
 	@ts=$$(date +"%Y-%m-%dT%H-%M-%S"); \
 	log="$(LOG_DIR)/coverage_$${ts}.log"; \
@@ -212,14 +223,14 @@ python-all: py-lint py-types py-fmt test-py
 rs-lint: rs-fmt rs-clippy
 
 .PHONY: rs-fmt
-rs-fmt: ready
-	@echo "==> cargo fmt check..."
-	@$(CARGO) fmt --all -- --check
+rs-fmt-fix: ready
+	@echo "==> cargo fmt..."
+	@$(CARGO) fmt --all
 
-.PHONY: rs-clippy
-rs-clippy: ready
-	@echo "==> cargo clippy..."
-	@$(CARGO) clippy $(RUST_PKG_FLAG) -- $(CLIPPY_FLAGS)
+.PHONY: rs-clippy-fix
+rs-clippy-fix: ready
+	@echo "==> cargo clippy --fix..."
+	@$(CARGO) clippy $(RUST_PKG_FLAG) --fix --allow-staged -- $(CLIPPY_FLAGS)
 
 .PHONY: test-rs
 test-rs: ready
@@ -231,14 +242,16 @@ rs-bench: ready
 	@echo "==> Running benchmarks..."
 	@$(CARGO) bench $(RUST_PKG_FLAG)
 
-
 .PHONY: rs-cov
 rs-cov: ready
-	@ts=$$(date +"%Y-%m-%dT%H-%M-%S");
-	@$(CARGO) llvm-cov --json --output-path $(LLVM_COV_DIR)/coverage_$${ts}.json
+	@mkdir -p $(LLVM_COV_DIR)
+	@ts=$$(date +"%Y-%m-%dT%H-%M-%S"); \
+	cov="$(LLVM_COV_DIR)/coverage_$${ts}.json" \
+	echo "==> Running Rust coverage...(cov: $$cov)"; \
+	$(CARGO) llvm-cov $(RUST_PKG_FLAG) --json --output-path cov
 
 .PHONY: rust-all
-rust-all: rs-lint test-rs rs-bench
+rust-all: rs-lint test-rs rs-bench rs-cov
 
 # -------------------------
 # Combined Commands
@@ -260,9 +273,6 @@ fmt: ready
 .PHONY: test
 test: test-rs test-py
 
-.PHONY: clean-test
-clean-test: clean-all types test
-
 .PHONY: cov
 cov: rs-cov py-cov
 
@@ -271,8 +281,8 @@ cov-html: cov
 	@echo "==> Generating HTML coverage reports..."
 	@uv run coverage html
 	@echo "==> Python coverage report: htmlcov/index.html"
-	@$(CARGO) llvm-cov --html
-	@echo "==> Rust coverage report target/llvm-cov/html/index.html"
+	@$(CARGO) llvm-cov $(RUST_PKG_FLAG) --html
+	@echo "==> Rust coverage report: target/llvm-cov/html/index.html"
 
 .PHONY: cov-report
 cov-report: ready
@@ -285,7 +295,8 @@ fix: ready
 	@uv run ruff format .
 	@echo "==> Auto-fixing Rust..."
 	@$(CARGO) fmt --all
-	@$(CARGO_NIGHTLY) clippy --fix --workspace --allow-dirty --allow-staged 2>/dev/null || $(CARGO) clippy $(RUST_PKG_FLAG) --fix --allow-dirty --allow-staged
+	@$(CARGO_NIGHTLY) clippy --fix $(RUST_PKG_FLAG) --allow-dirty --allow-staged 2>/dev/null || \
+		$(CARGO) clippy --fix $(RUST_PKG_FLAG) --allow-dirty --allow-staged
 
 .PHONY: watch
 watch:
@@ -307,6 +318,19 @@ ci: check test
 ci-quick: check
 
 # -------------------------
+# Development Workflow
+# -------------------------
+
+.PHONY: dev
+dev: setup sync build-ext-dev
+	@echo "==> Development environment ready!"
+	@echo "    Rust extension built in debug mode for faster iteration"
+
+.PHONY: dev-full
+dev-full: setup sync build
+	@echo "==> Full development build complete!"
+
+# -------------------------
 # Cleanup
 # -------------------------
 
@@ -315,19 +339,20 @@ clean:
 	@echo "==> Cleaning build artifacts..."
 	@rm -rf $(WHEELS_DIR) ./*.egg-info ./**/.eggs target/release target/debug dist/
 	@rm -f $(STAMP_BOOTSTRAP) $(STAMP_UVSYNC)
+	@rm -f src/sec_nlp/**/*.so 2>/dev/null || true
 	@echo "==> Removing Pytest cache/temp files..."
-	@rm -rf .pytest_tmp .pytest_cachedeep
+	@rm -rf .pytest_tmp .pytest_cache
 	@find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
 	@find . -type f -name "*.pyc" -delete 2>/dev/null || true
-	@find -f . -type f -name "*~" -delete 2>/dev/null || true
-	@find -f . -type f -name ".*~" -delete 2>/dev/null || true
+	@find . -type f -name "*~" -delete 2>/dev/null || true
+	@find . -type f -name ".*~" -delete 2>/dev/null || true
 
 .PHONY: deep-clean
 deep-clean: clean
 	@echo "==> Deep cleaning caches..."
-	@rm -rf .ruff_cache htmlcov .coverage .mypy_cache
+	@rm -rf .ruff_cache htmlcov .coverage .mypy_cache $(STUBS_DIR)
 	@$(CARGO) clean
-	@$(CARGO) llvm-cov clean --workspace
+	@$(CARGO) llvm-cov clean --workspace 2>/dev/null || true
 
 .PHONY: clean-all
 clean-all: deep-clean
