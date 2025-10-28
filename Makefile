@@ -172,7 +172,6 @@ build-sdist: prebuild
 py-lint: ready py-fmt
 	@echo "==> Ruff check..."
 	@uv run ruff check . --fix
-	@uv run ruff check . --unsafe-fixes
 
 .PHONY: py-stubs
 py-stubs: ready
@@ -227,7 +226,7 @@ rs-fmt-fix: ready
 	@echo "==> cargo fmt..."
 	@$(CARGO) fmt --all
 
-.PHONY: rs-clippy-fix
+.PHONY: rs-clippy
 rs-clippy-fix: ready
 	@echo "==> cargo clippy --fix..."
 	@$(CARGO) clippy $(RUST_PKG_FLAG) --fix --allow-staged -- $(CLIPPY_FLAGS)
@@ -289,10 +288,7 @@ cov-report: ready
 	@uv run coverage report -m
 
 .PHONY: fix
-fix: ready
-	@echo "==> Auto-fixing Python..."
-	@uv run ruff check --fix .
-	@uv run ruff format .
+fix: ready py-lint
 	@echo "==> Auto-fixing Rust..."
 	@$(CARGO) fmt --all
 	@$(CARGO_NIGHTLY) clippy --fix $(RUST_PKG_FLAG) --allow-dirty --allow-staged 2>/dev/null || \
