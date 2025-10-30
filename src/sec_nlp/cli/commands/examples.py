@@ -1,4 +1,4 @@
-# sec_nlp/cli/commands/examples.py
+# src/sec_nlp/cli/commands/examples.py
 """Examples command to show common usage patterns."""
 
 from rich.console import Console
@@ -129,7 +129,11 @@ sec-nlp run AAPL GOOGL MSFT \\
 
     md = Markdown(examples_md)
     console.print(
-        Panel(md, title="[bold cyan]Examples & Usage Patterns[/bold cyan]", border_style="cyan")
+        Panel(
+            md,
+            title="[bold cyan]Examples & Usage Patterns[/bold cyan]",
+            border_style="cyan",
+        )
     )
 
 

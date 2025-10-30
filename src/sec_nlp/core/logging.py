@@ -1,4 +1,4 @@
-# sec_nlp/core/config/logging.py
+# src/sec_nlp/core/logging.py
 """Centralized logging configuration."""
 
 from __future__ import annotations
@@ -7,8 +7,6 @@ import logging
 import sys
 from pathlib import Path
 from typing import Literal
-
-from sec_nlp.core.config.settings import settings
 
 
 class ColoredFormatter(logging.Formatter):
@@ -27,7 +25,9 @@ class ColoredFormatter(logging.Formatter):
         """Add color to log level."""
         levelname = record.levelname
         if levelname in self.COLORS:
-            record.levelname = f"{self.COLORS[levelname]}{levelname}{self.RESET}"
+            record.levelname = (
+                f"{self.COLORS[levelname]}{levelname}{self.RESET}"
+            )
         return super().format(record)
 
 
@@ -57,17 +57,14 @@ def setup_logging(
         setup_logging(log_file="logs/app.log")
     """
 
-    # Determine log level
     if level is None:
-        level = settings.log_level
+        level = "INFO"
     if isinstance(level, str):
         level = getattr(logging, level.upper())
 
-    # Determine format
     if format_type is None:
-        format_type = settings.log_format
+        format_type = "simple"
 
-    # Format strings
     formats: dict[str, str] = {
         "simple": "%(levelname)s - %(message)s",
         "detailed": "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
@@ -83,20 +80,16 @@ def setup_logging(
         else logging.Formatter(log_format, datefmt=date_format)
     )
 
-    # Configure root logger
     root_logger = logging.getLogger()
     root_logger.setLevel(level)
 
-    # Remove existing handlers
     root_logger.handlers.clear()
 
-    # Console handler
     console_handler = logging.StreamHandler(sys.stdout)
     console_handler.setLevel(level)
     console_handler.setFormatter(formatter)
     root_logger.addHandler(console_handler)
 
-    # File handler (optional)
     if log_file:
         log_path = Path(log_file)
         log_path.parent.mkdir(parents=True, exist_ok=True)
@@ -108,7 +101,6 @@ def setup_logging(
         file_handler.setFormatter(file_formatter)
         root_logger.addHandler(file_handler)
 
-    # Suppress noisy third-party loggers
     logging.getLogger("urllib3").setLevel(logging.WARNING)
     logging.getLogger("requests").setLevel(logging.WARNING)
     logging.getLogger("transformers").setLevel(logging.WARNING)
@@ -154,7 +146,9 @@ class LogContext:
         if isinstance(logger, str):
             logger = logging.getLogger(logger)
         self.logger = logger
-        self.level = level if isinstance(level, int) else getattr(logging, level.upper())
+        self.level = (
+            level if isinstance(level, int) else getattr(logging, level.upper())
+        )
         self.original_level = logger.level
 
     def __enter__(self) -> logging.Logger:

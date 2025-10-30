@@ -1,12 +1,14 @@
+# src/sec_nlp/pipelines/embed/config.py
 from pathlib import Path
 from typing import Literal
 
-from pydantic import Field, SettingsConfigDict, field_validator
+from pydantic import Field, field_validator
+from pydantic_settings import SettingsConfigDict
 
-from sec_nlp.pipelines.base import BasePipeline, BasePipelineConfig
+from sec_nlp.pipelines.base import BaseConfig
 
 
-class EmbeddingConfig(BasePipelineConfig):
+class EmbeddingConfig(BaseConfig):
     """Configuration for document embedding pipeline."""
 
     model_config = SettingsConfigDict(
@@ -62,13 +64,12 @@ class EmbeddingConfig(BasePipelineConfig):
         if not v:
             raise ValueError("collection_name must be non-empty")
         if not v.replace("-", "").replace("_", "").isalnum():
-            raise ValueError("collection_name must be alphanumeric with hyphens/underscores")
+            raise ValueError(
+                "collection_name must be alphanumeric with hyphens/underscores"
+            )
         return v
 
     def validate_config(self) -> None:
         """Validate pipeline-specific configuration."""
         if not self.documents_path.is_dir():
             raise ValueError("documents_path must be a directory")
-
-
-class EmbeddingPipeline(BasePipeline): ...

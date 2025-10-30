@@ -1,4 +1,4 @@
-# sec_nlp/cli/ui.py
+# src/sec_nlp/cli/ui.py
 """CLI UI utilities for rich formatting and user interaction."""
 
 from __future__ import annotations
@@ -9,7 +9,13 @@ from typing import Any
 import questionary
 from rich.console import Console
 from rich.panel import Panel
-from rich.progress import BarColumn, Progress, SpinnerColumn, TextColumn, TimeElapsedColumn
+from rich.progress import (
+    BarColumn,
+    Progress,
+    SpinnerColumn,
+    TextColumn,
+    TimeElapsedColumn,
+)
 from rich.table import Table
 from rich.tree import Tree
 
@@ -48,7 +54,9 @@ class CLIFormatter:
         console.print(f"[blue]ℹ[/blue] {message}", style="blue")
 
     @staticmethod
-    def print_config(config: dict[str, Any], title: str = "Configuration") -> None:
+    def print_config(
+        config: dict[str, Any], title: str = "Configuration"
+    ) -> None:
         """Print configuration in a formatted table."""
         table = Table(title=title, show_header=True, header_style="bold cyan")
         table.add_column("Setting", style="cyan", no_wrap=True)
@@ -109,7 +117,9 @@ class CLIFormatter:
         def add_items(tree_node: Tree, path: Path) -> None:
             """Recursively add items to tree."""
             try:
-                items = sorted(path.iterdir(), key=lambda x: (not x.is_dir(), x.name))
+                items = sorted(
+                    path.iterdir(), key=lambda x: (not x.is_dir(), x.name)
+                )
                 for item in items[:10]:
                     if item.is_dir():
                         branch = tree_node.add(f"📁 [bold]{item.name}[/bold]")
@@ -139,33 +149,36 @@ class CLIFormatter:
 
 def format_size(size_bytes: int) -> str:
     """Format file size in human-readable format."""
+    float_bytes = float(size_bytes)
     for unit in ["B", "KB", "MB", "GB"]:
-        if size_bytes < 1024.0:
+        if float_bytes < 1024.0:
             return f"{size_bytes:.1f}{unit}"
-        size_bytes /= 1024.0
-    return f"{size_bytes:.1f}TB"
+        float_bytes /= 1024.0
+    return f"{float_bytes:.1f}TB"
 
 
 class InteractivePrompts:
     """Interactive prompts for user input."""
 
     @staticmethod
-    def confirm(message: str, default: bool = False) -> bool:
+    def confirm(message: str, default: bool = False) -> Any:
         """Ask for confirmation."""
         return questionary.confirm(message, default=default).ask()
 
     @staticmethod
-    def select(message: str, choices: list[str]) -> str:
+    def select(message: str, choices: list[str]) -> Any:
         """Select from a list of choices."""
         return questionary.select(message, choices=choices).ask()
 
     @staticmethod
-    def text(message: str, default: str = "") -> str:
+    def text(message: str, default: str = "") -> Any:
         """Ask for text input."""
         return questionary.text(message, default=default).ask()
 
     @staticmethod
-    def path(message: str, default: str = "", only_directories: bool = False) -> str:
+    def path(
+        message: str, default: str = "", only_directories: bool = False
+    ) -> Any:
         """Ask for a file path."""
         return questionary.path(
             message,

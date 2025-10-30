@@ -1,4 +1,4 @@
-# sec_nlp/core/preprocessor.py
+# src/sec_nlp/core/preprocessor.py
 from __future__ import annotations
 
 import os
@@ -11,8 +11,8 @@ from langchain_core.documents import Document
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from pydantic import BaseModel, PrivateAttr, field_validator
 
-from sec_nlp.core.config import get_logger
 from sec_nlp.core.enums import FilingMode
+from sec_nlp.core.logging import get_logger
 
 logger = get_logger(__name__)
 
@@ -50,7 +50,12 @@ class Preprocessor(BaseModel):
 
     def _filing_dir(self, symbol: str, mode: FilingMode) -> Path:
         filing_type = mode.form
-        return self.downloads_folder / "sec-edgar-filings" / symbol.upper() / filing_type
+        return (
+            self.downloads_folder
+            / "sec-edgar-filings"
+            / symbol.upper()
+            / filing_type
+        )
 
     def html_paths_for_symbol(
         self,
@@ -61,10 +66,15 @@ class Preprocessor(BaseModel):
         base = self._filing_dir(symbol, mode)
         if not base.exists():
             raise FileNotFoundError(
-                "No filings found for %s in mode %s at %s", symbol, mode.value, base.resolve()
+                "No filings found for %s in mode %s at %s",
+                symbol,
+                mode.value,
+                base.resolve(),
             )
 
-        html_files = sorted(base.rglob("*.html"), key=os.path.getmtime, reverse=True)
+        html_files = sorted(
+            base.rglob("*.html"), key=os.path.getmtime, reverse=True
+        )
         return html_files[:limit] if limit else html_files
 
     def transform_html(self, html_path: Path) -> Sequence[Document]:
@@ -81,9 +91,13 @@ class Preprocessor(BaseModel):
         return finished_docs
 
     def html_to_text(self, html_path: Path) -> list[str]:
-        loader = BSHTMLLoader(file_path=html_path, bs_kwargs={"features": "lxml"})
+        loader = BSHTMLLoader(
+            file_path=html_path, bs_kwargs={"features": "lxml"}
+        )
         docs = loader.load_and_split(self._splitter_impl)
-        logger.info("Loaded %d raw text chunks from %s", len(docs), html_path.name)
+        logger.info(
+            "Loaded %d raw text chunks from %s", len(docs), html_path.name
+        )
         return [doc.page_content for doc in docs]
 
     def batch_transform_html(self, html_paths: list[Path]) -> list[Document]:

@@ -1,4 +1,4 @@
-# sec_nlp/__init__.py
+# src/sec_nlp/__init__.py
 """SEC NLP - CLI tool for SEC filing analysis."""
 
 from importlib.metadata import PackageNotFoundError
@@ -13,30 +13,22 @@ from .cli import main
 from .core import (
     FilingManager,
     FilingMode,
-    Pipeline,
     Preprocessor,
     get_logger,
     setup_logging,
 )
 from .core.llm import (
-    SummarizationInput,
-    SummarizationOutput,
     build_hf_pipeline,
     build_ollama_llm,
-    build_summarization_runnable,
+    build_runnable,
 )
 from .pipelines import (
+    AnalysisPipeline,
     BaseConfig,
     BasePipeline,
     BaseResult,
-    PipelineRegistry,
-)
-from .pipelines.impl import (
-    AnalysisConfig,
-    AnalysisPipeline,
-    EmbeddingConfig,
     EmbeddingPipeline,
-    SummaryConfig,
+    PipelineRegistry,
     SummaryPipeline,
 )
 
@@ -66,9 +58,6 @@ __all__: list[str] = [
     "create_pipeline",
     ## impl
     "AnalysisPipeline",
-    "AnalysisPipelineConfig",
     "EmbeddingPipeline",
-    "EmbeddingPipelineConfig",
     "SummaryPipeline",
-    "SummaryPipelineConfig",
 ]

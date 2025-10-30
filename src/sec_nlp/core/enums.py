@@ -1,4 +1,4 @@
-# sec_nlp/core/enums.py
+# src/sec_nlp/core/enums.py
 from enum import Enum
 
 

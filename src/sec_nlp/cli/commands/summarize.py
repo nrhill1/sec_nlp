@@ -1,4 +1,4 @@
-# sec_nlp/cli/commands/run.py (simplified)
+# src/sec_nlp/cli/commands/summarize.py
 """Run command - dispatches to summary pipeline."""
 
 from __future__ import annotations
@@ -10,10 +10,9 @@ import typer
 from dotenv import load_dotenv
 
 from sec_nlp.core import FilingMode
-from sec_nlp.pipelines.dispatcher import dispatch_pipeline
 
 
-def run_command(
+def summarize_command(
     symbols: list[str] = typer.Argument(
         None,
         help="Stock ticker symbols",
@@ -34,16 +33,9 @@ def run_command(
     if not symbols:
         symbols = ["AAPL"]
 
-    config_kwargs = {
+    _config_kwargs = {
         "pipeline_type": "summary",
         "symbols": symbols,
         "mode": mode,
         "start_date": start_date,
     }
-
-    dispatch_pipeline(
-        pipeline_type="summary",
-        config_kwargs=config_kwargs,
-        output_path=output_folder,
-        download_path=downloads_folder,
-    )

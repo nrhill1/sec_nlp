@@ -1,4 +1,4 @@
-# sec_nlp/core/llm/chains.py
+# src/sec_nlp/core/llm/chains.py
 from __future__ import annotations
 
 from typing import Any
@@ -8,74 +8,67 @@ from langchain_core.language_models import BaseLanguageModel
 from langchain_core.output_parsers import PydanticOutputParser
 from langchain_core.prompts.base import BasePromptTemplate
 from langchain_core.runnables import Runnable, RunnableSerializable
-from pydantic import BaseModel, Field
 from typing_extensions import override
 
-from sec_nlp.core.config import get_logger
+from sec_nlp.core.logging import get_logger
+from sec_nlp.pipelines.base import I, R
 
 logger = get_logger(__name__)
 
 
-__all__: list[str] = ["SummarizationInput", "SummarizationOutput", "build_summarization_runnable"]
-
-
-class SummarizationInput(BaseModel):
-    """Input schema for the SEC summarization chain."""
-
-    chunk: str
-    symbol: str
-    search_term: str
-
-
-class SummarizationOutput(BaseModel):
-    """Pydantic dataclass representing a validated LLM summary payload."""
-
-    summary: str | None = Field(default=None)
-    points: list[str] | None = Field(default=None)
-    confidence: float | None = Field(default=None, ge=0.0, le=1.0)
-
-    error: str | None = Field(default=None)
-    raw_output: str | None = Field(default=None)
-
-
-class SummarizationOutputParser(PydanticOutputParser[SummarizationOutput]):
+class OutputParser(PydanticOutputParser[R]):
     """Output parser to validate and format LLM output."""
 
-    pydantic_object: type[SummarizationOutput] = SummarizationOutput
+    pydantic_object: type[R]
 
-    def parse(self, text: str) -> SummarizationOutput:
+    def __init__(self, pydantic_object: type[R], **kwargs: Any) -> None:
+        """Initialize with the actual Pydantic model class."""
+        super().__init__(pydantic_object=pydantic_object, **kwargs)
+
+    def parse(self, text: str) -> R:
         try:
-            output: SummarizationOutput = super().parse(text)
+            output: R = super().parse(text)
             return output
         except OutputParserException as e:
-            return SummarizationOutput(error=e.observation, raw_output=e.llm_output)
+            return self.pydantic_object(
+                success=False, error=e.observation, raw_output=e.llm_output
+            )
 
     @property
     def _type(self) -> str:
-        return "sec_nlp.core.llm.chains.SummarizationOutputParser"
+        return f"sec_nlp.core.llm.chains.{str(self.pydantic_object)[1:]}OutputParser"
 
     @property
     @override
-    def OutputType(self) -> type[SummarizationOutput]:
+    def OutputType(self) -> type[R]:
         """Return the Pydantic model."""
         return self.pydantic_object
 
 
-def build_summarization_runnable(
+def build_runnable(
     *,
     prompt: BasePromptTemplate[Any],
     llm: BaseLanguageModel[Any],
+    input_model: type[I],
+    output_model: type[R],
     require_json: bool = True,
-) -> Runnable[SummarizationInput, SummarizationOutput]:
+) -> Runnable[I, R]:
     """
     Build the SEC summarization chain:
-      input:  SummarizationInput
+      input:  I (e.g., SummarizationInput)
       pipe:   prompt -> llm -> validation
-      output: SummarizationOutput
+      output: R (e.g., SummarizationOutput)
+
+    Args:
+        prompt: The prompt template
+        llm: The language model
+        output_model: The Pydantic model class for output validation
+        input_model: The Pydantic model class for input validation
+        require_json: Whether to require JSON output
+
+    Returns:
+        Runnable[I, R]: A runnable chain with input and output models specific to that pipeline.
     """
-
-    parser = SummarizationOutputParser()
-
-    chain: RunnableSerializable[Any, SummarizationOutput] = prompt | llm | parser
-
-    return chain.with_types(input_type=SummarizationInput, output_type=SummarizationOutput)
+    parser = OutputParser(pydantic_object=output_model)
+    chain: RunnableSerializable[Any, R] = prompt | llm | parser
+    return chain.with_types(input_type=input_model, output_type=output_model)

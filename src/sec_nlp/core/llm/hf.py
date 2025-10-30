@@ -1,9 +1,9 @@
-# sec_nlp/core/llm/hf.py
+# src/sec_nlp/core/llm/hf.py
 from __future__ import annotations
 
 from langchain_huggingface import HuggingFacePipeline
 
-from sec_nlp.core.config import get_logger
+from sec_nlp.core import get_logger
 
 logger = get_logger(__name__)
 
@@ -20,7 +20,9 @@ def build_hf_pipeline(
 
         hf_pipeline = HuggingFacePipeline(pipeline=pipe)
 
-        logger.info("Initialized HuggingFace Pipeline with model %s", model_name)
+        logger.info(
+            "Initialized HuggingFace Pipeline with model %s", model_name
+        )
 
         return hf_pipeline
 

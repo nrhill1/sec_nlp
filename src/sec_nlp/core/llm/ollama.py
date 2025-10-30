@@ -1,4 +1,4 @@
-# sec_nlp/core/llm/ollama.py
+# src/sec_nlp/core/llm/ollama.py
 from __future__ import annotations
 
 import os
@@ -6,7 +6,7 @@ from typing import Any
 
 from langchain_ollama.llms import OllamaLLM
 
-from sec_nlp.core.config import get_logger
+from sec_nlp.core import get_logger
 
 logger = get_logger(__name__)
 
@@ -30,9 +30,15 @@ def build_ollama_llm(
         OllamaLLM: LLM object that implements <Runnable[str | PromptValue, str]>
     """
 
-    base_url = base_url or os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
+    base_url = base_url or os.getenv(
+        "OLLAMA_BASE_URL", "http://localhost:11434"
+    )
 
-    llm = OllamaLLM(model=model_name, base_url=base_url, temperature=temperature, **kwargs)
+    llm = OllamaLLM(
+        model=model_name, base_url=base_url, temperature=temperature, **kwargs
+    )
 
-    logger.info("Created Ollama LLM: model=%s, base_url=%s", model_name, base_url)
+    logger.info(
+        "Created Ollama LLM: model=%s, base_url=%s", model_name, base_url
+    )
     return llm

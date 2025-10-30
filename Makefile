@@ -6,7 +6,7 @@ PYTHON_DIR := src/
 TEST_DIR := tests/
 LOG_DIR := $(TEST_DIR)/test_logs
 PYTEST_FLAGS := --color=yes --basetemp .pytest_tmp --cache-clear --log-cli-level=INFO
-MYPY_FLAGS :=  --exclude-gitignore --warn-unreachable
+MYPY_FLAGS :=  --exclude-gitignore --warn-unreachable --show-error-codes
 STUBS_DIR := types/
 STUBGEN_FLAGS := src/sec_nlp tests -o $(STUBS_DIR) --include-private
 

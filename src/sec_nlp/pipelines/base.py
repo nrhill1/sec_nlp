@@ -9,36 +9,44 @@ from typing import Any, ClassVar, Generic, Literal, TypeVar
 
 from pydantic import (
     BaseModel,
-    BaseSettings,
+    ConfigDict,
     Field,
-    SettingsConfigDict,
     computed_field,
     field_validator,
 )
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from sec_nlp.core import get_logger
 
 logger = get_logger(__name__)
 
 
-class BaseConfig(BaseSettings):
-    """
-    Base configuration for all pipeline types.
+class BaseResult(BaseModel):
+    """Base result type for all pipelines."""
 
-    Inherits from BaseSettings to support loading defaults from
-    environment variables while still accepting explicit CLI arguments.
-    """
+    pipeline_type: ClassVar[str]
+
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    success: bool = True
+    outputs: list[Path] = Field(default_factory=list)
+    metadata: dict[str, Any] = Field(default_factory=dict)
+    error: str | None = None
+    raw_output: str | None = None
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def has_outputs(self) -> bool:
+        """Check if pipeline produced any outputs."""
+        return len(self.outputs) > 0
+
+
+class BaseConfig(BaseSettings):
+    """Base config type for all pipelines."""
 
     model_config = SettingsConfigDict(
-        env_prefix="PIPELINE_",
-        env_file=".env",
-        env_file_encoding="utf-8",
-        case_sensitive=False,
-        extra="ignore",
-        env_nested_delimiter="__",
-        validate_default=True,
-        validate_assignment=True,
-        cli_parse_args=True,
+        extra="allow",
+        arbitrary_types_allowed=True,
     )
 
     pipeline_type: str
@@ -73,71 +81,150 @@ class BaseConfig(BaseSettings):
         return v
 
 
-class BaseResult(ABC, BaseModel):
-    """Base result type for all pipelines."""
-
-    success: bool
-    pipeline_type: str
-    outputs: list[Path] = Field(default_factory=list)
-    metadata: dict[str, Any] = Field(default_factory=dict)
-    error: str | None = None
-
-    @computed_field
-    @property
-    def has_outputs(self) -> bool:
-        """Check if pipeline produced any outputs."""
-        return len(self.outputs) > 0
-
-
-# Pipeline Generics
+# Type variables for generic pipeline components
 C = TypeVar("C", bound=BaseConfig)  # Config
+I = TypeVar("I", bound=BaseModel)  # Input  # noqa: E741
 R = TypeVar("R", bound=BaseResult)  # Result
 
 
-class BasePipeline(ABC, BaseModel, Generic[C, R]):
-    """Abstract base class for all pipeline types."""
+class BasePipeline(ABC, BaseModel, Generic[C, I, R]):
+    """
+    Abstract base class for all pipeline types.
+
+    This class inherits from BaseModel to leverage Pydantic's
+    lifecycle hooks (model_post_init) for clean initialization.
+
+    Type Parameters:
+        C: Configuration type (extends BaseConfig)
+        I: Input data type (extends BaseModel)
+        R: Result type (extends BaseResult)
+    """
+
+    _config_class: ClassVar[type[C]]
+    _input_class: ClassVar[type[I]]
+    _result_class: ClassVar[type[R]]
 
     config: C
-    result: R
+
+    model_config = ConfigDict(
+        arbitrary_types_allowed=True,
+        validate_assignment=True,
+    )
 
     pipeline_type: ClassVar[str]
     description: ClassVar[str]
-
     requires_llm: ClassVar[bool] = False
     requires_vector_db: ClassVar[bool] = False
 
-    def __init__(self, config: C) -> None:
-        """Initialize pipeline with validated config."""
-        self.config = config
+    def __init__(self, config: C, **kwargs: Any) -> None:
+        """
+        Initialize pipeline with validated config.
+
+        Args:
+            config: Validated configuration object
+            **kwargs: Additional fields (if any)
+        """
+        super().__init__(config=config, **kwargs)
+
+    def model_post_init(self, __context: Any) -> None:
+        """
+        Called after Pydantic initialization.
+        """
         self._validate_requirements()
+        self._build_components()
+
+    def _build_components(self) -> None:
+        """
+        Build pipeline components that depend on config.
+        """
+        pass
 
     @abstractmethod
-    def run(self, **kwargs: Any) -> R:
+    def run(self, input_data: I | None = None) -> R:
         """
         Execute the pipeline.
 
+        Args:
+            input_data: Optional input data for the pipeline.
+                       Some pipelines may not need input data if they
+                       operate based on configuration alone.
+
         Returns:
-            BaseResult with outputs and metadata
+            Result object with outputs and metadata
         """
         pass
 
     @abstractmethod
-    def validate_inputs(self) -> None:
-        """Validate that all required inputs are available."""
+    def validate_inputs(self, input_data: I) -> None:
+        """
+        Validate that input data is valid.
+
+        Args:
+            input_data: Input data to validate
+
+        Raises:
+            ValueError: If input data is invalid
+        """
         pass
 
     def _validate_requirements(self) -> None:
-        """Validate pipeline requirements are met."""
-        pass
+        """
+        Validate pipeline requirements are met.
+
+        Override this method to add custom requirement validation.
+        """
+        if self.requires_llm:
+            # Check if config has LLM settings
+            if not hasattr(self.config, "llm") or self.config.llm is None:
+                logger.warning(
+                    f"{self.pipeline_type} requires LLM configuration"
+                )
+
+        if self.requires_vector_db:
+            # Check if config has vector DB settings
+            if not hasattr(self.config, "vdb") or self.config.vdb is None:
+                logger.warning(
+                    f"{self.pipeline_type} requires vector DB configuration"
+                )
 
     @classmethod
     def get_config_class(cls) -> type[C]:
-        """Get the config class for this pipeline type."""
-        orig_bases = getattr(cls, "__orig_bases__", ())
-        for base in orig_bases:
-            if hasattr(base, "__args__"):
-                return base.__args__[0]
-        raise TypeError(f"Could not determine config class for {cls.__name__}")
+        """
+        Get the config class for this pipeline type.
+
+        Returns:
+            The configuration class (C type parameter)
+
+        Raises:
+            TypeError: If config class cannot be determined
+        """
+        return cls._config_class
+
+    @classmethod
+    def get_input_class(cls) -> type[I]:
+        """
+        Get the input class for this pipeline type.
+
+        Returns:
+            The input class (I type parameter)
+
+        Raises:
+            TypeError: If input class cannot be determined
+        """
+        return cls._input_class
+
+    @classmethod
+    def get_result_class(cls) -> type[R]:
+        """
+        Get the result class for this pipeline type.
+
+        Returns:
+            The result class (R type parameter)
+
+        Raises:
+            TypeError: If result class cannot be determined
+        """
+        return cls._result_class
 
     def __repr__(self) -> str:
         return f"<{self.__class__.__name__} type={self.pipeline_type}>"

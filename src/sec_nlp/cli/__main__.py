@@ -1,4 +1,4 @@
-# sec_nlp/cli/__main__.py
+# src/sec_nlp/cli/__main__.py
 """Main CLI application."""
 
 from __future__ import annotations
@@ -10,13 +10,13 @@ from sec_nlp.cli.commands import (
     analyze_command,
     embed_command,
     info_command,
-    run_command,
+    summarize_command,
     version_command,
 )
 
 console = Console()
 
-app = typer.Typer(
+main = typer.Typer(
     name="sec-nlp",
     help="SEC NLP Pipeline - Download, parse, and summarize SEC filings using LLMs",
     add_completion=False,
@@ -33,7 +33,7 @@ def version_callback(value: bool) -> None:
         raise typer.Exit()
 
 
-@app.callback()
+@main.callback()
 def main_callback(
     version: bool = typer.Option(
         False,
@@ -67,41 +67,35 @@ def main_callback(
     pass
 
 
-# Register commands with rich help
-app.command(
-    name="run",
-    help="[green]Run SEC filing analysis pipeline[/green]",
+main.command(
+    name="summarize",
+    help="[green]Run SEC filing summary pipeline[/green]",
     rich_help_panel="Main Commands",
-)(run_command)
+)(summarize_command)
 
-app.command(
+main.command(
     name="analyze",
     help="[yellow]Analyze existing summaries[/yellow] [dim](coming soon)[/dim]",
     rich_help_panel="Analysis Commands",
 )(analyze_command)
 
-app.command(
+main.command(
     name="embed",
     help="[yellow]Embed documents into vector store[/yellow] [dim](coming soon)[/dim]",
     rich_help_panel="Analysis Commands",
 )(embed_command)
 
-app.command(
+main.command(
     name="version",
     help="Show version information",
     rich_help_panel="Utility Commands",
 )(version_command)
 
-app.command(
+main.command(
     name="info",
     help="Show pipeline information and registry",
     rich_help_panel="Utility Commands",
 )(info_command)
-
-
-def main() -> None:
-    app()
-
 
 if __name__ == "__main__":
     main()

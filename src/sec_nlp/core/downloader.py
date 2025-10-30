@@ -1,14 +1,14 @@
-# sec_nlp/core/downloader.py
+# src/sec_nlp/core/downloader.py
 from datetime import date
 from pathlib import Path
 from typing import Any
 
 from pydantic import BaseModel, PrivateAttr, field_validator
-from sec_edgar_downloader import Downloader as SecEdgarDownloader  # type: ignore
+from sec_edgar_downloader import Downloader  # type: ignore
 from tqdm import tqdm
 
-from sec_nlp.core.config import get_logger
 from sec_nlp.core.enums import FilingMode
+from sec_nlp.core.logging import get_logger
 
 logger = get_logger(__name__)
 
@@ -23,7 +23,7 @@ class FilingManager(BaseModel):
     company_name: str = "My Company Inc."
 
     _symbols: set[str] = PrivateAttr(default_factory=set)
-    _downloader: SecEdgarDownloader | None = PrivateAttr(default=None)
+    _downloader: Downloader | None = PrivateAttr(default=None)
 
     @field_validator("downloads_folder")
     @classmethod
@@ -32,7 +32,7 @@ class FilingManager(BaseModel):
         return v
 
     def model_post_init(self, __ctx: Any) -> None:
-        self._downloader = SecEdgarDownloader(
+        self._downloader = Downloader(
             self.company_name, self.email, str(self.downloads_folder)
         )
 
@@ -69,7 +69,9 @@ class FilingManager(BaseModel):
             mode.value,
         )
 
-        for symbol in tqdm(sorted(self._symbols), desc=f"Downloading {filing_type} files..."):
+        for symbol in tqdm(
+            sorted(self._symbols), desc=f"Downloading {filing_type} files..."
+        ):
             try:
                 self._downloader.get(  # type: ignore[union-attr]
                     filing_type,

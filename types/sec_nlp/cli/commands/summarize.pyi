@@ -1,0 +1,3 @@
+from sec_nlp.core import FilingMode as FilingMode
+
+def summarize_command(symbols: list[str] = ..., mode: FilingMode = ..., start_date: str | None = ...) -> None: ...

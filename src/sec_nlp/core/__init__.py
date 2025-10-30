@@ -1,18 +1,19 @@
-# sec_nlp/core/__init__.py
+# src/sec_nlp/core/__init__.py
 """Core functionality for SEC NLP."""
 
 from .downloader import FilingManager
 from .enums import FilingMode
 from .logging import LogContext, get_logger, setup_logging
-from .pipeline import Pipeline, default_prompt_path
 from .preprocessor import Preprocessor
 
 __all__: list[str] = [
+    # Enums
     "FilingMode",
-    "Pipeline",
+    # Preprocessor
     "Preprocessor",
+    # Downloader
     "FilingManager",
-    # config
+    # Logging
     "LogContext",
     "get_logger",
     "setup_logging",

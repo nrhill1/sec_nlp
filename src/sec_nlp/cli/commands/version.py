@@ -1,3 +1,4 @@
+# src/sec_nlp/cli/commands/version.py
 import typer
 
 
