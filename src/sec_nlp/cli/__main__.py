@@ -7,8 +7,6 @@ import typer
 from rich.console import Console
 
 from sec_nlp.cli.commands import (
-    analyze_command,
-    embed_command,
     info_command,
     summarize_command,
     version_command,
@@ -74,18 +72,6 @@ main.command(
 )(summarize_command)
 
 main.command(
-    name="analyze",
-    help="[yellow]Analyze existing summaries[/yellow] [dim](coming soon)[/dim]",
-    rich_help_panel="Analysis Commands",
-)(analyze_command)
-
-main.command(
-    name="embed",
-    help="[yellow]Embed documents into vector store[/yellow] [dim](coming soon)[/dim]",
-    rich_help_panel="Analysis Commands",
-)(embed_command)
-
-main.command(
     name="version",
     help="Show version information",
     rich_help_panel="Utility Commands",
@@ -99,3 +85,16 @@ main.command(
 
 if __name__ == "__main__":
     main()
+
+
+# main.command(
+#     name="analyze",
+#     help="[yellow]Analyze existing summaries[/yellow] [dim](coming soon)[/dim]",
+#     rich_help_panel="Analysis Commands",
+# )(analyze_command)
+
+# main.command(
+#     name="embed",
+#     help="[yellow]Embed documents into vector store[/yellow] [dim](coming soon)[/dim]",
+#     rich_help_panel="Analysis Commands",
+# )(embed_command)

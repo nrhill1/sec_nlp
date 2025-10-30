@@ -1,6 +1,6 @@
 # src/sec_nlp/pipelines/embed/config.py
 from pathlib import Path
-from typing import Literal
+from typing import ClassVar, Literal
 
 from pydantic import Field, field_validator
 from pydantic_settings import SettingsConfigDict
@@ -19,7 +19,7 @@ class EmbeddingConfig(BaseConfig):
         extra="ignore",
     )
 
-    pipeline_type: Literal["embedding"] = "embedding"
+    pipeline_type: ClassVar[Literal["embedding"]] = "embedding"
 
     # Input options
     documents_path: Path = Field(

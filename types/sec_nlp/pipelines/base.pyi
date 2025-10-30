@@ -28,14 +28,15 @@ class BaseConfig(BaseSettings):
     pipeline_type: str
     verbose: bool
     dry_run: bool
-    log_format: Literal['simple', 'detailed', 'json']
+    log_format: Literal["simple", "detailed", "json"]
     log_file: Path | None
     def get_log_level(self) -> str: ...
     @classmethod
     def validate_log_file(cls, v: Path | None) -> Path | None: ...
-C = TypeVar('C', bound=BaseConfig)
-I = TypeVar('I', bound=BaseModel)
-R = TypeVar('R', bound=BaseResult)
+
+C = TypeVar("C", bound=BaseConfig)
+I = TypeVar("I", bound=BaseModel)
+R = TypeVar("R", bound=BaseResult)
 
 class BasePipeline(ABC, BaseModel, Generic[C, I, R], metaclass=abc.ABCMeta):
     _config_class: ClassVar[type[C]]
@@ -51,7 +52,7 @@ class BasePipeline(ABC, BaseModel, Generic[C, I, R], metaclass=abc.ABCMeta):
     def model_post_init(self, /, __context: Any) -> None: ...
     def _build_components(self) -> None: ...
     @abstractmethod
-    def run(self, input_data: I | None = None) -> R: ...
+    def run(self, *args, **kwargs) -> R: ...
     @abstractmethod
     def validate_inputs(self, input_data: I) -> None: ...
     def _validate_requirements(self) -> None: ...

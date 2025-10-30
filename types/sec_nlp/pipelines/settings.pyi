@@ -26,7 +26,7 @@ class VectorDBSettings(BaseModel):
     qdrant_https: bool
     qdrant_prefer_grpc: bool
     qdrant_timeout: int
-    qdrant_distance: Literal['Cosine', 'Euclid', 'Dot']
+    qdrant_distance: Literal["Cosine", "Euclid", "Dot"]
     qdrant_on_disk_payload: bool
     qdrant_replication_factor: int
     qdrant_write_consistency_factor: int

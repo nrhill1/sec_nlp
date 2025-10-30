@@ -28,4 +28,11 @@ class OutputParser(PydanticOutputParser[R]):
     @override
     def OutputType(self) -> type[R]: ...
 
-def build_runnable(*, prompt: BasePromptTemplate[Any], llm: BaseLanguageModel[Any], input_model: type[I], output_model: type[R], require_json: bool = True) -> Runnable[I, R]: ...
+def build_runnable(
+    *,
+    prompt: BasePromptTemplate[Any],
+    llm: BaseLanguageModel[Any],
+    input_model: type[I],
+    output_model: type[R],
+    require_json: bool = True,
+) -> Runnable[I, R]: ...

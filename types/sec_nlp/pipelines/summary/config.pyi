@@ -17,7 +17,6 @@ class SummaryConfig(BaseConfig):
     email: str
     dl_path: Path
     out_path: Path
-    symbols: list[str]
     mode: FilingMode
     start_date: date | None
     end_date: date | None
@@ -27,6 +26,7 @@ class SummaryConfig(BaseConfig):
     max_retries: int
     fresh: bool
     cleanup: bool
+    dry_run: bool
     @classmethod
     def normalize_symbols(cls, v: list[str] | str) -> list[str]: ...
     @classmethod

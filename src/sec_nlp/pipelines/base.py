@@ -49,7 +49,7 @@ class BaseConfig(BaseSettings):
         arbitrary_types_allowed=True,
     )
 
-    pipeline_type: str
+    pipeline_type: ClassVar[str]
 
     verbose: bool = Field(
         default=False,
@@ -140,7 +140,7 @@ class BasePipeline(ABC, BaseModel, Generic[C, I, R]):
         pass
 
     @abstractmethod
-    def run(self, input_data: I | None = None) -> R:
+    def run(self, *args, **kwargs) -> R:
         """
         Execute the pipeline.
 

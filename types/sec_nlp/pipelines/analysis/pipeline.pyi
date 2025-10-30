@@ -13,9 +13,13 @@ class AnalysisInput(BaseModel):
 
 class AnalysisResult(BaseResult): ...
 
-class AnalysisPipeline(BasePipeline[AnalysisConfig, AnalysisInput, AnalysisResult]):
+class AnalysisPipeline(
+    BasePipeline[AnalysisConfig, AnalysisInput, AnalysisResult]
+):
     description: str
     requires_llm: bool
     requires_vector_db: bool
     def validate_inputs(self, input: AnalysisInput) -> None: ...
-    def run(self, input_data: AnalysisInput | None = None) -> AnalysisResult: ...
+    def run(
+        self, input_data: AnalysisInput | None = None
+    ) -> AnalysisResult: ...

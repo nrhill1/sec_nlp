@@ -86,6 +86,9 @@ class SummaryPipeline(BasePipeline[SummaryConfig, SummaryInput, SummaryResult]):
     _embedder: Any | None = PrivateAttr(default=None)
     _embedding_dim: int | None = PrivateAttr(default=None)
 
+    def _model_post_init_(self) -> None:
+        pass
+
     def _build_components(self) -> None:
         """
         Build pipeline components that depend on config.
@@ -143,9 +146,6 @@ class SummaryPipeline(BasePipeline[SummaryConfig, SummaryInput, SummaryResult]):
 
     def _validate_config(self) -> None:
         """Validate configuration settings."""
-        if not self.config.symbols:
-            raise ValueError("No symbols provided")
-
         if not self.config.out_path.exists():
             raise ValueError(
                 f"Output path does not exist: {self.config.out_path}"
@@ -156,7 +156,7 @@ class SummaryPipeline(BasePipeline[SummaryConfig, SummaryInput, SummaryResult]):
                 f"Download path does not exist: {self.config.dl_path}"
             )
 
-    def run(self, input_data: SummaryInput | None = None) -> SummaryResult:
+    def run(self, symbols: list[str]) -> SummaryResult:
         """
         Execute the summary pipeline.
 
@@ -172,7 +172,7 @@ class SummaryPipeline(BasePipeline[SummaryConfig, SummaryInput, SummaryResult]):
             all_outputs: list[Path] = []
             metadata: dict[str, Any] = {}
 
-            for symbol in self.config.symbols:
+            for symbol in symbols:
                 symbol_outputs = self._process_symbol(symbol)
                 all_outputs.extend(symbol_outputs)
                 metadata[symbol] = len(symbol_outputs)

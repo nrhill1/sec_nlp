@@ -4,7 +4,7 @@
 from datetime import date, datetime, timedelta
 from importlib.resources import files
 from pathlib import Path
-from typing import Any, Self
+from typing import Any, ClassVar, Literal, Self
 
 from pydantic import Field, field_validator, model_validator
 from pydantic_settings import SettingsConfigDict
@@ -21,13 +21,14 @@ class SummaryConfig(BaseConfig):
         env_prefix="SUMMARY_",
         env_file=".env",
         env_file_encoding="utf-8",
+        env_nested_delimiter="__",
         case_sensitive=False,
         extra="ignore",
         arbitrary_types_allowed=True,
     )
 
     # Pipeline metadata
-    pipeline_type: str = "summary"
+    pipeline_type: ClassVar[Literal["summary"]] = "summary"
 
     # Nested configurations with defaults
     llm: LLMSettings = Field(default_factory=LLMSettings)
@@ -45,15 +46,8 @@ class SummaryConfig(BaseConfig):
         description="Path for downloading SEC filings",
     )
     out_path: Path = Field(
-        default=Path("./outputs"),
+        default=Path("outputs"),
         description="Path for output files",
-    )
-
-    # Target configuration
-    symbols: list[str] = Field(
-        ...,
-        description="Stock ticker symbols to process",
-        min_length=1,
     )
 
     # Filing search parameters
@@ -102,6 +96,9 @@ class SummaryConfig(BaseConfig):
     cleanup: bool = Field(
         default=True,
         description="Clean up downloaded files after processing",
+    )
+    dry_run: bool = Field(
+        default=False, description="Upsert document chunks to vector DB"
     )
 
     @field_validator("symbols", mode="before")
