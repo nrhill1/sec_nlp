@@ -3,24 +3,8 @@
 
 from __future__ import annotations
 
-import typer
-from rich.console import Console
-
 from sec_nlp.cli.commands import (
-    info_command,
     version_command,
-)
-from sec_nlp.pipelines.registry import PipelineRegistry
-
-console = Console()
-
-main = typer.Typer(
-    name="sec-nlp",
-    help="SEC NLP Pipeline - Download, parse, and summarize SEC filings using LLMs",
-    add_completion=False,
-    no_args_is_help=True,
-    pretty_exceptions_enable=False,
-    rich_markup_mode="rich",
 )
 
 
@@ -28,6 +12,9 @@ def version_callback(value: bool) -> None:
     """Show version and exit."""
     if value:
         version_command()
+
+
+def main(): ...
 
 
 if __name__ == "__main__":
