@@ -152,4 +152,5 @@ dev = [
   "pytest>=8.4.2",
   "pip>=25.2",
   "typing-extensions>=4.15.0",
+  "pre-commit>=4.3.0",
 ]
