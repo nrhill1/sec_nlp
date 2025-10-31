@@ -6,7 +6,6 @@ from typing import ClassVar
 from pydantic import BaseModel
 
 from sec_nlp.pipelines.base import BasePipeline, BaseResult
-from sec_nlp.pipelines.registry import PipelineRegistry
 
 from .config import AnalysisConfig
 
@@ -18,10 +17,8 @@ class AnalysisInput(BaseModel):
 class AnalysisResult(BaseResult): ...
 
 
-@PipelineRegistry.register("analysis")
-class AnalysisPipeline(
-    BasePipeline[AnalysisConfig, AnalysisInput, AnalysisResult]
-):
+# TODO: Finish the analysis pipeline
+class AnalysisPipeline(BasePipeline[AnalysisConfig, AnalysisResult]):
     """Pipeline for analyzing existing summaries."""
 
     description = "Analyze existing SEC filing summaries"

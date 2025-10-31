@@ -83,11 +83,10 @@ class BaseConfig(BaseSettings):
 
 # Type variables for generic pipeline components
 C = TypeVar("C", bound=BaseConfig)  # Config
-I = TypeVar("I", bound=BaseModel)  # Input  # noqa: E741
 R = TypeVar("R", bound=BaseResult)  # Result
 
 
-class BasePipeline(ABC, BaseModel, Generic[C, I, R]):
+class BasePipeline(ABC, BaseModel, Generic[C, R]):
     """
     Abstract base class for all pipeline types.
 
@@ -96,12 +95,10 @@ class BasePipeline(ABC, BaseModel, Generic[C, I, R]):
 
     Type Parameters:
         C: Configuration type (extends BaseConfig)
-        I: Input data type (extends BaseModel)
         R: Result type (extends BaseResult)
     """
 
     _config_class: ClassVar[type[C]]
-    _input_class: ClassVar[type[I]]
     _result_class: ClassVar[type[R]]
 
     config: C
@@ -140,7 +137,7 @@ class BasePipeline(ABC, BaseModel, Generic[C, I, R]):
         pass
 
     @abstractmethod
-    def run(self, *args, **kwargs) -> R:
+    def run(self) -> R:
         """
         Execute the pipeline.
 
@@ -151,19 +148,6 @@ class BasePipeline(ABC, BaseModel, Generic[C, I, R]):
 
         Returns:
             Result object with outputs and metadata
-        """
-        pass
-
-    @abstractmethod
-    def validate_inputs(self, input_data: I) -> None:
-        """
-        Validate that input data is valid.
-
-        Args:
-            input_data: Input data to validate
-
-        Raises:
-            ValueError: If input data is invalid
         """
         pass
 
@@ -201,19 +185,6 @@ class BasePipeline(ABC, BaseModel, Generic[C, I, R]):
         return cls._config_class
 
     @classmethod
-    def get_input_class(cls) -> type[I]:
-        """
-        Get the input class for this pipeline type.
-
-        Returns:
-            The input class (I type parameter)
-
-        Raises:
-            TypeError: If input class cannot be determined
-        """
-        return cls._input_class
-
-    @classmethod
     def get_result_class(cls) -> type[R]:
         """
         Get the result class for this pipeline type.
@@ -228,3 +199,6 @@ class BasePipeline(ABC, BaseModel, Generic[C, I, R]):
 
     def __repr__(self) -> str:
         return f"<{self.__class__.__name__} type={self.pipeline_type}>"
+
+
+PipelineModel = type[BasePipeline[BaseConfig, BaseResult]]

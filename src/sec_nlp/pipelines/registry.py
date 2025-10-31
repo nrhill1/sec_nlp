@@ -10,13 +10,10 @@ from pydantic import BaseModel
 from sec_nlp.core import get_logger
 from sec_nlp.pipelines.base import (
     BaseConfig,
-    BasePipeline,
-    BaseResult,
+    PipelineModel,
 )
 
 logger = get_logger(__name__)
-
-PipelineType = type[BasePipeline[BaseConfig, BaseModel, BaseResult]]
 
 
 class PipelineRegistry(BaseModel):
@@ -27,7 +24,7 @@ class PipelineRegistry(BaseModel):
     pipeline type identifiers to their implementations.
     """
 
-    _pipelines: ClassVar[dict[str, PipelineType]] = {}
+    _pipelines: ClassVar[dict[str, PipelineModel]] = {}
 
     @classmethod
     def register(cls, pipeline_type: str) -> Any:
@@ -43,8 +40,8 @@ class PipelineRegistry(BaseModel):
         """
 
         def decorator(
-            pipeline_class: PipelineType,
-        ) -> PipelineType:
+            pipeline_class: PipelineModel,
+        ) -> PipelineModel:
             if pipeline_type in cls._pipelines:
                 logger.warning(
                     "Pipeline type '%s' already registered, overwriting %s with %s",
@@ -67,7 +64,7 @@ class PipelineRegistry(BaseModel):
         return decorator
 
     @classmethod
-    def get_pipeline(cls, pipeline_type: str) -> PipelineType:
+    def get_pipeline(cls, pipeline_type: str) -> PipelineModel:
         """Get a pipeline class by type."""
         if pipeline_type not in cls._pipelines:
             available = ", ".join(cls._pipelines.keys())
@@ -80,7 +77,7 @@ class PipelineRegistry(BaseModel):
     @classmethod
     def get_all_pipelines(
         cls,
-    ) -> list[PipelineType]:
+    ) -> list[PipelineModel]:
         return list(cls._pipelines.values())
 
     @classmethod

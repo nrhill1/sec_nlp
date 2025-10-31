@@ -2,7 +2,7 @@
 """Pipeline implementations."""
 
 from .analysis import AnalysisPipeline
-from .base import BaseConfig, BasePipeline, BaseResult
+from .base import BaseConfig, BasePipeline, BaseResult, PipelineModel
 from .embed import EmbeddingPipeline
 from .registry import PipelineRegistry
 from .settings import LLMSettings, VectorDBSettings
@@ -13,6 +13,7 @@ __all__: list[str] = [
     "BaseConfig",
     "BasePipeline",
     "BaseResult",
+    "PipelineModel"
     # Pipelines
     "SummaryPipeline",
     "AnalysisPipeline",

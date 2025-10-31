@@ -8,7 +8,6 @@ authors = [
 requires-python = ">=3.11,<3.14"
 dependencies = [
   "python-dotenv",
-  "tqdm",
   "transformers",
   "torch",
   "pydantic>=2.0.0",
@@ -25,7 +24,6 @@ dependencies = [
   "accelerate>=1.10.1",
   "uuid",
   "sentence-transformers>=5.1.0",
-  "typer>=0.19.2",
   "qdrant-client>=1.15.1",
   "platformdirs>=4.5.0",
   "pydantic-settings>=2.11.0",

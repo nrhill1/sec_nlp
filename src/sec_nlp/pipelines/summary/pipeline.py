@@ -65,8 +65,8 @@ class SummaryResult(BaseResult):
 
 
 @PipelineRegistry.register("summary")
-class SummaryPipeline(BasePipeline[SummaryConfig, SummaryInput, SummaryResult]):
-    """Pipeline for SEC filing summarization with LLM."""
+class SummaryPipeline(BasePipeline[SummaryConfig, SummaryResult]):
+    """Pipeline for SEC filing summarization with Large Language Models."""
 
     pipeline_type: ClassVar[str] = "summary"
     description: ClassVar[str] = (
@@ -134,15 +134,6 @@ class SummaryPipeline(BasePipeline[SummaryConfig, SummaryInput, SummaryResult]):
         except Exception as e:
             logger.warning("Failed to build graph during init: %s", e)
             self._graph = None
-
-    def validate_inputs(self, input_data: SummaryInput) -> None:
-        """Validate that all required inputs are available."""
-        if not input_data.chunk:
-            raise ValueError("Chunk text is required")
-        if not input_data.symbol:
-            raise ValueError("Symbol is required")
-        if not input_data.search_term:
-            raise ValueError("Search term is required")
 
     def _validate_config(self) -> None:
         """Validate configuration settings."""

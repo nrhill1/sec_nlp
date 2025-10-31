@@ -9,16 +9,16 @@ from sec_nlp.pipelines.base import BasePipeline as BasePipeline
 from sec_nlp.pipelines.base import BaseResult as BaseResult
 
 logger: Incomplete
-PipelineType = type[BasePipeline[BaseConfig, BaseModel, BaseResult]]
+PipelineModel = type[BasePipeline[BaseConfig, BaseModel, BaseResult]]
 
 class PipelineRegistry(BaseModel):
-    _pipelines: ClassVar[dict[str, PipelineType]]
+    _pipelines: ClassVar[dict[str, PipelineModel]]
     @classmethod
     def register(cls, pipeline_type: str) -> Any: ...
     @classmethod
-    def get_pipeline(cls, pipeline_type: str) -> PipelineType: ...
+    def get_pipeline(cls, pipeline_type: str) -> PipelineModel: ...
     @classmethod
-    def get_all_pipelines(cls) -> list[PipelineType]: ...
+    def get_all_pipelines(cls) -> list[PipelineModel]: ...
     @classmethod
     def list_types(cls) -> list[str]: ...
     @classmethod
