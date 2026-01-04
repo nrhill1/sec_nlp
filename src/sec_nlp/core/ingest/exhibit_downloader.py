@@ -8,7 +8,7 @@ from pathlib import Path
 import requests
 from tqdm import tqdm
 
-from sec_nlp.core.infra.logger import logger
+from sec_nlp.core.infra.logger import format_size, logger
 
 
 class ExhibitDocument:
@@ -301,22 +301,12 @@ class ExhibitDownloader:
                     content_bytes = file_response.content or b""
                     content = file_response.text
                     total_bytes += len(content_bytes)
-                    size_kb = len(content_bytes) / 1024.0
-                    size_gb = size_kb / (1024.0 * 1024.0)
-                    if size_gb >= 0.01:
-                        logger.debug(
-                            "Downloaded exhibit %s (%s): %.3f GB",
-                            exhibit_number,
-                            link,
-                            size_gb,
-                        )
-                    else:
-                        logger.debug(
-                            "Downloaded exhibit %s (%s): %.1f KB",
-                            exhibit_number,
-                            link,
-                            size_kb,
-                        )
+                    logger.debug(
+                        "Downloaded exhibit %s (%s): %s",
+                        exhibit_number,
+                        link,
+                        format_size(len(content_bytes)),
+                    )
 
                     # Save to disk if output_dir provided
                     if output_dir:
@@ -340,15 +330,11 @@ class ExhibitDownloader:
                     logger.debug("Failed to download %s: %s", link, e)
                     continue
 
-            total_kb = total_bytes / 1024.0
-            total_gb = total_kb / (1024.0 * 1024.0)
             logger.info(
                 "Downloaded %d exhibits for accession %s (%s) [matched=%d skipped_filter=%d total_links=%d]",
                 len(exhibits),
                 accession_number,
-                f"{total_gb:.3f} GB"
-                if total_gb >= 0.01
-                else f"{total_kb:.1f} KB",
+                format_size(total_bytes),
                 matched,
                 skipped_filter,
                 len(exhibit_links),
