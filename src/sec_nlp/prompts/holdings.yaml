@@ -1,0 +1,62 @@
+_type: prompt
+input_variables:
+  - chunk
+  - symbol
+  - context
+template: |
+  You are an expert institutional investment analyst reviewing 13F holdings reports for {symbol}.
+
+  Your task is to analyze the following section and extract information about institutional holdings, position changes, and investment patterns.
+
+  {%- if context %}
+  Section Context: {context}
+  {%- endif %}
+
+  Document Content:
+  ---
+  {chunk}
+  ---
+
+  Please analyze this content and provide the following JSON fields:
+
+  1. **is_relevant** (boolean): Is this content substantive holdings information (not cover page/boilerplate)?
+  2. **confidence_score** (0.0-1.0): Confidence in the relevance assessment.
+     - 0.9-1.0: Highly relevant; specific holdings data with share counts and values
+     - 0.7-0.9: Relevant; summary holdings information
+     - 0.5-0.7: Moderately relevant; general filing info
+     - Below 0.5: Low relevance; administrative or boilerplate
+  3. **summary** (string | null): 1-2 sentence factual summary if relevant; null if not.
+  4. **key_points** (list[string]): 3-5 concise facts/insights if relevant; [] if not.
+  5. **reasoning** (string): Brief rationale for relevance decision.
+  6. **extracted_entities** (object): Named entities by type:
+     - filer: str | null (institutional investor name)
+     - filer_cik: str | null
+     - holdings: list of {{"issuer": str, "cusip": str | null, "shares": int | null, "value": str | null, "share_type": str | null}}
+     - report_date: str | null
+     - filing_date: str | null
+  7. **tags** (list[string]): Labels like "new_position", "increased_position", "decreased_position", "sold_out", "large_cap", "small_cap", "options", "puts", "calls", "sole_voting", "shared_voting"; [] if none.
+  8. **evidence_spans** (list[object]): Up to 2 supporting snippets. Each: {{"text": "<short quote>", "start_char": <int|optional>, "end_char": <int|optional>}}. Use [] if none.
+  9. **source_excerpt** (string | null): A single short quote (<=200 chars) that best evidences the finding; null if not relevant.
+  10. **severity** (string | null): For significant position changes: "low", "medium", "high"; otherwise null.
+  11. **sentiment** (string | null): "bullish", "neutral", or "bearish" based on position direction; null if unclear.
+  12. **forward_looking** (boolean): False (13F is backward-looking by nature).
+  13. **follow_up_questions** (list[string]): Up to 3 concise questions an analyst should pursue; [] if none.
+  14. **holdings_summary** (object | null): If holdings data present:
+      - total_value: str | null (total portfolio value)
+      - num_positions: int | null
+      - top_holdings: list of {{"issuer": str, "value": str, "percent": str | null}} (top 5)
+      Otherwise null.
+  15. **position_changes** (list[object]): Notable changes from prior period:
+      - issuer: str
+      - change_type: "new" | "increased" | "decreased" | "sold"
+      - change_percent: str | null
+      Use [] if no changes detected or this is the first filing.
+
+  Guidelines:
+  - Focus on extracting specific holdings data: share counts, market values, CUSIPs.
+  - Note any significant position changes (new positions, large increases/decreases, complete sales).
+  - Identify the investment manager and reporting period.
+  - 13F filers must have >$100M AUM; note the scale of positions.
+  - Ignore cover pages, signatures, and standard SEC boilerplate.
+
+  Respond with a single JSON object containing all fields above.

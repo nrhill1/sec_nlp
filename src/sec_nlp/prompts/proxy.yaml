@@ -1,0 +1,63 @@
+_type: prompt
+input_variables:
+  - chunk
+  - symbol
+  - context
+template: |
+  You are an expert corporate governance analyst reviewing DEF 14A proxy statements for {symbol}.
+
+  Your task is to analyze the following section and extract information about executive compensation, board composition, shareholder proposals, and governance matters.
+
+  {%- if context %}
+  Section Context: {context}
+  {%- endif %}
+
+  Document Content:
+  ---
+  {chunk}
+  ---
+
+  Please analyze this content and provide the following JSON fields:
+
+  1. **is_relevant** (boolean): Is this content substantive governance/compensation information (not boilerplate)?
+  2. **confidence_score** (0.0-1.0): Confidence in the relevance assessment.
+     - 0.9-1.0: Highly relevant; specific compensation figures, board details, or proposals
+     - 0.7-0.9: Relevant; governance policies, voting matters
+     - 0.5-0.7: Moderately relevant; general corporate info
+     - Below 0.5: Low relevance; administrative or boilerplate
+  3. **summary** (string | null): 1-2 sentence factual summary if relevant; null if not.
+  4. **key_points** (list[string]): 3-5 concise facts/insights if relevant; [] if not.
+  5. **reasoning** (string): Brief rationale for relevance decision.
+  6. **extracted_entities** (object): Named entities by type:
+     - executives: list of {{"name": str, "title": str, "compensation": str | null}}
+     - directors: list of {{"name": str, "committees": list[str], "independent": bool | null}}
+     - shareholders: list of str (institutional holders mentioned)
+     - amounts: list of str (compensation figures, share counts)
+     - dates: list of str
+  7. **tags** (list[string]): Labels like "executive_compensation", "board_composition", "say_on_pay", "shareholder_proposal", "related_party", "stock_awards", "options", "benefits", "audit_committee", "nomination", "bylaws"; [] if none.
+  8. **evidence_spans** (list[object]): Up to 2 supporting snippets. Each: {{"text": "<short quote>", "start_char": <int|optional>, "end_char": <int|optional>}}. Use [] if none.
+  9. **source_excerpt** (string | null): A single short quote (<=200 chars) that best evidences the finding; null if not relevant.
+  10. **severity** (string | null): For governance concerns: "low", "medium", "high"; otherwise null.
+  11. **sentiment** (string | null): "negative", "neutral", or "positive" regarding governance quality; null if unclear.
+  12. **forward_looking** (boolean): True if text contains forward-looking statements about compensation or governance; else false.
+  13. **follow_up_questions** (list[string]): Up to 3 concise questions an analyst should pursue; [] if none.
+  14. **compensation_data** (object | null): If compensation info present:
+      - base_salary: str | null
+      - bonus: str | null
+      - stock_awards: str | null
+      - option_awards: str | null
+      - total: str | null
+      Otherwise null.
+  15. **proposal_info** (object | null): If shareholder/management proposal:
+      - proposal_type: "management" | "shareholder"
+      - description: str
+      - board_recommendation: "for" | "against" | null
+      Otherwise null.
+
+  Guidelines:
+  - Focus on executive compensation, board composition, shareholder proposals, and governance policies.
+  - Extract specific dollar amounts, share counts, and percentages when present.
+  - Note any related-party transactions or potential conflicts of interest.
+  - Ignore tables of contents, headers/footers, and boilerplate legal disclaimers.
+
+  Respond with a single JSON object containing all fields above.

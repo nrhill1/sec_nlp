@@ -1,0 +1,73 @@
+# src/sec_nlp/core/llm/ollama.py
+
+import os
+from typing import Literal, TypedDict, Unpack
+
+from langchain_ollama.llms import OllamaLLM
+
+from sec_nlp.core.infra.logger import logger
+from sec_nlp.types import JsonValue
+
+
+class OllamaKwargs(TypedDict, total=False):
+    reasoning: bool | None
+    validate_model_on_init: bool
+    mirostat: int | None
+    mirostat_eta: float | None
+    mirostat_tau: float | None
+    num_ctx: int | None
+    num_gpu: int | None
+    num_thread: int | None
+    num_predict: int | None
+    repeat_last_n: int | None
+    repeat_penalty: float | None
+    seed: int | None
+    stop: list[str] | None
+    tfs_z: float | None
+    format: Literal["", "json"]
+    keep_alive: int | str | None
+    base_url: str | None
+    client_kwargs: dict[str, JsonValue] | None
+    async_client_kwargs: dict[str, JsonValue] | None
+    sync_client_kwargs: dict[str, JsonValue] | None
+
+
+def build_ollama_llm(
+    model_name: str,
+    base_url: str | None = None,
+    temperature: float = 0.1,
+    top_k: int = 10,
+    top_p: float = 0.5,
+    **kwargs: Unpack[OllamaKwargs],
+) -> OllamaLLM:
+    """
+    Factory function to create an Ollama LLM runnable.
+
+    Args:
+        model_name: Ollama model name (e.g., "llama3.2", "mistral")
+        base_url: Ollama server URL (defaults to http://localhost:11434)
+        temperature: Sampling temperature
+        **kwargs: Additional parameters for OllamaLLM
+
+    Returns:
+        OllamaLLM: LLM object that implements Runnable[str | PromptValue, str]
+    """
+
+    base_url = base_url or os.getenv(
+        "OLLAMA_BASE_URL", "http://localhost:11434"
+    )
+
+    ollama_llm = OllamaLLM(
+        model=model_name,
+        base_url=base_url,
+        temperature=temperature,
+        top_k=top_k,
+        top_p=top_p,
+        **kwargs,
+    )
+
+    logger.info(
+        "Created Ollama LLM: model=%s, base_url=%s", model_name, base_url
+    )
+
+    return ollama_llm

@@ -1,0 +1,188 @@
+# ============================================================================
+# General
+# ============================================================================
+
+## Operating System
+.DS_Store
+Thumbs.db
+
+## Environment
+.env
+.env.local
+.env.*.local
+.envrc
+
+## Editors and IDEs
+.vscode/
+.idea/
+*.code-workspace
+*.swp
+*.swo
+*~
+*.tmp~
+
+## Version Control
+.history/
+
+## Temporary Files
+*.tmp
+*.log
+*.bak
+*.old
+*.orig
+
+## Shell History
+.python_history
+.bash_history
+.zsh_history
+
+## Backups
+.backups/
+
+# ============================================================================
+# Python
+# ============================================================================
+
+## Bytecode
+**/__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+
+## Distribution / Packaging
+*.egg
+*.egg-info/
+.eggs/
+dist/
+build/
+*.whl
+*.spec
+
+## Virtual Environments
+.venv/
+venv/
+ENV/
+env/
+
+## Testing
+.pytest_cache/
+.pytest_tmp/
+test_logs/
+.benchmarks/
+
+## Coverage
+htmlcov/
+.coverage
+.coverage.*
+coverage.xml
+*.cover
+
+## Type Checking
+.pyre/
+.pytype/
+
+## Linting
+.ruff_cache/
+
+## Package Managers
+.uv/
+.uv-cache/
+.uv_cache/
+.uv-tmp/
+.uv.lock
+
+## Build Stamps
+.uvsync.stamp
+.bootstrap.stamp
+
+# ============================================================================
+# Rust
+# ============================================================================
+
+## Cargo Build
+target/
+Cargo.lock
+
+## Compiled Libraries
+*.rlib
+*.so
+*.dylib
+*.dll
+*.exe
+
+## Debug Symbols
+*.dSYM/
+*.pdb
+
+## Coverage
+cov.json
+.coverage/llvm/
+
+## Test Fixtures
+**/fixtures/**
+!tests/fixtures/**
+!tests/fixtures
+tests/fixtures/**/__pycache__/
+
+## Maturin (Python Extension)
+target/wheels/
+
+# ============================================================================
+# Go
+# ============================================================================
+
+## Binaries
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+## Build Output
+bin/
+
+## Test Coverage
+*.out
+coverage.html
+
+## Vendor
+vendor/
+
+## Go Workspace
+go.work
+go.work.sum
+
+# ============================================================================
+# Docker & Kubernetes
+# ============================================================================
+
+## Kubernetes
+*.kubeconfig
+
+# ============================================================================
+# Project Specific
+# ============================================================================
+
+## Data Directories
+downloads/
+outputs/
+data/
+.nltk_data/
+*.dat
+**runs.db
+qdrant_storage/
+
+## Profiling Output
+profiling/
+
+## Logs
+logs/
+*.log
+
+## 
+**.mypy_cache/
+**.cache/
+_cache/
+.ignore/
+.data
+.cache/sec-nlp/runs.db

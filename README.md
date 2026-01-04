@@ -1,0 +1,162 @@
+# sec-nlp
+
+NLP tools for SEC filings. Analyze filings with local LLMs, run semantic search, and extract targeted signals (Exhibit 10 contracts, warranty accruals) using a fast CLI.
+
+## Highlights
+- Local-first LLM analysis with Ollama (no hosted APIs)
+- Topic/keyword filtering, chunking, and relevance scoring
+- Optional semantic search and vector indexing with Qdrant (in-memory by default)
+- Purpose-built pipelines: `analyze`, `exb-10`, `warranty`
+- Structured outputs (YAML/JSON/CSV), run registry, and logs
+
+## Requirements
+- Python 3.13+
+- Ollama running locally for LLM and embedding models (analyze, exb-10)
+- Qdrant optional for persistent vector storage (in-memory by default)
+- Docker (optional) for `sec-nlp qdrant up`
+
+## Pipelines
+| Pipeline | What it does | Notes |
+| --- | --- | --- |
+| `analyze` | Generalized topic analysis + LLM summaries and scores | Requires Ollama (LLM + embeddings). Vector DB optional; disable with `--vector-mode off`. |
+| `exb-10` | Find and index Exhibit 10 contract signals | Uses embeddings + vector store; no LLM. |
+| `warranty` | Extract warranty accrual/payout data from XBRL | Deterministic, no LLM. |
+
+## Quickstart
+### 1) Install
+Using uv (recommended):
+```
+uv sync
+uv run sec-nlp --help
+```
+
+Using pip:
+```
+python -m venv .venv
+source .venv/bin/activate
+pip install -e .
+```
+
+### 2) Set your SEC contact email
+SEC EDGAR requests require a valid email address.
+```
+# .env
+ANALYZE_EMAIL=you@example.com
+EXB10_EMAIL=you@example.com
+WARRANTY_EMAIL=you@example.com
+```
+
+### 3) Start Ollama and pull models
+Defaults:
+- LLM: `llama3.2:1b`
+- Analyze embeddings: `bge-m3`
+- Exhibit 10 embeddings: `mxbai-embed-large`
+
+Example:
+```
+ollama serve
+ollama pull llama3.2:1b
+ollama pull bge-m3
+ollama pull mxbai-embed-large
+```
+
+### 4) Run a pipeline
+```
+sec-nlp analyze AAPL --preset quick
+sec-nlp analyze AAPL --topics warranty recall
+sec-nlp analyze AAPL --section-type item --section-numbers 1A
+sec-nlp exb-10 DE --search-terms exclusive aftermarket
+sec-nlp warranty AAPL
+```
+
+Interactive analyze setup:
+```
+sec-nlp analyze
+```
+
+## Analyze presets
+Use `--preset <name>` with `sec-nlp analyze`.
+- `quick`: Fast analysis: small model, 1 filing, no vector DB
+- `laptop`: Laptop-friendly analysis: small model, tighter caps, targeted search queries
+- `thorough`: Balanced analysis: better model, 3 filings, vector DB enabled
+- `comprehensive`: Full analysis: best model, 5 filings, all features enabled
+- `rare_earths`: Focus on rare earth miners (8-K current reports) with finance-tuned LLM and search queries
+
+## CLI overview
+- `sec-nlp analyze` - Generalized LLM analysis (topics, keywords, section filters, vector search)
+- `sec-nlp exb-10` - Exhibit 10 contract indexing and search
+- `sec-nlp warranty` - Warranty XBRL extraction
+- `sec-nlp qdrant` - Manage Qdrant collections and Docker container
+- `sec-nlp runs` - List and inspect pipeline runs
+- `sec-nlp clean` - Clear downloads, outputs, or logs
+- `sec-nlp version` - Show version
+
+Run `sec-nlp <command> --help` for full options.
+
+## Configuration
+Configuration is loaded in this order:
+1) CLI arguments
+2) Environment variables
+3) `.env` file
+
+Pipeline env prefixes:
+- `ANALYZE_`
+- `EXB10_`
+- `WARRANTY_`
+
+Nested fields use double underscores. Examples:
+```
+ANALYZE_LLM__MODEL_NAME=llama3.2:1b
+ANALYZE_LLM__BASE_URL=http://localhost:11434
+ANALYZE_VDB__QDRANT_LOCATION=:memory:
+EXB10_VDB__QDRANT_URL=http://localhost:6333
+```
+Nested CLI fields use dot notation, e.g. `--llm.model-name` or `--vdb.embedding-model`.
+
+Tips:
+- Override the Ollama endpoint with `OLLAMA_BASE_URL` or `--llm.base-url`.
+- Disable vector DB for analyze with `--vector-mode off`.
+- Lists in `.env` should be JSON, e.g. `ANALYZE_TOPICS=["warranty","recall"]`.
+
+## Outputs and data layout
+Default directories (override with `--dl-path` and `--out-path`):
+
+```
+downloads/      # raw SEC downloads (sec-edgar-filings)
+outputs/
+  <SYMBOL>/
+    analyze/<run_id>/<accession>/analysis.{yaml,json,csv}
+    exhibit10/<run_id>/<symbol>_exhibit10_<run_id>.{yaml,json,csv}
+    warranty/<run_id>/<symbol>_warranty_<accession>_<run_id>.json
+    warranty/<run_id>/<symbol>_warranty_combined_<run_id>.csv
+logs/
+```
+
+Run registry:
+- Stored in `~/.cache/sec-nlp/runs.db`
+- Manage with `sec-nlp runs ls` and `sec-nlp runs stats`
+
+## Qdrant
+By default, vector storage uses an in-memory Qdrant instance. For a persistent store:
+
+```
+sec-nlp qdrant up
+```
+This uses Docker and stores data in `./qdrant_storage`.
+
+Then point pipelines to it:
+```
+ANALYZE_VDB__QDRANT_URL=http://localhost:6333
+EXB10_VDB__QDRANT_URL=http://localhost:6333
+```
+
+## Development
+Common make targets:
+```
+make dev
+make test
+make lint
+```
+
+## License
+MIT

@@ -1,0 +1,264 @@
+name: CI
+
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - "**"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  RUSTFLAGS: -C target-cpu=native
+  CARGO_INCREMENTAL: "1"
+  RUST_CRATE: sec_o3
+  CARGO_TARGET_DIR: /tmp/sec-nlp/target
+  RUSTC_WRAPPER: sccache
+  SCCACHE_CACHE_SIZE: 10G
+  SCCACHE_DIR: /tmp/sccache
+  SCCACHE_GHA_ENABLED: "true"
+  UV_NO_BUILD_ISOLATION: "1"
+  UV_LINK_MODE: copy
+
+jobs:
+  changes:
+    name: Detect path changes
+    if: ${{ github.event_name != 'push' || github.ref_name != 'main' }}
+    runs-on: ubuntu-latest
+    outputs:
+      python_changed: ${{ steps.filter.outputs.python }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Paths filter
+        id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            python:
+              - 'pyproject.toml'
+              - 'sec_nlp/**'
+              - '**/*.py'
+              - 'uv.lock'
+
+  # ---------------------------------------------------------------------------
+  # FULL SUITES
+  # ---------------------------------------------------------------------------
+  full_python:
+    name: "Python (Full) — ${{ matrix.os }} / py${{ matrix.python }}"
+    if: ${{ github.event_name == 'push' && github.ref_name == 'main' }}
+    runs-on: ${{ matrix.os }}
+    continue-on-error: ${{ matrix.experimental || false }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        python: ["3.11", "3.12", "3.13"]
+        include:
+          - python: "3.11"
+            experimental: false
+          - python: "3.12"
+            experimental: true
+          - python: "3.13"
+            experimental: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+
+      - name: Setup sccache
+        uses: mozilla-actions/sccache@v0.0.4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: ${{ env.RUST_CRATE }} -> target
+          target-dir: ${{ env.CARGO_TARGET_DIR }}
+
+      - name: Setup environment
+        run: make sync
+
+      - name: Lint
+        run: make py-lint
+
+      - name: Type check
+        run: make types
+
+      - name: Build extension
+        run: make build-ext
+
+      - name: Test
+        run: make test
+
+      - name: Coverage
+        run: |
+          uv run coverage run -m pytest -q --basetemp .pytest_tmp --cache-clear
+          uv run coverage xml
+
+      - name: Upload to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          files: coverage.xml
+          flags: python,${{ matrix.os }},py${{ matrix.python }}
+          fail_ci_if_error: false
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+
+  # ---------------------------------------------------------------------------
+  # TARGETED JOBS
+  # ---------------------------------------------------------------------------
+  python_targeted:
+    name: "Python (Quick) — ${{ matrix.os }} / py${{ matrix.python }}"
+    needs: changes
+    if: ${{ (github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref_name != 'main')) && needs.changes.outputs.python_changed == 'true' }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        python: ["3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+
+      - name: Setup sccache
+        uses: mozilla-actions/sccache@v0.0.4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: ${{ env.RUST_CRATE }} -> target
+          target-dir: ${{ env.CARGO_TARGET_DIR }}
+          cache-all-crates: true
+
+      - name: Setup and lint
+        run: make check
+
+      - name: Build extension
+        run: make build-ext
+
+      - name: Test
+        run: make py-test
+
+  # ---------------------------------------------------------------------------
+  # PRE-COMMIT
+  # ---------------------------------------------------------------------------
+  pre_commit:
+    name: Pre-commit hooks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: astral-sh/setup-uv@v3
+
+      - name: Setup tools
+        run: make setup
+
+      - uses: pre-commit/action@v3.0.1
+
+  # ---------------------------------------------------------------------------
+  # INTEGRATION TESTS
+  # ---------------------------------------------------------------------------
+  integration:
+    name: "Integration — ${{ matrix.os }} / py${{ matrix.python }}"
+    if: github.event_name == 'push'
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        python: ["3.11"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+
+      - name: Setup sccache
+        uses: mozilla-actions/sccache@v0.0.4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: ${{ env.RUST_CRATE }} -> target
+          target-dir: ${{ env.CARGO_TARGET_DIR }}
+          cache-all-crates: true
+
+      - name: Setup environment
+        run: make sync
+
+      - name: Build extension
+        run: make build-ext
+
+      - name: Run integration tests
+        run: uv run pytest -v tests/integration
+
+  # ---------------------------------------------------------------------------
+  # STATUS CHECK (required for branch protection)
+  # ---------------------------------------------------------------------------
+  ci_success:
+    name: CI Success
+    if: always()
+    needs:
+      - changes
+      - full_python
+      - python_targeted
+      - pre_commit
+      - integration
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check all jobs
+        run: |
+          if [[ "${{ contains(needs.*.result, 'failure') }}" == "true" ]]; then
+            echo "One or more jobs failed"
+            exit 1
+          elif [[ "${{ contains(needs.*.result, 'cancelled') }}" == "true" ]]; then
+            echo "One or more jobs were cancelled"
+            exit 1
+          else
+            echo "All jobs passed"
+            exit 0
+          fi

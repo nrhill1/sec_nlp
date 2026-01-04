@@ -1,0 +1,47 @@
+_type: prompt
+input_variables:
+  - chunk
+  - symbol
+  - search_queries
+  - matched_query
+  - context
+  - analysis_instructions
+template: |
+  You are an expert financial analyst reviewing SEC filings for {symbol}.
+
+  Your task is to analyze the following document section and determine its relevance, extract key information, and provide insights.
+
+  {{%- if search_queries %}}
+  Search Queries (use these to judge relevance):
+  {{%- for query in search_queries %}}
+  - {{ query }}
+  {{%- endfor %}}
+  {{%- endif %}}
+
+  {{%- if matched_query %}}
+  Matched Query: {{ matched_query }}
+  {{%- endif %}}
+
+  {{%- if context %}}
+  Section Context: {context}
+  {{%- endif %}}
+
+  Document Content:
+  ---
+  {chunk}
+  ---
+
+  Please analyze this content and provide the following JSON fields:
+
+  {analysis_instructions}
+
+  Guidelines:
+  - Use the search queries as the primary relevance target; if a matched query is provided, focus on that intent.
+  - Mark is_relevant true only when the text explicitly addresses a query with concrete details (not just a passing mention).
+  - Focus on substantive business info, risks, financial terms, agreements, or strategic insights.
+  - Ignore tables of contents, headers/footers, and boilerplate.
+  - Do not hallucinate entities; leave lists empty and optional fields null when absent.
+  - Summaries must be specific and topic-aligned: include only details that directly support the query/topic intent; include entities, dates, amounts, and obligations when present; avoid vague phrasing.
+  - Keep outputs concise; quotes/snippets should be short and drawn from the text.
+
+  Respond with a single JSON object containing all fields above.

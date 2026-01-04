@@ -1,0 +1,65 @@
+"""Metadata filter helpers for vector search."""
+
+from __future__ import annotations
+
+from collections.abc import Mapping, Sequence
+
+from qdrant_client.models import FieldCondition, Filter, MatchAny, MatchValue
+
+type MetadataFilterValue = str | int | bool
+type MetadataFilters = Mapping[str, Sequence[MetadataFilterValue]]
+
+
+def build_metadata_filter(raw_filters: MetadataFilters) -> Filter | None:
+    """Construct a Qdrant metadata filter from config-style mappings."""
+    conditions: list[FieldCondition] = []
+
+    for key, raw_value in raw_filters.items():
+        values: list[MetadataFilterValue]
+        if isinstance(raw_value, str):
+            values = [raw_value]
+        else:
+            values = list(raw_value)
+        cleaned = [v for v in values if v != ""]
+        if not cleaned:
+            continue
+
+        if len(cleaned) == 1:
+            conditions.append(
+                FieldCondition(key=str(key), match=MatchValue(value=cleaned[0]))
+            )
+            continue
+
+        str_values = [v for v in cleaned if isinstance(v, str)]
+        int_values = [
+            v for v in cleaned if isinstance(v, int) and not isinstance(v, bool)
+        ]
+        bool_values = [v for v in cleaned if isinstance(v, bool)]
+
+        if len(str_values) == len(cleaned):
+            conditions.append(
+                FieldCondition(key=str(key), match=MatchAny(any=str_values))
+            )
+            continue
+
+        if len(int_values) == len(cleaned):
+            conditions.append(
+                FieldCondition(key=str(key), match=MatchAny(any=int_values))
+            )
+            continue
+
+        if len(bool_values) == len(cleaned):
+            conditions.append(
+                FieldCondition(key=str(key), match=MatchAny(any=bool_values))
+            )
+            continue
+
+        coerced_values = [str(v) for v in cleaned]
+        conditions.append(
+            FieldCondition(key=str(key), match=MatchAny(any=coerced_values))
+        )
+
+    if not conditions:
+        return None
+
+    return Filter(must=list(conditions))

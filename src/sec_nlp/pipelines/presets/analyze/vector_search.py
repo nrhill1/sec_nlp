@@ -1,0 +1,444 @@
+# src/sec_nlp/pipelines/presets/analyze/vector_search.py
+"""Vector search utilities for the analyze pipeline."""
+
+from __future__ import annotations
+
+from collections import defaultdict
+from pathlib import Path
+from typing import Any
+
+from langchain_core.documents import Document
+from langchain_core.runnables import RunnableConfig, RunnableSerializable
+from langchain_qdrant import QdrantVectorStore
+from pydantic import BaseModel, ConfigDict, Field
+
+from sec_nlp.core.infra.logger import log_divider, logger
+from sec_nlp.pipelines.metadata.filters import (
+    MetadataFilters,
+    build_metadata_filter,
+)
+from sec_nlp.pipelines.output_io import write_yaml
+from sec_nlp.pipelines.types import (
+    MetadataMap,
+    MetadataValue,
+)
+from sec_nlp.pipelines.utils import slugify
+from sec_nlp.types import JsonDict, JsonValue
+
+from .analysis_runner import AnalysisBatchInput
+from .config import AnalyzeConfig
+from .payloads import (
+    SearchAnalysisPayload,
+    SearchHighlightsPayload,
+    SearchOutputPayload,
+    SearchResultPayload,
+    SearchStatsPayload,
+)
+from .utils import resolve_symbol_for_output
+
+
+class SearchRetrieveInput(BaseModel):
+    """Runnable input for retrieving search hits."""
+
+    model_config = ConfigDict(
+        arbitrary_types_allowed=True,
+        extra="forbid",
+        frozen=True,
+        defer_build=True,
+    )
+
+    symbol: str | None = None
+    queries: list[str] | None = None
+
+
+class SearchRunnable(
+    RunnableSerializable[SearchRetrieveInput, AnalysisBatchInput]
+):
+    """Run semantic search for queries."""
+
+    model_config = ConfigDict(
+        arbitrary_types_allowed=True,
+        extra="forbid",
+        frozen=True,
+        defer_build=True,
+    )
+
+    config: AnalyzeConfig = Field(description="Analyze pipeline config")
+    vector_store: QdrantVectorStore | None = Field(
+        default=None, description="Vector store backend"
+    )
+
+    def invoke(
+        self,
+        input: SearchRetrieveInput,
+        config: RunnableConfig | None = None,
+        **kwargs: Any,
+    ) -> AnalysisBatchInput:
+        """Invoke the runnable for chaining in a sequence."""
+        _ = config
+        _ = kwargs
+        queries = input.queries
+        docs = self.retrieve_hits(queries)
+        fallback_symbol = input.symbol or (
+            self.config.symbols[0] if self.config.symbols else "<unknown>"
+        )
+        return AnalysisBatchInput(symbol=fallback_symbol, docs=docs)
+
+    def retrieve_hits(self, queries: list[str] | None = None) -> list[Document]:
+        """Retrieve candidate chunks from the vector store."""
+        query_list = self.config.search.queries if queries is None else queries
+        if (
+            not self.vector_store
+            or not query_list
+            or self.config.vector_mode == "off"
+        ):
+            return []
+
+        distance_metric = self.config.vdb.qdrant_distance
+        distance_prefers_lower = distance_metric in ("Cosine", "Euclid")
+        threshold = self.config.search.score_threshold
+        metadata_filter = build_metadata_filter(
+            self.config.search.metadata_filters
+        )
+        try:
+            collection = self.vector_store.collection_name
+            client = self.vector_store.client
+            if collection and client:
+                count = client.count(collection, exact=True).count
+                logger.info(
+                    "Vector search using collection=%s (points=%d)",
+                    collection,
+                    count,
+                )
+        except Exception:
+            logger.debug("Could not fetch Qdrant count before search")
+
+        seen: set[tuple[str, str | None, str | None]] = set()
+        retrieved: list[Document] = []
+
+        for query in query_list:
+            results = self.vector_store.similarity_search_with_score(
+                query,
+                k=self.config.search.limit,
+                filter=metadata_filter,
+            )
+            filtered = [
+                (doc, score)
+                for doc, score in results
+                if (
+                    score <= threshold
+                    if distance_prefers_lower
+                    else score >= threshold
+                )
+            ]
+            for doc, score in filtered:
+                meta = doc.metadata or {}
+                key = (
+                    doc.page_content or "",
+                    meta.get("section_number"),
+                    meta.get("symbol"),
+                )
+                if key in seen:
+                    continue
+                seen.add(key)
+                doc.metadata = {
+                    **meta,
+                    "search_query": query,
+                    "search_score": float(score),
+                }
+                retrieved.append(doc)
+
+        return retrieved
+
+    def run(self) -> list[Path]:
+        """Run semantic search queries if configured."""
+        if not self.config.search.enabled:
+            return []
+
+        if not self.config.search.queries:
+            logger.warning("Search enabled but no queries configured")
+            return []
+
+        if not self.vector_store:
+            logger.warning(
+                "Search enabled but vector store not initialized "
+                "(vector_mode may be 'off'?)"
+            )
+            return []
+        if self.config.search.analyze:
+            logger.info(
+                "Search export analysis disabled; run the analyze chain instead"
+            )
+
+        search_outputs: list[Path] = []
+
+        log_divider(logger, color="yellow")
+        logger.info(
+            "Running %d semantic search queries",
+            len(self.config.search.queries),
+        )
+
+        distance_metric = self.config.vdb.qdrant_distance
+        distance_prefers_lower = distance_metric in ("Cosine", "Euclid")
+        threshold = self.config.search.score_threshold
+        metadata_filter = build_metadata_filter(
+            self.config.search.metadata_filters
+        )
+
+        for i, query in enumerate(self.config.search.queries, 1):
+            try:
+                logger.info(
+                    "[%d/%d] Searching: %s",
+                    i,
+                    len(self.config.search.queries),
+                    query,
+                )
+
+                results = self.vector_store.similarity_search_with_score(
+                    query,
+                    k=self.config.search.limit,
+                    filter=metadata_filter,
+                )
+
+                filtered_results = [
+                    (doc, score)
+                    for doc, score in results
+                    if (
+                        score <= threshold
+                        if distance_prefers_lower
+                        else score >= threshold
+                    )
+                ]
+                logger.info(
+                    "Search '%s': kept %d/%d (%s %.2f)",
+                    query,
+                    len(filtered_results),
+                    len(results),
+                    "<=" if distance_prefers_lower else ">=",
+                    threshold,
+                )
+
+                if self.config.search.export_results:
+                    query_slug = slugify(query[:50])
+                    results_by_symbol: dict[
+                        str, list[tuple[Document, float]]
+                    ] = defaultdict(list)
+                    for doc, score in filtered_results:
+                        meta = doc.metadata or {}
+                        symbol_for_output = resolve_symbol_for_output(
+                            self.config.symbols[0]
+                            if self.config.symbols
+                            else "<unknown>",
+                            meta,
+                        )
+                        results_by_symbol[symbol_for_output].append(
+                            (doc, score)
+                        )
+
+                    for symbol_key, symbol_results in results_by_symbol.items():
+                        output_dir = (
+                            self.config.get_symbol_output_dir(symbol_key)
+                            / "search"
+                        )
+                        output_dir.mkdir(parents=True, exist_ok=True)
+                        output_file = output_dir / f"{query_slug}.yaml"
+
+                        section_counts: dict[str, int] = defaultdict(int)
+                        tag_counts: dict[str, int] = defaultdict(int)
+                        sentiment_counts: dict[str, int] = defaultdict(int)
+
+                        scores = [float(score) for _, score in symbol_results]
+                        avg_score = (
+                            sum(scores) / len(scores) if scores else None
+                        )
+                        best_score = (
+                            min(scores)
+                            if distance_prefers_lower and scores
+                            else max(scores)
+                            if scores
+                            else None
+                        )
+
+                        top_summaries: list[str] = []
+
+                        for doc, _ in symbol_results:
+                            meta = doc.metadata or {}
+
+                            section = meta.get("section_number")
+                            if section:
+                                section_counts[str(section)] += 1
+
+                            for tag in meta.get("tags") or []:
+                                tag_counts[str(tag)] += 1
+
+                            sentiment = meta.get("sentiment")
+                            if sentiment:
+                                sentiment_counts[str(sentiment)] += 1
+
+                            summary = meta.get("summary")
+                            if (
+                                isinstance(summary, str)
+                                and summary
+                                and summary not in top_summaries
+                            ):
+                                top_summaries.append(summary)
+
+                        metadata_filters_payload = (
+                            self._build_metadata_filters_payload(
+                                self.config.search.metadata_filters
+                            )
+                        )
+
+                        results_payload = [
+                            SearchResultPayload(
+                                score=float(score),
+                                content=doc.page_content[:500],
+                                metadata=(
+                                    metadata_payload
+                                    := self._normalize_metadata(doc.metadata)
+                                ),
+                                summary=metadata_payload.get("summary"),
+                                tags=metadata_payload.get("tags"),
+                                sentiment=metadata_payload.get("sentiment"),
+                                forward_looking=self._coerce_bool(
+                                    metadata_payload.get("forward_looking")
+                                ),
+                                confidence_score=self._coerce_float(
+                                    metadata_payload.get("confidence_score")
+                                ),
+                            )
+                            for doc, score in symbol_results
+                        ]
+
+                        stats_payload = SearchStatsPayload(
+                            average_score=avg_score,
+                            best_score=best_score,
+                            symbols={symbol_key: len(symbol_results)},
+                            sections=dict(section_counts),
+                            tag_frequency=dict(
+                                sorted(
+                                    tag_counts.items(),
+                                    key=lambda t: t[1],
+                                    reverse=True,
+                                )
+                            ),
+                            sentiment_breakdown=dict(sentiment_counts),
+                        )
+
+                        highlights_payload = SearchHighlightsPayload(
+                            top_summaries=top_summaries[:10]
+                        )
+
+                        analysis_payload = SearchAnalysisPayload(
+                            enabled=False,
+                            analyzed_hits=0,
+                            results=[],
+                        )
+
+                        search_payload = SearchOutputPayload(
+                            query=query,
+                            symbol=symbol_key,
+                            results_count=len(symbol_results),
+                            score_threshold=threshold,
+                            metadata_filters=metadata_filters_payload,
+                            stats=stats_payload,
+                            highlights=highlights_payload,
+                            analysis=analysis_payload,
+                            results=results_payload,
+                        )
+
+                        write_yaml(
+                            output_file,
+                            search_payload,
+                            exclude_none=True,
+                            sort_keys=False,
+                            allow_unicode=True,
+                        )
+
+                        search_outputs.append(output_file)
+                        logger.info(
+                            "Exported search results to %s",
+                            output_file,
+                        )
+
+                logger.info("  -> Found %d results", len(filtered_results))
+
+            except Exception as e:
+                logger.error("Search failed for query '%s': %s", query, e)
+                continue
+
+        return search_outputs
+
+    @staticmethod
+    def _build_metadata_filters_payload(filters: MetadataFilters) -> JsonDict:
+        payload: JsonDict = {}
+        for key, values in filters.items():
+            cleaned: list[JsonValue] = []
+            for value in values:
+                if value != "":
+                    cleaned.append(value)
+            if cleaned:
+                payload[str(key)] = cleaned
+        return payload
+
+    @classmethod
+    def _normalize_metadata(cls, metadata: MetadataMap | None) -> JsonDict:
+        if not metadata:
+            return {}
+        payload: JsonDict = {}
+        for key, raw_value in metadata.items():
+            normalized = cls._normalize_metadata_value(raw_value)
+            if normalized is not None:
+                payload[str(key)] = normalized
+        return payload
+
+    @classmethod
+    def _normalize_metadata_value(
+        cls, value: MetadataValue | Path
+    ) -> JsonValue | None:
+        if isinstance(value, Path):
+            return str(value)
+        if isinstance(value, (str, int, float, bool)) or value is None:
+            return value
+        if isinstance(value, dict):
+            nested: JsonDict = {}
+            for nested_key, nested_value in value.items():
+                if not isinstance(nested_key, str):
+                    continue
+                normalized = cls._normalize_metadata_value(nested_value)
+                if normalized is not None:
+                    nested[nested_key] = normalized
+            return nested or None
+        if isinstance(value, list):
+            items: list[JsonValue] = []
+            for item in value:
+                normalized = cls._normalize_metadata_value(item)
+                if normalized is not None:
+                    items.append(normalized)
+            return items or None
+        return None
+
+    @staticmethod
+    def _coerce_bool(value: JsonValue | None) -> bool | None:
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, (int, float)) and value in (0, 1):
+            return bool(value)
+        if isinstance(value, str):
+            cleaned = value.strip().lower()
+            if cleaned in ("true", "false"):
+                return cleaned == "true"
+        return None
+
+    @staticmethod
+    def _coerce_float(value: JsonValue | None) -> float | None:
+        if isinstance(value, bool):
+            return None
+        if isinstance(value, (int, float)):
+            return float(value)
+        if isinstance(value, str):
+            try:
+                return float(value)
+            except ValueError:
+                return None
+        return None

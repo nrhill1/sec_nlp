@@ -1,0 +1,38 @@
+fail_fast: true
+repos:
+- repo: https://github.com/pre-commit/pre-commit-hooks
+  rev: v6.0.0
+  hooks:
+  - id: check-yaml
+    args: [--allow-multiple-documents]
+  - id: check-toml
+  - id: end-of-file-fixer
+  - id: trailing-whitespace
+  - id: check-added-large-files
+  - id: check-merge-conflict
+  - id: mixed-line-ending
+
+# Python
+- repo: local
+  hooks:
+  - id: py-lint
+    name: Python Linting
+    entry: make py-lint
+    types: [python]
+    language: system
+    pass_filenames: false
+
+  - id: py-types
+    name: Python Typecheck (ty)
+    entry: make py-types
+    files: '^(src/|tests/).*\.py$'
+    language: system
+    pass_filenames: false
+
+  - id: py-test
+    name: Python Testing
+    entry: make py-test
+    files: '^(src/|tests/).*\.py$'
+    types: [python]
+    language: system
+    pass_filenames: false
