@@ -21,7 +21,7 @@ from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, field_validator
 from unstructured.documents.elements import Element
 
 from sec_nlp.core.edgar.filing_mode import FilingMode
-from sec_nlp.core.infra.logger import logger
+from sec_nlp.core.infra.logger import format_size, logger
 from sec_nlp.core.ingest import filings
 from sec_nlp.core.ingest.downloader import download_filings
 from sec_nlp.core.ingest.parser import HtmlProcessor
@@ -262,21 +262,17 @@ class Loader(BaseModel):
                             logger.debug("Could not stat %s", html_path)
                     for acc, sz in per_accession.items():
                         logger.debug(
-                            "Total size for %s (%s accession %s): %.1f KB",
+                            "Total size for %s (%s accession %s): %s",
                             symbol,
                             mode.form,
                             acc,
-                            sz / 1024.0,
+                            format_size(sz),
                         )
-                    total_kb = total_size / 1024.0
-                    total_gb = total_kb / 1024.0
                     logger.info(
                         "Total size for %s (%s): %s across %d files",
                         symbol,
                         mode.form,
-                        f"{total_gb:.3f} GB"
-                        if total_gb >= 0.01
-                        else f"{total_kb:.1f} KB",
+                        format_size(total_size),
                         len(html_paths),
                     )
                 docs = self.batch_transform_html(
