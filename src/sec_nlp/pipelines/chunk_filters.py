@@ -1,3 +1,4 @@
+# src/sec_nlp/pipelines/chunk_filters.py
 """Shared chunk filtering helpers for pipeline flows."""
 
 from __future__ import annotations

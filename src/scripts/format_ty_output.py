@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+# src/scripts/format_ty_output.py
 """Format ty diagnostics from GitHub annotation output."""
 
 from __future__ import annotations

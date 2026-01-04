@@ -1,3 +1,4 @@
+# src/sec_nlp/types.py
 """Shared type aliases for structured config and metadata."""
 
 from __future__ import annotations

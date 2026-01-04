@@ -1,3 +1,4 @@
+# src/sec_nlp/pipelines/presets/warranty/types.py
 """Shared type aliases for warranty pipeline data structures."""
 
 from __future__ import annotations

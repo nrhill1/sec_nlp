@@ -1,3 +1,4 @@
+# src/sec_nlp/pipelines/metadata/filters.py
 """Metadata filter helpers for vector search."""
 
 from __future__ import annotations

@@ -1,3 +1,4 @@
+# src/sec_nlp/prompts/loader.py
 """Prompt loading helpers for LLM pipelines."""
 
 from __future__ import annotations

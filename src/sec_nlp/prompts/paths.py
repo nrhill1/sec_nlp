@@ -1,3 +1,4 @@
+# src/sec_nlp/prompts/paths.py
 """Prompt file paths for LLM pipelines."""
 
 from pathlib import Path

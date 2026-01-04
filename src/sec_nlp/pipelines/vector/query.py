@@ -1,3 +1,4 @@
+# src/sec_nlp/pipelines/vector/query.py
 """Shared Qdrant query helpers for pipelines."""
 
 from __future__ import annotations

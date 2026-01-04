@@ -1,3 +1,4 @@
+# src/sec_nlp/pipelines/vector/store.py
 """Shared vector-store utilities for pipelines."""
 
 from __future__ import annotations

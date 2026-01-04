@@ -1,4 +1,4 @@
-# src/scripts/memory.py
+# src/scripts/profile/memory.py
 """Profile memory usage of pipelines."""
 
 import signal

@@ -1,3 +1,4 @@
+# src/sec_nlp/pipelines/vector/client.py
 """Shared Qdrant client helpers for pipelines and CLI."""
 
 from __future__ import annotations

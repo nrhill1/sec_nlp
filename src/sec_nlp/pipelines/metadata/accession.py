@@ -1,3 +1,4 @@
+# src/sec_nlp/pipelines/metadata/accession.py
 """Shared metadata helpers for accession identification."""
 
 from __future__ import annotations

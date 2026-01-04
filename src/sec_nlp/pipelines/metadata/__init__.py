@@ -1,3 +1,4 @@
+# src/sec_nlp/pipelines/metadata/__init__.py
 """Shared metadata helpers for pipelines."""
 
 from .accession import get_accession_from_metadata, group_results_by_accession

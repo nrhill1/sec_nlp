@@ -1,3 +1,4 @@
+# src/sec_nlp/pipelines/metadata/exhibit10.py
 """Metadata helpers for Exhibit 10 pipeline."""
 
 from __future__ import annotations

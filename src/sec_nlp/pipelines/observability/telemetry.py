@@ -1,3 +1,4 @@
+# src/sec_nlp/pipelines/observability/telemetry.py
 """Shared telemetry helpers for pipelines (chunk stats, document metadata).
 
 Chunk stats now report both character length and sentence count metrics,

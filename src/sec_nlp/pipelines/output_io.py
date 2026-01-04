@@ -1,3 +1,4 @@
+# src/sec_nlp/pipelines/output_io.py
 """Shared output serialization helpers for pipeline exports."""
 
 from __future__ import annotations

@@ -1,3 +1,4 @@
+# src/sec_nlp/pipelines/exceptions.py
 """Exception hierarchy for pipeline validation and execution.
 
 This module defines a comprehensive exception hierarchy following Python
