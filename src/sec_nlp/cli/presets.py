@@ -78,7 +78,6 @@ PRESET_CONFIGS: dict[AnalyzePreset, ConfigData] = {
             "vector_size": 768,
         },
         "search": {
-            "enabled": True,
             "limit": 5,
             "score_threshold": 0.6,
             "analyze_limit": 5,
@@ -148,7 +147,6 @@ PRESET_CONFIGS: dict[AnalyzePreset, ConfigData] = {
     AnalyzePreset.rare_earths: {
         "symbols": ["LAC", "MP", "ALB", "SMMT"],
         "search": {
-            "enabled": True,
             "queries": [
                 "rare earth production",
                 "lithium offtake agreement",

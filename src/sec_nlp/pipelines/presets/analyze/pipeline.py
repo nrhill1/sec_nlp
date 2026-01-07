@@ -41,7 +41,7 @@ from .result_writer import write_results
 from .topic_scoring import build_topic_matcher
 from .types import ChunkStats, SymbolRunMetadata, Timings
 from .vector_index import VectorIndexer
-from .vector_search import SearchRunnable
+from .vector_search import SearchResultsByQuery, SearchRunnable
 
 type PromptInput = dict[
     str,
@@ -91,6 +91,9 @@ class AnalyzePipeline(BasePipeline):
     _vector_indexer: VectorIndexer = PrivateAttr()
     _analysis_runner: AnalyzerRunnable = PrivateAttr()
     _search_runner: SearchRunnable = PrivateAttr()
+    _search_results_by_query: SearchResultsByQuery | None = PrivateAttr(
+        default=None
+    )
 
     @classmethod
     def config_model(cls) -> type[AnalyzeConfig]:
@@ -167,13 +170,14 @@ class AnalyzePipeline(BasePipeline):
             self._callbacks = []
 
         # Initialize vector store
-        if self.config.search.enabled and self.config.vector_mode == "off":
+        has_search_queries = bool(self.config.search.queries)
+        if has_search_queries and self.config.vector_mode == "off":
             logger.warning(
-                "search.enabled=True -- vector_mode should be 'read' or 'write'"
+                "search.queries set -- vector_mode should be 'read' or 'write'"
             )
 
         should_init_vector = (
-            self.config.search.enabled or self.config.vector_mode != "off"
+            has_search_queries or self.config.vector_mode != "off"
         )
 
         if should_init_vector:
@@ -360,9 +364,15 @@ class AnalyzePipeline(BasePipeline):
                     if index < last_index:
                         log_divider(logger, color="magenta")
 
-            # Run semantic search if enabled
-            if self.config.search.enabled:
-                search_outputs = self._search_runner.run()
+            # Run semantic search if queries are configured
+            if self.config.search.queries:
+                if self._search_results_by_query is not None:
+                    search_outputs = self._search_runner.export_results(
+                        self._search_results_by_query,
+                        cached=True,
+                    )
+                else:
+                    search_outputs = self._search_runner.run()
                 all_outputs.extend(search_outputs)
                 metadata["search_results"] = len(search_outputs)
                 metadata["search_outputs"] = search_outputs
@@ -469,12 +479,12 @@ class AnalyzePipeline(BasePipeline):
         self._vector_indexer.index(symbol, docs, timings)
 
         # Retrieve relevant chunks via vector search (if enabled)
-        if (
-            self.config.search.enabled
-            and self.config.search.queries
-            and self._vector_store
-        ):
-            docs_for_analysis = self._search_runner.retrieve_hits()
+        if self.config.search.queries and self._vector_store:
+            (
+                docs_for_analysis,
+                search_results,
+            ) = self._search_runner.retrieve_hits_with_results()
+            self._search_results_by_query = search_results
             if not docs_for_analysis:
                 logger.info(
                     "No vector search hits for %s; skipping analysis step",
@@ -487,7 +497,9 @@ class AnalyzePipeline(BasePipeline):
                     symbol,
                 )
         else:
-            logger.info("Search disabled or not configured; skipping analysis")
+            logger.info(
+                "Search not configured (no queries) or vector store unavailable; skipping analysis"
+            )
             docs_for_analysis = []
 
         # Analyze chunks with LLM (only if we have search hits)

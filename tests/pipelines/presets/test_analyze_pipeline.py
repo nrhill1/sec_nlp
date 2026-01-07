@@ -86,7 +86,7 @@ def _make_config(
         dl_path=tmp_path,
         vector_mode="off",
         export_format="json",
-        search=SearchConfig(enabled=False, queries=[]),
+        search=SearchConfig(queries=[]),
         validate_config=False,
         collect_metrics=False,
         top_k_chunks=top_k_chunks,

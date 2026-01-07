@@ -30,16 +30,9 @@ class SearchConfig(BaseModel):
         extra="ignore",
     )
 
-    enabled: bool = Field(
-        default=False,
-        description="Enable semantic search after analysis",
-        json_schema_extra={
-            "cli_args": {"nargs": "?", "const": True},
-        },
-    )
     queries: list[str] = Field(
         default_factory=list,
-        description="Search queries to run",
+        description="Search queries to run (search is enabled when non-empty)",
     )
     limit: int = Field(
         default=10,
@@ -119,7 +112,7 @@ class AnalyzeConfig(BaseConfig):
         default_factory=lambda: LLMConfig(
             prompt_file=ANALYZE_PROMPT_PATH,
             model_name="llama3.2:1b",
-            temperature=0.35,  # Slightly higher for recall while keeping consistency
+            temperature=0.25,  # Slightly higher for recall while keeping consistency
         ),
         description="LLM configuration for document analysis",
     )
@@ -245,7 +238,7 @@ class AnalyzeConfig(BaseConfig):
         description="Minimum number of topic keyword hits required to keep a chunk",
     )
     max_chunk_length: int | None = Field(
-        default=20000,
+        default=200000,
         ge=10,
         description="Optional maximum characters allowed per chunk (None disables)",
     )
@@ -420,8 +413,8 @@ class AnalyzeConfig(BaseConfig):
     @model_validator(mode="after")
     def _validate_vector_and_search(self) -> Self:
         """Guardrails for vector/search combinations."""
-        if self.search.enabled and self.vector_mode == "off":
+        if self.search.queries and self.vector_mode == "off":
             raise ValueError(
-                "search.enabled=True requires vector_mode to be 'read' or 'write'"
+                "search.queries requires vector_mode to be 'read' or 'write'"
             )
         return self

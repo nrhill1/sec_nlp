@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -35,6 +36,15 @@ from .payloads import (
     SearchStatsPayload,
 )
 from .utils import resolve_symbol_for_output
+
+
+@dataclass(frozen=True)
+class SearchQueryResults:
+    filtered: list[tuple[Document, float]]
+    total: int
+
+
+type SearchResultsByQuery = dict[str, SearchQueryResults]
 
 
 class SearchRetrieveInput(BaseModel):
@@ -84,15 +94,17 @@ class SearchRunnable(
         )
         return AnalysisBatchInput(symbol=fallback_symbol, docs=docs)
 
-    def retrieve_hits(self, queries: list[str] | None = None) -> list[Document]:
-        """Retrieve candidate chunks from the vector store."""
+    def search_queries(
+        self, queries: list[str] | None = None
+    ) -> SearchResultsByQuery:
+        """Run similarity search per query and return filtered hits."""
         query_list = self.config.search.queries if queries is None else queries
         if (
             not self.vector_store
             or not query_list
             or self.config.vector_mode == "off"
         ):
-            return []
+            return {}
 
         distance_metric = self.config.vdb.qdrant_distance
         distance_prefers_lower = distance_metric in ("Cosine", "Euclid")
@@ -113,8 +125,7 @@ class SearchRunnable(
         except Exception:
             logger.debug("Could not fetch Qdrant count before search")
 
-        seen: set[tuple[str, str | None, str | None]] = set()
-        retrieved: list[Document] = []
+        results_by_query: SearchResultsByQuery = {}
 
         for query in query_list:
             results = self.vector_store.similarity_search_with_score(
@@ -131,7 +142,31 @@ class SearchRunnable(
                     else score >= threshold
                 )
             ]
-            for doc, score in filtered:
+            results_by_query[query] = SearchQueryResults(
+                filtered=filtered,
+                total=len(results),
+            )
+
+        return results_by_query
+
+    def retrieve_hits(self, queries: list[str] | None = None) -> list[Document]:
+        """Retrieve candidate chunks from the vector store."""
+        docs, _ = self.retrieve_hits_with_results(queries)
+        return docs
+
+    def retrieve_hits_with_results(
+        self, queries: list[str] | None = None
+    ) -> tuple[list[Document], SearchResultsByQuery]:
+        """Retrieve deduplicated hits plus per-query results for export."""
+        results_by_query = self.search_queries(queries)
+        if not results_by_query:
+            return [], results_by_query
+
+        seen: set[tuple[str, str | None, str | None]] = set()
+        retrieved: list[Document] = []
+
+        for query, query_results in results_by_query.items():
+            for doc, score in query_results.filtered:
                 meta = doc.metadata or {}
                 key = (
                     doc.page_content or "",
@@ -141,27 +176,28 @@ class SearchRunnable(
                 if key in seen:
                     continue
                 seen.add(key)
-                doc.metadata = {
-                    **meta,
-                    "search_query": query,
-                    "search_score": float(score),
-                }
-                retrieved.append(doc)
+                retrieved.append(
+                    Document(
+                        page_content=doc.page_content,
+                        metadata={
+                            **meta,
+                            "search_query": query,
+                            "search_score": float(score),
+                        },
+                    )
+                )
 
-        return retrieved
+        return retrieved, results_by_query
 
     def run(self) -> list[Path]:
         """Run semantic search queries if configured."""
-        if not self.config.search.enabled:
-            return []
-
         if not self.config.search.queries:
-            logger.warning("Search enabled but no queries configured")
+            logger.warning("Search not configured: no queries provided")
             return []
 
         if not self.vector_store:
             logger.warning(
-                "Search enabled but vector store not initialized "
+                "Search queries configured but vector store not initialized "
                 "(vector_mode may be 'off'?)"
             )
             return []
@@ -169,6 +205,23 @@ class SearchRunnable(
             logger.info(
                 "Search export analysis disabled; run the analyze chain instead"
             )
+
+        results_by_query = self.search_queries()
+        return self.export_results(results_by_query)
+
+    def export_results(
+        self,
+        results_by_query: SearchResultsByQuery,
+        *,
+        cached: bool = False,
+    ) -> list[Path]:
+        """Export search results from precomputed hits."""
+        if not self.config.search.queries:
+            logger.warning("Search not configured: no queries provided")
+            return []
+
+        if cached:
+            logger.info("Reusing cached search results for export")
 
         search_outputs: list[Path] = []
 
@@ -181,9 +234,6 @@ class SearchRunnable(
         distance_metric = self.config.vdb.qdrant_distance
         distance_prefers_lower = distance_metric in ("Cosine", "Euclid")
         threshold = self.config.search.score_threshold
-        metadata_filter = build_metadata_filter(
-            self.config.search.metadata_filters
-        )
 
         for i, query in enumerate(self.config.search.queries, 1):
             try:
@@ -194,26 +244,19 @@ class SearchRunnable(
                     query,
                 )
 
-                results = self.vector_store.similarity_search_with_score(
-                    query,
-                    k=self.config.search.limit,
-                    filter=metadata_filter,
-                )
+                query_results = results_by_query.get(query)
+                if query_results is None:
+                    filtered_results: list[tuple[Document, float]] = []
+                    total_results = 0
+                else:
+                    filtered_results = query_results.filtered
+                    total_results = query_results.total
 
-                filtered_results = [
-                    (doc, score)
-                    for doc, score in results
-                    if (
-                        score <= threshold
-                        if distance_prefers_lower
-                        else score >= threshold
-                    )
-                ]
                 logger.info(
                     "Search '%s': kept %d/%d (%s %.2f)",
                     query,
                     len(filtered_results),
-                    len(results),
+                    total_results,
                     "<=" if distance_prefers_lower else ">=",
                     threshold,
                 )

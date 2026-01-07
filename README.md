@@ -22,6 +22,9 @@ NLP tools for SEC filings. Analyze filings with local LLMs, run semantic search,
 | `exb-10` | Find and index Exhibit 10 contract signals | Uses embeddings + vector store; no LLM. |
 | `warranty` | Extract warranty accrual/payout data from XBRL | Deterministic, no LLM. |
 
+Docs:
+- Analyze pipeline walkthrough: [src/sec_nlp/pipelines/presets/analyze/README.md](src/sec_nlp/pipelines/presets/analyze/README.md)
+
 ## Quickstart
 ### 1) Install
 Using uv (recommended):

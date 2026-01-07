@@ -41,14 +41,13 @@ def _make_config(
     tmp_path: Path,
     *,
     metadata_filters: MetadataFilters | None = None,
-    search_enabled: bool = True,
+    with_queries: bool = True,
 ) -> AnalyzeConfig:
-    queries = ["executive compensation clawback"] if search_enabled else []
+    queries = ["executive compensation clawback"] if with_queries else []
     filters: MetadataFilters = (
         metadata_filters if metadata_filters is not None else {}
     )
     search = SearchConfig(
-        enabled=search_enabled,
         queries=queries,
         limit=5,
         score_threshold=0.7,
@@ -58,7 +57,7 @@ def _make_config(
         symbols=["AAPL"],
         out_path=tmp_path,
         dl_path=tmp_path,
-        vector_mode="read" if search_enabled else "off",
+        vector_mode="read" if with_queries else "off",
         export_format="json",
         search=search,
         validate_config=False,
@@ -110,7 +109,7 @@ def test_retrieve_search_hits_passes_metadata_filter(
 
 
 def test_write_results_uses_metadata_symbol(tmp_path: Path) -> None:
-    config = _make_config(tmp_path, search_enabled=False)
+    config = _make_config(tmp_path, with_queries=False)
     pipeline = _TestAnalyzePipeline(config=config)
 
     analysis_results: list[AnalysisResultDict] = [

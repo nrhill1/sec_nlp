@@ -113,11 +113,13 @@ class AnalyzeCommand(AnalyzeConfig, PipelineCommand):
                 color="blue",
             )
         )
+        has_queries = bool(self.search.queries)
         search_status = (
-            f"enabled ({('<=' if self.vdb.qdrant_distance in ('Cosine', 'Euclid') else '>=')}"
+            f"configured ({len(self.search.queries)} queries, "
+            f"{('<=' if self.vdb.qdrant_distance in ('Cosine', 'Euclid') else '>=')}"
             f"{self.search.score_threshold})"
-            if self.search.enabled
-            else "disabled"
+            if has_queries
+            else "disabled (no queries)"
         )
         logger.info(
             bullet_line(
