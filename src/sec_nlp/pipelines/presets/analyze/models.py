@@ -75,10 +75,6 @@ class AnalysisInput(BaseModel):
 
     chunk: str
     symbol: str
-    search_queries: list[str] | None = Field(
-        default=None,
-        description="Search queries used to retrieve this chunk",
-    )
     matched_query: str | None = Field(
         default=None,
         description="Specific search query that matched this chunk",
@@ -339,6 +335,10 @@ class AnalysisOutput(BaseModel):
     )
 
     symbol: str
+    search_queries: list[str] = Field(
+        default_factory=list,
+        description="Search queries used to retrieve analyzed chunks",
+    )
     filing: FilingInfo
     executive_summary: ExecutiveSummary
     aggregates: Aggregates

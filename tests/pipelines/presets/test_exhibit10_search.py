@@ -21,7 +21,6 @@ class TestSearchConfig:
         """Test that SearchConfig has correct default values."""
         config = SearchConfig()
 
-        assert config.enabled is True
         assert config.queries == [
             "Supply agreements with exclusivity for diesel engine components",
             "Contracts providing parts at cost or cost-plus pricing to OEMs",
@@ -36,14 +35,12 @@ class TestSearchConfig:
     def test_search_config_with_custom_values(self) -> None:
         """Test creating SearchConfig with custom values."""
         config = SearchConfig(
-            enabled=True,
             queries=["exclusive contracts", "aftermarket provisions"],
             limit=20,
             score_threshold=0.7,
             export_results=False,
         )
 
-        assert config.enabled is True
         assert len(config.queries) == 2
         assert "exclusive contracts" in config.queries
         assert config.limit == 20
@@ -266,7 +263,6 @@ class TestExhibit10SearchIntegration:
         )
 
         # Should have search config with defaults
-        assert config.search.enabled is True
         assert config.search.queries == [
             "Supply agreements with exclusivity for diesel engine components",
             "Contracts providing parts at cost or cost-plus pricing to OEMs",
@@ -292,7 +288,6 @@ class TestExhibit10SearchIntegration:
             dl_path=dl_path,
             out_path=out_path,
             search=SearchConfig(
-                enabled=True,
                 queries=[
                     "exclusive supply agreements",
                     "aftermarket provisions",
@@ -301,6 +296,5 @@ class TestExhibit10SearchIntegration:
             ),
         )
 
-        assert config.search.enabled is True
         assert len(config.search.queries) == 2
         assert config.search.limit == 15

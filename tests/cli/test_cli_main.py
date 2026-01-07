@@ -201,12 +201,12 @@ class TestNormalizeCliArgs:
         from sec_nlp.cli.__main__ import _normalize_cli_args
 
         argv = [
-            "--search.enabled",
+            "--search.export-results",
             "false",
             "--validate-config",
             "0",
         ]
         normalized = _normalize_cli_args(argv)
 
-        assert "--no-search.enabled" in normalized
+        assert "--no-search.export-results" in normalized
         assert "--no-validate-config" in normalized

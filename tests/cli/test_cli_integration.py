@@ -184,7 +184,6 @@ class TestExb10CLIIntegration:
             str(dl_path),
             "--out-path",
             str(out_path),
-            "--search.enabled",
             "--search.limit",
             "20",
             "--search.score-threshold",
@@ -195,7 +194,6 @@ class TestExb10CLIIntegration:
 
         config = mock_run_pipeline.call_args[0][0]
         assert config.symbols == ["CAT", "DE", "GE", "CMI", "PCAR"]
-        assert config.search.enabled is True
         assert config.search.limit == 20
         assert config.search.score_threshold == 0.7
 
@@ -224,7 +222,6 @@ class TestExb10CLIIntegration:
             str(dl_path),
             "--out-path",
             str(out_path),
-            "--search.enabled",
             "--search.queries",
             "exclusive contracts",
             "--search.queries",
@@ -237,7 +234,6 @@ class TestExb10CLIIntegration:
 
         config = mock_run_pipeline.call_args[0][0]
         assert config.symbols == ["CAT", "DE", "GE", "CMI", "PCAR"]
-        assert config.search.enabled is True
         assert len(config.search.queries) == 3
         assert "exclusive contracts" in config.search.queries
         assert "aftermarket provisions" in config.search.queries
@@ -313,7 +309,6 @@ class TestExb10CLIIntegration:
             "--vdb.qdrant-port",
             "6333",
             # Search config
-            "--search.enabled",
             "--search.queries",
             "test query 1",
             "--search.queries",
@@ -336,7 +331,6 @@ class TestExb10CLIIntegration:
         assert config.vdb.qdrant_port == 6333
 
         # Verify Search config
-        assert config.search.enabled is True
         assert len(config.search.queries) == 2
         assert config.search.limit == 15
         assert config.search.score_threshold == 0.8
@@ -528,36 +522,3 @@ class TestCLIBooleanFlags:
 
         config = mock_run_pipeline.call_args[0][0]
         assert config.dry_run is True
-
-    @patch("sec_nlp.cli.command.PipelineCommand._run_pipeline", autospec=True)
-    def test_search_enabled_flag(
-        self,
-        mock_run_pipeline: Mock,
-        tmp_path: Path,
-    ) -> None:
-        """Test setting search.enabled boolean flag."""
-        from pydantic_settings import CliApp
-
-        from sec_nlp.cli.commands import Root
-
-        dl_path = tmp_path / "downloads"
-        out_path = tmp_path / "outputs"
-        dl_path.mkdir()
-        out_path.mkdir()
-
-        sys.argv = [
-            "cli",
-            "exb-10",
-            "--email",
-            "test@example.com",
-            "--dl-path",
-            str(dl_path),
-            "--out-path",
-            str(out_path),
-            "--search.enabled",
-        ]
-
-        CliApp.run(Root)
-
-        config = mock_run_pipeline.call_args[0][0]
-        assert config.search.enabled is True

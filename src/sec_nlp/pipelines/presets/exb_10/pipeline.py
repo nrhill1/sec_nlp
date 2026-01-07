@@ -218,8 +218,8 @@ class Exhibit10Pipeline(BasePipeline):
             else:
                 logger.info("Skipping chunking/indexing (search_only mode)")
 
-            # Run semantic search if enabled (or if search_only mode)
-            if self.config.search.enabled or self.config.search_only:
+            # Run semantic search if queries are configured (or if search_only mode)
+            if self.config.search.queries or self.config.search_only:
                 search_outputs = self._run_semantic_search()
                 all_outputs.extend(search_outputs)
                 metadata["search_results"] = len(search_outputs)
@@ -357,16 +357,16 @@ class Exhibit10Pipeline(BasePipeline):
         Returns:
             List of output files from search results
         """
-        if not self.config.search.enabled and not self.config.search_only:
+        if not self.config.search.queries and not self.config.search_only:
             return []
 
         if not self.config.search.queries:
-            logger.warning("Search enabled but no queries configured")
+            logger.warning("Search not configured: no queries provided")
             return []
 
         if not self._vector_store:
             logger.warning(
-                "Search enabled but vector store not initialized (dry_run=True?)"
+                "Search queries configured but vector store not initialized (dry_run=True?)"
             )
             return []
 

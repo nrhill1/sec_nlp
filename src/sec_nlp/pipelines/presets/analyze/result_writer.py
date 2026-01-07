@@ -25,6 +25,7 @@ def write_results(
     filing_meta: MetadataRecord,
     analysis_results: list[AnalysisResultDict],
     relevant_results: list[AnalysisResultDict] | None = None,
+    search_queries: list[str] | None = None,
     timings: Timings | None = None,
 ) -> list[Path]:
     """Write analysis results to output files."""
@@ -63,6 +64,7 @@ def write_results(
                     filing_meta=meta,
                     analysis_results=all_for_filing,
                     relevant_results=results_for_filing,
+                    search_queries=search_queries,
                     timings=timings,
                 )
                 output_dir = config.get_symbol_output_dir(symbol_for_output)
@@ -77,6 +79,7 @@ def write_results(
                 filing_meta=filing_meta,
                 analysis_results=analysis_results,
                 relevant_results=[],
+                search_queries=search_queries,
                 timings=timings,
             )
             output_dir = config.get_symbol_output_dir(symbol_for_output)
@@ -106,6 +109,7 @@ def write_results(
             filing_meta=filing_meta,
             analysis_results=analysis_results,
             relevant_results=relevant_results,
+            search_queries=search_queries,
             timings=timings,
         )
         output_dir = config.get_symbol_output_dir(symbol_for_output)

@@ -17,15 +17,6 @@ class SearchConfig(BaseSettings):
         validate_assignment=False,
     )
 
-    enabled: bool = Field(
-        default=True,
-        description="Enable semantic search after vector upsert",
-        json_schema_extra={
-            # Allow bare flag usage: --search.enabled sets True
-            "cli_args": {"nargs": "?", "const": True},
-        },
-    )
-
     queries: list[str] = Field(
         default_factory=lambda: [
             "Supply agreements with exclusivity for diesel engine components",

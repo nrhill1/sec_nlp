@@ -1,5 +1,6 @@
 from pathlib import Path
 from typing import ClassVar, Literal
+from unittest.mock import Mock
 
 from langchain_core.documents import Document
 from langchain_core.runnables import Runnable, RunnableConfig
@@ -11,6 +12,10 @@ from sec_nlp.pipelines.presets.analyze import (
     AnalyzePipeline,
     OutputFormatter,
     SearchConfig,
+)
+from sec_nlp.pipelines.presets.analyze.vector_search import (
+    SearchQueryResults,
+    SearchRunnable,
 )
 from sec_nlp.pipelines.types import AnalysisResultDict, MetadataValue
 
@@ -24,6 +29,22 @@ class _TestAnalyzePipeline(AnalyzePipeline):
     def _build_components(self) -> None:
         self._callbacks = []
         self._graph = _FakeGraph()
+
+
+class _CachedSearchPipeline(AnalyzePipeline):
+    """Pipeline stub that skips processing and uses cached search hits."""
+
+    pipeline_type: ClassVar[Literal["analyze"]] = "analyze"
+    description: ClassVar[str] = "Cached search pipeline"
+
+    def _build_components(self) -> None:
+        self._search_runner = Mock(spec=SearchRunnable)
+
+    def _process_symbol(self, symbol: str) -> tuple[list[Path], dict]:
+        self._search_results_by_query = {
+            "cached-query": SearchQueryResults(filtered=[], total=0)
+        }
+        return [], {}
 
 
 class _FakeGraph(Runnable[AnalysisInput, AnalysisResult]):
@@ -86,7 +107,7 @@ def _make_config(
         dl_path=tmp_path,
         vector_mode="off",
         export_format="json",
-        search=SearchConfig(enabled=False, queries=[]),
+        search=SearchConfig(queries=[]),
         validate_config=False,
         collect_metrics=False,
         top_k_chunks=top_k_chunks,
@@ -179,3 +200,27 @@ def test_batch_retry_then_success(tmp_path: Path) -> None:
     graph = pipe._graph
     assert isinstance(graph, _FakeGraph)
     assert graph.batch_calls == 2
+
+
+def test_run_uses_cached_search_results(tmp_path: Path) -> None:
+    config = AnalyzeConfig(
+        symbols=["AAPL"],
+        out_path=tmp_path,
+        dl_path=tmp_path,
+        vector_mode="read",
+        export_format="json",
+        search=SearchConfig(queries=["cached-query"]),
+        validate_config=False,
+        collect_metrics=False,
+    )
+    pipeline = _CachedSearchPipeline(config=config)
+
+    pipeline.run()
+
+    runner = pipeline._search_runner
+    assert isinstance(runner, Mock)
+    runner.export_results.assert_called_once()
+    runner.run.assert_not_called()
+    call = runner.export_results.call_args
+    assert call.kwargs.get("cached") is True
+    assert call.kwargs.get("queries") == ["cached-query"]

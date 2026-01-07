@@ -2,7 +2,6 @@ _type: prompt
 input_variables:
   - chunk
   - symbol
-  - search_queries
   - matched_query
   - context
   - analysis_instructions
@@ -10,13 +9,6 @@ template: |
   You are an expert financial analyst reviewing SEC filings for {symbol}.
 
   Your task is to analyze the following document section and determine its relevance, extract key information, and provide insights.
-
-  {{%- if search_queries %}}
-  Search Queries (use these to judge relevance):
-  {{%- for query in search_queries %}}
-  - {{ query }}
-  {{%- endfor %}}
-  {{%- endif %}}
 
   {{%- if matched_query %}}
   Matched Query: {{ matched_query }}
@@ -36,7 +28,7 @@ template: |
   {analysis_instructions}
 
   Guidelines:
-  - Use the search queries as the primary relevance target; if a matched query is provided, focus on that intent.
+  - Use the matched query as the primary relevance target; if none is provided, judge relevance to the content and context.
   - Mark is_relevant true only when the text explicitly addresses a query with concrete details (not just a passing mention).
   - Focus on substantive business info, risks, financial terms, agreements, or strategic insights.
   - Ignore tables of contents, headers/footers, and boilerplate.

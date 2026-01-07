@@ -78,25 +78,21 @@ class AnalyzerRunnable(
             raise ValueError("Cannot analyze empty docs list")
 
         inputs: list[AnalysisInput] = []
-        search_queries = (
-            list(self.config.search.queries)
-            if self.config.search.queries
-            else None
-        )
         for doc in docs:
             metadata = doc.metadata or {}
             doc_symbol = resolve_symbol_for_output(symbol, metadata)
-            matched_query = metadata.get("search_query")
+            matched_queries = self._extract_matched_queries(metadata)
             matched_query_value = (
-                str(matched_query)
-                if isinstance(matched_query, str) and matched_query
+                str(matched_queries[0].get("query"))
+                if matched_queries
+                and isinstance(matched_queries[0], dict)
+                and matched_queries[0].get("query")
                 else None
             )
             inputs.append(
                 AnalysisInput(
                     symbol=doc_symbol,
                     chunk=doc.page_content,
-                    search_queries=search_queries,
                     matched_query=matched_query_value,
                     context=self._build_context(doc),
                     topic_hits=metadata.get("topic_hits"),
@@ -144,8 +140,9 @@ class AnalyzerRunnable(
             meta = doc.metadata or {}
             meta = {
                 **meta,
-                "search_query": query,
-                "search_score": float(score),
+                "matched_queries": [
+                    {"query": query, "score": float(score)},
+                ],
             }
             doc.metadata = meta
             symbol_value = meta.get("symbol")
@@ -164,7 +161,6 @@ class AnalyzerRunnable(
                 AnalysisInput(
                     symbol=symbol,
                     chunk=doc.page_content,
-                    search_queries=[query],
                     matched_query=query,
                     context=self._build_context(doc),
                     topic_hits=topic_hits,
@@ -260,6 +256,35 @@ class AnalyzerRunnable(
 
         return " | ".join(context_parts) if context_parts else None
 
+    @staticmethod
+    def _extract_matched_queries(
+        metadata: MetadataRecord | None,
+    ) -> list[dict[str, float | str]]:
+        raw_matches = (metadata or {}).get("matched_queries")
+        if isinstance(raw_matches, list):
+            cleaned: list[dict[str, float | str]] = []
+            for item in raw_matches:
+                if not isinstance(item, dict):
+                    continue
+                query = item.get("query")
+                score = item.get("score")
+                if not isinstance(query, str) or not query.strip():
+                    continue
+                payload: dict[str, float | str] = {"query": query.strip()}
+                if isinstance(score, (int, float)):
+                    payload["score"] = float(score)
+                cleaned.append(payload)
+            return cleaned
+
+        query = (metadata or {}).get("search_query")
+        if isinstance(query, str) and query.strip():
+            payload: dict[str, float | str] = {"query": query.strip()}
+            score = (metadata or {}).get("search_score")
+            if isinstance(score, (int, float)):
+                payload["score"] = float(score)
+            return [payload]
+        return []
+
     def _format_result(
         self, result: AnalysisResult, doc: Document
     ) -> AnalysisResultDict:
@@ -267,6 +292,9 @@ class AnalyzerRunnable(
             **(doc.metadata or {}),
             "accession_number": get_accession_from_metadata(doc.metadata),
         }
+        matched_queries = self._extract_matched_queries(source_metadata)
+        for key in ("matched_queries", "search_query", "search_score"):
+            source_metadata.pop(key, None)
         result_dict: AnalysisResultDict = {
             "is_relevant": result.is_relevant,
             "confidence_score": result.confidence_score,
@@ -283,6 +311,8 @@ class AnalyzerRunnable(
             "follow_up_questions": result.follow_up_questions,
             "source_metadata": source_metadata,
         }
+        if matched_queries:
+            result_dict["matched_queries"] = matched_queries
 
         if self.config.include_raw_chunks:
             result_dict["raw_chunk"] = doc.page_content
@@ -301,11 +331,15 @@ class AnalyzerRunnable(
             **(doc.metadata or {}),
             "accession_number": get_accession_from_metadata(doc.metadata),
         }
+        matched_queries = self._extract_matched_queries(source_metadata)
+        for key in ("matched_queries", "search_query", "search_score"):
+            source_metadata.pop(key, None)
         return {
             "error": "Processing failed",
             "exception": f"{type(error).__name__}: {error}",
             "chunk_preview": chunk_preview,
             "source_metadata": source_metadata,
+            **({"matched_queries": matched_queries} if matched_queries else {}),
             **(
                 {"raw_chunk": item.chunk}
                 if self.config.include_raw_chunks
