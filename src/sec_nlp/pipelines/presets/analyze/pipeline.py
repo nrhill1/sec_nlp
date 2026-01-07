@@ -170,10 +170,10 @@ class AnalyzePipeline(BasePipeline):
             self._callbacks = []
 
         # Initialize vector store
-        has_search_queries = bool(self.config.search.queries)
+        has_search_queries = bool(self.config.get_search_queries())
         if has_search_queries and self.config.vector_mode == "off":
             logger.warning(
-                "search.queries set -- vector_mode should be 'read' or 'write'"
+                "search queries configured -- vector_mode should be 'read' or 'write'"
             )
 
         should_init_vector = (
@@ -365,18 +365,23 @@ class AnalyzePipeline(BasePipeline):
                         log_divider(logger, color="magenta")
 
             # Run semantic search if queries are configured
-            if self.config.search.queries:
+            if self.config.get_search_queries():
                 if self._search_results_by_query is not None:
                     search_outputs = self._search_runner.export_results(
                         self._search_results_by_query,
                         cached=True,
+                        queries=self.config.get_search_queries(),
                     )
                 else:
-                    search_outputs = self._search_runner.run()
+                    search_outputs = self._search_runner.run(
+                        queries=self.config.get_search_queries(),
+                    )
                 all_outputs.extend(search_outputs)
                 metadata["search_results"] = len(search_outputs)
                 metadata["search_outputs"] = search_outputs
-                metadata["search_queries"] = list(self.config.search.queries)
+                metadata["search_queries"] = list(
+                    self.config.get_search_queries()
+                )
 
             self.config.complete_run(success=True)
             return AnalyzeResult(
@@ -479,11 +484,14 @@ class AnalyzePipeline(BasePipeline):
         self._vector_indexer.index(symbol, docs, timings)
 
         # Retrieve relevant chunks via vector search (if enabled)
-        if self.config.search.queries and self._vector_store:
+        search_queries = self.config.get_search_queries()
+        if search_queries and self._vector_store:
             (
                 docs_for_analysis,
                 search_results,
-            ) = self._search_runner.retrieve_hits_with_results()
+            ) = self._search_runner.retrieve_hits_with_results(
+                queries=search_queries
+            )
             self._search_results_by_query = search_results
             if not docs_for_analysis:
                 logger.info(
@@ -498,7 +506,7 @@ class AnalyzePipeline(BasePipeline):
                 )
         else:
             logger.info(
-                "Search not configured (no queries) or vector store unavailable; skipping analysis"
+                "Search not configured (no queries/topics) or vector store unavailable; skipping analysis"
             )
             docs_for_analysis = []
 
@@ -568,6 +576,7 @@ class AnalyzePipeline(BasePipeline):
             docs[0].metadata or {},
             analysis_results,
             relevant_results=relevant_results,
+            search_queries=search_queries,
             timings=timings,
         )
         if output_files:
@@ -620,7 +629,7 @@ class AnalyzePipeline(BasePipeline):
                 config=self.config,
                 vector_store=self._vector_store,
             )
-        return runner.retrieve_hits()
+        return runner.retrieve_hits(queries=self.config.get_search_queries())
 
     def _write_results(
         self,
@@ -629,6 +638,7 @@ class AnalyzePipeline(BasePipeline):
         analysis_results: list[AnalysisResultDict],
         *,
         relevant_results: list[AnalysisResultDict] | None = None,
+        search_queries: list[str] | None = None,
         timings: Timings | None = None,
     ) -> list[Path]:
         """Expose result writing for tests and downstream usage."""
@@ -647,5 +657,6 @@ class AnalyzePipeline(BasePipeline):
             filing_meta=filing_meta,
             analysis_results=analysis_results,
             relevant_results=relevant_results,
+            search_queries=search_queries,
             timings=timings,
         )

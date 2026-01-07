@@ -394,6 +394,14 @@ class AnalyzeConfig(BaseConfig):
     def pipeline_label(self) -> str:
         return "Analyze"
 
+    def get_search_queries(self) -> list[str]:
+        """Return configured search queries, falling back to topics."""
+        if self.search.queries:
+            return list(self.search.queries)
+        if self.topics:
+            return list(self.topics)
+        return []
+
     def get_section_pattern(self) -> SectionPattern | None:
         """Create SectionPattern from config.
 
@@ -413,8 +421,8 @@ class AnalyzeConfig(BaseConfig):
     @model_validator(mode="after")
     def _validate_vector_and_search(self) -> Self:
         """Guardrails for vector/search combinations."""
-        if self.search.queries and self.vector_mode == "off":
+        if self.get_search_queries() and self.vector_mode == "off":
             raise ValueError(
-                "search.queries requires vector_mode to be 'read' or 'write'"
+                "search queries (search.queries or topics) require vector_mode to be 'read' or 'write'"
             )
         return self

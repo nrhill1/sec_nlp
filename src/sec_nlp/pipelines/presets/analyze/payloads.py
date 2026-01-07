@@ -79,6 +79,54 @@ class SearchResultPayload(BaseModel):
     confidence_score: float | None = None
 
 
+class SearchMatchPayload(BaseModel):
+    """Matched query metadata for a unique search hit."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid", defer_build=True)
+
+    query: JsonValue
+    score: float
+
+
+class SearchQuerySectionPayload(BaseModel):
+    """Per-query section within a consolidated search export."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid", defer_build=True)
+
+    query: JsonValue
+    results_count: int
+    stats: SearchStatsPayload
+    highlights: SearchHighlightsPayload
+    results: list[SearchResultPayload] = Field(default_factory=list)
+
+
+class SearchUniqueResultPayload(BaseModel):
+    """Unique search hit aggregated across queries."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid", defer_build=True)
+
+    content: JsonValue
+    metadata: JsonDict = Field(default_factory=dict)
+    matched_queries: list[SearchMatchPayload] = Field(default_factory=list)
+    best_score: float | None = None
+
+
+class SearchSummaryPayload(BaseModel):
+    """Consolidated search export with per-query sections and unique hits."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid", defer_build=True)
+
+    symbol: JsonValue
+    score_threshold: float | None = None
+    metadata_filters: JsonDict = Field(default_factory=dict)
+    total_queries: int
+    total_unique_results: int
+    queries: list[SearchQuerySectionPayload] = Field(default_factory=list)
+    unique_results: list[SearchUniqueResultPayload] = Field(
+        default_factory=list
+    )
+
+
 class SearchOutputPayload(BaseModel):
     """Root payload for analyze search exports."""
 

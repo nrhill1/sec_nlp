@@ -83,7 +83,6 @@ _BOOLEAN_FLAGS: set[str] = {
     "--vdb.qdrant-https",
     "--search.export-results",
     "--search.analyze",
-    "--search.enabled",
     "--skip-empty-sections",
     "--trace-log-prompts",
     "--use-llm-summary",

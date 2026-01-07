@@ -55,6 +55,7 @@ class OutputFormatter:
         filing_meta: MetadataMap,
         analysis_results: list[AnalysisResultDict],
         relevant_results: list[AnalysisResultDict],
+        search_queries: list[str] | None = None,
         timings: dict[str, float] | None = None,
     ) -> AnalysisOutput:
         """Build structured output from analysis results.
@@ -152,6 +153,7 @@ class OutputFormatter:
 
         return AnalysisOutput(
             symbol=symbol,
+            search_queries=search_queries or [],
             filing=filing,
             executive_summary=executive_summary,
             aggregates=aggregates,

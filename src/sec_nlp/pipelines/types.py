@@ -53,8 +53,6 @@ class SourceMetadata(TypedDict, total=False):
     chunk_index: int
     topic_hits: list[str]
     topic_score: int
-    search_query: str
-    search_score: float
     simhash: int
     xbrl_conflicts: list[str]
     xbrl_values_seen: dict[str, list[dict[str, str | int | float | None]]]
@@ -157,6 +155,7 @@ class AnalysisResultDict(TypedDict, total=False):
 
     # Provenance
     source_metadata: MetadataRecord
+    matched_queries: list[dict[str, float | str]]
     raw_chunk: str
 
     # Error handling

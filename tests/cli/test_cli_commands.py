@@ -73,14 +73,12 @@ class TestExb10Command:
             dl_path=dl_path,
             out_path=out_path,
             search=SearchConfig(
-                enabled=True,
                 queries=["exclusive contracts", "aftermarket provisions"],
                 limit=20,
                 score_threshold=0.7,
             ),
         )
 
-        assert cmd.search.enabled is True
         assert len(cmd.search.queries) == 2
         assert "exclusive contracts" in cmd.search.queries
         assert cmd.search.limit == 20
@@ -234,7 +232,6 @@ class TestNestedModelConfiguration:
                 qdrant_host="localhost",
             ),
             search=SearchConfig(
-                enabled=True,
                 queries=["test query"],
                 limit=15,
             ),
@@ -242,7 +239,6 @@ class TestNestedModelConfiguration:
 
         # Verify all nested configs are set correctly
         assert cmd.vdb.embedding_model == "nomic-embed-text"
-        assert cmd.search.enabled is True
         assert cmd.search.limit == 15
 
     def test_list_field_configuration(self, tmp_path: Path) -> None:
@@ -261,7 +257,6 @@ class TestNestedModelConfiguration:
             symbols=["CAT", "DE", "PCAR"],
             search_terms=["exclusive", "custom_term"],
             search=SearchConfig(
-                enabled=True,
                 queries=["query1", "query2", "query3"],
             ),
         )

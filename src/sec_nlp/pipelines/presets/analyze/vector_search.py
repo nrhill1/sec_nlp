@@ -23,17 +23,18 @@ from sec_nlp.pipelines.types import (
     MetadataMap,
     MetadataValue,
 )
-from sec_nlp.pipelines.utils import slugify
 from sec_nlp.types import JsonDict, JsonValue
 
 from .analysis_runner import AnalysisBatchInput
 from .config import AnalyzeConfig
 from .payloads import (
-    SearchAnalysisPayload,
     SearchHighlightsPayload,
-    SearchOutputPayload,
+    SearchMatchPayload,
+    SearchQuerySectionPayload,
     SearchResultPayload,
     SearchStatsPayload,
+    SearchSummaryPayload,
+    SearchUniqueResultPayload,
 )
 from .utils import resolve_symbol_for_output
 
@@ -45,6 +46,12 @@ class SearchQueryResults:
 
 
 type SearchResultsByQuery = dict[str, SearchQueryResults]
+
+
+@dataclass
+class _UniqueHit:
+    doc: Document
+    matches: dict[str, float]
 
 
 class SearchRetrieveInput(BaseModel):
@@ -98,7 +105,10 @@ class SearchRunnable(
         self, queries: list[str] | None = None
     ) -> SearchResultsByQuery:
         """Run similarity search per query and return filtered hits."""
-        query_list = self.config.search.queries if queries is None else queries
+        query_list = (
+            self.config.get_search_queries() if queries is None else queries
+        )
+        query_list = self._clean_queries(query_list)
         if (
             not self.vector_store
             or not query_list
@@ -162,8 +172,10 @@ class SearchRunnable(
         if not results_by_query:
             return [], results_by_query
 
-        seen: set[tuple[str, str | None, str | None]] = set()
-        retrieved: list[Document] = []
+        distance_metric = self.config.vdb.qdrant_distance
+        distance_prefers_lower = distance_metric in ("Cosine", "Euclid")
+
+        unique_hits: dict[tuple[str, str | None, str | None], _UniqueHit] = {}
 
         for query, query_results in results_by_query.items():
             for doc, score in query_results.filtered:
@@ -173,26 +185,50 @@ class SearchRunnable(
                     meta.get("section_number"),
                     meta.get("symbol"),
                 )
-                if key in seen:
-                    continue
-                seen.add(key)
-                retrieved.append(
-                    Document(
-                        page_content=doc.page_content,
-                        metadata={
-                            **meta,
-                            "search_query": query,
-                            "search_score": float(score),
-                        },
+                hit = unique_hits.get(key)
+                score_value = float(score)
+                if hit is None:
+                    unique_hits[key] = _UniqueHit(
+                        doc=doc,
+                        matches={query: score_value},
                     )
+                else:
+                    self._update_match(
+                        hit.matches,
+                        query,
+                        score_value,
+                        distance_prefers_lower,
+                    )
+
+        retrieved: list[Document] = []
+        for hit in unique_hits.values():
+            matched_queries = self._sort_matches(
+                hit.matches, distance_prefers_lower
+            )
+            metadata = {**(hit.doc.metadata or {})}
+            metadata["matched_queries"] = [
+                {"query": query, "score": score}
+                for query, score in matched_queries
+            ]
+            retrieved.append(
+                Document(
+                    page_content=hit.doc.page_content,
+                    metadata=metadata,
                 )
+            )
 
         return retrieved, results_by_query
 
-    def run(self) -> list[Path]:
+    def run(self, queries: list[str] | None = None) -> list[Path]:
         """Run semantic search queries if configured."""
-        if not self.config.search.queries:
-            logger.warning("Search not configured: no queries provided")
+        query_list = (
+            self.config.get_search_queries() if queries is None else queries
+        )
+        query_list = self._clean_queries(query_list)
+        if not query_list:
+            logger.warning(
+                "Search not configured: no queries or topics provided"
+            )
             return []
 
         if not self.vector_store:
@@ -206,41 +242,59 @@ class SearchRunnable(
                 "Search export analysis disabled; run the analyze chain instead"
             )
 
-        results_by_query = self.search_queries()
-        return self.export_results(results_by_query)
+        results_by_query = self.search_queries(query_list)
+        return self.export_results(results_by_query, queries=query_list)
 
     def export_results(
         self,
         results_by_query: SearchResultsByQuery,
         *,
         cached: bool = False,
+        queries: list[str] | None = None,
     ) -> list[Path]:
         """Export search results from precomputed hits."""
-        if not self.config.search.queries:
-            logger.warning("Search not configured: no queries provided")
+        query_list = (
+            self.config.get_search_queries() if queries is None else queries
+        )
+        query_list = self._clean_queries(query_list)
+        if not query_list:
+            logger.warning(
+                "Search not configured: no queries or topics provided"
+            )
+            return []
+        if not self.config.search.export_results:
+            logger.info("Search export disabled; skipping results export")
             return []
 
         if cached:
             logger.info("Reusing cached search results for export")
 
-        search_outputs: list[Path] = []
-
         log_divider(logger, color="yellow")
         logger.info(
-            "Running %d semantic search queries",
-            len(self.config.search.queries),
+            "Exporting results for %d semantic search queries",
+            len(query_list),
         )
 
         distance_metric = self.config.vdb.qdrant_distance
         distance_prefers_lower = distance_metric in ("Cosine", "Euclid")
         threshold = self.config.search.score_threshold
+        metadata_filters_payload = self._build_metadata_filters_payload(
+            self.config.search.metadata_filters
+        )
 
-        for i, query in enumerate(self.config.search.queries, 1):
+        per_symbol_query_results: dict[
+            str, dict[str, list[tuple[Document, float]]]
+        ] = defaultdict(lambda: defaultdict(list))
+        unique_hits: dict[
+            str, dict[tuple[str, str | None, str], _UniqueHit]
+        ] = defaultdict(dict)
+
+        for i, query in enumerate(query_list, 1):
             try:
                 logger.info(
-                    "[%d/%d] Searching: %s",
+                    "[%d/%d] Query: %s",
                     i,
-                    len(self.config.search.queries),
+                    len(query_list),
                     query,
                 )
 
@@ -261,147 +315,36 @@ class SearchRunnable(
                     threshold,
                 )
 
-                if self.config.search.export_results:
-                    query_slug = slugify(query[:50])
-                    results_by_symbol: dict[
-                        str, list[tuple[Document, float]]
-                    ] = defaultdict(list)
-                    for doc, score in filtered_results:
-                        meta = doc.metadata or {}
-                        symbol_for_output = resolve_symbol_for_output(
-                            self.config.symbols[0]
-                            if self.config.symbols
-                            else "<unknown>",
-                            meta,
+                for doc, score in filtered_results:
+                    meta = doc.metadata or {}
+                    symbol_for_output = resolve_symbol_for_output(
+                        self.config.symbols[0]
+                        if self.config.symbols
+                        else "<unknown>",
+                        meta,
+                    )
+                    per_symbol_query_results[symbol_for_output][query].append(
+                        (doc, score)
+                    )
+
+                    key = (
+                        doc.page_content or "",
+                        meta.get("section_number"),
+                        symbol_for_output,
+                    )
+                    hit = unique_hits[symbol_for_output].get(key)
+                    score_value = float(score)
+                    if hit is None:
+                        unique_hits[symbol_for_output][key] = _UniqueHit(
+                            doc=doc,
+                            matches={query: score_value},
                         )
-                        results_by_symbol[symbol_for_output].append(
-                            (doc, score)
-                        )
-
-                    for symbol_key, symbol_results in results_by_symbol.items():
-                        output_dir = (
-                            self.config.get_symbol_output_dir(symbol_key)
-                            / "search"
-                        )
-                        output_dir.mkdir(parents=True, exist_ok=True)
-                        output_file = output_dir / f"{query_slug}.yaml"
-
-                        section_counts: dict[str, int] = defaultdict(int)
-                        tag_counts: dict[str, int] = defaultdict(int)
-                        sentiment_counts: dict[str, int] = defaultdict(int)
-
-                        scores = [float(score) for _, score in symbol_results]
-                        avg_score = (
-                            sum(scores) / len(scores) if scores else None
-                        )
-                        best_score = (
-                            min(scores)
-                            if distance_prefers_lower and scores
-                            else max(scores)
-                            if scores
-                            else None
-                        )
-
-                        top_summaries: list[str] = []
-
-                        for doc, _ in symbol_results:
-                            meta = doc.metadata or {}
-
-                            section = meta.get("section_number")
-                            if section:
-                                section_counts[str(section)] += 1
-
-                            for tag in meta.get("tags") or []:
-                                tag_counts[str(tag)] += 1
-
-                            sentiment = meta.get("sentiment")
-                            if sentiment:
-                                sentiment_counts[str(sentiment)] += 1
-
-                            summary = meta.get("summary")
-                            if (
-                                isinstance(summary, str)
-                                and summary
-                                and summary not in top_summaries
-                            ):
-                                top_summaries.append(summary)
-
-                        metadata_filters_payload = (
-                            self._build_metadata_filters_payload(
-                                self.config.search.metadata_filters
-                            )
-                        )
-
-                        results_payload = [
-                            SearchResultPayload(
-                                score=float(score),
-                                content=doc.page_content[:500],
-                                metadata=(
-                                    metadata_payload
-                                    := self._normalize_metadata(doc.metadata)
-                                ),
-                                summary=metadata_payload.get("summary"),
-                                tags=metadata_payload.get("tags"),
-                                sentiment=metadata_payload.get("sentiment"),
-                                forward_looking=self._coerce_bool(
-                                    metadata_payload.get("forward_looking")
-                                ),
-                                confidence_score=self._coerce_float(
-                                    metadata_payload.get("confidence_score")
-                                ),
-                            )
-                            for doc, score in symbol_results
-                        ]
-
-                        stats_payload = SearchStatsPayload(
-                            average_score=avg_score,
-                            best_score=best_score,
-                            symbols={symbol_key: len(symbol_results)},
-                            sections=dict(section_counts),
-                            tag_frequency=dict(
-                                sorted(
-                                    tag_counts.items(),
-                                    key=lambda t: t[1],
-                                    reverse=True,
-                                )
-                            ),
-                            sentiment_breakdown=dict(sentiment_counts),
-                        )
-
-                        highlights_payload = SearchHighlightsPayload(
-                            top_summaries=top_summaries[:10]
-                        )
-
-                        analysis_payload = SearchAnalysisPayload(
-                            enabled=False,
-                            analyzed_hits=0,
-                            results=[],
-                        )
-
-                        search_payload = SearchOutputPayload(
-                            query=query,
-                            symbol=symbol_key,
-                            results_count=len(symbol_results),
-                            score_threshold=threshold,
-                            metadata_filters=metadata_filters_payload,
-                            stats=stats_payload,
-                            highlights=highlights_payload,
-                            analysis=analysis_payload,
-                            results=results_payload,
-                        )
-
-                        write_yaml(
-                            output_file,
-                            search_payload,
-                            exclude_none=True,
-                            sort_keys=False,
-                            allow_unicode=True,
-                        )
-
-                        search_outputs.append(output_file)
-                        logger.info(
-                            "Exported search results to %s",
-                            output_file,
+                    else:
+                        self._update_match(
+                            hit.matches,
+                            query,
+                            score_value,
+                            distance_prefers_lower,
                         )
 
                 logger.info("  -> Found %d results", len(filtered_results))
@@ -410,7 +353,224 @@ class SearchRunnable(
                 logger.error("Search failed for query '%s': %s", query, e)
                 continue
 
+        if not per_symbol_query_results:
+            logger.info("No search results to export")
+            return []
+
+        search_outputs: list[Path] = []
+
+        for symbol_key, query_results_map in per_symbol_query_results.items():
+            output_dir = (
+                self.config.get_symbol_output_dir(symbol_key) / "search"
+            )
+            output_dir.mkdir(parents=True, exist_ok=True)
+            output_file = output_dir / "summary.yaml"
+
+            query_sections: list[SearchQuerySectionPayload] = []
+            for query in query_list:
+                symbol_results = query_results_map.get(query, [])
+
+                section_counts: dict[str, int] = defaultdict(int)
+                tag_counts: dict[str, int] = defaultdict(int)
+                sentiment_counts: dict[str, int] = defaultdict(int)
+
+                scores = [float(score) for _, score in symbol_results]
+                avg_score = sum(scores) / len(scores) if scores else None
+                best_score = self._best_score(scores, distance_prefers_lower)
+
+                top_summaries: list[str] = []
+
+                for doc, _ in symbol_results:
+                    meta = doc.metadata or {}
+
+                    section = meta.get("section_number")
+                    if section:
+                        section_counts[str(section)] += 1
+
+                    for tag in meta.get("tags") or []:
+                        tag_counts[str(tag)] += 1
+
+                    sentiment = meta.get("sentiment")
+                    if sentiment:
+                        sentiment_counts[str(sentiment)] += 1
+
+                    summary = meta.get("summary")
+                    if (
+                        isinstance(summary, str)
+                        and summary
+                        and summary not in top_summaries
+                    ):
+                        top_summaries.append(summary)
+
+                results_payload = [
+                    SearchResultPayload(
+                        score=float(score),
+                        content=(doc.page_content or "")[:500],
+                        metadata=(
+                            metadata_payload := self._normalize_metadata(
+                                doc.metadata
+                            )
+                        ),
+                        summary=metadata_payload.get("summary"),
+                        tags=metadata_payload.get("tags"),
+                        sentiment=metadata_payload.get("sentiment"),
+                        forward_looking=self._coerce_bool(
+                            metadata_payload.get("forward_looking")
+                        ),
+                        confidence_score=self._coerce_float(
+                            metadata_payload.get("confidence_score")
+                        ),
+                    )
+                    for doc, score in symbol_results
+                ]
+
+                stats_payload = SearchStatsPayload(
+                    average_score=avg_score,
+                    best_score=best_score,
+                    symbols=(
+                        {symbol_key: len(symbol_results)}
+                        if symbol_results
+                        else {}
+                    ),
+                    sections=dict(section_counts),
+                    tag_frequency=dict(
+                        sorted(
+                            tag_counts.items(),
+                            key=lambda t: t[1],
+                            reverse=True,
+                        )
+                    ),
+                    sentiment_breakdown=dict(sentiment_counts),
+                )
+
+                highlights_payload = SearchHighlightsPayload(
+                    top_summaries=top_summaries[:10]
+                )
+
+                query_sections.append(
+                    SearchQuerySectionPayload(
+                        query=query,
+                        results_count=len(symbol_results),
+                        stats=stats_payload,
+                        highlights=highlights_payload,
+                        results=results_payload,
+                    )
+                )
+
+            unique_payloads = self._build_unique_results(
+                unique_hits.get(symbol_key, {}),
+                distance_prefers_lower,
+            )
+
+            summary_payload = SearchSummaryPayload(
+                symbol=symbol_key,
+                score_threshold=threshold,
+                metadata_filters=metadata_filters_payload,
+                total_queries=len(query_list),
+                total_unique_results=len(unique_payloads),
+                queries=query_sections,
+                unique_results=unique_payloads,
+            )
+
+            write_yaml(
+                output_file,
+                summary_payload,
+                exclude_none=True,
+                sort_keys=False,
+                allow_unicode=True,
+            )
+
+            search_outputs.append(output_file)
+            logger.info(
+                "Exported consolidated search results to %s",
+                output_file,
+            )
+
         return search_outputs
+
+    @staticmethod
+    def _clean_queries(queries: list[str] | None) -> list[str]:
+        if not queries:
+            return []
+        return [
+            query.strip()
+            for query in queries
+            if isinstance(query, str) and query.strip()
+        ]
+
+    @staticmethod
+    def _score_is_better(
+        candidate: float, current: float, prefers_lower: bool
+    ) -> bool:
+        return candidate < current if prefers_lower else candidate > current
+
+    @classmethod
+    def _update_match(
+        cls,
+        matches: dict[str, float],
+        query: str,
+        score: float,
+        prefers_lower: bool,
+    ) -> None:
+        existing = matches.get(query)
+        if existing is None or cls._score_is_better(
+            score, existing, prefers_lower
+        ):
+            matches[query] = score
+
+    @staticmethod
+    def _sort_matches(
+        matches: dict[str, float], prefers_lower: bool
+    ) -> list[tuple[str, float]]:
+        if prefers_lower:
+            return sorted(matches.items(), key=lambda item: (item[1], item[0]))
+        return sorted(matches.items(), key=lambda item: (-item[1], item[0]))
+
+    @staticmethod
+    def _best_score(scores: list[float], prefers_lower: bool) -> float | None:
+        if not scores:
+            return None
+        return min(scores) if prefers_lower else max(scores)
+
+    @staticmethod
+    def _unique_sort_key(
+        payload: SearchUniqueResultPayload, prefers_lower: bool
+    ) -> float:
+        score = payload.best_score
+        if score is None:
+            return float("inf") if prefers_lower else float("-inf")
+        return score
+
+    def _build_unique_results(
+        self,
+        unique_hits: dict[tuple[str, str | None, str], _UniqueHit],
+        prefers_lower: bool,
+    ) -> list[SearchUniqueResultPayload]:
+        unique_payloads: list[SearchUniqueResultPayload] = []
+        for hit in unique_hits.values():
+            if not hit.matches:
+                continue
+            sorted_matches = self._sort_matches(hit.matches, prefers_lower)
+            best_score = sorted_matches[0][1] if sorted_matches else None
+            metadata_payload = self._normalize_metadata(hit.doc.metadata)
+            metadata_payload.pop("matched_queries", None)
+            unique_payloads.append(
+                SearchUniqueResultPayload(
+                    content=(hit.doc.page_content or "")[:500],
+                    metadata=metadata_payload,
+                    matched_queries=[
+                        SearchMatchPayload(query=query, score=float(score))
+                        for query, score in sorted_matches
+                    ],
+                    best_score=best_score,
+                )
+            )
+
+        unique_payloads.sort(
+            key=lambda payload: self._unique_sort_key(payload, prefers_lower),
+            reverse=not prefers_lower,
+        )
+        return unique_payloads
 
     @staticmethod
     def _build_metadata_filters_payload(filters: MetadataFilters) -> JsonDict:
