@@ -7,11 +7,13 @@ from unittest.mock import MagicMock, Mock
 import pytest
 from langchain_qdrant import QdrantVectorStore
 
-from sec_nlp.pipelines.presets.exb_10.search import (
+from sec_nlp.pipelines.presets.exb_10.steps.search.search import (
     Exhibit10Search,
     SearchResult,
 )
-from sec_nlp.pipelines.presets.exb_10.search_config import SearchConfig
+from sec_nlp.pipelines.presets.exb_10.steps.search.search_config import (
+    SearchConfig,
+)
 
 
 class TestSearchConfig:

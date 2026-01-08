@@ -1,4 +1,4 @@
-# src/sec_nlp/pipelines/presets/analyze/outputs.py
+# src/sec_nlp/pipelines/presets/analyze/io/outputs.py
 """Output formatting and export for the analyze pipeline."""
 
 import csv
@@ -14,7 +14,7 @@ from sec_nlp.pipelines.output_io import (
 )
 from sec_nlp.pipelines.types import AnalysisResultDict, MetadataMap
 
-from .models import (
+from ..models import (
     Aggregates,
     AnalysisDiagnostics,
     AnalysisOutput,

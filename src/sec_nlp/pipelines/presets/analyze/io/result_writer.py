@@ -1,4 +1,4 @@
-# src/sec_nlp/pipelines/presets/analyze/result_writer.py
+# src/sec_nlp/pipelines/presets/analyze/io/result_writer.py
 """Output writing helpers for the analyze pipeline."""
 
 from __future__ import annotations
@@ -11,10 +11,10 @@ from sec_nlp.pipelines.metadata.accession import (
 )
 from sec_nlp.pipelines.types import AnalysisResultDict, MetadataRecord
 
-from .config import AnalyzeConfig
+from ..config import AnalyzeConfig
+from ..types import Timings
+from ..utils import resolve_symbol_for_output
 from .outputs import OutputFormatter
-from .types import Timings
-from .utils import resolve_symbol_for_output
 
 
 def write_results(

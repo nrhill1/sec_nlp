@@ -1,4 +1,4 @@
-# src/sec_nlp/pipelines/presets/exb_10/search_config.py
+# src/sec_nlp/pipelines/presets/exb_10/steps/search/search_config.py
 """Configuration for semantic search on Exhibit 10 contracts."""
 
 from pydantic import Field, field_validator

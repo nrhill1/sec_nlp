@@ -1,4 +1,4 @@
-# src/sec_nlp/pipelines/presets/analyze/vector_index.py
+# src/sec_nlp/pipelines/presets/analyze/steps/indexing/vector_index.py
 """Vector indexing utilities for the analyze pipeline."""
 
 from __future__ import annotations
@@ -12,8 +12,8 @@ from sec_nlp.core.infra.logger import logger
 from sec_nlp.core.text.deduplication import SimHashDeduplicator
 from sec_nlp.pipelines.vector.query import scroll_exists
 
-from .config import AnalyzeConfig
-from .types import Timings
+from ...config import AnalyzeConfig
+from ...types import Timings
 
 
 class VectorIndexer:

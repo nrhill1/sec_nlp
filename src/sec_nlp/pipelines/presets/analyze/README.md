@@ -19,8 +19,13 @@ flowchart TD
   K --> L[Filter relevant and build aggregates]
   I --> M[Write output files]
   L --> M
+  C -->|after all symbols| N{Search queries or topics}
+  N -- yes --> O[Export search summaries - optional]
 ```
 
+Implementation layout:
+- `steps/` groups pipeline stages (preprocess, indexing, search, analysis).
+- `io/` holds output formatting/export helpers.
 
 ## How to run
 
@@ -74,7 +79,7 @@ Documents are split into chunks and filtered. Preprocessing handles:
 - SimHash-based deduplication.
 - Per-filing caps and top-K selection.
 
-Code: `src/sec_nlp/pipelines/presets/analyze/preprocess.py`
+Code: `src/sec_nlp/pipelines/presets/analyze/steps/preprocess/preprocess.py`
 
 ### 5) Compute chunk stats
 Chunk length stats are computed and logged per accession. These feed into run metadata and diagnostics.
@@ -84,27 +89,27 @@ Code: `src/sec_nlp/pipelines/presets/analyze/pipeline.py`
 ### 6) Vector indexing (optional)
 Chunks are indexed into Qdrant when `vector_mode` is `read` or `write`. The indexer applies SimHash deduplication to avoid re-adding similar chunks.
 
-Code: `src/sec_nlp/pipelines/presets/analyze/vector_index.py`
+Code: `src/sec_nlp/pipelines/presets/analyze/steps/indexing/vector_index.py`
 
 ### 7) Vector search retrieval
 If search queries (or topics when queries are empty) are configured, the pipeline retrieves candidate chunks by similarity search and applies the score threshold. Search hits are de-duplicated by content/section/symbol and annotated with `matched_queries` (query + score). Per-query results are cached for the optional summary export after the symbol loop.
 
-Code: `src/sec_nlp/pipelines/presets/analyze/vector_search.py`
+Code: `src/sec_nlp/pipelines/presets/analyze/steps/search/vector_search.py`
 
 ### 8) LLM analysis
 Only retrieved search hits are analyzed. The analyzer builds `AnalysisInput` items with matched query hints, context (section + topic hits), and analysis instructions, runs batched LLM calls with retries and fallback, and formats structured result dicts.
 
-Code: `src/sec_nlp/pipelines/presets/analyze/analysis_runner.py`
+Code: `src/sec_nlp/pipelines/presets/analyze/steps/analysis/analysis_runner.py`
 
 ### 9) Filter relevant results + write outputs
 Results are filtered by relevance and confidence threshold via `OutputFormatter`. Aggregates and diagnostics are computed and exported in the configured formats (YAML/JSON/CSV).
 
-Code: `src/sec_nlp/pipelines/presets/analyze/outputs.py`, `src/sec_nlp/pipelines/presets/analyze/result_writer.py`
+Code: `src/sec_nlp/pipelines/presets/analyze/io/outputs.py`, `src/sec_nlp/pipelines/presets/analyze/io/result_writer.py`
 
 ### 10) Export search results (optional)
 After all symbols are processed, search results can be exported to consolidated YAML summaries with per-query sections and unique hits. The export reuses cached search results from the analysis pass when available and does not run LLM analysis.
 
-Code: `src/sec_nlp/pipelines/presets/analyze/vector_search.py`
+Code: `src/sec_nlp/pipelines/presets/analyze/steps/search/vector_search.py`
 
 ## Output Files
 

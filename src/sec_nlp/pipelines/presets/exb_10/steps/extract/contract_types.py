@@ -1,4 +1,4 @@
-# src/sec_nlp/pipelines/presets/exb_10/contract_types.py
+# src/sec_nlp/pipelines/presets/exb_10/steps/extract/contract_types.py
 """Contract type categorization for Exhibit 10 analysis."""
 
 from __future__ import annotations

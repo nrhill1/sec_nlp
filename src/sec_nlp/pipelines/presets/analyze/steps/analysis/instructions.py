@@ -1,4 +1,4 @@
-# src/sec_nlp/pipelines/presets/analyze/instructions.py
+# src/sec_nlp/pipelines/presets/analyze/steps/analysis/instructions.py
 """Prompt instruction builder for analyze schema fields."""
 
 from __future__ import annotations

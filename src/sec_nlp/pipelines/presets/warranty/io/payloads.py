@@ -1,4 +1,4 @@
-# src/sec_nlp/pipelines/presets/warranty/payloads.py
+# src/sec_nlp/pipelines/presets/warranty/io/payloads.py
 """Payload models for warranty exports."""
 
 from __future__ import annotations

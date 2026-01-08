@@ -1,4 +1,4 @@
-# src/sec_nlp/pipelines/presets/exb_10/search.py
+# src/sec_nlp/pipelines/presets/exb_10/steps/search/search.py
 """Semantic search for Exhibit 10 supplier contracts."""
 
 from __future__ import annotations

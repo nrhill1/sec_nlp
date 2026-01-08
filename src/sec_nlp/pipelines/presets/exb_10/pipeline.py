@@ -28,15 +28,15 @@ from sec_nlp.pipelines.vector.query import scroll_exists
 from sec_nlp.types import JsonValue, ResultDict
 
 from .config import Exhibit10Config
-from .exhibits import collect_exhibit_documents
+from .io.outputs import write_exhibit10_outputs
 from .models import Exhibit10Result
-from .outputs import write_exhibit10_outputs
-from .payloads import (
+from .steps.extract.exhibits import collect_exhibit_documents
+from .steps.search.payloads import (
     SearchManifestMetaPayload,
     SearchManifestPayload,
     SearchRecordPayload,
 )
-from .search import Exhibit10Search
+from .steps.search.search import Exhibit10Search
 
 
 class SearchRecord(TypedDict):

@@ -1,4 +1,4 @@
-# src/sec_nlp/pipelines/presets/exb_10/outputs.py
+# src/sec_nlp/pipelines/presets/exb_10/io/outputs.py
 """Output generation for Exhibit 10 pipeline."""
 
 from __future__ import annotations
@@ -19,7 +19,7 @@ from sec_nlp.pipelines.output_io import (
 )
 from sec_nlp.types import JsonDict, JsonObject, JsonValue
 
-from .config import Exhibit10Config
+from ..config import Exhibit10Config
 
 
 class AccessionRecord(TypedDict):

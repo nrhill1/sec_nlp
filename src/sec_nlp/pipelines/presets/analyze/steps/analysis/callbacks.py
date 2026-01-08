@@ -1,4 +1,4 @@
-# src/sec_nlp/pipelines/presets/analyze/callbacks.py
+# src/sec_nlp/pipelines/presets/analyze/steps/analysis/callbacks.py
 """LangChain callback handlers for the analyze pipeline."""
 
 from uuid import UUID

@@ -1,4 +1,4 @@
-# src/sec_nlp/pipelines/presets/analyze/topic_scoring.py
+# src/sec_nlp/pipelines/presets/analyze/steps/preprocess/topic_scoring.py
 """Topic scoring utilities for analyze chunks."""
 
 from __future__ import annotations

@@ -1,4 +1,4 @@
-# src/sec_nlp/pipelines/presets/analyze/preprocess.py
+# src/sec_nlp/pipelines/presets/analyze/steps/preprocess/preprocess.py
 """Chunking and preprocessing for the analyze pipeline."""
 
 from __future__ import annotations
@@ -14,7 +14,7 @@ from sec_nlp.core.text.keyword import KeywordMatcher
 from sec_nlp.core.text.section_extractor import SectionExtractor
 from sec_nlp.pipelines.chunk_filters import limit_docs_per_accession
 
-from .config import AnalyzeConfig
+from ...config import AnalyzeConfig
 from .topic_scoring import (
     build_topic_matcher,
     normalize_topics,

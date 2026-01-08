@@ -1,4 +1,4 @@
-# src/sec_nlp/pipelines/presets/analyze/payloads.py
+# src/sec_nlp/pipelines/presets/analyze/steps/search/payloads.py
 """Payload models for analyze search exports."""
 
 from __future__ import annotations

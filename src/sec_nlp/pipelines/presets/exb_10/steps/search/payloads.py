@@ -1,4 +1,4 @@
-# src/sec_nlp/pipelines/presets/exb_10/payloads.py
+# src/sec_nlp/pipelines/presets/exb_10/steps/search/payloads.py
 """Payload models for Exhibit 10 search exports."""
 
 from __future__ import annotations

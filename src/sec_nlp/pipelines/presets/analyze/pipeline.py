@@ -30,18 +30,18 @@ from sec_nlp.pipelines.types import AnalysisResultDict, MetadataRecord
 from sec_nlp.prompts import load_prompt_template
 from sec_nlp.types import ResultDict
 
-from .analysis_runner import AnalyzerRunnable
-from .callbacks import TracingCallbackHandler
 from .config import AnalyzeConfig
-from .instructions import AnalysisInstructionBuilder
+from .io.outputs import OutputFormatter
+from .io.result_writer import write_results
 from .models import AnalysisInput, AnalysisResult, AnalyzeResult
-from .outputs import OutputFormatter
-from .preprocess import ChunkPreprocessor
-from .result_writer import write_results
-from .topic_scoring import build_topic_matcher
+from .steps.analysis.analysis_runner import AnalyzerRunnable
+from .steps.analysis.callbacks import TracingCallbackHandler
+from .steps.analysis.instructions import AnalysisInstructionBuilder
+from .steps.indexing.vector_index import VectorIndexer
+from .steps.preprocess.preprocess import ChunkPreprocessor
+from .steps.preprocess.topic_scoring import build_topic_matcher
+from .steps.search.vector_search import SearchResultsByQuery, SearchRunnable
 from .types import ChunkStats, SymbolRunMetadata, Timings
-from .vector_index import VectorIndexer
-from .vector_search import SearchResultsByQuery, SearchRunnable
 
 type PromptInput = dict[
     str,

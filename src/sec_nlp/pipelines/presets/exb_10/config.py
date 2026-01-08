@@ -10,8 +10,11 @@ from sec_nlp.core.edgar.filing_mode import FilingMode
 from sec_nlp.pipelines.base.config import BaseConfig
 from sec_nlp.pipelines.vector.config import VectorConfig
 
-from .contract_types import ContractCategory, get_keywords_for_categories
-from .search_config import SearchConfig
+from .steps.extract.contract_types import (
+    ContractCategory,
+    get_keywords_for_categories,
+)
+from .steps.search.search_config import SearchConfig
 
 
 class Exhibit10Config(BaseConfig):

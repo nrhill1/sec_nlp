@@ -1,4 +1,4 @@
-# src/sec_nlp/pipelines/presets/warranty/deduplication.py
+# src/sec_nlp/pipelines/presets/warranty/steps/aggregate/deduplication.py
 """Period record deduplication and aggregation for warranty pipeline."""
 
 from collections.abc import Hashable
@@ -13,7 +13,7 @@ from sec_nlp.pipelines.types import (
 )
 from sec_nlp.types import JsonValue
 
-from .types import WarrantyMergeBucket, WarrantyPeriodRecord
+from ...types import WarrantyMergeBucket, WarrantyPeriodRecord
 
 FieldName = Literal["warranty_liability", "warranty_payout", "net_revenue"]
 

@@ -23,16 +23,19 @@ from sec_nlp.pipelines.types import FilingMetadata, WarrantyExtractionDict
 from sec_nlp.types import ResultDict
 
 from .config import WarrantyConfig
-from .deduplication import aggregate_period_records, dedupe_period_records
-from .models import WarrantyResult
-from .payloads import (
+from .io.payloads import (
     WarrantyOutputPayload,
     WarrantyPeriodPayload,
     WarrantyProcessingPayload,
     WarrantySummaryPayload,
 )
+from .models import WarrantyResult
+from .steps.aggregate.deduplication import (
+    aggregate_period_records,
+    dedupe_period_records,
+)
+from .steps.extract.xbrl import extract_from_xbrl_docs, load_xbrl_for_filing
 from .types import WarrantyPeriodRecord
-from .xbrl import extract_from_xbrl_docs, load_xbrl_for_filing
 
 
 class WarrantyPipeline(BasePipeline):

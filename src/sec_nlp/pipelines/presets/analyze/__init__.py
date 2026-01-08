@@ -1,8 +1,8 @@
 # src/sec_nlp/pipelines/presets/analyze/__init__.py
 """Generalized document analysis pipeline with semantic search."""
 
-from .callbacks import TracingCallbackHandler
 from .config import AnalyzeConfig, SearchConfig
+from .io.outputs import OutputFormatter
 from .models import (
     Aggregates,
     AnalysisDiagnostics,
@@ -13,8 +13,8 @@ from .models import (
     ExecutiveSummary,
     FilingInfo,
 )
-from .outputs import OutputFormatter
 from .pipeline import AnalyzePipeline
+from .steps.analysis.callbacks import TracingCallbackHandler
 
 __all__: tuple[str, ...] = (
     "Aggregates",

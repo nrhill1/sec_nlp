@@ -1,4 +1,4 @@
-# src/sec_nlp/pipelines/presets/warranty/xbrl.py
+# src/sec_nlp/pipelines/presets/warranty/steps/extract/xbrl.py
 """XBRL fact extraction for warranty pipeline."""
 
 import re
