@@ -1,7 +1,7 @@
 # src/sec_nlp/core/llm/ollama.py
 
 import os
-from typing import Literal, TypedDict, Unpack
+from typing import TypedDict, Unpack
 
 from langchain_ollama.llms import OllamaLLM
 
