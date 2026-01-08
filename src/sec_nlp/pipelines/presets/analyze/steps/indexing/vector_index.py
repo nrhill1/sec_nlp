@@ -32,27 +32,6 @@ class VectorIndexer:
 
     def index(self, symbol: str, docs: list[Document], timings: Timings) -> int:
         """Store chunks in the vector store (deduped) before analysis."""
-        if (
-            not self.vector_store
-            or self.config.vector_mode == "off"
-            or not docs
-        ):
-            if not docs:
-                logger.info(
-                    "Skipping indexing for %s: no chunks after preprocessing",
-                    symbol,
-                )
-            elif self.config.vector_mode == "off":
-                logger.info(
-                    "Skipping indexing for %s: vector_mode is 'off'",
-                    symbol,
-                )
-            else:
-                logger.info(
-                    "Skipping indexing for %s: vector store unavailable",
-                    symbol,
-                )
-            return 0
 
         t_store_start = perf_counter()
         vstore = self.vector_store
