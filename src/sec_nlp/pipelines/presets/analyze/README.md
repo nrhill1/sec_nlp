@@ -1,25 +1,26 @@
 # Analyze Pipeline
 
-The analyze pipeline performs semantic search + LLM-driven analysis over SEC filings. It loads filings, chunks and filters content, optionally indexes embeddings, retrieves search hits, runs LLM analysis, and writes aggregated outputs.
+The analyze pipeline performs semantic search and LLM-driven analysis over SEC filings. It loads filings, splits and filters content, indexes embeddings when enabled, retrieves search hits, analyzes only those hits with the LLM, and writes aggregated outputs plus optional search summaries.
 
 ## Visual Flow
 
 ```mermaid
 flowchart TD
-  A[AnalyzePipeline.run] --> B[Setup paths + run metadata]
+  A[AnalyzePipeline.run] --> B[Setup paths and run metadata]
   B --> C{For each symbol}
   C --> D[Load filings via Loader]
-  D --> E[Chunk + preprocess]
-  E --> F[Vector indexing - optional]
-  F --> G{Search queries or topics}
-  G -- no --> H[Skip analysis]
-  G -- yes --> I[Vector search retrieval]
-  I --> J[LLM analysis]
-  J --> K[Filter relevant + compute stats]
-  K --> L[Write output files]
-  C -->|after all symbols| M{Search queries or topics}
-  M --> N[Export search summaries]
+  D --> E[Chunk and preprocess]
+  E --> F[Compute chunk stats]
+  F --> G[Vector indexing - optional]
+  G --> H{Search queries or topics}
+  H -- no --> I[Skip analysis]
+  H -- yes --> J[Vector search retrieval]
+  J --> K[LLM analysis]
+  K --> L[Filter relevant and build aggregates]
+  I --> M[Write output files]
+  L --> M
 ```
+
 
 ## How to run
 
@@ -39,6 +40,8 @@ sec-nlp analyze AAPL --search.queries "supply chain disruption"
 Run `sec-nlp analyze --help` for full options.
 
 Search runs automatically when `--search.queries` is provided. If it is omitted, the pipeline falls back to `--topics` as search queries.
+
+Search summaries are exported after all symbols when `search.export_results` is enabled; the export reuses cached search results from the analysis pass when available.
 
 ## Major Steps
 
@@ -84,12 +87,12 @@ Chunks are indexed into Qdrant when `vector_mode` is `read` or `write`. The inde
 Code: `src/sec_nlp/pipelines/presets/analyze/vector_index.py`
 
 ### 7) Vector search retrieval
-If search queries (or topics when queries are empty) are configured, the pipeline retrieves candidate chunks by similarity search and applies the score threshold. Search hits are de-duplicated by content/section/symbol and annotated with `matched_queries` (query + score).
+If search queries (or topics when queries are empty) are configured, the pipeline retrieves candidate chunks by similarity search and applies the score threshold. Search hits are de-duplicated by content/section/symbol and annotated with `matched_queries` (query + score). Per-query results are cached for the optional summary export after the symbol loop.
 
 Code: `src/sec_nlp/pipelines/presets/analyze/vector_search.py`
 
 ### 8) LLM analysis
-Only retrieved search hits are analyzed. The analyzer builds `AnalysisInput` items with context (section + topic hits), runs batched LLM calls with retries and fallback, and formats structured result dicts.
+Only retrieved search hits are analyzed. The analyzer builds `AnalysisInput` items with matched query hints, context (section + topic hits), and analysis instructions, runs batched LLM calls with retries and fallback, and formats structured result dicts.
 
 Code: `src/sec_nlp/pipelines/presets/analyze/analysis_runner.py`
 
@@ -99,7 +102,7 @@ Results are filtered by relevance and confidence threshold via `OutputFormatter`
 Code: `src/sec_nlp/pipelines/presets/analyze/outputs.py`, `src/sec_nlp/pipelines/presets/analyze/result_writer.py`
 
 ### 10) Export search results (optional)
-After all symbols are processed, search results can be exported to consolidated YAML summaries with per-query sections and unique hits (this export does not run LLM analysis).
+After all symbols are processed, search results can be exported to consolidated YAML summaries with per-query sections and unique hits. The export reuses cached search results from the analysis pass when available and does not run LLM analysis.
 
 Code: `src/sec_nlp/pipelines/presets/analyze/vector_search.py`
 
@@ -116,5 +119,6 @@ Paths are created by `AnalyzeConfig.get_symbol_output_dir` and `OutputFormatter.
 
 - `search.queries` (or `topics` when queries are empty) must be set to retrieve hits and run analysis.
 - `vector_mode` must be `read` or `write` if search is enabled.
+- `search.export_results` controls whether search summaries are written after the run.
 - `confidence_threshold` controls what is considered relevant in outputs.
 - `analysis_fields` controls which fields are requested from the LLM prompt.
