@@ -8,9 +8,9 @@ The analyze pipeline performs semantic search + LLM-driven analysis over SEC fil
 flowchart TD
   A[AnalyzePipeline.run] --> B[Setup paths + run metadata]
   B --> C{For each symbol}
-  C --> D[Load filings (Loader)]
+  C --> D[Load filings via Loader]
   D --> E[Chunk + preprocess]
-  E --> F[Vector indexing (optional)]
+  E --> F[Vector indexing - optional]
   F --> G{Search queries or topics}
   G -- no --> H[Skip analysis]
   G -- yes --> I[Vector search retrieval]

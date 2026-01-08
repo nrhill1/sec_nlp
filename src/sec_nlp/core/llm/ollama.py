@@ -24,7 +24,6 @@ class OllamaKwargs(TypedDict, total=False):
     seed: int | None
     stop: list[str] | None
     tfs_z: float | None
-    format: Literal["", "json"]
     keep_alive: int | str | None
     base_url: str | None
     client_kwargs: dict[str, JsonValue] | None
