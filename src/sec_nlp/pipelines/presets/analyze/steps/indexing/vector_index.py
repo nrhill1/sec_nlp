@@ -23,7 +23,7 @@ class VectorIndexer:
         self,
         *,
         config: AnalyzeConfig,
-        vector_store: QdrantVectorStore | None,
+        vector_store: QdrantVectorStore,
         deduplicator: SimHashDeduplicator,
     ) -> None:
         self.config = config

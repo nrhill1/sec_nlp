@@ -24,6 +24,8 @@ from ...config import AnalyzeConfig
 from ...models import AnalysisInput, AnalysisResult
 from ...utils import query_term_overlap, resolve_symbol_for_output
 
+NUMERIC_SIGNAL_RE = re.compile(r"[$€£]?\d")
+
 
 class AnalysisBatchInput(BaseModel):
     """Runnable input for analyzing a batch of documents."""
@@ -57,8 +59,6 @@ class AnalyzerRunnable(
     )
     callbacks: list[BaseCallbackHandler] = Field(default_factory=list)
     analysis_instructions: str = Field(default="")
-
-    _numeric_signal_re = re.compile(r"[$€£]?\d")
 
     def invoke(
         self,
@@ -313,7 +313,7 @@ class AnalyzerRunnable(
     @classmethod
     def _has_numeric_signal(cls, *values: str | None) -> bool:
         for value in values:
-            if value and cls._numeric_signal_re.search(value):
+            if value and NUMERIC_SIGNAL_RE.search(value):
                 return True
         return False
 

@@ -77,7 +77,7 @@ class AnalyzePipeline(BasePipeline):
     _section_extractor: SectionExtractor | None = PrivateAttr(default=None)
 
     # Vector Store
-    _vector_store: QdrantVectorStore | None = PrivateAttr(default=None)
+    _vector_store: QdrantVectorStore = PrivateAttr()
 
     # Deduplication
     _deduplicator: SimHashDeduplicator = PrivateAttr()
