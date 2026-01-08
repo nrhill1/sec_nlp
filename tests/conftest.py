@@ -15,6 +15,7 @@ from _pytest.logging import LogCaptureFixture
 from langchain_core.documents import Document
 
 from sec_nlp.core.ingest.loader import Loader
+from sec_nlp.pipelines import BaseConfig
 from sec_nlp.types import JsonDict
 from tests.fixtures.sample_filings import (
     SAMPLE_ERROR_HTML,
@@ -29,9 +30,28 @@ from tests.utils.typing import BenchmarkCompare, MemoryTracker
 logger = logging.getLogger(__name__)
 
 
+class TempPipelineConfig(BaseConfig):
+    """Minimal config used to isolate pipeline paths during tests."""
+
+    pipeline_type = "temp_test"
+
+    def pipeline_label(self) -> str:
+        return "Temp Test"
+
+
 def pytest_configure(config: Config) -> None:
     """Pytest hook that runs at the start of the test session."""
     logger.info("=" * 80)
+
+
+@pytest.fixture
+def temp_pipeline_config(tmp_path: Path) -> TempPipelineConfig:
+    """Provide a config instance rooted in tmp_path outputs/downloads."""
+    outputs_dir = tmp_path / "outputs"
+    downloads_dir = tmp_path / "downloads"
+    outputs_dir.mkdir(parents=True, exist_ok=True)
+    downloads_dir.mkdir(parents=True, exist_ok=True)
+    return TempPipelineConfig(out_path=outputs_dir, dl_path=downloads_dir)
     logger.info("Starting pytest session")
     logger.info(f"Python version: {sys.version}")
     logger.info(f"Python executable: {sys.executable}")

@@ -127,18 +127,23 @@ class TestBaseConfig:
 
         assert config.get_log_level() == "INFO"
 
-    def test_base_config_log_file_creates_parent_dir(self) -> None:
+    def test_base_config_log_file_creates_parent_dir(
+        self,
+        tmp_path: Path,
+        temp_pipeline_config: BaseConfig,
+    ) -> None:
         """Test that setup_paths creates log_file parent directory."""
-        import tempfile
+        log_file = tmp_path / "logs" / "nested" / "test.log"
 
-        with tempfile.TemporaryDirectory() as tmpdir:
-            log_file = Path(tmpdir) / "logs" / "nested" / "test.log"
+        config = _ConcreteConfig(
+            log_file=log_file,
+            out_path=temp_pipeline_config.out_path,
+            dl_path=temp_pipeline_config.dl_path,
+        )
+        config.setup_paths()
 
-            config = _ConcreteConfig(log_file=log_file)
-            config.setup_paths()
-
-            assert config.log_file == log_file
-            assert log_file.parent.exists()
+        assert config.log_file == log_file
+        assert log_file.parent.exists()
 
 
 class TestBasePipeline:

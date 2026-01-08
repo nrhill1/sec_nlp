@@ -145,17 +145,23 @@ class TestBaseResultEdgeCases:
 class TestBaseConfigEdgeCases:
     """Edge case tests for BaseConfig."""
 
-    def test_config_with_relative_log_file(self) -> None:
-        """Test config with relative log file path."""
-        import tempfile
-
-        with tempfile.TemporaryDirectory() as _tmpdir:
-            relative_path = Path("logs/test.log")
-            config = EdgeCaseConfig(log_file=relative_path)
-            assert config.log_file == relative_path
-            # Parent directory should be created
-            config.setup_paths()
-            assert relative_path.parent.exists()
+    def test_config_log_file_under_tmp_path(
+        self,
+        tmp_path: Path,
+        temp_pipeline_config: BaseConfig,
+    ) -> None:
+        """Test that setup_paths creates log_file parent directory."""
+        relative_path = Path("logs/test.log")
+        log_file = tmp_path / relative_path
+        config = EdgeCaseConfig(
+            log_file=log_file,
+            out_path=temp_pipeline_config.out_path,
+            dl_path=temp_pipeline_config.dl_path,
+        )
+        assert config.log_file == log_file
+        # Parent directory should be created
+        config.setup_paths()
+        assert log_file.parent.exists()
 
     def test_config_log_file_with_symlink(self) -> None:
         """Test config with symlinked log file path."""
