@@ -13,6 +13,16 @@ ANALYSIS_FIELD_ORDER: list[str] = [
     "summary",
     "key_points",
     "reasoning",
+    "query_match_terms",
+    "missing_query_terms",
+    "binding_status",
+    "contingencies",
+    "impact_channels",
+    "impact_direction",
+    "impact_magnitude",
+    "impact_horizon",
+    "impact_confidence",
+    "impact_rationale",
     "extracted_entities",
     "tags",
     "evidence_spans",
@@ -42,6 +52,36 @@ ANALYSIS_FIELD_DESCRIPTIONS: dict[str, str] = {
     ),
     "reasoning": (
         "**reasoning** (string): Brief rationale explicitly referencing the matched query/topic and the specific supporting detail(s) or why it is not relevant."
+    ),
+    "query_match_terms": (
+        "**query_match_terms** (list[string]): Exact query terms that appear in the text (case-insensitive match). Use [] if no query or none found."
+    ),
+    "missing_query_terms": (
+        "**missing_query_terms** (list[string]): High-signal query terms that are absent from the text. Use [] if none or no query."
+    ),
+    "binding_status": (
+        '**binding_status** (string | null): "binding", "non_binding", "conditional", "terminated", or "unknown" for agreements/commitments.'
+    ),
+    "contingencies": (
+        "**contingencies** (list[string]): Explicit conditions/approvals/requirements tied to the event; [] if none."
+    ),
+    "impact_channels": (
+        '**impact_channels** (list[string]): Financial impact vectors such as "revenue", "costs", "margin", "capex", "liquidity", "balance_sheet", "production", "pricing", "regulatory", "legal", "tax", "strategy". [] if none.'
+    ),
+    "impact_direction": (
+        '**impact_direction** (string | null): "positive", "negative", "mixed", "neutral", or "unclear".'
+    ),
+    "impact_magnitude": (
+        '**impact_magnitude** (string | null): "low", "medium", "high", "none", or "unclear".'
+    ),
+    "impact_horizon": (
+        '**impact_horizon** (string | null): "near_term", "mid_term", "long_term", or "unclear".'
+    ),
+    "impact_confidence": (
+        "**impact_confidence** (0.0-1.0 | null): Confidence in the impact assessment; null if no impact assessment."
+    ),
+    "impact_rationale": (
+        "**impact_rationale** (string | null): 1-2 sentence justification linking the text to expected financial impact; null if unclear."
     ),
     "extracted_entities": (
         "**extracted_entities** (object): Named entities by type: companies, people, dates, amounts, locations (each a list; [] if none)."

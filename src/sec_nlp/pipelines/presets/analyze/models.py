@@ -79,6 +79,10 @@ class AnalysisInput(BaseModel):
         default=None,
         description="Specific search query that matched this chunk",
     )
+    matched_queries: list[str] | None = Field(
+        default=None,
+        description="List of matching queries (ordered by relevance)",
+    )
     context: str | None = Field(
         default=None,
         description="Additional context for analysis (optional)",
@@ -126,6 +130,48 @@ class AnalysisResult(BaseResult):
     reasoning: str | None = Field(
         default=None,
         description="Explanation of the analysis",
+    )
+    query_match_terms: list[str] = Field(
+        default_factory=list,
+        description="Exact query terms found in the chunk",
+    )
+    missing_query_terms: list[str] = Field(
+        default_factory=list,
+        description="High-signal query terms missing from the chunk",
+    )
+    binding_status: str | None = Field(
+        default=None,
+        description="Binding status for agreements or commitments",
+    )
+    contingencies: list[str] = Field(
+        default_factory=list,
+        description="Conditions or contingencies stated in the text",
+    )
+    impact_channels: list[str] = Field(
+        default_factory=list,
+        description="Financial impact channels inferred from the text",
+    )
+    impact_direction: str | None = Field(
+        default=None,
+        description="Direction of expected financial impact",
+    )
+    impact_magnitude: str | None = Field(
+        default=None,
+        description="Magnitude of expected financial impact",
+    )
+    impact_horizon: str | None = Field(
+        default=None,
+        description="Timing horizon for expected financial impact",
+    )
+    impact_confidence: float | None = Field(
+        default=None,
+        ge=0.0,
+        le=1.0,
+        description="Confidence in the impact assessment",
+    )
+    impact_rationale: str | None = Field(
+        default=None,
+        description="Justification for the impact assessment",
     )
     extracted_entities: dict[str, EntityValue] = Field(
         default_factory=dict,
@@ -182,7 +228,15 @@ class AnalysisResult(BaseResult):
             return items
         return []
 
-    @field_validator("tags", "follow_up_questions", mode="before")
+    @field_validator(
+        "tags",
+        "follow_up_questions",
+        "query_match_terms",
+        "missing_query_terms",
+        "impact_channels",
+        "contingencies",
+        mode="before",
+    )
     @classmethod
     def _coerce_list_fields(cls, v: StringListInput) -> list[str]:
         """Normalize optional list fields from LLM output."""
@@ -322,6 +376,11 @@ class Aggregates(BaseModel):
     sentiment_breakdown: dict[str, int] = Field(default_factory=dict)
     sections_covered: dict[str, int] = Field(default_factory=dict)
     topic_hits_frequency: dict[str, int] = Field(default_factory=dict)
+    impact_channel_frequency: dict[str, int] = Field(default_factory=dict)
+    impact_horizon_frequency: dict[str, int] = Field(default_factory=dict)
+    impact_direction_frequency: dict[str, int] = Field(default_factory=dict)
+    impact_magnitude_frequency: dict[str, int] = Field(default_factory=dict)
+    binding_status_frequency: dict[str, int] = Field(default_factory=dict)
     forward_looking_count: int = 0
 
 

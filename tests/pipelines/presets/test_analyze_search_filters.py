@@ -63,19 +63,28 @@ def _make_config(
     )
     if vector_mode is None:
         vector_mode = "read" if with_queries or topics else "off"
-    config_kwargs: dict[str, object] = {
-        "symbols": ["AAPL"],
-        "out_path": tmp_path,
-        "dl_path": tmp_path,
-        "vector_mode": vector_mode,
-        "export_format": "json",
-        "search": search,
-        "validate_config": False,
-        "collect_metrics": False,
-    }
-    if topics is not None:
-        config_kwargs["topics"] = topics
-    return AnalyzeConfig(**config_kwargs)
+    if topics is None:
+        return AnalyzeConfig(
+            symbols=["AAPL"],
+            out_path=tmp_path,
+            dl_path=tmp_path,
+            vector_mode=vector_mode,
+            export_format="json",
+            search=search,
+            validate_config=False,
+            collect_metrics=False,
+        )
+    return AnalyzeConfig(
+        symbols=["AAPL"],
+        out_path=tmp_path,
+        dl_path=tmp_path,
+        vector_mode=vector_mode,
+        export_format="json",
+        search=search,
+        validate_config=False,
+        collect_metrics=False,
+        topics=topics,
+    )
 
 
 def test_retrieve_search_hits_passes_metadata_filter(

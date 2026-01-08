@@ -17,6 +17,7 @@ from sec_nlp.pipelines.presets.analyze.steps.search.vector_search import (
     SearchQueryResults,
     SearchRunnable,
 )
+from sec_nlp.pipelines.presets.analyze.types import ChunkStats
 from sec_nlp.pipelines.types import AnalysisResultDict, MetadataValue
 
 
@@ -40,11 +41,12 @@ class _CachedSearchPipeline(AnalyzePipeline):
     def _build_components(self) -> None:
         self._search_runner = Mock(spec=SearchRunnable)
 
-    def _process_symbol(self, symbol: str) -> tuple[list[Path], dict]:
+    def _process_symbol(self, symbol: str) -> tuple[list[Path], ChunkStats]:
         self._search_results_by_query = {
             "cached-query": SearchQueryResults(filtered=[], total=0)
         }
-        return [], {}
+        stats: ChunkStats = {}
+        return [], stats
 
 
 class _FakeGraph(Runnable[AnalysisInput, AnalysisResult]):

@@ -1,0 +1,6 @@
+from pathlib import Path
+
+PROMPTS_DIR: Path
+ANALYZE_PROMPT_PATH: Path
+PROXY_PROMPT_PATH: Path
+HOLDINGS_PROMPT_PATH: Path

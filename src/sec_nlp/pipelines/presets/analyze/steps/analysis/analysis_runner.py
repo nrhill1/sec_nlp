@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from langchain_core.callbacks.base import BaseCallbackHandler
@@ -21,7 +22,7 @@ from sec_nlp.pipelines.types import AnalysisResultDict, MetadataRecord
 
 from ...config import AnalyzeConfig
 from ...models import AnalysisInput, AnalysisResult
-from ...utils import resolve_symbol_for_output
+from ...utils import query_term_overlap, resolve_symbol_for_output
 
 
 class AnalysisBatchInput(BaseModel):
@@ -57,6 +58,8 @@ class AnalyzerRunnable(
     callbacks: list[BaseCallbackHandler] = Field(default_factory=list)
     analysis_instructions: str = Field(default="")
 
+    _numeric_signal_re = re.compile(r"[$€£]?\d")
+
     def invoke(
         self,
         input: AnalysisBatchInput,
@@ -82,18 +85,16 @@ class AnalyzerRunnable(
             metadata = doc.metadata or {}
             doc_symbol = resolve_symbol_for_output(symbol, metadata)
             matched_queries = self._extract_matched_queries(metadata)
-            matched_query_value = (
-                str(matched_queries[0].get("query"))
-                if matched_queries
-                and isinstance(matched_queries[0], dict)
-                and matched_queries[0].get("query")
-                else None
+            matched_query_value = self._select_primary_query(
+                matched_queries, doc.page_content
             )
+            matched_query_list = self._build_matched_query_list(matched_queries)
             inputs.append(
                 AnalysisInput(
                     symbol=doc_symbol,
                     chunk=doc.page_content,
                     matched_query=matched_query_value,
+                    matched_queries=matched_query_list,
                     context=self._build_context(doc),
                     topic_hits=metadata.get("topic_hits"),
                     analysis_instructions=self.analysis_instructions,
@@ -162,6 +163,7 @@ class AnalyzerRunnable(
                     symbol=symbol,
                     chunk=doc.page_content,
                     matched_query=query,
+                    matched_queries=[query],
                     context=self._build_context(doc),
                     topic_hits=topic_hits,
                     analysis_instructions=self.analysis_instructions,
@@ -257,6 +259,95 @@ class AnalyzerRunnable(
         return " | ".join(context_parts) if context_parts else None
 
     @staticmethod
+    def _build_matched_query_list(
+        matched_queries: list[dict[str, float | str]],
+    ) -> list[str] | None:
+        queries: list[str] = []
+        seen: set[str] = set()
+        for item in matched_queries:
+            query = item.get("query")
+            if not isinstance(query, str):
+                continue
+            cleaned = query.strip()
+            if not cleaned or cleaned in seen:
+                continue
+            seen.add(cleaned)
+            queries.append(cleaned)
+            if len(queries) >= 3:
+                break
+        return queries or None
+
+    def _select_primary_query(
+        self,
+        matched_queries: list[dict[str, float | str]],
+        content: str | None,
+    ) -> str | None:
+        if not matched_queries:
+            return None
+        best_query: str | None = None
+        best_ratio = -1.0
+        for item in matched_queries:
+            query = item.get("query")
+            if not isinstance(query, str):
+                continue
+            cleaned = query.strip()
+            if not cleaned:
+                continue
+            _, _, ratio = query_term_overlap(
+                cleaned,
+                content,
+                min_len=self.config.search.query_term_min_len,
+            )
+            if ratio > best_ratio:
+                best_ratio = ratio
+                best_query = cleaned
+        if best_query is not None:
+            return best_query
+        first_query = matched_queries[0].get("query")
+        return (
+            str(first_query).strip()
+            if isinstance(first_query, str) and first_query.strip()
+            else None
+        )
+
+    @classmethod
+    def _has_numeric_signal(cls, *values: str | None) -> bool:
+        for value in values:
+            if value and cls._numeric_signal_re.search(value):
+                return True
+        return False
+
+    def _calibrate_confidence(
+        self,
+        *,
+        llm_confidence: float | None,
+        is_relevant: bool,
+        matched_terms: list[str],
+        missing_terms: list[str],
+        overlap_ratio: float,
+        result: AnalysisResult,
+    ) -> float | None:
+        if llm_confidence is None and not matched_terms and not missing_terms:
+            return None
+
+        score = 0.2 + (0.6 * overlap_ratio)
+        if result.source_excerpt or result.evidence_spans:
+            score += 0.1
+        key_points = "; ".join(result.key_points or []) or None
+        if self._has_numeric_signal(result.summary, key_points):
+            score += 0.1
+        if result.binding_status == "binding":
+            score += 0.05
+        elif result.binding_status == "non_binding":
+            score -= 0.05
+        if missing_terms:
+            score -= 0.15
+        if not is_relevant:
+            score = min(score, 0.4)
+        score = max(0.05, min(score, 0.99))
+        return score
+
+    @staticmethod
     def _extract_matched_queries(
         metadata: MetadataRecord | None,
     ) -> list[dict[str, float | str]]:
@@ -293,14 +384,54 @@ class AnalyzerRunnable(
             "accession_number": get_accession_from_metadata(doc.metadata),
         }
         matched_queries = self._extract_matched_queries(source_metadata)
+        primary_query = self._select_primary_query(
+            matched_queries, doc.page_content
+        )
+        query_match_terms, missing_query_terms, overlap_ratio = (
+            query_term_overlap(
+                primary_query,
+                doc.page_content,
+                min_len=self.config.search.query_term_min_len,
+            )
+        )
         for key in ("matched_queries", "search_query", "search_score"):
             source_metadata.pop(key, None)
+        is_relevant = result.is_relevant
+        if primary_query and not query_match_terms and is_relevant:
+            is_relevant = False
+
+        confidence_score = result.confidence_score
+        if self.config.confidence_mode == "calibrated":
+            calibrated = self._calibrate_confidence(
+                llm_confidence=confidence_score,
+                is_relevant=is_relevant,
+                matched_terms=query_match_terms,
+                missing_terms=missing_query_terms,
+                overlap_ratio=overlap_ratio,
+                result=result,
+            )
+            if calibrated is not None:
+                if confidence_score is None:
+                    confidence_score = calibrated
+                else:
+                    confidence_score = min(float(confidence_score), calibrated)
+
         result_dict: AnalysisResultDict = {
-            "is_relevant": result.is_relevant,
-            "confidence_score": result.confidence_score,
+            "is_relevant": is_relevant,
+            "confidence_score": confidence_score,
             "summary": result.summary,
             "key_points": result.key_points,
             "reasoning": result.reasoning,
+            "query_match_terms": query_match_terms,
+            "missing_query_terms": missing_query_terms,
+            "binding_status": result.binding_status,
+            "contingencies": result.contingencies,
+            "impact_channels": result.impact_channels,
+            "impact_direction": result.impact_direction,
+            "impact_magnitude": result.impact_magnitude,
+            "impact_horizon": result.impact_horizon,
+            "impact_confidence": result.impact_confidence,
+            "impact_rationale": result.impact_rationale,
             "extracted_entities": result.extracted_entities,
             "tags": result.tags,
             "evidence_spans": result.evidence_spans,

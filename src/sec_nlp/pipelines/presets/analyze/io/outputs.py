@@ -169,6 +169,11 @@ class OutputFormatter:
         sentiment_counts: dict[str, int] = defaultdict(int)
         section_counts: dict[str, int] = defaultdict(int)
         topic_hit_counts: dict[str, int] = defaultdict(int)
+        impact_channel_counts: dict[str, int] = defaultdict(int)
+        impact_horizon_counts: dict[str, int] = defaultdict(int)
+        impact_direction_counts: dict[str, int] = defaultdict(int)
+        impact_magnitude_counts: dict[str, int] = defaultdict(int)
+        binding_status_counts: dict[str, int] = defaultdict(int)
         forward_looking_count = 0
 
         for result in relevant_results:
@@ -195,6 +200,28 @@ class OutputFormatter:
             elif isinstance(topic_hits, str) and topic_hits:
                 topic_hit_counts[topic_hits] += 1
 
+            impact_channels = result.get("impact_channels") or []
+            if isinstance(impact_channels, list):
+                for channel in impact_channels:
+                    if channel:
+                        impact_channel_counts[str(channel)] += 1
+
+            impact_horizon = result.get("impact_horizon")
+            if impact_horizon:
+                impact_horizon_counts[str(impact_horizon)] += 1
+
+            impact_direction = result.get("impact_direction")
+            if impact_direction:
+                impact_direction_counts[str(impact_direction)] += 1
+
+            impact_magnitude = result.get("impact_magnitude")
+            if impact_magnitude:
+                impact_magnitude_counts[str(impact_magnitude)] += 1
+
+            binding_status = result.get("binding_status")
+            if binding_status:
+                binding_status_counts[str(binding_status)] += 1
+
         return Aggregates(
             tag_frequency=dict(
                 sorted(tag_counts.items(), key=lambda t: t[1], reverse=True)
@@ -202,6 +229,41 @@ class OutputFormatter:
             sentiment_breakdown=dict(sentiment_counts),
             sections_covered=dict(section_counts),
             topic_hits_frequency=dict(topic_hit_counts),
+            impact_channel_frequency=dict(
+                sorted(
+                    impact_channel_counts.items(),
+                    key=lambda t: t[1],
+                    reverse=True,
+                )
+            ),
+            impact_horizon_frequency=dict(
+                sorted(
+                    impact_horizon_counts.items(),
+                    key=lambda t: t[1],
+                    reverse=True,
+                )
+            ),
+            impact_direction_frequency=dict(
+                sorted(
+                    impact_direction_counts.items(),
+                    key=lambda t: t[1],
+                    reverse=True,
+                )
+            ),
+            impact_magnitude_frequency=dict(
+                sorted(
+                    impact_magnitude_counts.items(),
+                    key=lambda t: t[1],
+                    reverse=True,
+                )
+            ),
+            binding_status_frequency=dict(
+                sorted(
+                    binding_status_counts.items(),
+                    key=lambda t: t[1],
+                    reverse=True,
+                )
+            ),
             forward_looking_count=forward_looking_count,
         )
 
@@ -255,6 +317,16 @@ class OutputFormatter:
             "confidence_score",
             "summary",
             "key_points",
+            "query_match_terms",
+            "missing_query_terms",
+            "binding_status",
+            "contingencies",
+            "impact_channels",
+            "impact_direction",
+            "impact_magnitude",
+            "impact_horizon",
+            "impact_confidence",
+            "impact_rationale",
             "tags",
             "severity",
             "sentiment",
@@ -285,6 +357,24 @@ class OutputFormatter:
                     "confidence_score": result.get("confidence_score"),
                     "summary": result.get("summary", ""),
                     "key_points": "; ".join(result.get("key_points", [])),
+                    "query_match_terms": "; ".join(
+                        result.get("query_match_terms") or []
+                    ),
+                    "missing_query_terms": "; ".join(
+                        result.get("missing_query_terms") or []
+                    ),
+                    "binding_status": result.get("binding_status", ""),
+                    "contingencies": "; ".join(
+                        result.get("contingencies") or []
+                    ),
+                    "impact_channels": "; ".join(
+                        result.get("impact_channels") or []
+                    ),
+                    "impact_direction": result.get("impact_direction", ""),
+                    "impact_magnitude": result.get("impact_magnitude", ""),
+                    "impact_horizon": result.get("impact_horizon", ""),
+                    "impact_confidence": result.get("impact_confidence", ""),
+                    "impact_rationale": result.get("impact_rationale", ""),
                     "tags": "; ".join(tags),
                     "severity": result.get("severity", ""),
                     "sentiment": result.get("sentiment", ""),

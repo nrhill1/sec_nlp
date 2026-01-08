@@ -140,6 +140,16 @@ class AnalysisResultDict(TypedDict, total=False):
     summary: str | None
     key_points: list[str]
     reasoning: str | None
+    query_match_terms: list[str]
+    missing_query_terms: list[str]
+    binding_status: str | None
+    contingencies: list[str]
+    impact_channels: list[str]
+    impact_direction: str | None
+    impact_magnitude: str | None
+    impact_horizon: str | None
+    impact_confidence: float | None
+    impact_rationale: str | None
 
     # Classification
     tags: list[str]

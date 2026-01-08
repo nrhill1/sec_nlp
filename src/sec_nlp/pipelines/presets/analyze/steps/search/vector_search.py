@@ -26,7 +26,7 @@ from sec_nlp.pipelines.types import (
 from sec_nlp.types import JsonDict, JsonValue
 
 from ...config import AnalyzeConfig
-from ...utils import resolve_symbol_for_output
+from ...utils import query_term_overlap, resolve_symbol_for_output
 from ..analysis.analysis_runner import AnalysisBatchInput
 from .payloads import (
     SearchHighlightsPayload,
@@ -151,6 +151,7 @@ class SearchRunnable(
                     if distance_prefers_lower
                     else score >= threshold
                 )
+                and self._passes_query_term_gate(query, doc.page_content)
             ]
             results_by_query[query] = SearchQueryResults(
                 filtered=filtered,
@@ -218,6 +219,26 @@ class SearchRunnable(
             )
 
         return retrieved, results_by_query
+
+    def _passes_query_term_gate(
+        self, query: str | None, content: str | None
+    ) -> bool:
+        min_hits = self.config.search.query_term_min_hits
+        min_ratio = self.config.search.query_term_min_ratio
+        min_len = self.config.search.query_term_min_len
+        if min_hits <= 0 and min_ratio <= 0:
+            return True
+        matched_terms, _, ratio = query_term_overlap(
+            query,
+            content,
+            min_len=min_len,
+        )
+        hits = len(matched_terms)
+        if min_hits > 0 and hits < min_hits:
+            return False
+        if min_ratio > 0 and ratio < min_ratio:
+            return False
+        return True
 
     def run(self, queries: list[str] | None = None) -> list[Path]:
         """Run semantic search queries if configured."""

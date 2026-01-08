@@ -48,6 +48,28 @@ class SearchConfig(BaseModel):
             "so this acts as a max distance; for dot-product higher is better"
         ),
     )
+    query_term_min_hits: int = Field(
+        default=1,
+        ge=0,
+        description=(
+            "Minimum number of query terms that must appear in a chunk to keep a hit "
+            "(0 disables lexical gating)"
+        ),
+    )
+    query_term_min_ratio: float = Field(
+        default=0.3,
+        ge=0.0,
+        le=1.0,
+        description=(
+            "Minimum fraction of query terms that must appear in a chunk "
+            "(0 disables ratio gating)"
+        ),
+    )
+    query_term_min_len: int = Field(
+        default=3,
+        ge=1,
+        description="Minimum length for query terms used in lexical gating",
+    )
     analyze: bool = Field(
         default=True,
         description="Run LLM analysis on search results",
@@ -289,6 +311,13 @@ class AnalyzeConfig(BaseConfig):
         le=1.0,
         description="Minimum confidence score to consider results relevant",
     )
+    confidence_mode: Literal["llm", "calibrated"] = Field(
+        default="calibrated",
+        description=(
+            "How to set confidence_score: use raw LLM output or calibrate "
+            "with query-term overlap and evidence signals"
+        ),
+    )
     llm_retry_attempts: int = Field(
         default=2,
         ge=0,
@@ -308,6 +337,24 @@ class AnalyzeConfig(BaseConfig):
             "summary",
             "key_points",
             "reasoning",
+            "query_match_terms",
+            "missing_query_terms",
+            "binding_status",
+            "contingencies",
+            "impact_channels",
+            "impact_direction",
+            "impact_magnitude",
+            "impact_horizon",
+            "impact_confidence",
+            "impact_rationale",
+            "extracted_entities",
+            "tags",
+            "evidence_spans",
+            "source_excerpt",
+            "severity",
+            "sentiment",
+            "forward_looking",
+            "follow_up_questions",
         ],
         description="Fields to extract from LLM analysis",
     )

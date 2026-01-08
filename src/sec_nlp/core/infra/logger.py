@@ -180,6 +180,21 @@ def setup_logging(
             "langchain_core.prompts.loading"
         )
     )
+    # Collapse repeated unstructured warnings to keep console output readable
+    unstructured_seen: set[str] = set()
+
+    def _dedupe_unstructured_profiles(record: logging.LogRecord) -> bool:
+        if not str(record.name).startswith("unstructured"):
+            return True
+        message = record.getMessage()
+        if message != "Need to load profiles.":
+            return True
+        if message in unstructured_seen:
+            return False
+        unstructured_seen.add(message)
+        return True
+
+    console_handler.addFilter(_dedupe_unstructured_profiles)
     root_logger.addHandler(console_handler)
 
     # File handler
@@ -211,6 +226,7 @@ def setup_logging(
     # Suppress noisy third-party loggers
     for lib in ["urllib3", "requests", "transformers", "torch", "httpx"]:
         logging.getLogger(lib).setLevel(logging.WARNING)
+    logging.getLogger("unstructured").setLevel(logging.WARNING)
 
     root_logger.debug(
         "Logging configured: level=%s, format=%s, file=%s",
