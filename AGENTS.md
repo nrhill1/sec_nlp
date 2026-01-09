@@ -18,3 +18,4 @@ When fixing type errors, writing any new code, or modifying exsiting code:
 10. For Pydantic, never use SkipValidation.
 11. Do not create new Protocol types.
 12. Do not use reserved Python keywords or function names.
+13. Type annotations and aliases should follow guidelines for Python v3.13.9.

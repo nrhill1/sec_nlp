@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import tomllib
 from pathlib import Path
 
@@ -60,4 +61,50 @@ def _validate_project_root(root: Path) -> Path:
 
 PROJECT_ROOT: Path = _validate_project_root(
     _project_root_from_module(Path(__file__))
+)
+
+
+def _read_int_setting(name: str, default: int) -> int:
+    raw_value = os.getenv(name)
+    if raw_value is None:
+        return default
+    try:
+        return int(raw_value)
+    except ValueError as exc:
+        raise PathSecurityError(
+            f"Invalid integer for {name}: {raw_value}"
+        ) from exc
+
+
+def _read_float_setting(name: str, default: float) -> float:
+    raw_value = os.getenv(name)
+    if raw_value is None:
+        return default
+    try:
+        return float(raw_value)
+    except ValueError as exc:
+        raise PathSecurityError(
+            f"Invalid float for {name}: {raw_value}"
+        ) from exc
+
+
+MARKET_CACHE_TTL_SECONDS: float = _read_float_setting(
+    "SEC_NLP_MARKET_CACHE_TTL_SECONDS",
+    300.0,
+)
+MARKET_CACHE_MAX_ENTRIES: int = _read_int_setting(
+    "SEC_NLP_MARKET_CACHE_MAX_ENTRIES",
+    128,
+)
+MARKET_RETRY_ATTEMPTS: int = _read_int_setting(
+    "SEC_NLP_MARKET_RETRY_ATTEMPTS",
+    3,
+)
+MARKET_RETRY_BACKOFF_SECONDS: float = _read_float_setting(
+    "SEC_NLP_MARKET_RETRY_BACKOFF_SECONDS",
+    0.5,
+)
+MARKET_RETRY_BACKOFF_MULTIPLIER: float = _read_float_setting(
+    "SEC_NLP_MARKET_RETRY_BACKOFF_MULTIPLIER",
+    2.0,
 )
