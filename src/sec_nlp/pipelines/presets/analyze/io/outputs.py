@@ -3,8 +3,9 @@
 
 import csv
 from collections import defaultdict
+from hashlib import sha256
 from pathlib import Path
-from typing import Literal
+from typing import Literal, cast
 
 from sec_nlp.core.infra.logger import logger
 from sec_nlp.pipelines.output_io import (
@@ -20,6 +21,7 @@ from ..models import (
     AnalysisOutput,
     ExecutiveSummary,
     FilingInfo,
+    OutputProvenance,
 )
 
 
@@ -32,11 +34,25 @@ class OutputFormatter:
         confidence_threshold: float,
         topics: list[str] | None = None,
         include_raw_chunks: bool = False,
+        run_id: str | None = None,
+        model_name: str | None = None,
+        confidence_mode: str | None = None,
+        prompt_path: Path | None = None,
+        prompt_version: str | None = None,
+        pipeline_version: str | None = None,
     ) -> None:
         self.export_format = export_format
         self.confidence_threshold = confidence_threshold
         self.topics = topics or []
         self.include_raw_chunks = include_raw_chunks
+        self.run_id = run_id
+        self.model_name = model_name
+        self.confidence_mode = confidence_mode
+        self.prompt_path = prompt_path
+        self.prompt_version = prompt_version or self._hash_prompt_file(
+            prompt_path
+        )
+        self.pipeline_version = pipeline_version
 
     def is_relevant_result(self, result: AnalysisResultDict) -> bool:
         """Check if a result meets the relevance threshold."""
@@ -48,6 +64,106 @@ class OutputFormatter:
             and is_relevant_flag
             and confidence >= self.confidence_threshold
         )
+
+    @staticmethod
+    def _hash_prompt_file(prompt_path: Path | None) -> str | None:
+        if prompt_path is None:
+            return None
+        try:
+            return sha256(prompt_path.read_bytes()).hexdigest()
+        except OSError:
+            return None
+
+    def _coerce_score(self, value: object) -> float | None:
+        if isinstance(value, (int, float)):
+            return float(value)
+        if isinstance(value, str):
+            try:
+                return float(value)
+            except ValueError:
+                return None
+        return None
+
+    def _confidence_bucket(self, score: float | None) -> str:
+        if score is None:
+            return "unknown"
+        if score >= 0.85:
+            return "high"
+        if score >= self.confidence_threshold:
+            return "medium"
+        return "low"
+
+    def _rank_results(
+        self, results: list[AnalysisResultDict]
+    ) -> list[AnalysisResultDict]:
+        def sort_score(result: AnalysisResultDict) -> float:
+            score = self._coerce_score(result.get("confidence_score"))
+            return score if score is not None else -1.0
+
+        sorted_results = sorted(
+            results,
+            key=sort_score,
+            reverse=True,
+        )
+        ranked: list[AnalysisResultDict] = []
+        for idx, result in enumerate(sorted_results, start=1):
+            score = self._coerce_score(result.get("confidence_score"))
+            enriched = cast(AnalysisResultDict, dict(result))
+            enriched["rank"] = idx
+            enriched["confidence_bucket"] = self._confidence_bucket(score)
+            ranked.append(enriched)
+        return ranked
+
+    @staticmethod
+    def _extract_queries(result: AnalysisResultDict) -> list[str]:
+        matched_queries = result.get("matched_queries")
+        if not isinstance(matched_queries, list):
+            return []
+        queries: list[str] = []
+        seen: set[str] = set()
+        for item in matched_queries:
+            if not isinstance(item, dict):
+                continue
+            query = item.get("query")
+            if not isinstance(query, str):
+                continue
+            cleaned = query.strip()
+            if not cleaned or cleaned in seen:
+                continue
+            seen.add(cleaned)
+            queries.append(cleaned)
+        return queries
+
+    @staticmethod
+    def _extract_section(result: AnalysisResultDict) -> str | None:
+        metadata = result.get("source_metadata") or {}
+        section = metadata.get("section_number")
+        if isinstance(section, (int, float)):
+            return str(section)
+        if isinstance(section, str):
+            cleaned = section.strip()
+            return cleaned if cleaned else None
+        return None
+
+    def _group_by_query(
+        self, results: list[AnalysisResultDict]
+    ) -> dict[str, list[AnalysisResultDict]]:
+        grouped: dict[str, list[AnalysisResultDict]] = {}
+        for result in results:
+            for query in self._extract_queries(result):
+                grouped.setdefault(query, []).append(result)
+        return grouped
+
+    def _group_by_section(
+        self, results: list[AnalysisResultDict]
+    ) -> dict[str, list[AnalysisResultDict]]:
+        grouped: dict[str, list[AnalysisResultDict]] = {}
+        for result in results:
+            section = self._extract_section(result)
+            if section is None:
+                continue
+            grouped.setdefault(section, []).append(result)
+        return grouped
 
     def build_output(
         self,
@@ -87,6 +203,8 @@ class OutputFormatter:
             else 0.0
         )
 
+        ranked_results = self._rank_results(relevant_results)
+
         # Build aggregates
         aggregates = self._build_aggregates(relevant_results)
 
@@ -96,7 +214,7 @@ class OutputFormatter:
 
         # Extract key points (deduplicated, top 5)
         key_points: list[str] = []
-        for r in relevant_results:
+        for r in ranked_results:
             for kp in r.get("key_points") or []:
                 if kp and kp not in key_points:
                     key_points.append(kp)
@@ -137,6 +255,17 @@ class OutputFormatter:
             confidence_threshold=self.confidence_threshold,
         )
 
+        provenance = OutputProvenance(
+            run_id=self.run_id,
+            pipeline_version=self.pipeline_version,
+            model_name=self.model_name,
+            confidence_mode=self.confidence_mode,
+            prompt_path=str(self.prompt_path)
+            if self.prompt_path is not None
+            else None,
+            prompt_version=self.prompt_version,
+        )
+
         # Build filing info
         def _meta_str(key: str) -> str | None:
             value = filing_meta.get(key)
@@ -158,7 +287,10 @@ class OutputFormatter:
             executive_summary=executive_summary,
             aggregates=aggregates,
             diagnostics=diagnostics,
-            results=relevant_results,
+            provenance=provenance,
+            results=ranked_results,
+            results_by_query=self._group_by_query(ranked_results),
+            results_by_section=self._group_by_section(ranked_results),
         )
 
     def _build_aggregates(
@@ -228,7 +360,13 @@ class OutputFormatter:
             ),
             sentiment_breakdown=dict(sentiment_counts),
             sections_covered=dict(section_counts),
-            topic_hits_frequency=dict(topic_hit_counts),
+            topic_hits_frequency=dict(
+                sorted(
+                    topic_hit_counts.items(),
+                    key=lambda t: t[1],
+                    reverse=True,
+                )
+            ),
             impact_channel_frequency=dict(
                 sorted(
                     impact_channel_counts.items(),

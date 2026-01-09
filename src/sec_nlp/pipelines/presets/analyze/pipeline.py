@@ -17,6 +17,7 @@ from pydantic import PrivateAttr
 from qdrant_client.models import Distance, VectorParams
 from tqdm import tqdm
 
+from sec_nlp import __version__ as sec_nlp_version
 from sec_nlp.core.infra.logger import log_divider, logger
 from sec_nlp.core.ingest.loader import Loader
 from sec_nlp.core.llm.chains import InputModelKeys, build_runnable
@@ -293,6 +294,11 @@ class AnalyzePipeline(BasePipeline):
             confidence_threshold=self.config.confidence_threshold,
             topics=keyword_terms,
             include_raw_chunks=self.config.include_raw_chunks,
+            run_id=str(self.config.run_id),
+            model_name=self.config.llm.model_name,
+            confidence_mode=self.config.confidence_mode,
+            prompt_path=self.config.llm.prompt_path,
+            pipeline_version=sec_nlp_version,
         )
 
         topic_matcher = build_topic_matcher(keyword_terms)
@@ -649,6 +655,11 @@ class AnalyzePipeline(BasePipeline):
                 confidence_threshold=self.config.confidence_threshold,
                 topics=self.config.topics or self.config.keywords,
                 include_raw_chunks=self.config.include_raw_chunks,
+                run_id=str(self.config.run_id),
+                model_name=self.config.llm.model_name,
+                confidence_mode=self.config.confidence_mode,
+                prompt_path=self.config.llm.prompt_path,
+                pipeline_version=sec_nlp_version,
             )
         return write_results(
             config=self.config,

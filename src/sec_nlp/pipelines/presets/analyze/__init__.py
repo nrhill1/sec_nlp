@@ -12,6 +12,7 @@ from .models import (
     AnalyzeResult,
     ExecutiveSummary,
     FilingInfo,
+    OutputProvenance,
 )
 from .pipeline import AnalyzePipeline
 from .steps.analysis.callbacks import TracingCallbackHandler
@@ -28,6 +29,7 @@ __all__: tuple[str, ...] = (
     "ExecutiveSummary",
     "FilingInfo",
     "OutputFormatter",
+    "OutputProvenance",
     "SearchConfig",
     "TracingCallbackHandler",
 )

@@ -21,6 +21,8 @@ type EvidenceSpan = dict[str, str | int | float]
 type EntityValue = JsonValue
 type StringListInput = list[str] | str | int | float | None
 
+ANALYSIS_OUTPUT_SCHEMA_VERSION = "1.1"
+
 
 def _coerce_json_value(value: JsonValue) -> JsonValue | None:
     if isinstance(value, (str, int, float, bool)) or value is None:
@@ -363,6 +365,24 @@ class AnalysisDiagnostics(BaseModel):
     confidence_threshold: float = 0.5
 
 
+class OutputProvenance(BaseModel):
+    """Metadata describing how the analysis output was produced."""
+
+    model_config = ConfigDict(
+        frozen=True,
+        extra="ignore",
+        defer_build=True,
+    )
+
+    run_id: str | None = None
+    pipeline_version: str | None = None
+    model_name: str | None = None
+    confidence_mode: str | None = None
+    prompt_path: str | None = None
+    prompt_version: str | None = None
+    schema_version: str = ANALYSIS_OUTPUT_SCHEMA_VERSION
+
+
 class Aggregates(BaseModel):
     """Aggregated statistics from analysis results."""
 
@@ -402,8 +422,17 @@ class AnalysisOutput(BaseModel):
     executive_summary: ExecutiveSummary
     aggregates: Aggregates
     diagnostics: AnalysisDiagnostics
+    provenance: OutputProvenance | None = None
     results: list[AnalysisResultDict] = Field(
         default_factory=list, description="Relevant analysis results"
+    )
+    results_by_query: dict[str, list[AnalysisResultDict]] = Field(
+        default_factory=dict,
+        description="Results grouped by matched search query",
+    )
+    results_by_section: dict[str, list[AnalysisResultDict]] = Field(
+        default_factory=dict,
+        description="Results grouped by filing section number",
     )
 
 
