@@ -11,6 +11,14 @@ ROOT_DIR := $(shell dirname $(realpath $(firstword $(MAKEFILE_LIST))))
 # Nested Makefile directories
 PYTHON_DIR := $(ROOT_DIR)/src
 MARKET_DIR := $(ROOT_DIR)/crates/market
+MARKET_MANIFEST := $(MARKET_DIR)/Cargo.toml
+
+# Maturin
+MATURIN_FLAGS ?=
+MATURIN_BUILD_FLAGS ?= --release --uv --strip
+MATURIN_SDIST_FLAGS ?=
+RUSTFLAGS_DEV ?= -C debuginfo=0 -C codegen-units=256 -C opt-level=0
+RUSTFLAGS_PROD ?= -C lto=thin -C codegen-units=1 -C opt-level=3
 
 # Cache control
 UV_DEPS := $(wildcard pyproject.toml uv.lock)
@@ -47,6 +55,9 @@ help:
 	@echo "Language-Specific:"
 	@echo "  py-<target>            Run Python target (e.g., py-lint, py-test)"
 	@echo "  market-<target>        Run Market (Rust) target (e.g., market-dev)"
+	@echo "  maturin-dev            Build + install Rust extension via maturin"
+	@echo "  maturin-build          Build release wheels via maturin"
+	@echo "  maturin-sdist          Build a source distribution via maturin"
 	@echo ""
 	@echo "For detailed help on each subsystem, run:"
 	@echo "  make -C src help       # Python commands"
@@ -83,6 +94,7 @@ $(STAMP_BOOTSTRAP): $(BOOTSTRAP_DEPS)
 	@uv tool list | grep -qE '(^|[[:space:]])ty([[:space:]]|@)' || uv tool install ty
 	@uv tool list | grep -qE '(^|[[:space:]])pytest([[:space:]]|@)' || uv tool install pytest
 	@uv tool list | grep -qE '(^|[[:space:]])coverage([[:space:]]|@)' || uv tool install coverage
+	@uv tool list | grep -qE '(^|[[:space:]])maturin([[:space:]]|@)' || uv tool install maturin
 	@uv tool upgrade --all || true
 	@touch $(STAMP_BOOTSTRAP)
 	@echo "✓ Dev tools ready"
@@ -124,6 +136,22 @@ py-%: ready
 .PHONY: market-%
 market-%:
 	@$(MAKE) -C $(MARKET_DIR) $*
+
+# =========================================================================
+# Maturin Targets
+# =========================================================================
+
+.PHONY: maturin-dev
+maturin-dev:
+	@RUSTFLAGS="$(RUSTFLAGS_DEV)" maturin develop -m $(MARKET_MANIFEST) $(MATURIN_FLAGS)
+
+.PHONY: maturin-build
+maturin-build:
+	@RUSTFLAGS="$(RUSTFLAGS_PROD)" maturin build -m $(MARKET_MANIFEST) $(MATURIN_BUILD_FLAGS)
+
+.PHONY: maturin-sdist
+maturin-sdist:
+	@maturin sdist -m $(MARKET_MANIFEST) $(MATURIN_SDIST_FLAGS)
 
 # =========================================================================
 # Combined Commands

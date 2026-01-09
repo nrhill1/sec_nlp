@@ -9,6 +9,12 @@ from .ingest.exhibit_downloader import (
     create_exhibit_downloader,
 )
 from .ingest.loader import Loader
+from .market import (
+    MarketExtensionError,
+    MarketQuote,
+    MarketRetriever,
+    create_market_retriever,
+)
 from .text.filters import (
     HOLDINGS_SECTION_PATTERNS,
     PROXY_SECTION_PATTERNS,
@@ -59,4 +65,9 @@ __all__: tuple[str, ...] = (
     "LogContext",
     "logger",
     "setup_logging",
+    # Market
+    "MarketExtensionError",
+    "MarketQuote",
+    "MarketRetriever",
+    "create_market_retriever",
 )

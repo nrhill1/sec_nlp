@@ -6,9 +6,12 @@ SHELL := /bin/bash
 # =========================================================================
 
 ROOT_DIR := $(shell dirname $(realpath $(firstword $(MAKEFILE_LIST))))
+REPO_ROOT := $(shell cd $(ROOT_DIR)/../.. && pwd)
 CARGO_MANIFEST := $(ROOT_DIR)/Cargo.toml
 MATURIN_FLAGS ?=
-MATURIN_BUILD_FLAGS ?= --release
+MATURIN_BUILD_FLAGS ?= --release --uv
+RUSTFLAGS_DEV ?=
+RUSTFLAGS_PROD ?=
 
 # =========================================================================
 # Help
@@ -36,11 +39,11 @@ help:
 
 .PHONY: dev
 dev:
-	@maturin develop -m $(CARGO_MANIFEST) $(MATURIN_FLAGS)
+	@cd $(REPO_ROOT) && RUSTFLAGS="$(RUSTFLAGS_DEV)" maturin develop -m $(CARGO_MANIFEST) $(MATURIN_FLAGS)
 
 .PHONY: build
 build:
-	@maturin build -m $(CARGO_MANIFEST) $(MATURIN_BUILD_FLAGS)
+	@cd $(REPO_ROOT) && RUSTFLAGS="$(RUSTFLAGS_PROD)" maturin build -m $(CARGO_MANIFEST) $(MATURIN_BUILD_FLAGS)
 
 .PHONY: fmt
 fmt:
