@@ -10,6 +10,7 @@ ROOT_DIR := $(shell dirname $(realpath $(firstword $(MAKEFILE_LIST))))
 
 # Nested Makefile directories
 PYTHON_DIR := $(ROOT_DIR)/src
+MARKET_DIR := $(ROOT_DIR)/crates/market
 
 # Cache control
 UV_DEPS := $(wildcard pyproject.toml uv.lock)
@@ -45,9 +46,11 @@ help:
 	@echo ""
 	@echo "Language-Specific:"
 	@echo "  py-<target>            Run Python target (e.g., py-lint, py-test)"
+	@echo "  market-<target>        Run Market (Rust) target (e.g., market-dev)"
 	@echo ""
 	@echo "For detailed help on each subsystem, run:"
 	@echo "  make -C src help       # Python commands"
+	@echo "  make -C crates/market help  # Market (Rust) commands"
 	@echo ""
 	@echo "CI/CD:"
 	@echo "  ci                     Full CI pipeline"
@@ -113,6 +116,14 @@ update: setup
 .PHONY: py-%
 py-%: ready
 	@$(MAKE) -C $(PYTHON_DIR) $*
+
+# =========================================================================
+# Rust Targets (delegate to crates/market/Makefile)
+# =========================================================================
+
+.PHONY: market-%
+market-%:
+	@$(MAKE) -C $(MARKET_DIR) $*
 
 # =========================================================================
 # Combined Commands
