@@ -3,6 +3,7 @@
 
 from .config import AnalyzeConfig, SearchConfig
 from .io.outputs import OutputFormatter
+from .market import MarketConfig
 from .models import (
     Aggregates,
     AnalysisDiagnostics,
@@ -32,4 +33,5 @@ __all__: tuple[str, ...] = (
     "OutputProvenance",
     "SearchConfig",
     "TracingCallbackHandler",
+    "MarketConfig",
 )

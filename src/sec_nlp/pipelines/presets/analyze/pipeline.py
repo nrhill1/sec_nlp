@@ -34,6 +34,7 @@ from sec_nlp.types import ResultDict
 from .config import AnalyzeConfig
 from .io.outputs import OutputFormatter
 from .io.result_writer import write_results
+from .market import MarketEnrichment, build_market_enrichment
 from .models import AnalysisInput, AnalysisResult, AnalyzeResult
 from .steps.analysis.analysis_runner import AnalyzerRunnable
 from .steps.analysis.callbacks import TracingCallbackHandler
@@ -462,6 +463,7 @@ class AnalyzePipeline(BasePipeline):
             "mean": float(mean(chunk_lengths)),
             "timings": timings,
         }
+        market_data = self._build_market_enrichment(symbol, docs)
         accession_docs: dict[str, list[Document]] = defaultdict(list)
         for doc in docs:
             accession = get_accession_from_metadata(doc.metadata)
@@ -584,6 +586,7 @@ class AnalyzePipeline(BasePipeline):
             relevant_results=relevant_results,
             search_queries=search_queries,
             timings=timings,
+            market_data=market_data,
         )
         if output_files:
             run_id = self.config.run_id
@@ -637,6 +640,19 @@ class AnalyzePipeline(BasePipeline):
             )
         return runner.retrieve_hits(queries=self.config.get_search_queries())
 
+    def _build_market_enrichment(
+        self,
+        symbol: str,
+        docs: list[Document],
+    ) -> MarketEnrichment | None:
+        """Return market enrichment metadata for the given docs."""
+        return build_market_enrichment(
+            config=self.config.market,
+            symbol=symbol,
+            docs=docs,
+            default_range=self.config.date_range,
+        )
+
     def _write_results(
         self,
         symbol: str,
@@ -646,6 +662,7 @@ class AnalyzePipeline(BasePipeline):
         relevant_results: list[AnalysisResultDict] | None = None,
         search_queries: list[str] | None = None,
         timings: Timings | None = None,
+        market_data: MarketEnrichment | None = None,
     ) -> list[Path]:
         """Expose result writing for tests and downstream usage."""
         formatter = getattr(self, "_output_formatter", None)
@@ -670,4 +687,5 @@ class AnalyzePipeline(BasePipeline):
             relevant_results=relevant_results,
             search_queries=search_queries,
             timings=timings,
+            market_data=market_data,
         )

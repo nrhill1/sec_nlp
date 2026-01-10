@@ -20,6 +20,8 @@ from sec_nlp.pipelines.metadata.filters import MetadataFilters
 from sec_nlp.pipelines.vector.config import VectorConfig
 from sec_nlp.prompts import ANALYZE_PROMPT_PATH
 
+from .market import MarketConfig
+
 
 class SearchConfig(BaseModel):
     """Configuration for semantic search functionality."""
@@ -192,6 +194,11 @@ class AnalyzeConfig(BaseConfig):
         default=5,
         ge=1,
         description="Maximum number of filings to process per symbol",
+    )
+
+    market: MarketConfig = Field(
+        default_factory=MarketConfig,
+        description="Optional market enrichment configuration for the symbol range.",
     )
 
     section_type: SectionType | None = Field(

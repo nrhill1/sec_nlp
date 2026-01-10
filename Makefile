@@ -183,6 +183,12 @@ lint: ready
 	@echo "✓ All linters passed!"
 	@echo ""
 
+.PHONY: verify-all
+verify-all: ready
+	@$(MAKE) lint
+	@$(MAKE) types
+	@$(MAKE) test
+
 .PHONY: fmt
 fmt: ready
 	@echo "==> Formatting all code..."

@@ -1,0 +1,270 @@
+"""Optional market enrichment helpers for the analyze pipeline."""
+
+from __future__ import annotations
+
+from collections.abc import Iterable, Sequence
+from datetime import UTC, date, datetime
+from enum import Enum
+
+from langchain_core.documents import Document
+from pydantic import BaseModel, ConfigDict, Field
+
+from sec_nlp.core.infra.logger import logger
+from sec_nlp.core.market import (
+    MarketExtensionError,
+    MarketQuote,
+    MarketRetriever,
+    create_market_retriever,
+)
+from sec_nlp.types import JsonDict, JsonValue
+
+
+class MarketGranularity(str, Enum):
+    """Supported buckets for reducing quote granularity."""
+
+    daily = "daily"
+    weekly = "weekly"
+    monthly = "monthly"
+
+
+class MarketConfig(BaseModel):
+    """Configuration for optional market enrichments."""
+
+    model_config = ConfigDict(
+        frozen=True,
+        extra="forbid",
+        defer_build=True,
+    )
+
+    enabled: bool = Field(
+        default=False,
+        description="Fetch market data for the analyzed range when enabled.",
+    )
+    ticker: str | None = Field(
+        default=None,
+        description="Override the ticker used for enrichment (defaults to the target symbol).",
+    )
+    granularity: MarketGranularity = Field(
+        default=MarketGranularity.daily,
+        description="Bucket quotes into daily, weekly, or monthly averages.",
+    )
+    limit: int = Field(
+        default=5,
+        ge=1,
+        description="Maximum number of aggregated rows to include in the output.",
+    )
+
+
+class MarketQuoteSummary(BaseModel):
+    """A single aggregated interval of market data."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    start_date: date
+    end_date: date
+    average_open: float
+    average_high: float
+    average_low: float
+    average_close: float
+    average_adjclose: float
+    average_volume: float
+
+
+class MarketEnrichment(BaseModel):
+    """Market data attached to a symbol run."""
+
+    model_config = ConfigDict(
+        frozen=True,
+        extra="ignore",
+        defer_build=True,
+    )
+
+    symbol: str
+    ticker: str
+    start_date: date
+    end_date: date
+    granularity: MarketGranularity
+    quotes: list[MarketQuoteSummary]
+
+
+_DATE_KEYS: tuple[str, ...] = (
+    "filing_date",
+    "acceptance_date",
+    "period_end",
+    "period_of_report",
+    "start_date",
+    "end_date",
+    "document_date",
+    "published_date",
+)
+
+
+def build_market_enrichment(
+    *,
+    config: MarketConfig,
+    symbol: str,
+    docs: Sequence[Document],
+    default_range: tuple[date, date],
+    retriever: MarketRetriever | None = None,
+) -> MarketEnrichment | None:
+    """Fetch and aggregate market data for a symbol if enabled."""
+
+    if not config.enabled:
+        return None
+
+    ticker = config.ticker or symbol
+    if not ticker:
+        return None
+
+    start_date, end_date = _derive_date_range(docs, default_range)
+    retriever_instance = retriever or create_market_retriever()
+
+    try:
+        raw_quotes = retriever_instance.retrieve_range(
+            ticker,
+            (start_date, end_date),
+        )
+    except MarketExtensionError as exc:
+        logger.warning(
+            "Market enrichment unavailable for %s (%s): %s",
+            symbol,
+            ticker,
+            exc,
+        )
+        return None
+    except Exception as exc:  # pragma: no cover - best effort enrichment
+        logger.warning(
+            "Market enrichment failed for %s (%s): %s",
+            symbol,
+            ticker,
+            exc,
+        )
+        return None
+
+    if not raw_quotes:
+        logger.info(
+            "Market enrichment: no quotes found for %s between %s and %s",
+            ticker,
+            start_date,
+            end_date,
+        )
+        return None
+
+    aggregated = _aggregate_quotes(raw_quotes, config.granularity)
+    if config.limit and len(aggregated) > config.limit:
+        aggregated = aggregated[-config.limit :]
+
+    return MarketEnrichment(
+        symbol=symbol,
+        ticker=ticker,
+        start_date=start_date,
+        end_date=end_date,
+        granularity=config.granularity,
+        quotes=aggregated,
+    )
+
+
+def _derive_date_range(
+    docs: Sequence[Document],
+    fallback: tuple[date, date],
+) -> tuple[date, date]:
+    candidates: list[date] = []
+    for doc in docs:
+        metadata = doc.metadata or {}
+        for data in _metadata_sources(metadata):
+            for key in _DATE_KEYS:
+                parsed = _parse_date_value(data.get(key))
+                if parsed:
+                    candidates.append(parsed)
+    if not candidates:
+        return fallback
+    start = min(candidates)
+    end = max(candidates)
+    return (start, end) if start <= end else (end, start)
+
+
+def _metadata_sources(metadata: JsonDict) -> Iterable[JsonDict]:
+    yield metadata
+    source = metadata.get("source_metadata")
+    if isinstance(source, dict):
+        yield source
+
+
+def _parse_date_value(value: JsonValue) -> date | None:
+    if value is None:
+        return None
+    if isinstance(value, date):
+        if isinstance(value, datetime):
+            return value.date()
+        return value
+    if isinstance(value, datetime):
+        return value.date()
+    if isinstance(value, str):
+        stripped = value.strip()
+        if not stripped:
+            return None
+        try:
+            return datetime.fromisoformat(stripped).date()
+        except ValueError:
+            pass
+        if stripped.endswith("Z"):
+            try:
+                return datetime.fromisoformat(
+                    stripped.replace("Z", "+00:00")
+                ).date()
+            except ValueError:
+                pass
+        if stripped.isdigit() and len(stripped) == 8:
+            try:
+                return datetime.strptime(stripped, "%Y%m%d").date()
+            except ValueError:
+                pass
+        for fmt in ("%Y-%m-%d %H:%M:%S", "%Y/%m/%d", "%m/%d/%Y"):
+            try:
+                return datetime.strptime(stripped, fmt).date()
+            except ValueError:
+                continue
+    return None
+
+
+def _aggregate_quotes(
+    quotes: list[MarketQuote],
+    granularity: MarketGranularity,
+) -> list[MarketQuoteSummary]:
+    groups: dict[tuple[int, ...], list[MarketQuote]] = {}
+    for quote in quotes:
+        bucket_key = _bucket_key(granularity, quote.timestamp)
+        groups.setdefault(bucket_key, []).append(quote)
+
+    aggregated: list[MarketQuoteSummary] = []
+    for bucket_key in sorted(groups):
+        bucket = groups[bucket_key]
+        count = len(bucket)
+        min_ts = min(quote.timestamp for quote in bucket)
+        max_ts = max(quote.timestamp for quote in bucket)
+        aggregated.append(
+            MarketQuoteSummary(
+                start_date=datetime.fromtimestamp(min_ts, UTC).date(),
+                end_date=datetime.fromtimestamp(max_ts, UTC).date(),
+                average_open=sum(quote.open_price for quote in bucket) / count,
+                average_high=sum(quote.high for quote in bucket) / count,
+                average_low=sum(quote.low for quote in bucket) / count,
+                average_close=sum(quote.close for quote in bucket) / count,
+                average_adjclose=sum(quote.adjclose for quote in bucket)
+                / count,
+                average_volume=sum(quote.volume for quote in bucket) / count,
+            )
+        )
+    return aggregated
+
+
+def _bucket_key(
+    granularity: MarketGranularity, timestamp: int
+) -> tuple[int, ...]:
+    dt = datetime.fromtimestamp(timestamp, UTC)
+    if granularity == MarketGranularity.weekly:
+        year, week, _ = dt.isocalendar()
+        return (year, week)
+    if granularity == MarketGranularity.monthly:
+        return (dt.year, dt.month)
+    return (dt.year, dt.month, dt.day)

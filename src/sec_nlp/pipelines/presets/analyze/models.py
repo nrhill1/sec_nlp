@@ -17,6 +17,8 @@ from sec_nlp.pipelines.base.result import SummaryFieldValue
 from sec_nlp.pipelines.types import AnalysisResultDict
 from sec_nlp.types import JsonDict, JsonValue
 
+from .market import MarketEnrichment
+
 type EvidenceSpan = dict[str, str | int | float]
 type EntityValue = JsonValue
 type StringListInput = list[str] | str | int | float | None
@@ -423,6 +425,10 @@ class AnalysisOutput(BaseModel):
     aggregates: Aggregates
     diagnostics: AnalysisDiagnostics
     provenance: OutputProvenance | None = None
+    market_enrichment: MarketEnrichment | None = Field(
+        default=None,
+        description="Aggregated market quotes for the requested date range",
+    )
     results: list[AnalysisResultDict] = Field(
         default_factory=list, description="Relevant analysis results"
     )

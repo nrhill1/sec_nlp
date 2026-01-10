@@ -15,6 +15,7 @@ from sec_nlp.pipelines.output_io import (
 )
 from sec_nlp.pipelines.types import AnalysisResultDict, MetadataMap
 
+from ..market import MarketEnrichment
 from ..models import (
     Aggregates,
     AnalysisDiagnostics,
@@ -173,6 +174,7 @@ class OutputFormatter:
         relevant_results: list[AnalysisResultDict],
         search_queries: list[str] | None = None,
         timings: dict[str, float] | None = None,
+        market_data: MarketEnrichment | None = None,
     ) -> AnalysisOutput:
         """Build structured output from analysis results.
 
@@ -182,6 +184,7 @@ class OutputFormatter:
             analysis_results: All analysis results (including failures)
             relevant_results: Filtered relevant results
             timings: Optional timing breakdown
+            market_data: Optional market enrichment metadata to attach to the output
 
         Returns:
             Structured AnalysisOutput model
@@ -288,6 +291,7 @@ class OutputFormatter:
             aggregates=aggregates,
             diagnostics=diagnostics,
             provenance=provenance,
+            market_enrichment=market_data,
             results=ranked_results,
             results_by_query=self._group_by_query(ranked_results),
             results_by_section=self._group_by_section(ranked_results),
