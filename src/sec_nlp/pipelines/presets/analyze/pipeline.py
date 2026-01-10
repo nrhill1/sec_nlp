@@ -593,6 +593,7 @@ class AnalyzePipeline(BasePipeline):
             search_queries=search_queries,
             timings=timings,
             market_data=market_data,
+            market_context=market_context,
         )
         if output_files:
             run_id = self.config.run_id
@@ -678,9 +679,19 @@ class AnalyzePipeline(BasePipeline):
         if extra > 0:
             suffix = f" (+{extra} more)"
 
+        filing_hint = (
+            f"filing {enrichment.filing_date.isoformat()}"
+            if enrichment.filing_date
+            else "filing date unknown"
+        )
+        window = (
+            f"{enrichment.window_start.isoformat()}.."
+            f"{enrichment.window_end.isoformat()}"
+        )
+
         return (
-            f"market {enrichment.ticker} {enrichment.granularity.value} "
-            f"{enrichment.start_date.isoformat()}..{enrichment.end_date.isoformat()}: "
+            f"{filing_hint} | market {enrichment.ticker} "
+            f"{enrichment.granularity.value} window {window}: "
             f"{'; '.join(rows)}{suffix}"
         )
 
@@ -694,6 +705,7 @@ class AnalyzePipeline(BasePipeline):
         search_queries: list[str] | None = None,
         timings: Timings | None = None,
         market_data: MarketEnrichment | None = None,
+        market_context: str | None = None,
     ) -> list[Path]:
         """Expose result writing for tests and downstream usage."""
         formatter = getattr(self, "_output_formatter", None)
@@ -719,4 +731,5 @@ class AnalyzePipeline(BasePipeline):
             search_queries=search_queries,
             timings=timings,
             market_data=market_data,
+            market_context=market_context,
         )

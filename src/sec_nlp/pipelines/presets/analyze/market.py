@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterable, Sequence
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from enum import Enum
 
 from langchain_core.documents import Document
@@ -81,8 +81,9 @@ class MarketEnrichment(BaseModel):
 
     symbol: str
     ticker: str
-    start_date: date
-    end_date: date
+    filing_date: date | None
+    window_start: date
+    window_end: date
     granularity: MarketGranularity
     quotes: list[MarketQuoteSummary]
 
@@ -97,6 +98,15 @@ _DATE_KEYS: tuple[str, ...] = (
     "document_date",
     "published_date",
 )
+
+_FILING_DATE_KEYS: tuple[str, ...] = (
+    "filing_date",
+    "acceptance_date",
+    "period_end",
+    "period_of_report",
+)
+
+_WINDOW_DELTA = timedelta(days=30)
 
 
 def build_market_enrichment(
@@ -117,12 +127,14 @@ def build_market_enrichment(
         return None
 
     start_date, end_date = _derive_date_range(docs, default_range)
+    filing_date = _extract_filing_date(docs)
+    window_start, window_end = _extend_window(start_date, end_date)
     retriever_instance = retriever or create_market_retriever()
 
     try:
         raw_quotes = retriever_instance.retrieve_range(
             ticker,
-            (start_date, end_date),
+            (window_start, window_end),
         )
     except MarketExtensionError as exc:
         logger.warning(
@@ -154,14 +166,15 @@ def build_market_enrichment(
     if config.limit and len(aggregated) > config.limit:
         aggregated = aggregated[-config.limit :]
 
-    return MarketEnrichment(
-        symbol=symbol,
-        ticker=ticker,
-        start_date=start_date,
-        end_date=end_date,
-        granularity=config.granularity,
-        quotes=aggregated,
-    )
+        return MarketEnrichment(
+            symbol=symbol,
+            ticker=ticker,
+            filing_date=filing_date,
+            window_start=window_start,
+            window_end=window_end,
+            granularity=config.granularity,
+            quotes=aggregated,
+        )
 
 
 def _derive_date_range(
@@ -225,6 +238,27 @@ def _parse_date_value(value: JsonValue) -> date | None:
             except ValueError:
                 continue
     return None
+
+
+def _extract_filing_date(docs: Sequence[Document]) -> date | None:
+    for doc in docs:
+        metadata = doc.metadata or {}
+        for data in _metadata_sources(metadata):
+            for key in _FILING_DATE_KEYS:
+                parsed = _parse_date_value(data.get(key))
+                if parsed:
+                    return parsed
+    return None
+
+
+def _extend_window(start: date, end: date) -> tuple[date, date]:
+    limit_min = date(1970, 1, 1)
+    limit_max = datetime.now(UTC).date()
+    window_start = max(start - _WINDOW_DELTA, limit_min)
+    window_end = min(end + _WINDOW_DELTA, limit_max)
+    if window_end < window_start:
+        window_end = window_start
+    return window_start, window_end
 
 
 def _aggregate_quotes(

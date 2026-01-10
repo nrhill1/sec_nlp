@@ -429,6 +429,10 @@ class AnalysisOutput(BaseModel):
         default=None,
         description="Aggregated market quotes for the requested date range",
     )
+    market_correlation: str | None = Field(
+        default=None,
+        description="Human-readable correlation between the filing and the market window",
+    )
     results: list[AnalysisResultDict] = Field(
         default_factory=list, description="Relevant analysis results"
     )
