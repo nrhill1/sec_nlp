@@ -89,6 +89,7 @@ Use `--preset <name>` with `sec-nlp analyze`.
 - `sec-nlp analyze` - Generalized LLM analysis (topics, keywords, section filters, vector search)
 - `sec-nlp exb-10` - Exhibit 10 contract indexing and search
 - `sec-nlp warranty` - Warranty XBRL extraction
+- `sec-nlp market` - Query the Rust-backed market extension for latest or historical quotes
 - `sec-nlp qdrant` - Manage Qdrant collections and Docker container
 - `sec-nlp runs` - List and inspect pipeline runs
 - `sec-nlp clean` - Clear downloads, outputs, or logs
@@ -160,6 +161,9 @@ make dev
 make test
 make lint
 ```
+
+### Type stubs
+`make stubs` regenerates Python stub files for the package and places them under `types/`. Three manual stubs are maintained for the new market integration—`types/market/__init__.pyi`, `types/sec_nlp/core/market.pyi`, and `types/sec_nlp/cli/commands/market.pyi`—so remember to preserve those files if you run stubgen (they document the Rust extension and CLI command explicitly).
 
 ## License
 MIT

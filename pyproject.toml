@@ -30,6 +30,7 @@ dependencies = [
   "tqdm",
   "unstructured>=0.18.20",
   "pyahocorasick>=2.2.0",
+  "pandas>=2.3.3",
 ]
 
 [project.scripts]

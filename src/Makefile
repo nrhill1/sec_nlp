@@ -16,7 +16,14 @@ PROFILE_DIR := $(REPO_ROOT)/profiling
 PY_SCRIPTS_DIR := $(REPO_ROOT)/src/scripts
 
 PYTEST_FLAGS := -q --color=yes --basetemp $(REPO_ROOT)/.pytest_tmp --cache-clear
-STUBGEN_FLAGS := $(PYTHON_DIR)/sec_nlp $(TEST_DIR) -o $(STUBS_DIR) --include-private
+STUBGEN_FLAGS := \
+	$(PYTHON_DIR)/sec_nlp \
+	$(TEST_DIR) \
+	-o $(STUBS_DIR) \
+	--include-private \
+	--exclude market \
+	--exclude sec_nlp/core/market.py \
+	--exclude sec_nlp/cli/commands/market.py
 
 # =========================================================================
 # Help
