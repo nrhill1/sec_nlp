@@ -256,6 +256,10 @@ class AnalyzerRunnable(
         if topic_hits:
             context_parts.append("topics: " + ", ".join(topic_hits[:5]))
 
+        market_hint = (doc.metadata or {}).get("market_enrichment_context")
+        if isinstance(market_hint, str) and market_hint:
+            context_parts.append(market_hint)
+
         return " | ".join(context_parts) if context_parts else None
 
     @staticmethod

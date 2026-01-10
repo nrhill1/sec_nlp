@@ -464,6 +464,12 @@ class AnalyzePipeline(BasePipeline):
             "timings": timings,
         }
         market_data = self._build_market_enrichment(symbol, docs)
+        market_context = self._format_market_context(market_data)
+        if market_context:
+            for doc in docs:
+                metadata = dict(doc.metadata or {})
+                metadata["market_enrichment_context"] = market_context
+                doc.metadata = metadata
         accession_docs: dict[str, list[Document]] = defaultdict(list)
         for doc in docs:
             accession = get_accession_from_metadata(doc.metadata)
@@ -651,6 +657,31 @@ class AnalyzePipeline(BasePipeline):
             symbol=symbol,
             docs=docs,
             default_range=self.config.date_range,
+        )
+
+    def _format_market_context(
+        self,
+        enrichment: MarketEnrichment | None,
+    ) -> str | None:
+        """Summarize market data for inclusion in the LLM context."""
+        if enrichment is None or not enrichment.quotes:
+            return None
+
+        rows: list[str] = []
+        for summary in enrichment.quotes[:3]:
+            rows.append(
+                f"{summary.start_date.isoformat()}..{summary.end_date.isoformat()} "
+                f"close={summary.average_close:.2f}"
+            )
+        suffix = ""
+        extra = len(enrichment.quotes) - len(rows)
+        if extra > 0:
+            suffix = f" (+{extra} more)"
+
+        return (
+            f"market {enrichment.ticker} {enrichment.granularity.value} "
+            f"{enrichment.start_date.isoformat()}..{enrichment.end_date.isoformat()}: "
+            f"{'; '.join(rows)}{suffix}"
         )
 
     def _write_results(
