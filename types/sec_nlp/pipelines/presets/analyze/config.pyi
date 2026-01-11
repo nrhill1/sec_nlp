@@ -52,6 +52,10 @@ class AnalyzeConfig(BaseConfig):
     search_window: int
     chunk_size: int
     chunk_overlap: int
+    chunking_mode: Literal["sentence", "semantic"]
+    semantic_similarity_threshold: float
+    semantic_min_chunk_sentences: int
+    semantic_max_chunk_sentences: int
     keywords: list[str]
     topics: list[str]
     min_topic_hits: int

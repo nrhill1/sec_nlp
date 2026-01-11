@@ -12,6 +12,7 @@ from langchain_core.documents import Document
 from langchain_core.language_models import BaseLanguageModel
 from langchain_core.prompts.base import BasePromptTemplate
 from langchain_core.runnables import Runnable
+from langchain_ollama.embeddings import OllamaEmbeddings
 from langchain_qdrant import QdrantVectorStore
 from pydantic import PrivateAttr
 from qdrant_client.models import Distance, VectorParams
@@ -80,6 +81,7 @@ class AnalyzePipeline(BasePipeline):
 
     # Vector Store
     _vector_store: QdrantVectorStore = PrivateAttr()
+    _embedder: OllamaEmbeddings = PrivateAttr()
 
     # Deduplication
     _deduplicator: SimHashDeduplicator = PrivateAttr()
@@ -186,6 +188,7 @@ class AnalyzePipeline(BasePipeline):
             try:
                 qdrant_client = self.config.vdb.setup_qdrant_client()
                 embedder = self.config.vdb.setup_embedding_model()
+                self._embedder = embedder
 
                 test_embedding = embedder.embed_query("test")
                 embedding_dim = len(test_embedding)
@@ -311,6 +314,7 @@ class AnalyzePipeline(BasePipeline):
             topic_matcher=topic_matcher,
             min_topic_hits=self.config.min_topic_hits,
             prioritize_topics=self.config.prioritize_topics,
+            embedder=self._embedder,
         )
         self._vector_indexer = VectorIndexer(
             config=self.config,
@@ -620,6 +624,7 @@ class AnalyzePipeline(BasePipeline):
                 topic_matcher=build_topic_matcher(topics),
                 min_topic_hits=self.config.min_topic_hits,
                 prioritize_topics=self.config.prioritize_topics,
+                embedder=self._embedder,
             )
         return preprocessor.prepare_documents(docs)
 
