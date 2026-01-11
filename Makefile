@@ -1,3 +1,4 @@
+.ONESHELL:
 SHELL := /bin/bash
 .DEFAULT_GOAL := help
 BRANCH := $(shell git rev-parse --abbrev-ref HEAD)
@@ -7,6 +8,10 @@ BRANCH := $(shell git rev-parse --abbrev-ref HEAD)
 # =========================================================================
 
 ROOT_DIR := $(shell dirname $(realpath $(firstword $(MAKEFILE_LIST))))
+
+# Caching
+SCCACHE ?= sccache
+export RUSTC_WRAPPER ?= $(SCCACHE)
 
 # Nested Makefile directories
 PYTHON_DIR := $(ROOT_DIR)/src
@@ -183,11 +188,20 @@ lint: ready
 	@echo "✓ All linters passed!"
 	@echo ""
 
+.PHONY: verify-py
+verify-py: ready
+	@$(MAKE) py-lint
+	@$(MAKE) py-types
+	@$(MAKE) py-test
+
+.PHONY: verify-rs
+verify-rs: ready
+	@$(MAKE) market-test
+
 .PHONY: verify-all
 verify-all: ready
-	@$(MAKE) lint
-	@$(MAKE) types
-	@$(MAKE) test
+	@$(MAKE) verify-py
+	@$(MAKE) verify-rs
 
 .PHONY: fmt
 fmt: ready

@@ -253,4 +253,5 @@ mod tests {
             filtered.into_iter().map(|q| q.timestamp).collect();
         assert_eq!(timestamps, vec![10, 15]);
     }
+
 }

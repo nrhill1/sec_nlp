@@ -8,6 +8,11 @@ SHELL := /bin/bash
 ROOT_DIR := $(shell dirname $(realpath $(firstword $(MAKEFILE_LIST))))
 REPO_ROOT := $(shell cd $(ROOT_DIR)/../.. && pwd)
 CARGO_MANIFEST := $(ROOT_DIR)/Cargo.toml
+ifneq ("$(wildcard $(REPO_ROOT)/.env)","")
+	include $(REPO_ROOT)/.env
+	export
+endif
+PYTHON_SYS_EXECUTABLE ?= $(shell python3 -c 'import sys; print(sys.executable)')
 MATURIN_FLAGS ?=
 MATURIN_BUILD_FLAGS ?= --release --uv
 RUSTFLAGS_DEV ?=
@@ -59,7 +64,8 @@ clippy:
 
 .PHONY: test
 test:
-	@cargo test --manifest-path $(CARGO_MANIFEST)
+	@PYTHON_SYS_EXECUTABLE=$(PYTHON_SYS_EXECUTABLE) \
+	cargo test --manifest-path $(CARGO_MANIFEST)
 
 # =========================================================================
 # Cleanup
