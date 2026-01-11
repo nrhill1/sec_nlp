@@ -10,6 +10,7 @@ from pydantic import BaseModel
 
 from sec_nlp.core.infra.logger import (
     bullet_line,
+    center_block,
     color_text,
     logger,
     styled_header,
@@ -116,7 +117,11 @@ class PipelineCommand(BaseModel, ABC):
             if self._pipeline_type()
             else "Pipeline"
         )
-        logger.info(styled_header(title, subtitle=self._get_header_subtitle()))
+        logger.info(
+            center_block(
+                styled_header(title, subtitle=self._get_header_subtitle())
+            )
+        )
 
     def _get_header_subtitle(self) -> str:
         pipeline_cls = self._get_pipeline_class()
