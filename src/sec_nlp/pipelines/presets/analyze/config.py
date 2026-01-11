@@ -243,10 +243,10 @@ class AnalyzeConfig(BaseConfig):
     ) -> dict[str, JsonValue]:
         market_values: dict[str, JsonValue] = {}
         raw_market = values.get("market")
-        if isinstance(raw_market, dict):
-            market_values.update(raw_market)
-        elif isinstance(raw_market, MarketConfig):
+        if isinstance(raw_market, MarketConfig):
             market_values.update(raw_market.model_dump())
+        elif isinstance(raw_market, dict):
+            market_values.update(raw_market)
         market_flags = {
             "enabled": values.get("market_enabled"),
             "ticker": values.get("market_ticker"),
