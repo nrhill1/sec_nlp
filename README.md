@@ -1,5 +1,6 @@
 # sec-nlp
 
+[![codecov](https://codecov.io/gh/nrhill1/sec_nlp/graph/badge.svg)](https://codecov.io/gh/nrhill1/sec_nlp)
 NLP tools for SEC filings. Analyze filings with local LLMs, run semantic search, and extract targeted signals (Exhibit 10 contracts, warranty accruals) using a fast CLI.
 
 ## Highlights
