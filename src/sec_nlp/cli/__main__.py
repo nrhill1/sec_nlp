@@ -58,6 +58,7 @@ _MULTI_VALUE_FLAGS: set[str] = {
     "--analysis-fields",
     "--search-terms",
     "--search.queries",
+    "--queries",
     "--material-keywords",
 }
 
@@ -131,7 +132,13 @@ def _normalize_cli_args(argv: list[str]) -> list[str]:
         normalized.append(arg)
         i += 1
 
-    return normalized
+    rewritten: list[str] = []
+    for token in normalized:
+        if token == "--queries":
+            rewritten.append("--search.queries")
+        else:
+            rewritten.append(token)
+    return rewritten
 
 
 def format_validation_error(error: ValidationError) -> str:

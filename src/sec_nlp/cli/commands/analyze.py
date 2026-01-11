@@ -1,7 +1,7 @@
 # src/sec_nlp/cli/commands/analyze.py
 """CLI command for generalized document analysis pipeline."""
 
-from pydantic import Field
+from pydantic import Field, model_validator
 from pydantic_settings import CliPositionalArg
 
 from sec_nlp.cli.command import PipelineCommand
@@ -16,6 +16,7 @@ from sec_nlp.pipelines.presets.analyze import (
     AnalyzePipeline,
     AnalyzeResult,
 )
+from sec_nlp.types import JsonValue
 
 
 class AnalyzeCommand(AnalyzeConfig, PipelineCommand):
@@ -44,6 +45,17 @@ class AnalyzeCommand(AnalyzeConfig, PipelineCommand):
     symbols: CliPositionalArg[list[str]] = Field(
         default_factory=list,
         description="Ticker symbols to analyze (e.g., AAPL MSFT GOOGL). Omit for interactive mode.",
+    )
+    cli_queries: list[str] = Field(
+        default_factory=list,
+        description="Queries supplied via CLI (helper for --queries).",
+        json_schema_extra={
+            "cli_args": {
+                "nargs": "+",
+                "action": "extend",
+                "aliases": ["--queries"],
+            }
+        },
     )
 
     def _supports_interactive(self) -> bool:
@@ -75,6 +87,21 @@ class AnalyzeCommand(AnalyzeConfig, PipelineCommand):
             PipelineCommand.cli_cmd(new_config)
         except Exception as e:
             logger.error(color_text(f"Configuration error: {e}", color="red"))
+
+    @model_validator(mode="before")
+    @classmethod
+    def _merge_cli_queries(
+        cls, values: dict[str, JsonValue]
+    ) -> dict[str, JsonValue]:
+        cli_queries = values.get("cli_queries")
+        if isinstance(cli_queries, list) and cli_queries:
+            raw_search = values.get("search")
+            search_values: dict[str, JsonValue] = (
+                dict(raw_search) if isinstance(raw_search, dict) else {}
+            )
+            search_values["queries"] = cli_queries
+            values["search"] = search_values
+        return values
 
     def _handle_missing_symbols(self) -> None:
         logger.error(color_text("No symbols provided.", color="red"))

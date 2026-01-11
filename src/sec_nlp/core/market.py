@@ -9,6 +9,7 @@ from time import monotonic, sleep
 from types import ModuleType
 from typing import TypeVar
 
+from sec_nlp.core.infra.logger import logger
 from sec_nlp.core.infra.settings import (
     MARKET_CACHE_MAX_ENTRIES,
     MARKET_CACHE_TTL_SECONDS,
@@ -127,6 +128,12 @@ class MarketRetriever:
         )
         self._cache: OrderedDict[CacheKey, MarketCacheEntry] = OrderedDict()
 
+    def _log(self, message: str, *args: str) -> None:
+        logger.debug(message, *args)
+
+    def _log(self, message: str, *args: object) -> None:
+        logger.debug(message, *args)
+
     def _cache_enabled(self) -> bool:
         return self._cache_ttl_seconds > 0 and self._cache_max_entries > 0
 
@@ -189,7 +196,22 @@ class MarketRetriever:
         def _fetch() -> float:
             return self._market.fetch_price(ticker)
 
+        self._log("fetch_price ticker=%s", ticker)
         return self._call_with_retry("fetch_price", _fetch)
+
+    def fetch_prices(self, tickers: Sequence[str]) -> dict[str, float]:
+        """Fetch latest close prices for multiple tickers."""
+        normalized = tuple(
+            ticker.strip().upper() for ticker in tickers if ticker.strip()
+        )
+        if not normalized:
+            return {}
+
+        def _fetch() -> dict[str, float]:
+            return self._market.fetch_prices(list(normalized))
+
+        self._log("fetch_prices tickers=%s", ", ".join(normalized))
+        return self._call_with_retry("fetch_prices", _fetch)
 
     def retrieve_range(
         self,
@@ -211,6 +233,7 @@ class MarketRetriever:
         def _fetch() -> list[dict[str, float | int]]:
             return self._market.retrieve_range(ticker, date_range_text)
 
+        self._log("retrieve_range ticker=%s range=%s", ticker, date_range_text)
         raw_quotes = self._call_with_retry("retrieve_range", _fetch)
         quotes = [_normalize_quote(raw_quote) for raw_quote in raw_quotes]
         self._set_cached_quotes(cache_key, now, tuple(quotes))
