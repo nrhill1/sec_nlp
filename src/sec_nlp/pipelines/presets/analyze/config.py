@@ -306,6 +306,37 @@ class AnalyzeConfig(BaseConfig):
         ge=0,
         description="Sentence overlap between chunks when splitting sections",
     )
+    chunking_mode: Literal["sentence", "semantic"] = Field(
+        default="semantic",
+        description=(
+            "Chunking strategy: 'sentence' uses fixed sentence counts; "
+            "'semantic' uses embeddings to detect topic boundaries"
+        ),
+        json_schema_extra={
+            "cli_args": {
+                "choices": ["sentence", "semantic"],
+                "aliases": ["-cm"],
+            }
+        },
+    )
+    semantic_similarity_threshold: float = Field(
+        default=0.5,
+        ge=0.0,
+        le=1.0,
+        description=(
+            "Similarity threshold for semantic chunking; lower values create more splits"
+        ),
+    )
+    semantic_min_chunk_sentences: int = Field(
+        default=3,
+        ge=1,
+        description="Minimum sentences per chunk when using semantic chunking",
+    )
+    semantic_max_chunk_sentences: int = Field(
+        default=50,
+        ge=1,
+        description="Maximum sentences per chunk when using semantic chunking",
+    )
     keywords: list[str] = Field(
         default_factory=list,
         description="Keywords to prioritize in content (optional)",

@@ -6,12 +6,17 @@ from __future__ import annotations
 from collections.abc import Iterable
 
 from langchain_core.documents import Document
+from langchain_ollama.embeddings import OllamaEmbeddings
 
 from sec_nlp.core.infra.logger import logger
 from sec_nlp.core.text.chunking import SentenceSplitter
 from sec_nlp.core.text.deduplication import SimHashConfig, SimHashDeduplicator
 from sec_nlp.core.text.keyword import KeywordMatcher
 from sec_nlp.core.text.section_extractor import SectionExtractor
+from sec_nlp.core.text.semantic_chunking import (
+    SemanticChunker,
+    SemanticChunkerConfig,
+)
 from sec_nlp.pipelines.chunk_filters import limit_docs_per_accession
 
 from ...config import AnalyzeConfig
@@ -34,6 +39,7 @@ class ChunkPreprocessor:
         topic_matcher: KeywordMatcher | None = None,
         min_topic_hits: int = 0,
         prioritize_topics: bool = True,
+        embedder: OllamaEmbeddings | None = None,
     ) -> None:
         self.config = config
         self.section_extractor = section_extractor
@@ -41,6 +47,29 @@ class ChunkPreprocessor:
         self.topic_matcher = topic_matcher or build_topic_matcher(self.topics)
         self.min_topic_hits = min_topic_hits
         self.prioritize_topics = prioritize_topics
+        self._embedder = embedder
+        self._semantic_chunker: SemanticChunker | None = None
+
+    def _get_semantic_chunker(self) -> SemanticChunker:
+        """Lazily initialize semantic chunker when needed."""
+        if self._semantic_chunker is not None:
+            return self._semantic_chunker
+
+        if self._embedder is None:
+            raise ValueError(
+                "Semantic chunking requires an embedder but none was provided"
+            )
+
+        semantic_config = SemanticChunkerConfig(
+            min_chunk_sentences=self.config.semantic_min_chunk_sentences,
+            max_chunk_sentences=self.config.semantic_max_chunk_sentences,
+            similarity_threshold=self.config.semantic_similarity_threshold,
+        )
+        self._semantic_chunker = SemanticChunker(
+            embedder=self._embedder,
+            config=semantic_config,
+        )
+        return self._semantic_chunker
 
     def chunk_and_prepare(self, docs: list[Document]) -> list[Document]:
         """Split into chunks (if needed) then apply filters."""
@@ -65,8 +94,10 @@ class ChunkPreprocessor:
     def split_into_chunks(self, docs: list[Document]) -> list[Document]:
         """Split documents into chunks, preserving section metadata."""
         chunks: list[Document] = []
+        use_semantic = self.config.chunking_mode == "semantic"
 
         if self.section_extractor:
+            # Section extractor handles its own chunking (sentence-based)
             for doc in docs:
                 metadata = doc.metadata or {}
                 section_chunks = self.section_extractor.extract_and_chunk(
@@ -76,22 +107,59 @@ class ChunkPreprocessor:
                     chunk_overlap=self.config.chunk_overlap,
                 )
                 chunks.extend(section_chunks)
+        elif use_semantic:
+            semantic_chunker = self._get_semantic_chunker()
+            chunks = self._split_with_semantic_chunker(docs, semantic_chunker)
         else:
-            splitter = SentenceSplitter(
-                chunk_size=self.config.chunk_size,
-                chunk_overlap=self.config.chunk_overlap,
-            )
-            for doc in docs:
-                base_meta = doc.metadata or {}
-                for idx, chunk in enumerate(splitter.split_documents([doc])):
-                    chunk.metadata = {
-                        **(chunk.metadata or {}),
-                        **base_meta,
-                        "chunk_index": idx,
-                        "section_number": base_meta.get("section_number", ""),
-                    }
-                    chunks.append(chunk)
+            chunks = self._split_with_sentence_splitter(docs)
 
+        return chunks
+
+    def _split_with_sentence_splitter(
+        self, docs: list[Document]
+    ) -> list[Document]:
+        """Split documents using fixed sentence-count chunking."""
+        splitter = SentenceSplitter(
+            chunk_size=self.config.chunk_size,
+            chunk_overlap=self.config.chunk_overlap,
+        )
+        chunks: list[Document] = []
+        for doc in docs:
+            base_meta = doc.metadata or {}
+            for idx, chunk in enumerate(splitter.split_documents([doc])):
+                chunk.metadata = {
+                    **(chunk.metadata or {}),
+                    **base_meta,
+                    "chunk_index": idx,
+                    "section_number": base_meta.get("section_number", ""),
+                    "chunking_mode": "sentence",
+                }
+                chunks.append(chunk)
+        return chunks
+
+    def _split_with_semantic_chunker(
+        self,
+        docs: list[Document],
+        semantic_chunker: SemanticChunker,
+    ) -> list[Document]:
+        """Split documents using semantic boundary detection."""
+        chunks: list[Document] = []
+        for doc in docs:
+            base_meta = doc.metadata or {}
+            doc_chunks = semantic_chunker.split_documents([doc])
+            for chunk in doc_chunks:
+                chunk.metadata = {
+                    **(chunk.metadata or {}),
+                    **base_meta,
+                    "section_number": base_meta.get("section_number", ""),
+                }
+                chunks.append(chunk)
+
+        logger.info(
+            "Semantic chunking: %d documents -> %d chunks",
+            len(docs),
+            len(chunks),
+        )
         return chunks
 
     def prepare_documents(self, docs: list[Document]) -> list[Document]:
