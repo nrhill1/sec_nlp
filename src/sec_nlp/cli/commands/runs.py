@@ -10,7 +10,7 @@ from pydantic_settings import CliSubCommand, SettingsConfigDict
 from sec_nlp.cli.formatting import (
     ColumnSpec,
     center_text,
-    format_config_block,
+    format_key_value,
     format_section_header,
     format_status,
     format_table,
@@ -181,8 +181,8 @@ class RunsInfo(BaseModel):
         if run.output_dir:
             items.append(("Output Dir", run.output_dir))
 
-        config_block = format_config_block(items, centered=True)
-        logger.info(config_block)
+        for label, value in items:
+            logger.info(format_key_value(label, value))
 
 
 class RunsDelete(BaseModel):
@@ -343,8 +343,8 @@ class RunsStats(BaseModel):
             for pipeline, count in sorted(by_pipeline.items()):
                 items.append((f"  {pipeline}", str(count)))
 
-        config_block = format_config_block(items, centered=True)
-        logger.info(config_block)
+        for label, value in items:
+            logger.info(format_key_value(label, value))
 
 
 class Runs(BaseModel):

@@ -9,8 +9,8 @@ from pathlib import Path
 from pydantic import BaseModel
 
 from sec_nlp.cli.formatting import (
-    format_config_block,
     format_divider,
+    format_key_value,
     format_section_header,
     format_status,
 )
@@ -147,8 +147,8 @@ class PipelineCommand(BaseModel, ABC):
             items.append(("Batch size", str(batch_size)))
 
         if items:
-            config_block = format_config_block(items, centered=True)
-            logger.info(config_block)
+            for label, value in items:
+                logger.info(format_key_value(label, value))
 
     def _validation_config(self) -> BaseConfig:
         if isinstance(self, BaseConfig):

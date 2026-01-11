@@ -6,7 +6,7 @@ from pydantic_settings import CliPositionalArg
 
 from sec_nlp.cli.command import PipelineCommand
 from sec_nlp.cli.formatting import (
-    format_config_block,
+    format_key_value,
     format_status,
 )
 from sec_nlp.core.infra.logger import (
@@ -154,8 +154,9 @@ class AnalyzeCommand(AnalyzeConfig, PipelineCommand):
         elif self.keywords:
             items.append(("Keywords", ", ".join(self.keywords)))
 
-        config_block = format_config_block(items, centered=True)
-        logger.info(config_block)
+        for label, value in items:
+            formatted = format_key_value(label, value)
+            logger.info(formatted)
 
     def _handle_result(self, result: BaseResult) -> None:
         """Handle analyze-specific result output."""

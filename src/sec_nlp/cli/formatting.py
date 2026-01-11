@@ -103,6 +103,7 @@ def format_section_header(
 def format_divider(
     char: str = "─",
     length: int | None = None,
+    width: int | None = None,
     color: str = "dim",
     centered: bool = True,
 ) -> str:
@@ -111,6 +112,7 @@ def format_divider(
     Args:
         char: Character to repeat
         length: Line length (defaults to 60 or terminal width)
+        width: Terminal width for centering (overrides auto-detection)
         color: Divider color
         centered: Whether to center the divider
 
@@ -122,7 +124,7 @@ def format_divider(
     )
     divider = color_text(char * line_length, color=color)
     if centered:
-        return center_text(divider)
+        return center_text(divider, width=width)
     return divider
 
 

@@ -76,23 +76,23 @@ class ValidationReport(BaseModel):
 
     def print_report(self) -> None:
         """Log a human-readable report summary."""
-        header = (
-            f"Validation Report - {'PASSED' if self.all_passed else 'FAILED'}"
+        status_text = "PASSED" if self.all_passed else "FAILED"
+        status_color = "green" if self.all_passed else "red"
+        logger.info(
+            color_text(f"Validation Report - {status_text}", color=status_color)
         )
-        color = "green" if self.all_passed else "red"
-        logger.info(color_text(text=header, color=color))
 
         for chk in self.checks:
-            lvl = chk.severity.upper()
-            msg = f"[{lvl}] {chk.check_name}: {chk.message}"
+            icon = {"error": "✗", "warning": "⚠", "info": "✓"}.get(
+                chk.severity, "•"
+            )
+            msg = f"{icon} {chk.check_name}: {chk.message}"
             if chk.severity == "error":
                 logger.error(msg)
             elif chk.severity == "warning":
                 logger.warning(msg)
             else:
-                logger.info(msg)
-
-        logger.info(f"errors={self.errors} warnings={self.warnings}")
+                logger.info(color_text(msg, color="blue"))
 
 
 class PipelineValidator(BaseModel):

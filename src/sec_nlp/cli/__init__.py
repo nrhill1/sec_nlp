@@ -14,6 +14,11 @@ from .formatting import (
     format_table,
     get_terminal_width,
 )
+from .validation import (
+    format_unknown_arg_error,
+    format_validation_error,
+    format_validation_summary,
+)
 
 __all__: tuple[str, ...] = (
     "main",
@@ -26,5 +31,8 @@ __all__: tuple[str, ...] = (
     "format_section_header",
     "format_status",
     "format_table",
+    "format_unknown_arg_error",
+    "format_validation_error",
+    "format_validation_summary",
     "get_terminal_width",
 )
