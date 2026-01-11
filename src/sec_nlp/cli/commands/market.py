@@ -5,18 +5,24 @@ from __future__ import annotations
 import json
 from collections.abc import Sequence
 from datetime import date, timedelta
-from typing import Any, Literal
+from typing import Literal
 
 import pandas as pd
 from pydantic import BaseModel, ConfigDict, Field
+from pydantic_settings import CliPositionalArg
 
+from sec_nlp.cli.formatting import (
+    ColumnSpec,
+    center_text,
+    format_divider,
+    format_key_value,
+    format_section_header,
+    format_status,
+    format_table,
+)
 from sec_nlp.core.infra.logger import (
-    bullet_line,
-    center_block,
     color_text,
     logger,
-    styled_header,
-    visible_length,
 )
 from sec_nlp.core.market import (
     MarketExtensionError,
@@ -45,7 +51,7 @@ class Market(BaseModel):
         extra="forbid",
     )
 
-    ticker: str = Field(
+    symbol: CliPositionalArg[str] = Field(
         description="Ticker symbol (e.g., AAPL).",
     )
     start_date: date | None = Field(
@@ -86,20 +92,25 @@ class Market(BaseModel):
         return self.start_date is not None and self.end_date is not None
 
     def _print_range(self, quotes: Sequence[MarketQuote]) -> None:
-        logger.info(
-            center_block(styled_header(f"Quotes: {self.ticker.upper()}"))
+        header = format_section_header(
+            f"Quotes: {self.symbol.upper()}",
+            style="box",
         )
+        logger.info(header)
+
         if not quotes:
             logger.info(
-                color_text(
-                    "No quotes found for the requested range", color="yellow"
+                format_status(
+                    "No quotes found for the requested range", status="warning"
                 )
             )
             return
 
-        records = [
+        records: list[dict[str, str | int | float]] = [
             {
-                "timestamp": pd.to_datetime(quote.timestamp, unit="s"),
+                "timestamp": pd.to_datetime(quote.timestamp, unit="s").strftime(
+                    "%Y-%m-%d %H:%M:%S"
+                ),
                 "open": quote.open_price,
                 "high": quote.high,
                 "low": quote.low,
@@ -127,94 +138,72 @@ class Market(BaseModel):
                 pd.DataFrame(records).head(self.limit).to_csv(index=False)
             )
             csv_lines = csv_text.strip().splitlines()
-            combined = "\n".join(csv_lines)
+            combined = "\n".join(center_text(line) for line in csv_lines)
             if stats:
-                width = max(visible_length(line) for line in csv_lines)
                 combined = (
-                    f"{combined}\n"
-                    f"{color_text('─' * width, color='dim')}\n"
-                    f"{stats}"
+                    f"{combined}\n{format_divider()}\n{center_text(stats)}"
                 )
-            logger.info(color_text(center_block(combined), color="cyan"))
+            logger.info(color_text(combined, color="cyan"))
         else:
-            table, width = self._render_table(records[: self.limit])
-            combined = table
+            table_str = self._render_table(records[: self.limit])
+            # Print table directly to avoid logger prefix breaking alignment
+            print(table_str)
             if stats:
-                combined = (
-                    f"{combined}\n"
-                    f"{color_text('─' * width, color='dim')}\n"
-                    f"{stats}"
-                )
+                print(format_divider())
+                # Center each line of the stats separately
+                for stat_line in stats.split("\n"):
+                    print(center_text(stat_line))
             if len(quotes) > self.limit:
-                combined += (
-                    f"\n... {len(quotes) - self.limit} more rows not shown"
-                )
-            logger.info(color_text(center_block(combined), color="cyan"))
+                more_msg = f"... {len(quotes) - self.limit} more rows not shown"
+                print(center_text(color_text(more_msg, color="dim")))
 
     def _render_table(
-        self, records: Sequence[dict[str, Any]]
-    ) -> tuple[str, int]:
+        self, records: Sequence[dict[str, str | float | int]]
+    ) -> str:
         if not records:
-            return "No quote data to display", 0
+            return "No quote data to display"
 
-        columns = ["timestamp", "open", "high", "low", "close"]
+        headers = ["TIMESTAMP", "OPEN", "HIGH", "LOW", "CLOSE"]
         if self.include_adjclose:
-            columns.append("adj_close")
-        columns.append("volume")
+            headers.append("ADJ_CLOSE")
+        headers.append("VOLUME")
 
-        table_rows: list[dict[str, str]] = []
-        widths = {col: len(col) for col in columns}
+        column_specs = [
+            ColumnSpec(header="TIMESTAMP", align="left", color="blue"),
+            ColumnSpec(header="OPEN", align="right"),
+            ColumnSpec(header="HIGH", align="right", color="green"),
+            ColumnSpec(header="LOW", align="right", color="red"),
+            ColumnSpec(header="CLOSE", align="right"),
+        ]
+        if self.include_adjclose:
+            column_specs.append(ColumnSpec(header="ADJ_CLOSE", align="right"))
+        column_specs.append(ColumnSpec(header="VOLUME", align="right"))
 
+        rows: list[list[str]] = []
         for record in records:
-            row: dict[str, str] = {}
-            timestamp_value = record["timestamp"]
-            timestamp_text = (
-                timestamp_value.strftime("%Y-%m-%d %H:%M:%S")
-                if hasattr(timestamp_value, "strftime")
-                else str(timestamp_value)
-            )
-            row["timestamp"] = timestamp_text
-            row["open"] = f"{record['open']:.2f}"
-            row["high"] = f"{record['high']:.2f}"
-            row["low"] = f"{record['low']:.2f}"
-            row["close"] = f"{record['close']:.2f}"
+            row = [
+                str(record["timestamp"]),
+                f"{record['open']:.2f}",
+                f"{record['high']:.2f}",
+                f"{record['low']:.2f}",
+                f"{record['close']:.2f}",
+            ]
             if self.include_adjclose:
                 adj = record.get("adj_close")
-                row["adj_close"] = f"{adj:.2f}" if adj is not None else "N/A"
-            row["volume"] = f"{record['volume']:,}"
+                row.append(f"{adj:.2f}" if adj is not None else "N/A")
+            row.append(f"{record['volume']:,}")
+            rows.append(row)
 
-            for column, value in row.items():
-                widths[column] = max(widths[column], len(value))
-            table_rows.append(row)
-
-        header = " | ".join(
-            column.upper().ljust(widths[column]) for column in columns
+        return format_table(
+            rows,
+            headers=headers,
+            column_specs=column_specs,
+            border=True,
+            centered=True,
         )
-        divider = "-+-".join("-" * widths[column] for column in columns)
-
-        lines = [header, divider]
-        for row in table_rows:
-            cells = []
-            for column in columns:
-                cell_value = row[column]
-                if column == "timestamp":
-                    padded = cell_value.ljust(widths[column])
-                    cells.append(color_text(padded, color="blue"))
-                elif column == "high":
-                    padded = cell_value.rjust(widths[column])
-                    cells.append(color_text(padded, color="red"))
-                elif column == "low":
-                    padded = cell_value.rjust(widths[column])
-                    cells.append(color_text(padded, color="green"))
-                else:
-                    cells.append(cell_value.rjust(widths[column]))
-            lines.append(" | ".join(cells))
-
-        table_text = "\n".join(lines)
-        width = max(visible_length(line) for line in lines)
-        return table_text, width
 
     def _summarize_quotes(self, quotes: Sequence[MarketQuote]) -> str:
+        """Build a formatted summary of quote statistics."""
         open_price = quotes[0].open_price
         close_price = quotes[-1].close
         percent_change = ((close_price - open_price) / open_price) * 100
@@ -222,8 +211,6 @@ class Market(BaseModel):
         low = min(quote.low for quote in quotes)
         avg_volume = sum(quote.volume for quote in quotes) / len(quotes)
         highest_close = max(quote.close for quote in quotes)
-        high_text = color_text(f"high={high:.2f}", color="red")
-        low_text = color_text(f"low={low:.2f}", color="green")
         change_amount = close_price - open_price
         change_color = (
             "green"
@@ -232,40 +219,54 @@ class Market(BaseModel):
             if change_amount < 0
             else "dim"
         )
-        change_text = color_text(
-            f"change={change_amount:.2f} ({percent_change:.2f}%)",
-            color=change_color,
+
+        # Build summary as two-column key-value pairs
+        open_str = color_text(f"{open_price:.2f}", color="cyan")
+        close_str = color_text(f"{close_price:.2f}", color="cyan")
+        change_str = color_text(
+            f"{change_amount:+.2f} ({percent_change:+.2f}%)", color=change_color
         )
-        return (
-            f"\nopen={open_price:.2f} close={close_price:.2f} "
-            f"{change_text} "
-            f"{high_text} {low_text} highest_close={highest_close:.2f} avg_vol={avg_volume:,.0f}"
-        )
+        high_str = color_text(f"{high:.2f}", color="green")
+        low_str = color_text(f"{low:.2f}", color="red")
+        best_close_str = color_text(f"{highest_close:.2f}", color="yellow")
+        volume_str = color_text(f"{avg_volume:,.0f}", color="blue")
+
+        # Format as aligned key-value lines
+        lines = [
+            f"{'Open:':>12}  {open_str:<14}  {'High:':>12}  {high_str}",
+            f"{'Close:':>12}  {close_str:<14}  {'Low:':>12}  {low_str}",
+            f"{'Change:':>12}  {change_str:<14}  {'Best Close:':>12}  {best_close_str}",
+            f"{'Avg Volume:':>12}  {volume_str}",
+        ]
+
+        return "\n".join(lines)
 
     def cli_cmd(self) -> None:
         """Execute a market lookup."""
-        logger.info(center_block(styled_header("Market lookup")))
+        header = format_section_header("Market Lookup", style="box")
+        logger.info(header)
 
         retriever = create_market_retriever()
 
         try:
             if self.latest:
-                price = retriever.fetch_price(self.ticker)
-                logger.info(
-                    bullet_line(
-                        "Latest close",
-                        f"{self.ticker.upper()}: {price:.4f}",
-                        color="green",
-                    )
+                price = retriever.fetch_price(self.symbol)
+                result = format_key_value(
+                    "Latest close",
+                    f"{self.symbol.upper()}: {price:.4f}",
+                    label_color="green",
                 )
+                logger.info(center_text(result))
                 return
 
             date_range = self._determine_range()
-            quotes = retriever.retrieve_range(self.ticker, date_range)
+            quotes = retriever.retrieve_range(self.symbol, date_range)
             self._print_range(quotes)
         except MarketExtensionError as error:
             logger.error(
-                color_text(f"Failed to fetch market data: {error}", color="red")
+                format_status(
+                    f"Failed to fetch market data: {error}", status="error"
+                )
             )
 
     def _determine_range(self) -> tuple[date, date]:

@@ -61,7 +61,7 @@ def collect_exhibit_documents(
     start_date, end_date = config.date_range
 
     # Use disk-based downloader which fetches ALL files including separate exhibits
-    from sec_edgar_downloader import Downloader  # type: ignore[attr-defined]
+    from sec_edgar_downloader import Downloader
 
     work_folder = loader.downloads_folder
     downloader = Downloader(loader.company_name, loader.email, str(work_folder))

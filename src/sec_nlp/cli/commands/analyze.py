@@ -5,8 +5,11 @@ from pydantic import Field, model_validator
 from pydantic_settings import CliPositionalArg
 
 from sec_nlp.cli.command import PipelineCommand
+from sec_nlp.cli.formatting import (
+    format_config_block,
+    format_status,
+)
 from sec_nlp.core.infra.logger import (
-    bullet_line,
     color_text,
     logger,
 )
@@ -115,31 +118,27 @@ class AnalyzeCommand(AnalyzeConfig, PipelineCommand):
 
     def _log_config_details(self) -> None:
         """Log analyze-specific configuration."""
+        items: list[tuple[str, str | None]] = []
+
         # Show preset if used
         if self.preset:
-            logger.info(bullet_line("Preset", self.preset, color="magenta"))
+            items.append(("Preset", self.preset))
 
-        logger.info(bullet_line("Symbols", ", ".join(self.symbols)))
-        logger.info(
-            bullet_line(
+        items.append(("Symbols", ", ".join(self.symbols)))
+        items.append(
+            (
                 "LLM",
                 f"{self.llm.model_name} @ T={self.llm.temperature} (json={self.llm.require_json})",
             )
         )
-        logger.info(
-            bullet_line(
+        items.append(
+            (
                 "Batching",
                 f"chunks={self.batch_size} top_k={self.top_k_chunks or 'all'}",
-                color="cyan",
             )
         )
-        logger.info(
-            bullet_line(
-                "Vector DB",
-                f"mode={self.vector_mode}",
-                color="blue",
-            )
-        )
+        items.append(("Vector DB", f"mode={self.vector_mode}"))
+
         has_queries = bool(self.search.queries)
         search_status = (
             f"configured ({len(self.search.queries)} queries, "
@@ -148,21 +147,15 @@ class AnalyzeCommand(AnalyzeConfig, PipelineCommand):
             if has_queries
             else "disabled (no queries)"
         )
-        logger.info(
-            bullet_line(
-                "Search",
-                f"{search_status} | limit={self.search.limit}",
-                color="magenta",
-            )
-        )
+        items.append(("Search", f"{search_status} | limit={self.search.limit}"))
+
         if self.topics:
-            logger.info(
-                bullet_line("Topics", ", ".join(self.topics), color="green")
-            )
+            items.append(("Topics", ", ".join(self.topics)))
         elif self.keywords:
-            logger.info(
-                bullet_line("Keywords", ", ".join(self.keywords), color="green")
-            )
+            items.append(("Keywords", ", ".join(self.keywords)))
+
+        config_block = format_config_block(items, centered=True)
+        logger.info(config_block)
 
     def _handle_result(self, result: BaseResult) -> None:
         """Handle analyze-specific result output."""
@@ -171,16 +164,18 @@ class AnalyzeCommand(AnalyzeConfig, PipelineCommand):
             return
         if result.error is not None:
             logger.error(
-                color_text(f"✗ Analysis failed: {result.error}", color="red")
+                format_status(
+                    f"Analysis failed: {result.error}", status="error"
+                )
             )
             return
 
         if not result.success:
-            logger.error(color_text("✗ Analysis failed", color="red"))
+            logger.error(format_status("Analysis failed", status="error"))
             return
 
         if result.outputs:
-            logger.info(color_text("✓ Analysis complete", color="green"))
+            logger.info(format_status("Analysis complete", status="success"))
             logger.info(
                 color_text(f"Outputs: {len(result.outputs)}", color="cyan")
             )
@@ -188,7 +183,7 @@ class AnalyzeCommand(AnalyzeConfig, PipelineCommand):
                 logger.info(color_text(f"  → {output_path}", color="cyan"))
         else:
             logger.info(
-                color_text(
-                    "✓ Analysis complete: no outputs generated", color="yellow"
+                format_status(
+                    "Analysis complete: no outputs generated", status="warning"
                 )
             )

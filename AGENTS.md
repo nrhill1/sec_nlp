@@ -13,7 +13,7 @@ When fixing type errors, writing any new code, or modifying exsiting code:
 5. No use of `hasattr`
 6. Use `getattr` only when necessary — prefer accessing using dot notation or .get().
 7. Whenever possible, use dot notation instead of square brackets to access attributes.
-8. No string/byte annotations.
+8. No string/byte type annotations.
 9. For Pydantic `model_config`, use frozen and disallow extra whenever possible.
 10. For Pydantic, never use SkipValidation.
 11. Do not create new Protocol types.

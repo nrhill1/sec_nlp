@@ -151,9 +151,7 @@ class WarrantyPipeline(BasePipeline):
         Responsible for locating HTML/XBRL files for the ticker inside the
         configured date window, then delegating to `_process_filing` for each.
         """
-        from sec_edgar_downloader import (  # type: ignore[attr-defined]
-            Downloader,
-        )
+        from sec_edgar_downloader import Downloader
 
         logger.info("Processing symbol: %s", symbol)
 

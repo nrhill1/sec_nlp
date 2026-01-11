@@ -151,7 +151,7 @@ class KeywordMatcher:
         word: str,
         value: int,
     ) -> None:
-        automaton.add_word(word, value)  # type: ignore[too-many-positional-arguments]
+        automaton.add_word(word, value)
 
     @classmethod
     def _populate_automaton(

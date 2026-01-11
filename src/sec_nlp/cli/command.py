@@ -8,12 +8,15 @@ from pathlib import Path
 
 from pydantic import BaseModel
 
+from sec_nlp.cli.formatting import (
+    format_config_block,
+    format_divider,
+    format_section_header,
+    format_status,
+)
 from sec_nlp.core.infra.logger import (
-    bullet_line,
-    center_block,
     color_text,
     logger,
-    styled_header,
 )
 from sec_nlp.pipelines.base import BasePipeline
 from sec_nlp.pipelines.base.config import BaseConfig
@@ -117,27 +120,35 @@ class PipelineCommand(BaseModel, ABC):
             if self._pipeline_type()
             else "Pipeline"
         )
-        logger.info(
-            center_block(
-                styled_header(title, subtitle=self._get_header_subtitle())
-            )
+        header = format_section_header(
+            title,
+            subtitle=self._get_header_subtitle(),
+            style="box",
         )
+        logger.info(header)
 
     def _get_header_subtitle(self) -> str:
         pipeline_cls = self._get_pipeline_class()
         return getattr(pipeline_cls, "description", "")
 
     def _log_config_details(self) -> None:
-        symbols = ", ".join(getattr(self, "symbols", []))
-        logger.info(bullet_line("Symbols", symbols))
+        items: list[tuple[str, str | None]] = []
+
+        symbols = getattr(self, "symbols", [])
+        if symbols:
+            items.append(("Symbols", ", ".join(symbols)))
 
         mode = getattr(self, "mode", None)
         if mode is not None:
-            logger.info(bullet_line("Mode", str(mode)))
+            items.append(("Mode", str(mode)))
 
         batch_size = getattr(self, "batch_size", None)
         if batch_size is not None:
-            logger.info(bullet_line("Batch size", str(batch_size)))
+            items.append(("Batch size", str(batch_size)))
+
+        if items:
+            config_block = format_config_block(items, centered=True)
+            logger.info(config_block)
 
     def _validation_config(self) -> BaseConfig:
         if isinstance(self, BaseConfig):
@@ -147,39 +158,36 @@ class PipelineCommand(BaseModel, ABC):
         )
 
     def _handle_result(self, result: BaseResult) -> None:
+        pipeline_name = self._pipeline_type() or "Pipeline"
+        logger.info(format_divider())
+
         if result.error is not None:
             logger.error(
-                color_text(
-                    f"✗ {self._pipeline_type() or 'Pipeline'} failed: {result.error}",
-                    color="red",
+                format_status(
+                    f"{pipeline_name} failed: {result.error}",
+                    status="error",
                 )
             )
             return
 
         if not result.success:
             logger.error(
-                color_text(
-                    f"✗ {self._pipeline_type() or 'Pipeline'} failed",
-                    color="red",
-                )
+                format_status(f"{pipeline_name} failed", status="error")
             )
             return
 
         if result.outputs:
             logger.info(
-                color_text(
-                    f"✓ {self._pipeline_type() or 'Pipeline'} complete",
-                    color="green",
-                )
+                format_status(f"{pipeline_name} complete", status="success")
             )
             for output_path in result.outputs:
                 logger.info(color_text(f"  → {output_path}", color="cyan"))
             return
 
         logger.info(
-            color_text(
-                f"✓ {self._pipeline_type() or 'Pipeline'} complete: no outputs generated",
-                color="yellow",
+            format_status(
+                f"{pipeline_name} complete: no outputs generated",
+                status="warning",
             )
         )
 

@@ -5,7 +5,7 @@ import csv
 from collections import defaultdict
 from hashlib import sha256
 from pathlib import Path
-from typing import Literal, cast
+from typing import Literal
 
 from sec_nlp.core.infra.logger import logger
 from sec_nlp.pipelines.output_io import (
@@ -109,7 +109,7 @@ class OutputFormatter:
         ranked: list[AnalysisResultDict] = []
         for idx, result in enumerate(sorted_results, start=1):
             score = self._coerce_score(result.get("confidence_score"))
-            enriched = cast(AnalysisResultDict, dict(result))
+            enriched: AnalysisResultDict = {**result}
             enriched["rank"] = idx
             enriched["confidence_bucket"] = self._confidence_bucket(score)
             ranked.append(enriched)
