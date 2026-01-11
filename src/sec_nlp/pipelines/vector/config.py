@@ -339,3 +339,71 @@ class VectorConfig(BaseModel):
             num_batches,
         )
         return all_ids
+
+    async def batch_embed_documents_async(
+        self,
+        embedder: OllamaEmbeddings,
+        texts: list[str],
+    ) -> list[list[float]]:
+        """Generate embeddings asynchronously in batches.
+
+        Uses the async embedding API for non-blocking operation.
+
+        Args:
+            embedder: Embedding model
+            texts: List of text strings to embed
+
+        Returns:
+            List of embedding vectors
+        """
+        if not texts:
+            return []
+
+        all_embeddings: list[list[float]] = []
+
+        for i in range(0, len(texts), self.embedding_batch_size):
+            batch = texts[i : i + self.embedding_batch_size]
+            try:
+                batch_embeddings = await embedder.aembed_documents(batch)
+                # Ensure alignment between inputs and outputs
+                if len(batch_embeddings) < len(batch):
+                    missing = len(batch) - len(batch_embeddings)
+                    batch_embeddings = list(batch_embeddings) + ([[]] * missing)
+                elif len(batch_embeddings) > len(batch):
+                    batch_embeddings = list(batch_embeddings)[: len(batch)]
+                all_embeddings.extend(batch_embeddings)
+            except Exception as e:
+                logger.error("Failed to embed batch at index %d: %s", i, e)
+                all_embeddings.extend([[] for _ in batch])
+
+        return all_embeddings
+
+    async def batch_add_to_vector_store_async(
+        self,
+        vector_store: QdrantVectorStore,
+        documents: list[Document],
+    ) -> list[str]:
+        """Add documents to vector store asynchronously in batches.
+
+        Args:
+            vector_store: Vector store instance
+            documents: Documents to add
+
+        Returns:
+            List of document IDs
+        """
+        if not documents:
+            return []
+
+        all_ids: list[str] = []
+
+        for i in range(0, len(documents), self.embedding_batch_size):
+            batch = documents[i : i + self.embedding_batch_size]
+            try:
+                batch_ids = await vector_store.aadd_documents(batch)
+                all_ids.extend(batch_ids)
+            except Exception as e:
+                logger.error("Failed to add batch at index %d: %s", i, e)
+
+        logger.info("Added %d documents async", len(all_ids))
+        return all_ids
