@@ -4,6 +4,7 @@
 import io
 import logging
 import re
+import shutil
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -309,6 +310,29 @@ _ANSI_RE: re.Pattern[str] = re.compile(r"\x1b\[[0-9;]*m")
 def _visible_len(text: str) -> int:
     """Length without ANSI escape codes."""
     return len(_ANSI_RE.sub("", text))
+
+
+def visible_length(text: str) -> int:
+    """Public wrapper around ANSI-aware visible length calculation."""
+    return _visible_len(text)
+
+
+def center_block(text: str, width: int | None = None) -> str:
+    """Center a block of text using the terminal width (or provided width)."""
+    trimmed = text.strip("\n")
+    if not trimmed:
+        return ""
+
+    term_width = (
+        width
+        if width is not None
+        else shutil.get_terminal_size((80, 20)).columns
+    )
+    lines = [line.rstrip() for line in trimmed.splitlines()]
+    block_width = max(visible_length(line) for line in lines)
+    padding = max((term_width - block_width) // 2, 0)
+    centered = [" " * padding + line for line in lines]
+    return "\n" + "\n".join(centered) + "\n"
 
 
 def styled_divider(

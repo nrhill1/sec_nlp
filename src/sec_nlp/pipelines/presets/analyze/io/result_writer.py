@@ -9,6 +9,7 @@ from sec_nlp.pipelines.metadata.accession import (
     get_accession_from_metadata,
     group_results_by_accession,
 )
+from sec_nlp.pipelines.presets.analyze.market import MarketEnrichment
 from sec_nlp.pipelines.types import AnalysisResultDict, MetadataRecord
 
 from ..config import AnalyzeConfig
@@ -27,6 +28,8 @@ def write_results(
     relevant_results: list[AnalysisResultDict] | None = None,
     search_queries: list[str] | None = None,
     timings: Timings | None = None,
+    market_data: MarketEnrichment | None = None,
+    market_context: str | None = None,
 ) -> list[Path]:
     """Write analysis results to output files."""
     output_files: list[Path] = []
@@ -66,6 +69,8 @@ def write_results(
                     relevant_results=results_for_filing,
                     search_queries=search_queries,
                     timings=timings,
+                    market_data=market_data,
+                    market_context=market_context,
                 )
                 output_dir = config.get_symbol_output_dir(symbol_for_output)
                 output_files.extend(
@@ -74,16 +79,18 @@ def write_results(
         else:
             accession = get_accession_from_metadata(filing_meta)
             symbol_for_output = resolve_symbol_for_output(symbol, filing_meta)
-            output = formatter.build_output(
-                symbol=symbol_for_output,
-                filing_meta=filing_meta,
-                analysis_results=analysis_results,
-                relevant_results=[],
-                search_queries=search_queries,
-                timings=timings,
-            )
-            output_dir = config.get_symbol_output_dir(symbol_for_output)
-            output_files.extend(formatter.export(output, output_dir, accession))
+        output = formatter.build_output(
+            symbol=symbol_for_output,
+            filing_meta=filing_meta,
+            analysis_results=analysis_results,
+            relevant_results=[],
+            search_queries=search_queries,
+            timings=timings,
+            market_data=market_data,
+            market_context=market_context,
+        )
+        output_dir = config.get_symbol_output_dir(symbol_for_output)
+        output_files.extend(formatter.export(output, output_dir, accession))
     else:
         accession = get_accession_from_metadata(filing_meta)
         first_meta = next(
@@ -111,6 +118,8 @@ def write_results(
             relevant_results=relevant_results,
             search_queries=search_queries,
             timings=timings,
+            market_data=market_data,
+            market_context=market_context,
         )
         output_dir = config.get_symbol_output_dir(symbol_for_output)
         output_files.extend(formatter.export(output, output_dir, accession))

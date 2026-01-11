@@ -5,7 +5,7 @@ import csv
 from collections import defaultdict
 from hashlib import sha256
 from pathlib import Path
-from typing import Literal, cast
+from typing import Literal
 
 from sec_nlp.core.infra.logger import logger
 from sec_nlp.pipelines.output_io import (
@@ -15,6 +15,7 @@ from sec_nlp.pipelines.output_io import (
 )
 from sec_nlp.pipelines.types import AnalysisResultDict, MetadataMap
 
+from ..market import MarketEnrichment
 from ..models import (
     Aggregates,
     AnalysisDiagnostics,
@@ -108,7 +109,7 @@ class OutputFormatter:
         ranked: list[AnalysisResultDict] = []
         for idx, result in enumerate(sorted_results, start=1):
             score = self._coerce_score(result.get("confidence_score"))
-            enriched = cast(AnalysisResultDict, dict(result))
+            enriched: AnalysisResultDict = {**result}
             enriched["rank"] = idx
             enriched["confidence_bucket"] = self._confidence_bucket(score)
             ranked.append(enriched)
@@ -173,6 +174,8 @@ class OutputFormatter:
         relevant_results: list[AnalysisResultDict],
         search_queries: list[str] | None = None,
         timings: dict[str, float] | None = None,
+        market_data: MarketEnrichment | None = None,
+        market_context: str | None = None,
     ) -> AnalysisOutput:
         """Build structured output from analysis results.
 
@@ -182,6 +185,8 @@ class OutputFormatter:
             analysis_results: All analysis results (including failures)
             relevant_results: Filtered relevant results
             timings: Optional timing breakdown
+            market_data: Optional market enrichment metadata to attach to the output
+            market_context: Optional human-readable correlation summary
 
         Returns:
             Structured AnalysisOutput model
@@ -288,6 +293,8 @@ class OutputFormatter:
             aggregates=aggregates,
             diagnostics=diagnostics,
             provenance=provenance,
+            market_enrichment=market_data,
+            market_correlation=market_context,
             results=ranked_results,
             results_by_query=self._group_by_query(ranked_results),
             results_by_section=self._group_by_section(ranked_results),

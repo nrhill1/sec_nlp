@@ -1,12 +1,15 @@
 # src/sec_nlp/cli/commands/analyze.py
 """CLI command for generalized document analysis pipeline."""
 
-from pydantic import Field
+from pydantic import Field, model_validator
 from pydantic_settings import CliPositionalArg
 
 from sec_nlp.cli.command import PipelineCommand
+from sec_nlp.cli.formatting import (
+    format_key_value,
+    format_status,
+)
 from sec_nlp.core.infra.logger import (
-    bullet_line,
     color_text,
     logger,
 )
@@ -16,6 +19,7 @@ from sec_nlp.pipelines.presets.analyze import (
     AnalyzePipeline,
     AnalyzeResult,
 )
+from sec_nlp.types import JsonValue
 
 
 class AnalyzeCommand(AnalyzeConfig, PipelineCommand):
@@ -44,6 +48,17 @@ class AnalyzeCommand(AnalyzeConfig, PipelineCommand):
     symbols: CliPositionalArg[list[str]] = Field(
         default_factory=list,
         description="Ticker symbols to analyze (e.g., AAPL MSFT GOOGL). Omit for interactive mode.",
+    )
+    cli_queries: list[str] = Field(
+        default_factory=list,
+        description="Queries supplied via CLI (helper for --queries).",
+        json_schema_extra={
+            "cli_args": {
+                "nargs": "+",
+                "action": "extend",
+                "aliases": ["--queries"],
+            }
+        },
     )
 
     def _supports_interactive(self) -> bool:
@@ -76,6 +91,21 @@ class AnalyzeCommand(AnalyzeConfig, PipelineCommand):
         except Exception as e:
             logger.error(color_text(f"Configuration error: {e}", color="red"))
 
+    @model_validator(mode="before")
+    @classmethod
+    def _merge_cli_queries(
+        cls, values: dict[str, JsonValue]
+    ) -> dict[str, JsonValue]:
+        cli_queries = values.get("cli_queries")
+        if isinstance(cli_queries, list) and cli_queries:
+            raw_search = values.get("search")
+            search_values: dict[str, JsonValue] = (
+                dict(raw_search) if isinstance(raw_search, dict) else {}
+            )
+            search_values["queries"] = cli_queries
+            values["search"] = search_values
+        return values
+
     def _handle_missing_symbols(self) -> None:
         logger.error(color_text("No symbols provided.", color="red"))
         logger.info("Usage: sec-nlp analyze SYMBOL [SYMBOL ...] [OPTIONS]")
@@ -88,31 +118,27 @@ class AnalyzeCommand(AnalyzeConfig, PipelineCommand):
 
     def _log_config_details(self) -> None:
         """Log analyze-specific configuration."""
+        items: list[tuple[str, str | None]] = []
+
         # Show preset if used
         if self.preset:
-            logger.info(bullet_line("Preset", self.preset, color="magenta"))
+            items.append(("Preset", self.preset))
 
-        logger.info(bullet_line("Symbols", ", ".join(self.symbols)))
-        logger.info(
-            bullet_line(
+        items.append(("Symbols", ", ".join(self.symbols)))
+        items.append(
+            (
                 "LLM",
                 f"{self.llm.model_name} @ T={self.llm.temperature} (json={self.llm.require_json})",
             )
         )
-        logger.info(
-            bullet_line(
+        items.append(
+            (
                 "Batching",
                 f"chunks={self.batch_size} top_k={self.top_k_chunks or 'all'}",
-                color="cyan",
             )
         )
-        logger.info(
-            bullet_line(
-                "Vector DB",
-                f"mode={self.vector_mode}",
-                color="blue",
-            )
-        )
+        items.append(("Vector DB", f"mode={self.vector_mode}"))
+
         has_queries = bool(self.search.queries)
         search_status = (
             f"configured ({len(self.search.queries)} queries, "
@@ -121,21 +147,16 @@ class AnalyzeCommand(AnalyzeConfig, PipelineCommand):
             if has_queries
             else "disabled (no queries)"
         )
-        logger.info(
-            bullet_line(
-                "Search",
-                f"{search_status} | limit={self.search.limit}",
-                color="magenta",
-            )
-        )
+        items.append(("Search", f"{search_status} | limit={self.search.limit}"))
+
         if self.topics:
-            logger.info(
-                bullet_line("Topics", ", ".join(self.topics), color="green")
-            )
+            items.append(("Topics", ", ".join(self.topics)))
         elif self.keywords:
-            logger.info(
-                bullet_line("Keywords", ", ".join(self.keywords), color="green")
-            )
+            items.append(("Keywords", ", ".join(self.keywords)))
+
+        for label, value in items:
+            formatted = format_key_value(label, value)
+            logger.info(formatted)
 
     def _handle_result(self, result: BaseResult) -> None:
         """Handle analyze-specific result output."""
@@ -144,16 +165,18 @@ class AnalyzeCommand(AnalyzeConfig, PipelineCommand):
             return
         if result.error is not None:
             logger.error(
-                color_text(f"✗ Analysis failed: {result.error}", color="red")
+                format_status(
+                    f"Analysis failed: {result.error}", status="error"
+                )
             )
             return
 
         if not result.success:
-            logger.error(color_text("✗ Analysis failed", color="red"))
+            logger.error(format_status("Analysis failed", status="error"))
             return
 
         if result.outputs:
-            logger.info(color_text("✓ Analysis complete", color="green"))
+            logger.info(format_status("Analysis complete", status="success"))
             logger.info(
                 color_text(f"Outputs: {len(result.outputs)}", color="cyan")
             )
@@ -161,7 +184,7 @@ class AnalyzeCommand(AnalyzeConfig, PipelineCommand):
                 logger.info(color_text(f"  → {output_path}", color="cyan"))
         else:
             logger.info(
-                color_text(
-                    "✓ Analysis complete: no outputs generated", color="yellow"
+                format_status(
+                    "Analysis complete: no outputs generated", status="warning"
                 )
             )

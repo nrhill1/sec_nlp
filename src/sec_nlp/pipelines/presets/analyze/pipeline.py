@@ -34,6 +34,7 @@ from sec_nlp.types import ResultDict
 from .config import AnalyzeConfig
 from .io.outputs import OutputFormatter
 from .io.result_writer import write_results
+from .market import MarketEnrichment, build_market_enrichment
 from .models import AnalysisInput, AnalysisResult, AnalyzeResult
 from .steps.analysis.analysis_runner import AnalyzerRunnable
 from .steps.analysis.callbacks import TracingCallbackHandler
@@ -462,6 +463,13 @@ class AnalyzePipeline(BasePipeline):
             "mean": float(mean(chunk_lengths)),
             "timings": timings,
         }
+        market_data = self._build_market_enrichment(symbol, docs)
+        market_context = self._format_market_context(market_data)
+        if market_context:
+            for doc in docs:
+                metadata = dict(doc.metadata or {})
+                metadata["market_enrichment_context"] = market_context
+                doc.metadata = metadata
         accession_docs: dict[str, list[Document]] = defaultdict(list)
         for doc in docs:
             accession = get_accession_from_metadata(doc.metadata)
@@ -584,6 +592,8 @@ class AnalyzePipeline(BasePipeline):
             relevant_results=relevant_results,
             search_queries=search_queries,
             timings=timings,
+            market_data=market_data,
+            market_context=market_context,
         )
         if output_files:
             run_id = self.config.run_id
@@ -637,6 +647,54 @@ class AnalyzePipeline(BasePipeline):
             )
         return runner.retrieve_hits(queries=self.config.get_search_queries())
 
+    def _build_market_enrichment(
+        self,
+        symbol: str,
+        docs: list[Document],
+    ) -> MarketEnrichment | None:
+        """Return market enrichment metadata for the given docs."""
+        return build_market_enrichment(
+            config=self.config.market,
+            symbol=symbol,
+            docs=docs,
+            default_range=self.config.date_range,
+        )
+
+    def _format_market_context(
+        self,
+        enrichment: MarketEnrichment | None,
+    ) -> str | None:
+        """Summarize market data for inclusion in the LLM context."""
+        if enrichment is None or not enrichment.quotes:
+            return None
+
+        rows: list[str] = []
+        for summary in enrichment.quotes[:3]:
+            rows.append(
+                f"{summary.start_date.isoformat()}..{summary.end_date.isoformat()} "
+                f"close={summary.average_close:.2f}"
+            )
+        suffix = ""
+        extra = len(enrichment.quotes) - len(rows)
+        if extra > 0:
+            suffix = f" (+{extra} more)"
+
+        filing_hint = (
+            f"filing {enrichment.filing_date.isoformat()}"
+            if enrichment.filing_date
+            else "filing date unknown"
+        )
+        window = (
+            f"{enrichment.window_start.isoformat()}.."
+            f"{enrichment.window_end.isoformat()}"
+        )
+
+        return (
+            f"{filing_hint} | market {enrichment.ticker} "
+            f"{enrichment.granularity.value} window {window}: "
+            f"{'; '.join(rows)}{suffix}"
+        )
+
     def _write_results(
         self,
         symbol: str,
@@ -646,6 +704,8 @@ class AnalyzePipeline(BasePipeline):
         relevant_results: list[AnalysisResultDict] | None = None,
         search_queries: list[str] | None = None,
         timings: Timings | None = None,
+        market_data: MarketEnrichment | None = None,
+        market_context: str | None = None,
     ) -> list[Path]:
         """Expose result writing for tests and downstream usage."""
         formatter = getattr(self, "_output_formatter", None)
@@ -670,4 +730,6 @@ class AnalyzePipeline(BasePipeline):
             relevant_results=relevant_results,
             search_queries=search_queries,
             timings=timings,
+            market_data=market_data,
+            market_context=market_context,
         )

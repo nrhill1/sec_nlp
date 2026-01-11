@@ -1,0 +1,14 @@
+[package]
+name = "market"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[lib]
+name = "market"
+crate-type = ["cdylib"]
+
+[dependencies]
+pyo3 = { version = "0.23", features = ["extension-module"] }
+tokio = { version = "1.37", features = ["rt-multi-thread"] }
+yahoo_finance_api = "2.1"

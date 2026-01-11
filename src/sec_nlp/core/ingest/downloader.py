@@ -6,7 +6,7 @@ from collections.abc import Iterable
 from datetime import date
 from pathlib import Path
 
-from sec_edgar_downloader import Downloader  # type: ignore[attr-defined]
+from sec_edgar_downloader import Downloader
 
 from sec_nlp.core.edgar.filing_mode import FilingMode
 from sec_nlp.core.infra.logger import logger

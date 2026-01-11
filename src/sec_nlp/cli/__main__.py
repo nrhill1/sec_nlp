@@ -2,7 +2,6 @@
 """Main CLI application."""
 
 import os
-import re
 import signal
 import sys
 import traceback
@@ -22,6 +21,9 @@ signal.signal(signal.SIGINT, _graceful_sigint)
 
 # Import after SIGINT is set so early interrupts are clean
 from sec_nlp.cli.commands import Root  # noqa: E402
+from sec_nlp.cli.validation import (  # noqa: E402
+    format_validation_error,
+)
 from sec_nlp.core.infra.logger import (  # noqa: E402
     color_text,
     get_timestamped_log_path,
@@ -58,6 +60,7 @@ _MULTI_VALUE_FLAGS: set[str] = {
     "--analysis-fields",
     "--search-terms",
     "--search.queries",
+    "--queries",
     "--material-keywords",
 }
 
@@ -131,92 +134,13 @@ def _normalize_cli_args(argv: list[str]) -> list[str]:
         normalized.append(arg)
         i += 1
 
-    return normalized
-
-
-def format_validation_error(error: ValidationError) -> str:
-    """Format a pydantic validation error with helpful suggestions.
-
-    Args:
-        error: The validation error
-
-    Returns:
-        Formatted error message with suggestions
-    """
-    lines = ["\n" + color_text("Configuration Error", color="red")]
-    lines.append(color_text("=" * 50, color="red"))
-
-    for err in error.errors():
-        loc = ".".join(str(x) for x in err["loc"])
-        msg = err["msg"]
-        err_type = err["type"]
-
-        lines.append(f"\n  {color_text('Field:', color='yellow')} {loc}")
-        lines.append(f"  {color_text('Error:', color='red')} {msg}")
-
-        # Add type-specific suggestions
-        if err_type == "missing":
-            lines.append(
-                f"  {color_text('Fix:', color='green')} This field is required. Add --{loc.replace('.', '-')} <value>"
-            )
-        elif err_type == "string_type":
-            lines.append(
-                f"  {color_text('Fix:', color='green')} Expected a string value. Try quoting the value."
-            )
-        elif err_type == "int_parsing":
-            lines.append(
-                f"  {color_text('Fix:', color='green')} Expected an integer (e.g., 5, 10, 100)"
-            )
-        elif err_type == "float_parsing":
-            lines.append(
-                f"  {color_text('Fix:', color='green')} Expected a number (e.g., 0.5, 1.0)"
-            )
-        elif "enum" in err_type or "literal" in err_type:
-            # Extract allowed values from message
-            match = re.search(r"'([^']+)'(?:,\s*'([^']+)')*", msg)
-            if match:
-                lines.append(
-                    f"  {color_text('Fix:', color='green')} Use one of the allowed values shown above."
-                )
-
-    lines.append("\n" + color_text("=" * 50, color="red"))
-    lines.append(
-        color_text("Tip:", color="cyan")
-        + " Run 'sec-nlp <command> --help' for available options."
-    )
-
-    return "\n".join(lines)
-
-
-def format_unknown_arg_error(arg: str) -> str:
-    """Format an unknown argument error with suggestions.
-
-    Args:
-        arg: The unknown argument
-
-    Returns:
-        Formatted error message with suggestions
-    """
-    lines = ["\n" + color_text(f"Unknown argument: {arg}", color="red")]
-
-    # Look for similar field names
-    arg_lower = arg.lower().lstrip("-")
-    suggestions = []
-
-    for key, values in FIELD_SUGGESTIONS:
-        if key in arg_lower or arg_lower in key:
-            suggestions.extend(values)
-
-    if suggestions:
-        lines.append(f"\n{color_text('Did you mean:', color='yellow')}")
-        for suggestion in suggestions[:3]:
-            lines.append(f"  --{suggestion}")
-
-    lines.append(
-        f"\n{color_text('Tip:', color='cyan')} Run 'sec-nlp <command> --help' for available options."
-    )
-
-    return "\n".join(lines)
+    rewritten: list[str] = []
+    for token in normalized:
+        if token == "--queries":
+            rewritten.append("--search.queries")
+        else:
+            rewritten.append(token)
+    return rewritten
 
 
 def main() -> int:

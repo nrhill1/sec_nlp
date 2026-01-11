@@ -19,6 +19,9 @@ from sec_nlp.pipelines.llm.config import LLMConfig
 from sec_nlp.pipelines.metadata.filters import MetadataFilters
 from sec_nlp.pipelines.vector.config import VectorConfig
 from sec_nlp.prompts import ANALYZE_PROMPT_PATH
+from sec_nlp.types import JsonValue
+
+from .market import MarketConfig, MarketGranularity
 
 
 class SearchConfig(BaseModel):
@@ -33,6 +36,13 @@ class SearchConfig(BaseModel):
     queries: list[str] = Field(
         default_factory=list,
         description="Search queries to run (search is enabled when non-empty)",
+        json_schema_extra={
+            "cli_args": {
+                "nargs": "+",
+                "action": "extend",
+                "aliases": ["--queries"],
+            }
+        },
     )
     limit: int = Field(
         default=10,
@@ -193,6 +203,62 @@ class AnalyzeConfig(BaseConfig):
         ge=1,
         description="Maximum number of filings to process per symbol",
     )
+
+    market: MarketConfig = Field(
+        default_factory=MarketConfig,
+        description="Optional market enrichment configuration for the symbol range.",
+    )
+
+    market_enabled: bool | None = Field(
+        default=None,
+        description="Enable market enrichment via CLI flag (overrides market.enabled).",
+        json_schema_extra={
+            "cli_args": {
+                "aliases": ["--market-enabled"],
+                "action": "store_true",
+            }
+        },
+    )
+    market_ticker: str | None = Field(
+        default=None,
+        description="Ticker to use for market enrichment when enabled.",
+        json_schema_extra={"cli_args": {"aliases": ["--market-ticker"]}},
+    )
+    market_granularity: MarketGranularity | None = Field(
+        default=None,
+        description="Granularity to request when market enrichment is enabled.",
+        json_schema_extra={"cli_args": {"aliases": ["--market-granularity"]}},
+    )
+    market_limit: int | None = Field(
+        default=None,
+        ge=1,
+        description="Limit of aggregated rows to include when market enrichment is enabled.",
+        json_schema_extra={"cli_args": {"aliases": ["--market-limit"]}},
+    )
+
+    @model_validator(mode="before")
+    @classmethod
+    def _apply_market_flags(
+        cls, values: dict[str, JsonValue]
+    ) -> dict[str, JsonValue]:
+        market_values: dict[str, JsonValue] = {}
+        raw_market = values.get("market")
+        if isinstance(raw_market, MarketConfig):
+            market_values.update(raw_market.model_dump())
+        elif isinstance(raw_market, dict):
+            market_values.update(raw_market)
+        market_flags = {
+            "enabled": values.get("market_enabled"),
+            "ticker": values.get("market_ticker"),
+            "granularity": values.get("market_granularity"),
+            "limit": values.get("market_limit"),
+        }
+        for key, flag in market_flags.items():
+            if flag is not None:
+                market_values[key] = flag
+        if market_values:
+            values["market"] = market_values
+        return values
 
     section_type: SectionType | None = Field(
         default=None,

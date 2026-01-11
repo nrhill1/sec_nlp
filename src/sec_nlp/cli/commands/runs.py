@@ -7,11 +7,17 @@ from typing import Literal
 from pydantic import BaseModel, Field
 from pydantic_settings import CliSubCommand, SettingsConfigDict
 
+from sec_nlp.cli.formatting import (
+    ColumnSpec,
+    center_text,
+    format_key_value,
+    format_section_header,
+    format_status,
+    format_table,
+)
 from sec_nlp.core.infra.logger import (
-    bullet_line,
     color_text,
     logger,
-    styled_header,
 )
 from sec_nlp.pipelines.observability.run_registry import get_registry
 
@@ -53,7 +59,8 @@ class RunsLs(BaseModel):
 
     def cli_cmd(self) -> None:
         """List pipeline runs."""
-        logger.info(styled_header("Pipeline Runs"))
+        header = format_section_header("Pipeline Runs", style="box")
+        logger.info(header)
 
         registry = get_registry()
         runs = registry.list_runs(
@@ -63,10 +70,22 @@ class RunsLs(BaseModel):
         )
 
         if not runs:
-            logger.info(color_text("No runs found.", color="yellow"))
+            logger.info(format_status("No runs found.", status="warning"))
             return
 
-        # Display runs
+        # Build table rows
+        headers = ["ID", "PIPELINE", "STATUS", "STARTED", "DURATION"]
+        column_specs = [
+            ColumnSpec(header="ID", align="left", min_width=6, color="cyan"),
+            ColumnSpec(
+                header="PIPELINE", align="left", min_width=12, color="blue"
+            ),
+            ColumnSpec(header="STATUS", align="left", min_width=10),
+            ColumnSpec(header="STARTED", align="left"),
+            ColumnSpec(header="DURATION", align="right"),
+        ]
+
+        rows: list[list[str]] = []
         for run in runs:
             # Derive a display status so stale records with a completed_at
             # timestamp don't still render as "running", and mark
@@ -85,25 +104,36 @@ class RunsLs(BaseModel):
             }.get(display_status, "dim")
 
             # Format duration
-            duration_str = ""
+            duration_str = "—"
             if run.duration_seconds is not None:
                 mins, secs = divmod(int(run.duration_seconds), 60)
                 if mins > 0:
-                    duration_str = f" ({mins}m {secs}s)"
+                    duration_str = f"{mins}m {secs}s"
                 else:
-                    duration_str = f" ({secs}s)"
+                    duration_str = f"{secs}s"
 
-            logger.info(
-                "  %s  %s  %s  %s%s",
-                color_text(run.short_id.ljust(6), color="cyan"),
-                color_text(run.pipeline_type.ljust(12), color="blue"),
-                color_text(display_status.ljust(10), color=status_color),
-                _format_local(run.started_at),
-                duration_str,
+            rows.append(
+                [
+                    run.short_id,
+                    run.pipeline_type,
+                    color_text(display_status, color=status_color),
+                    _format_local(run.started_at),
+                    duration_str,
+                ]
             )
 
+        table = format_table(
+            rows,
+            headers=headers,
+            column_specs=column_specs,
+            border=True,
+            centered=True,
+        )
+        logger.info(table)
         logger.info("")
-        logger.info(color_text(f"Showing {len(runs)} run(s)", color="dim"))
+        logger.info(
+            center_text(color_text(f"Showing {len(runs)} run(s)", color="dim"))
+        )
 
 
 class RunsInfo(BaseModel):
@@ -125,31 +155,34 @@ class RunsInfo(BaseModel):
 
         if not run:
             logger.error(
-                color_text(f"Run '{self.run}' not found.", color="red")
+                format_status(f"Run '{self.run}' not found.", status="error")
             )
             return
 
-        logger.info(styled_header(f"Run {run.short_id}"))
-        logger.info(bullet_line("Run ID", run.run_id))
-        logger.info(bullet_line("Pipeline", run.pipeline_type))
-        logger.info(bullet_line("Status", run.status))
-        logger.info(
-            bullet_line(
-                "Started", _format_local(run.started_at, "%Y-%m-%d %H:%M:%S %Z")
-            )
-        )
+        header = format_section_header(f"Run {run.short_id}", style="box")
+        logger.info(header)
+
+        items: list[tuple[str, str | None]] = [
+            ("Run ID", run.run_id),
+            ("Pipeline", run.pipeline_type),
+            ("Status", run.status),
+            ("Started", _format_local(run.started_at, "%Y-%m-%d %H:%M:%S %Z")),
+        ]
         if run.completed_at:
-            logger.info(
-                bullet_line(
+            items.append(
+                (
                     "Completed",
                     _format_local(run.completed_at, "%Y-%m-%d %H:%M:%S %Z"),
                 )
             )
         if run.duration_seconds is not None:
             mins, secs = divmod(int(run.duration_seconds), 60)
-            logger.info(bullet_line("Duration", f"{mins}m {secs}s"))
+            items.append(("Duration", f"{mins}m {secs}s"))
         if run.output_dir:
-            logger.info(bullet_line("Output Dir", run.output_dir))
+            items.append(("Output Dir", run.output_dir))
+
+        for label, value in items:
+            logger.info(format_key_value(label, value))
 
 
 class RunsDelete(BaseModel):
@@ -290,24 +323,28 @@ class RunsStats(BaseModel):
         registry = get_registry()
         stats = registry.get_stats()
 
-        logger.info(styled_header("Run Registry Stats"))
+        header = format_section_header("Run Registry Stats", style="box")
+        logger.info(header)
+
         db_path = stats.get("db_path", "")
-        logger.info(bullet_line("Database", str(db_path) if db_path else None))
-        logger.info(bullet_line("Total runs", str(stats.get("total_runs", 0))))
+        items: list[tuple[str, str | None]] = [
+            ("Database", str(db_path) if db_path else None),
+            ("Total runs", str(stats.get("total_runs", 0))),
+        ]
 
         by_status = stats.get("by_status")
         if by_status and isinstance(by_status, dict):
-            logger.info("")
-            logger.info(color_text("By Status:", color="cyan"))
             for status, count in sorted(by_status.items()):
-                logger.info(f"  {status}: {count}")
+                items.append((f"  {status}", str(count)))
 
         by_pipeline = stats.get("by_pipeline")
         if by_pipeline and isinstance(by_pipeline, dict):
-            logger.info("")
-            logger.info(color_text("By Pipeline:", color="cyan"))
+            items.append(("By Pipeline", None))
             for pipeline, count in sorted(by_pipeline.items()):
-                logger.info(f"  {pipeline}: {count}")
+                items.append((f"  {pipeline}", str(count)))
+
+        for label, value in items:
+            logger.info(format_key_value(label, value))
 
 
 class Runs(BaseModel):

@@ -30,6 +30,7 @@ dependencies = [
   "tqdm",
   "unstructured>=0.18.20",
   "pyahocorasick>=2.2.0",
+  "pandas>=2.3.3",
 ]
 
 [project.scripts]
@@ -38,21 +39,23 @@ profile-memory = "scripts.profile.memory:main"
 check-imports = "scripts.build.check_imports:main"
 
 [tool.uv]
-cache-keys = [{file = "pyproject.toml"}, {file = "Cargo.toml"}, {file = "**/*.rs"}]
+cache-keys = [
+  {file = "pyproject.toml"},
+  {file = "crates/market/Cargo.toml"},
+  {file = "**/*.rs"},
+]
 
-[tool.uv_build]
-package = "sec_nlp"
-include = ["pyproject.toml", "README.md"]
-
-[tool.setuptools]
-packages = ["sec_nlp", "scripts"]
-
-[tool.setuptools.package-data]
-sec_nlp = ["py.typed"]
+[tool.maturin]
+bindings = "pyo3"
+manifest-path = "crates/market/Cargo.toml"
+module-name = "market"
+python-source = "src"
+python-packages = ["sec_nlp", "scripts"]
+include = ["src/sec_nlp/py.typed"]
 
 [build-system]
-requires = ["uv_build>=0.9.17,<0.10.0"]
-build-backend = "uv_build"
+requires = ["maturin>=1.5,<2.0"]
+build-backend = "maturin"
 
 [dependency-groups]
 dev = [
@@ -74,4 +77,5 @@ dev = [
   "ty>=0.0.4",
   "pytest-socket>=0.7.0",
   "mypy>=1.19.1",
+  "maturin>=1.5.0",
 ]

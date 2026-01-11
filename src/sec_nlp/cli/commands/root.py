@@ -16,6 +16,7 @@ from sec_nlp.core.infra.logger import logger
 from .analyze import AnalyzeCommand
 from .clean import Clean
 from .exb_10 import Exb10
+from .market import Market
 from .qdrant import Qdrant
 from .runs import Runs
 from .version import Version
@@ -54,6 +55,10 @@ class Root(BaseSettings):
 
     qdrant: CliSubCommand[Qdrant] = Field(
         description="Manage Qdrant collections (list, info, create, delete, search)"
+    )
+
+    market: CliSubCommand[Market] = Field(
+        description="Retrieve Yahoo Finance market data (latest or range)."
     )
 
     runs: CliSubCommand[Runs] = Field(

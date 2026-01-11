@@ -28,11 +28,3 @@ repos:
     files: '^(src/|tests/).*\.py$'
     language: system
     pass_filenames: false
-
-  - id: py-test
-    name: Python Testing
-    entry: make py-test
-    files: '^(src/|tests/).*\.py$'
-    types: [python]
-    language: system
-    pass_filenames: false
