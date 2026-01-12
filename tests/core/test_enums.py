@@ -39,12 +39,14 @@ class TestFilingMode:
     def test_filing_mode_iteration(self) -> None:
         """Test that all FilingMode values can be iterated."""
         modes = list(FilingMode)
-        assert len(modes) == 5
+        assert len(modes) == 7
         assert FilingMode.annual in modes
         assert FilingMode.quarterly in modes
         assert FilingMode.current in modes
         assert FilingMode.proxy in modes
         assert FilingMode.holdings in modes
+        assert FilingMode.registration in modes
+        assert FilingMode.shelf_registration in modes
 
     def test_filing_mode_from_string(self) -> None:
         """Test creating FilingMode from string."""
@@ -112,4 +114,12 @@ class TestFilingMode:
         )
         assert (
             FilingMode.holdings.description == "Institutional Holdings Report"
+        )
+        assert (
+            FilingMode.registration.description
+            == "Registration Statement (IPO)"
+        )
+        assert (
+            FilingMode.shelf_registration.description
+            == "Shelf Registration Statement"
         )

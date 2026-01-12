@@ -81,7 +81,7 @@ class AnalyzePipeline(BasePipeline):
 
     # Vector Store
     _vector_store: QdrantVectorStore = PrivateAttr()
-    _embedder: OllamaEmbeddings = PrivateAttr()
+    _embedder: OllamaEmbeddings | None = PrivateAttr(default=None)
 
     # Deduplication
     _deduplicator: SimHashDeduplicator = PrivateAttr()
