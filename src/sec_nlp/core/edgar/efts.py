@@ -393,7 +393,7 @@ class EFTSClient(BaseModel):
 def _as_json_dict(val: JsonValue) -> JsonDict | None:
     """Convert a JsonValue to JsonDict if it's a dict, else None."""
     if _is_json_object(val):
-        return _mapping_to_json_dict(val)
+        return _mapping_to_json_dict(val)  # ty:ignore[invalid-argument-type]
     return None
 
 
