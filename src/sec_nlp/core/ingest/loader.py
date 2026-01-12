@@ -238,7 +238,7 @@ class Loader(BaseModel):
         # Gather and preprocess
         all_docs: list[Document] = []
         per_symbol_counts: dict[str, int] = {}
-        relationships_by_symbol: dict[str, JsonDict] = {}
+        relationships_by_symbol: JsonDict = {}
 
         for symbol in sorted(self._symbols):
             try:
@@ -313,13 +313,14 @@ class Loader(BaseModel):
                 )
                 per_symbol_counts[symbol] = 0
 
-        self._last_meta = {
+        meta: LoaderRunMetadata = {
             "work_folder": str(work_folder),
             "download_results": download_results,
             "per_symbol_doc_counts": per_symbol_counts,
             "total_documents": len(all_docs),
             "relationships": relationships_by_symbol,
         }
+        self._last_meta = meta
 
         return all_docs
 
@@ -424,7 +425,7 @@ class Loader(BaseModel):
 
     @staticmethod
     def _attach_related_filings(
-        docs: list[Document],
+        docs: Sequence[Document],
         related_map: dict[str, list[JsonDict]],
     ) -> None:
         if not docs or not related_map:
@@ -868,7 +869,7 @@ class Loader(BaseModel):
         # Stream documents
         total_docs = 0
         per_symbol_counts: dict[str, int] = {}
-        relationships_by_symbol: dict[str, JsonDict] = {}
+        relationships_by_symbol: JsonDict = {}
 
         for symbol in sorted(self._symbols):
             try:
@@ -932,22 +933,17 @@ class Loader(BaseModel):
                 per_symbol_counts[symbol] = 0
 
         # Update metadata
-        self._last_meta = {
+        meta: LoaderRunMetadata = {
             "work_folder": str(work_folder),
             "download_results": download_results,
             "per_symbol_doc_counts": per_symbol_counts,
             "total_documents": total_docs,
             "relationships": relationships_by_symbol,
         }
+        self._last_meta = meta
 
         # Return metadata
-        return {
-            "work_folder": str(work_folder),
-            "download_results": download_results,
-            "per_symbol_doc_counts": per_symbol_counts,
-            "total_documents": total_docs,
-            "relationships": relationships_by_symbol,
-        }
+        return meta
 
     def load_texts_stream(
         self,

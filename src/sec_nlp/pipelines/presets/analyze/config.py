@@ -423,8 +423,11 @@ class AnalyzeConfig(BaseConfig):
                     llm_values["prompt_file"] = prompt_path
                     values["llm"] = llm_values
             elif isinstance(raw_llm, dict):
-                if raw_llm.get("prompt_file") is None:
-                    llm_values = dict(raw_llm)
+                llm_values: JsonDict = {}
+                for key, value in raw_llm.items():
+                    if isinstance(key, str):
+                        llm_values[key] = value
+                if llm_values.get("prompt_file") is None:
                     llm_values["prompt_file"] = prompt_path
                     values["llm"] = llm_values
             elif raw_llm is None:

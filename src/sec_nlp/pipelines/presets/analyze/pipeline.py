@@ -89,9 +89,7 @@ class AnalyzePipeline(BasePipeline):
     # Output formatting
     _output_formatter: OutputFormatter = PrivateAttr()
     _analysis_instructions: str = PrivateAttr(default="")
-    _relationship_graphs: dict[str, JsonDict] = PrivateAttr(
-        default_factory=dict
-    )
+    _relationship_graphs: JsonDict = PrivateAttr(default_factory=dict)
 
     # Modular helpers
     _preprocessor: ChunkPreprocessor = PrivateAttr()
@@ -439,8 +437,8 @@ class AnalyzePipeline(BasePipeline):
             perform_download=True,
             section_filter=self._section_filter,
         )
-        relationships = self._loader.last_meta.get("relationships")
-        if isinstance(relationships, dict):
+        relationships = self._loader.last_meta["relationships"]
+        if relationships:
             self._relationship_graphs.update(relationships)
         timings["load"] = perf_counter() - t0
 

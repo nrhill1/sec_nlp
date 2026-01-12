@@ -214,9 +214,12 @@ class HoldingsParser:
                 metadata.update(entry)
                 metadata["source"] = str(table_file)
                 metadata["holding_index"] = idx
+                content = _format_entry(entry)
+                if not isinstance(content, str):
+                    content = "Holding entry"
                 docs.append(
                     Document(
-                        page_content=_format_entry(entry),
+                        page_content=content,
                         metadata=metadata,
                     )
                 )
