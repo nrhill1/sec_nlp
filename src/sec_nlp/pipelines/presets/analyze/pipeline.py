@@ -30,7 +30,7 @@ from sec_nlp.pipelines.metadata.accession import get_accession_from_metadata
 from sec_nlp.pipelines.observability.telemetry import log_chunk_length_stats
 from sec_nlp.pipelines.types import AnalysisResultDict, MetadataRecord
 from sec_nlp.prompts import load_prompt_template
-from sec_nlp.types import ResultDict
+from sec_nlp.types import JsonDict, ResultDict
 
 from .config import AnalyzeConfig
 from .io.outputs import OutputFormatter
@@ -89,6 +89,9 @@ class AnalyzePipeline(BasePipeline):
     # Output formatting
     _output_formatter: OutputFormatter = PrivateAttr()
     _analysis_instructions: str = PrivateAttr(default="")
+    _relationship_graphs: dict[str, JsonDict] = PrivateAttr(
+        default_factory=dict
+    )
 
     # Modular helpers
     _preprocessor: ChunkPreprocessor = PrivateAttr()
@@ -125,7 +128,10 @@ class AnalyzePipeline(BasePipeline):
             )
 
             # Build section filter if section filtering is configured
-            if self.config.section_type and self.config.section_numbers:
+            if self.config.section_type and (
+                self.config.section_numbers
+                or self.config.custom_section_pattern
+            ):
                 section_pattern = self.config.get_section_pattern()
                 if section_pattern is not None:
                     self._section_filter = SectionFilter(
@@ -394,6 +400,9 @@ class AnalyzePipeline(BasePipeline):
                     self.config.get_search_queries()
                 )
 
+            if self._relationship_graphs:
+                metadata["relationships"] = dict(self._relationship_graphs)
+
             self.config.complete_run(success=True)
             return AnalyzeResult(
                 success=True,
@@ -430,6 +439,9 @@ class AnalyzePipeline(BasePipeline):
             perform_download=True,
             section_filter=self._section_filter,
         )
+        relationships = self._loader.last_meta.get("relationships")
+        if isinstance(relationships, dict):
+            self._relationship_graphs.update(relationships)
         timings["load"] = perf_counter() - t0
 
         if not docs:
@@ -624,7 +636,7 @@ class AnalyzePipeline(BasePipeline):
                 topic_matcher=build_topic_matcher(topics),
                 min_topic_hits=self.config.min_topic_hits,
                 prioritize_topics=self.config.prioritize_topics,
-                embedder=self._embedder,
+                embedder=getattr(self, "_embedder", None),
             )
         return preprocessor.prepare_documents(docs)
 

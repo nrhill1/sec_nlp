@@ -16,8 +16,6 @@ from .market import (
     create_market_retriever,
 )
 from .text.filters import (
-    HOLDINGS_SECTION_PATTERNS,
-    PROXY_SECTION_PATTERNS,
     SectionFilter,
     SectionPattern,
     SectionType,
@@ -33,6 +31,11 @@ from .text.section_extractor import (
     SectionBoundary,
     SectionExtractor,
     create_section_extractor,
+)
+from .text.section_patterns import (
+    HOLDINGS_SECTION_PATTERNS,
+    PROXY_SECTION_PATTERNS,
+    REGISTRATION_SECTION_PATTERNS,
 )
 
 __all__: tuple[str, ...] = (
@@ -56,6 +59,7 @@ __all__: tuple[str, ...] = (
     "create_proxy_filter",
     "PROXY_SECTION_PATTERNS",
     "HOLDINGS_SECTION_PATTERNS",
+    "REGISTRATION_SECTION_PATTERNS",
     # Section Extraction
     "SectionExtractor",
     "ExtractedSection",

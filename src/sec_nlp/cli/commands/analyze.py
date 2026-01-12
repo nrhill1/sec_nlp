@@ -138,6 +138,12 @@ class AnalyzeCommand(AnalyzeConfig, PipelineCommand):
             )
         )
         items.append(("Vector DB", f"mode={self.vector_mode}"))
+        items.append(
+            (
+                "Timeline",
+                "enabled" if self.show_timeline else "disabled",
+            )
+        )
 
         has_queries = bool(self.search.queries)
         search_status = (

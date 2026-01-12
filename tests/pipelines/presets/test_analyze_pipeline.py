@@ -188,6 +188,35 @@ def test_coverage_metrics() -> None:
     assert diag.chunks_relevant == 1
 
 
+def test_output_includes_relationship_timeline() -> None:
+    formatter = OutputFormatter(
+        export_format="json",
+        confidence_threshold=0.5,
+        topics=["a"],
+        include_raw_chunks=False,
+    )
+    filing_meta = {
+        "accession_number": "0000000000-24-000001",
+        "related_filings": [
+            {
+                "accession_number": "0000000000-24-000002",
+                "relation_type": "amendment",
+                "filed_date": "2024-01-01",
+            }
+        ],
+    }
+
+    output = formatter.build_output(
+        "SYM", filing_meta, analysis_results=[], relevant_results=[]
+    )
+
+    assert "amendment" in output.relationship_timeline
+    assert (
+        output.relationship_timeline["amendment"][0].get("accession_number")
+        == "0000000000-24-000002"
+    )
+
+
 def test_batch_retry_then_success(tmp_path: Path) -> None:
     pipe = _make_pipeline(tmp_path, llm_retry_attempts=1, llm_retry_backoff=0.0)
     docs = [Document(page_content="a"), Document(page_content="b")]

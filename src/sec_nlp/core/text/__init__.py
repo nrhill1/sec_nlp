@@ -4,8 +4,6 @@
 from .chunking import SentenceSplitter
 from .deduplication import SimHashConfig, SimHashDeduplicator
 from .filters import (
-    HOLDINGS_SECTION_PATTERNS,
-    PROXY_SECTION_PATTERNS,
     SectionFilter,
     SectionPattern,
     SectionType,
@@ -29,6 +27,11 @@ from .section_extractor import (
     SectionExtractor,
     create_section_extractor,
 )
+from .section_patterns import (
+    HOLDINGS_SECTION_PATTERNS,
+    PROXY_SECTION_PATTERNS,
+    REGISTRATION_SECTION_PATTERNS,
+)
 
 __all__ = (
     "SentenceSplitter",
@@ -45,6 +48,7 @@ __all__ = (
     "create_proxy_filter",
     "PROXY_SECTION_PATTERNS",
     "HOLDINGS_SECTION_PATTERNS",
+    "REGISTRATION_SECTION_PATTERNS",
     "FilterStats",
     "KeywordHit",
     "KeywordMatcher",

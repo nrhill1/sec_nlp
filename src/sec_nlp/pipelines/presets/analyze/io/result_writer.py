@@ -5,12 +5,14 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from sec_nlp.core.infra.logger import logger
 from sec_nlp.pipelines.metadata.accession import (
     get_accession_from_metadata,
     group_results_by_accession,
 )
 from sec_nlp.pipelines.presets.analyze.market import MarketEnrichment
 from sec_nlp.pipelines.types import AnalysisResultDict, MetadataRecord
+from sec_nlp.types import JsonDict
 
 from ..config import AnalyzeConfig
 from ..types import Timings
@@ -72,6 +74,12 @@ def write_results(
                     market_data=market_data,
                     market_context=market_context,
                 )
+                if config.show_timeline and output.relationship_timeline:
+                    _log_relationship_timeline(
+                        symbol_for_output,
+                        accession,
+                        output.relationship_timeline,
+                    )
                 output_dir = config.get_symbol_output_dir(symbol_for_output)
                 output_files.extend(
                     formatter.export(output, output_dir, accession)
@@ -89,6 +97,12 @@ def write_results(
             market_data=market_data,
             market_context=market_context,
         )
+        if config.show_timeline and output.relationship_timeline:
+            _log_relationship_timeline(
+                symbol_for_output,
+                accession,
+                output.relationship_timeline,
+            )
         output_dir = config.get_symbol_output_dir(symbol_for_output)
         output_files.extend(formatter.export(output, output_dir, accession))
     else:
@@ -121,6 +135,12 @@ def write_results(
             market_data=market_data,
             market_context=market_context,
         )
+        if config.show_timeline and output.relationship_timeline:
+            _log_relationship_timeline(
+                symbol_for_output,
+                accession,
+                output.relationship_timeline,
+            )
         output_dir = config.get_symbol_output_dir(symbol_for_output)
         output_files.extend(formatter.export(output, output_dir, accession))
 
@@ -145,3 +165,19 @@ def _select_filing_meta(
         merged_meta["accession_number"] = accession
 
     return merged_meta
+
+
+def _log_relationship_timeline(
+    symbol: str,
+    accession: str,
+    timeline: dict[str, list[JsonDict]],
+) -> None:
+    logger.info("Related filings for %s (%s):", symbol, accession or "unknown")
+    for relation_type, items in timeline.items():
+        accessions: list[str] = []
+        for item in items:
+            accession_value = item.get("accession_number")
+            if isinstance(accession_value, str) and accession_value:
+                accessions.append(accession_value)
+        summary = ", ".join(accessions) if accessions else "none"
+        logger.info("  %s: %s", relation_type, summary)

@@ -14,6 +14,7 @@ from sec_nlp.pipelines.output_io import (
     write_yaml,
 )
 from sec_nlp.pipelines.types import AnalysisResultDict, MetadataMap
+from sec_nlp.types import JsonDict
 
 from ..market import MarketEnrichment
 from ..models import (
@@ -166,6 +167,35 @@ class OutputFormatter:
             grouped.setdefault(section, []).append(result)
         return grouped
 
+    @staticmethod
+    def _timeline_sort_key(item: JsonDict) -> str:
+        value = item.get("filed_date")
+        return value if isinstance(value, str) else ""
+
+    def _build_relationship_timeline(
+        self,
+        filing_meta: MetadataMap,
+    ) -> dict[str, list[JsonDict]]:
+        related = filing_meta.get("related_filings")
+        if not isinstance(related, list):
+            return {}
+        grouped: dict[str, list[JsonDict]] = {}
+        for item in related:
+            if not isinstance(item, dict):
+                continue
+            relation_type = item.get("relation_type")
+            if not isinstance(relation_type, str):
+                continue
+            record: JsonDict = {}
+            for key, value in item.items():
+                if isinstance(key, str):
+                    record[key] = value
+            grouped.setdefault(relation_type, []).append(record)
+        for relation_type, items in grouped.items():
+            items.sort(key=self._timeline_sort_key, reverse=True)
+            grouped[relation_type] = items
+        return grouped
+
     def build_output(
         self,
         symbol: str,
@@ -284,6 +314,7 @@ class OutputFormatter:
             acceptance_date=_meta_str("acceptance_date"),
             filing_date=_meta_str("filing_date"),
         )
+        relationship_timeline = self._build_relationship_timeline(filing_meta)
 
         return AnalysisOutput(
             symbol=symbol,
@@ -298,6 +329,7 @@ class OutputFormatter:
             results=ranked_results,
             results_by_query=self._group_by_query(ranked_results),
             results_by_section=self._group_by_section(ranked_results),
+            relationship_timeline=relationship_timeline,
         )
 
     def _build_aggregates(

@@ -14,12 +14,21 @@ from pydantic_settings import SettingsConfigDict
 
 from sec_nlp.core.edgar.filing_mode import FilingMode
 from sec_nlp.core.text.filters import SectionPattern, SectionType
+from sec_nlp.core.text.section_patterns import (
+    HOLDINGS_SECTION_PATTERNS,
+    PROXY_SECTION_PATTERNS,
+    REGISTRATION_SECTION_PATTERNS,
+)
 from sec_nlp.pipelines.base.config import BaseConfig
 from sec_nlp.pipelines.llm.config import LLMConfig
 from sec_nlp.pipelines.metadata.filters import MetadataFilters
 from sec_nlp.pipelines.vector.config import VectorConfig
-from sec_nlp.prompts import ANALYZE_PROMPT_PATH
-from sec_nlp.types import JsonValue
+from sec_nlp.prompts import (
+    ANALYZE_PROMPT_PATH,
+    HOLDINGS_PROMPT_PATH,
+    PROXY_PROMPT_PATH,
+)
+from sec_nlp.types import JsonDict, JsonValue
 
 from .market import MarketConfig, MarketGranularity
 
@@ -252,7 +261,7 @@ class AnalyzeConfig(BaseConfig):
     # Filing Parameters
     mode: FilingMode = Field(
         default=FilingMode.annual,
-        description="Filing type to process (10-K, 10-Q, or 8-K)",
+        description="Filing type to process (10-K, 10-Q, 8-K, DEF 14A, 13F-HR, S-1, S-3)",
     )
     loader_use_async: bool = Field(
         default=True,
@@ -344,6 +353,83 @@ class AnalyzeConfig(BaseConfig):
             efts_values["enabled"] = efts_enabled
         if efts_values:
             values["efts"] = efts_values
+        return values
+
+    @staticmethod
+    def _combine_section_patterns(patterns: JsonDict) -> JsonValue:
+        combined_parts = []
+        for pattern in patterns.values():
+            if isinstance(pattern, str) and pattern:
+                combined_parts.append(f"({pattern})")
+        if not combined_parts:
+            return None
+        return "|".join(combined_parts)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _apply_mode_defaults(cls, values: JsonDict) -> JsonDict:
+        raw_mode = values.get("mode")
+        if isinstance(raw_mode, FilingMode):
+            mode = raw_mode
+        elif isinstance(raw_mode, str):
+            try:
+                mode = FilingMode(raw_mode)
+            except ValueError:
+                return values
+        else:
+            return values
+
+        section_type = values.get("section_type")
+        section_numbers = values.get("section_numbers")
+        custom_pattern = values.get("custom_section_pattern")
+        should_apply_sections = (
+            section_type is None
+            and not section_numbers
+            and custom_pattern is None
+        )
+
+        if should_apply_sections:
+            if mode == FilingMode.proxy:
+                combined = cls._combine_section_patterns(PROXY_SECTION_PATTERNS)
+            elif mode == FilingMode.holdings:
+                combined = cls._combine_section_patterns(
+                    HOLDINGS_SECTION_PATTERNS
+                )
+            elif mode in (
+                FilingMode.registration,
+                FilingMode.shelf_registration,
+            ):
+                combined = cls._combine_section_patterns(
+                    REGISTRATION_SECTION_PATTERNS
+                )
+            else:
+                combined = None
+
+            if combined is not None:
+                values["section_type"] = SectionType.CUSTOM
+                values["custom_section_pattern"] = combined
+
+        prompt_path = None
+        if mode == FilingMode.proxy:
+            prompt_path = PROXY_PROMPT_PATH
+        elif mode == FilingMode.holdings:
+            prompt_path = HOLDINGS_PROMPT_PATH
+
+        if prompt_path is not None:
+            raw_llm = values.get("llm")
+            if isinstance(raw_llm, LLMConfig):
+                if raw_llm.prompt_file is None:
+                    llm_values = raw_llm.model_dump()
+                    llm_values["prompt_file"] = prompt_path
+                    values["llm"] = llm_values
+            elif isinstance(raw_llm, dict):
+                if raw_llm.get("prompt_file") is None:
+                    llm_values = dict(raw_llm)
+                    llm_values["prompt_file"] = prompt_path
+                    values["llm"] = llm_values
+            elif raw_llm is None:
+                values["llm"] = {"prompt_file": prompt_path}
+
         return values
 
     section_type: SectionType | None = Field(
@@ -603,6 +689,11 @@ class AnalyzeConfig(BaseConfig):
     include_raw_chunks: bool = Field(
         default=False,
         description="Include raw document chunks in output files",
+    )
+
+    show_timeline: bool = Field(
+        default=False,
+        description="Display related filing timelines in logs when available",
     )
 
     aggregate_by_filing: bool = Field(

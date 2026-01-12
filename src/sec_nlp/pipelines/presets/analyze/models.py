@@ -444,6 +444,10 @@ class AnalysisOutput(BaseModel):
         default_factory=dict,
         description="Results grouped by filing section number",
     )
+    relationship_timeline: dict[str, list[JsonDict]] = Field(
+        default_factory=dict,
+        description="Related filings grouped by relationship type",
+    )
 
 
 class AnalyzeResult(BaseResult):
