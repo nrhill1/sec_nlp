@@ -14,13 +14,14 @@ import json
 import urllib.error
 import urllib.parse
 import urllib.request
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from datetime import date
-from typing import Final
+from typing import Final, TypeGuard
 
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr
 
 from sec_nlp.core.infra.logger import logger
+from sec_nlp.types import JsonArray, JsonDict, JsonObject, JsonValue
 
 from .efts_models import (
     EFTSError,
@@ -283,7 +284,7 @@ class EFTSClient(BaseModel):
         encoded = urllib.parse.urlencode(params)
         return f"{self.config.base_url}?{encoded}"
 
-    async def _make_request(self, url: str) -> dict[str, object]:
+    async def _make_request(self, url: str) -> JsonDict:
         """Make HTTP request to EFTS API."""
         headers = {
             "User-Agent": self.config.user_agent,
@@ -321,57 +322,35 @@ class EFTSClient(BaseModel):
             ) from e
 
         body = response.read().decode("utf-8")
-        data: dict[str, object] = json.loads(body)
+        data: JsonDict = json.loads(body)
         return data
 
-    def _parse_response(
-        self, data: dict[str, object], query: str
-    ) -> EFTSSearchResponse:
+    def _parse_response(self, data: JsonDict, query: str) -> EFTSSearchResponse:
         """Parse EFTS API response into models."""
         # EFTS response structure:
         # {
         #   "query": {"from": 0, "size": 10, "q": "..."},
         #   "hits": {"total": {"value": N}, "hits": [...]}
         # }
-        raw_hits_data = data.get("hits")
-        hits_data: dict[str, object] = (
-            raw_hits_data if isinstance(raw_hits_data, dict) else {}
-        )
-
-        raw_total = hits_data.get("total")
-        if isinstance(raw_total, dict):
-            total_value = raw_total.get("value")
-            total = int(total_value) if isinstance(total_value, (int, float)) else 0
-        elif isinstance(raw_total, (int, float)):
-            total = int(raw_total)
-        else:
-            total = 0
-
-        raw_hits_list = hits_data.get("hits")
-        raw_hits: list[object] = (
-            raw_hits_list if isinstance(raw_hits_list, list) else []
-        )
+        hits_data = _get_dict(data, "hits")
+        total = _extract_total(hits_data)
+        raw_hits = _get_list(hits_data, "hits")
 
         hits: list[EFTSHit] = []
         for raw_hit in raw_hits:
-            if not isinstance(raw_hit, dict):
+            parsed = _as_json_dict(raw_hit)
+            if parsed is None:
                 continue
             try:
-                hit = self._parse_hit(raw_hit)
+                hit = self._parse_hit(parsed)
                 hits.append(hit)
             except Exception as e:
                 logger.warning("Failed to parse EFTS hit: %s", e)
                 continue
 
-        raw_query_data = data.get("query")
-        query_data: dict[str, object] = (
-            raw_query_data if isinstance(raw_query_data, dict) else {}
-        )
-
-        raw_start = query_data.get("from")
-        start = int(raw_start) if isinstance(raw_start, (int, float)) else 0
-        raw_limit = query_data.get("size")
-        limit = int(raw_limit) if isinstance(raw_limit, (int, float)) else 10
+        query_data = _get_dict(data, "query")
+        start = _get_int(query_data, "from", 0)
+        limit = _get_int(query_data, "size", 10)
 
         return EFTSSearchResponse(
             query=query,
@@ -381,66 +360,18 @@ class EFTSClient(BaseModel):
             limit=limit,
         )
 
-    def _parse_hit(self, raw: dict[str, object]) -> EFTSHit:
+    def _parse_hit(self, raw: JsonDict) -> EFTSHit:
         """Parse a single EFTS hit from raw response."""
-        raw_source = raw.get("_source")
-        source: dict[str, object] = (
-            raw_source if isinstance(raw_source, dict) else {}
-        )
-
-        # Extract highlight snippet if available
-        raw_highlight = raw.get("highlight")
-        snippet = ""
-        if isinstance(raw_highlight, dict):
-            snippets = raw_highlight.get("text")
-            if isinstance(snippets, list) and snippets:
-                snippet = " ... ".join(str(s) for s in snippets[:3])
-
-        # Parse filed date
-        filed_str = source.get("file_date")
-        if not isinstance(filed_str, str):
-            filed_str = source.get("filed")
-        if isinstance(filed_str, str) and filed_str:
-            filed_date = date.fromisoformat(filed_str[:10])
-        else:
-            filed_date = date.today()
-
-        # Get accession number
-        accession_raw = source.get("adsh")
-        if not isinstance(accession_raw, str):
-            accession_raw = source.get("accession_number")
-        accession = str(accession_raw) if accession_raw is not None else ""
-
-        # Normalize accession format (add dashes if missing)
-        if accession and "-" not in accession and len(accession) == 18:
-            accession = f"{accession[:10]}-{accession[10:12]}-{accession[12:]}"
-
-        # Get CIK
-        cik_raw = source.get("cik")
-        cik = str(cik_raw).zfill(10) if cik_raw is not None else "0000000000"
-
-        # Get company name
-        display_names = source.get("display_names")
-        if isinstance(display_names, list) and display_names:
-            company_name = str(display_names[0])
-        else:
-            company_raw = source.get("company")
-            company_name = str(company_raw) if company_raw is not None else ""
-
-        # Get form type
-        form_raw = source.get("form")
-        form_type = str(form_raw) if form_raw is not None else ""
-
-        # Get optional fields
-        file_num = source.get("file_num")
-        file_number = file_num if isinstance(file_num, str) else None
-
-        film_num = source.get("film_num")
-        film_number = film_num if isinstance(film_num, str) else None
-
-        # Get score
-        score_raw = raw.get("_score")
-        score = float(score_raw) if isinstance(score_raw, (int, float)) else 0.0
+        source = _get_dict(raw, "_source")
+        snippet = _extract_snippet(raw)
+        filed_date = _extract_filed_date(source)
+        accession = _extract_accession(source)
+        cik = _get_str(source, "cik", "0").zfill(10)
+        company_name = _extract_company_name(source)
+        form_type = _get_str(source, "form", "")
+        file_number = _get_optional_str(source, "file_num")
+        film_number = _get_optional_str(source, "film_num")
+        score = _get_float(raw, "_score", 0.0)
 
         return EFTSHit(
             accession_number=accession,
@@ -454,6 +385,140 @@ class EFTSClient(BaseModel):
             score=score,
             filing_url=None,  # Computed via edgar_url property
         )
+
+
+# -- Helper functions for type-safe JSON parsing --
+
+
+def _as_json_dict(val: JsonValue) -> JsonDict | None:
+    """Convert a JsonValue to JsonDict if it's a dict, else None."""
+    if _is_json_object(val):
+        return _mapping_to_json_dict(val)
+    return None
+
+
+def _is_json_object(val: JsonValue) -> TypeGuard[JsonObject]:
+    """Check whether a JsonValue is a JsonObject with string keys."""
+    if not isinstance(val, Mapping):
+        return False
+    for key in val:
+        if not isinstance(key, str):
+            return False
+    return True
+
+
+def _mapping_to_json_dict(mapping: JsonObject) -> JsonDict:
+    """Convert a JsonObject (Mapping) to a mutable JsonDict."""
+    return {k: mapping[k] for k in mapping}
+
+
+def _get_dict(data: JsonDict, key: str) -> JsonDict:
+    """Extract a dict value from JSON data."""
+    val = data.get(key)
+    if isinstance(val, dict):
+        return dict(val)
+    return {}
+
+
+def _get_list(data: JsonDict, key: str) -> JsonArray:
+    """Extract a list value from JSON data."""
+    val = data.get(key)
+    if isinstance(val, list):
+        return list(val)
+    return []
+
+
+def _get_str(data: JsonDict, key: str, default: str) -> str:
+    """Extract a string value from JSON data."""
+    val = data.get(key)
+    if val is None:
+        return default
+    return str(val)
+
+
+def _get_optional_str(data: JsonDict, key: str) -> str | None:
+    """Extract an optional string value from JSON data."""
+    val = data.get(key)
+    if isinstance(val, str):
+        return val
+    return None
+
+
+def _get_int(data: JsonDict, key: str, default: int) -> int:
+    """Extract an int value from JSON data."""
+    val = data.get(key)
+    if isinstance(val, int):
+        return val
+    if isinstance(val, float):
+        return int(val)
+    return default
+
+
+def _get_float(data: JsonDict, key: str, default: float) -> float:
+    """Extract a float value from JSON data."""
+    val = data.get(key)
+    if isinstance(val, (int, float)):
+        return float(val)
+    return default
+
+
+def _extract_total(hits_data: JsonDict) -> int:
+    """Extract total count from hits data."""
+    raw_total = hits_data.get("total")
+    if isinstance(raw_total, dict):
+        total_dict: JsonDict = dict(raw_total)
+        val = total_dict.get("value")
+        if isinstance(val, (int, float)):
+            return int(val)
+        return 0
+    if isinstance(raw_total, (int, float)):
+        return int(raw_total)
+    return 0
+
+
+def _extract_snippet(raw: JsonDict) -> str:
+    """Extract highlight snippet from hit."""
+    raw_highlight = raw.get("highlight")
+    if not isinstance(raw_highlight, dict):
+        return ""
+    highlight_dict: JsonDict = dict(raw_highlight)
+    snippets = highlight_dict.get("text")
+    if isinstance(snippets, list) and snippets:
+        return " ... ".join(str(s) for s in snippets[:3])
+    return ""
+
+
+def _extract_filed_date(source: JsonDict) -> date:
+    """Extract filed date from source."""
+    filed_str = source.get("file_date")
+    if not isinstance(filed_str, str):
+        filed_str = source.get("filed")
+    if isinstance(filed_str, str) and filed_str:
+        return date.fromisoformat(filed_str[:10])
+    return date.today()
+
+
+def _extract_accession(source: JsonDict) -> str:
+    """Extract and normalize accession number."""
+    accession_raw = source.get("adsh")
+    if not isinstance(accession_raw, str):
+        accession_raw = source.get("accession_number")
+    accession = str(accession_raw) if accession_raw is not None else ""
+    # Normalize format (add dashes if missing)
+    if accession and "-" not in accession and len(accession) == 18:
+        return f"{accession[:10]}-{accession[10:12]}-{accession[12:]}"
+    return accession
+
+
+def _extract_company_name(source: JsonDict) -> str:
+    """Extract company name from source."""
+    display_names = source.get("display_names")
+    if isinstance(display_names, list) and display_names:
+        return str(display_names[0])
+    company_raw = source.get("company")
+    if company_raw is not None:
+        return str(company_raw)
+    return ""
 
 
 class EFTSAPIError(Exception):
