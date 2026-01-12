@@ -19,3 +19,10 @@ When fixing type errors, writing any new code, or modifying exsiting code:
 11. Do not create new Protocol types.
 12. Do not use reserved Python keywords or function names.
 13. Type annotations and aliases should follow guidelines for Python v3.13.9.
+
+## Testing
+
+### Guidelines
+
+1. No network use during testing. All HTTP/socket calls must be mocked.
+2. Tests should be deterministic and not depend on external services.

@@ -24,6 +24,56 @@ from sec_nlp.types import JsonValue
 from .market import MarketConfig, MarketGranularity
 
 
+class EFTSConfig(BaseModel):
+    """Configuration for SEC EDGAR Full-Text Search (EFTS) integration."""
+
+    model_config = ConfigDict(
+        defer_build=True,
+        frozen=True,
+        extra="ignore",
+    )
+
+    enabled: bool = Field(
+        default=False,
+        description="Enable EFTS search to discover filings beyond local downloads",
+    )
+    limit: int = Field(
+        default=20,
+        ge=1,
+        le=100,
+        description="Maximum EFTS results to fetch per query",
+    )
+    score_threshold: float = Field(
+        default=0.0,
+        ge=0.0,
+        description="Minimum EFTS relevance score to include (0 = no threshold)",
+    )
+    auto_download: bool = Field(
+        default=True,
+        description="Automatically download high-scoring EFTS hits not yet local",
+    )
+    auto_download_limit: int = Field(
+        default=5,
+        ge=0,
+        le=20,
+        description="Maximum filings to auto-download from EFTS results (0 = disabled)",
+    )
+    forms: list[str] = Field(
+        default_factory=list,
+        description="Form types to include in EFTS search (empty = use pipeline mode)",
+    )
+    expand_date_range: bool = Field(
+        default=True,
+        description="Expand EFTS date range beyond pipeline config for broader discovery",
+    )
+    date_range_years: int = Field(
+        default=3,
+        ge=1,
+        le=10,
+        description="Years of filings to search when expand_date_range is enabled",
+    )
+
+
 class SearchConfig(BaseModel):
     """Configuration for semantic search functionality."""
 
@@ -182,6 +232,23 @@ class AnalyzeConfig(BaseConfig):
         description="Post-analysis semantic search configuration",
     )
 
+    # EFTS (EDGAR Full-Text Search) Configuration
+    efts: EFTSConfig = Field(
+        default_factory=EFTSConfig,
+        description="SEC EDGAR Full-Text Search integration for filing discovery",
+    )
+
+    efts_enabled: bool | None = Field(
+        default=None,
+        description="Enable EFTS search via CLI flag (overrides efts.enabled).",
+        json_schema_extra={
+            "cli_args": {
+                "aliases": ["--efts-enabled", "--efts"],
+                "action": "store_true",
+            }
+        },
+    )
+
     # Filing Parameters
     mode: FilingMode = Field(
         default=FilingMode.annual,
@@ -258,6 +325,25 @@ class AnalyzeConfig(BaseConfig):
                 market_values[key] = flag
         if market_values:
             values["market"] = market_values
+        return values
+
+    @model_validator(mode="before")
+    @classmethod
+    def _apply_efts_flags(
+        cls, values: dict[str, JsonValue]
+    ) -> dict[str, JsonValue]:
+        """Apply CLI flags to EFTS config."""
+        efts_values: dict[str, JsonValue] = {}
+        raw_efts = values.get("efts")
+        if isinstance(raw_efts, EFTSConfig):
+            efts_values.update(raw_efts.model_dump())
+        elif isinstance(raw_efts, dict):
+            efts_values.update(raw_efts)
+        efts_enabled = values.get("efts_enabled")
+        if efts_enabled is not None:
+            efts_values["enabled"] = efts_enabled
+        if efts_values:
+            values["efts"] = efts_values
         return values
 
     section_type: SectionType | None = Field(
