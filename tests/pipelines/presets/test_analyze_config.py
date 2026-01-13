@@ -15,3 +15,21 @@ def test_analyze_config_rejects_malicious_run_id() -> None:
         AnalyzeConfig.model_validate(
             {"symbols": ["AAPL"], "run_id": "1; DROP TABLE runs;"}
         )
+
+
+def test_proxy_default_topics_apply_when_empty() -> None:
+    config = AnalyzeConfig.model_validate(
+        {"symbols": ["AAPL"], "mode": "proxy"}
+    )
+    assert "executive compensation" in config.topics
+
+
+def test_proxy_default_topics_do_not_override_cli() -> None:
+    config = AnalyzeConfig.model_validate(
+        {
+            "symbols": ["AAPL"],
+            "mode": "proxy",
+            "topics": ["custom governance topic"],
+        }
+    )
+    assert config.topics == ["custom governance topic"]
