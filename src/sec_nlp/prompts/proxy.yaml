@@ -9,7 +9,7 @@ template: |
   Your task is to analyze the following section and extract information about executive compensation, board composition, shareholder proposals, and governance matters.
 
   {{%- if context %}}
-  Section Context: {context}
+  Section Context (may include market data): {context}
   {{%- endif %}}
 
   Document Content:
@@ -58,6 +58,7 @@ template: |
   - Focus on executive compensation, board composition, shareholder proposals, and governance policies.
   - Extract specific dollar amounts, share counts, and percentages when present.
   - Note any related-party transactions or potential conflicts of interest.
+  - If market context is provided, use it as background only; avoid inferring causality.
   - Ignore tables of contents, headers/footers, and boilerplate legal disclaimers.
 
   Respond with a single JSON object containing all fields above.

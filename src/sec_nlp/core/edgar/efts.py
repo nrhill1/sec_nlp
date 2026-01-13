@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -35,6 +36,10 @@ from .efts_models import (
 EFTS_BASE_URL: Final[str] = "https://efts.sec.gov/LATEST/search-index"
 DEFAULT_USER_AGENT: Final[str] = "SEC NLP Tool (contact@example.com)"
 MIN_REQUEST_INTERVAL: Final[float] = 0.1  # 10 requests per second max
+_CIK_PATTERN: Final[re.Pattern[str]] = re.compile(
+    r"\bCIK\s*(\d{1,10})\b",
+    re.IGNORECASE,
+)
 
 
 class EFTSClientConfig(BaseModel):
@@ -366,8 +371,8 @@ class EFTSClient(BaseModel):
         snippet = _extract_snippet(raw)
         filed_date = _extract_filed_date(source)
         accession = _extract_accession(source)
-        cik = _get_str(source, "cik", "0").zfill(10)
         company_name = _extract_company_name(source)
+        cik = _extract_cik(source, company_name, accession)
         form_type = _get_str(source, "form", "")
         file_number = _get_optional_str(source, "file_num")
         film_number = _get_optional_str(source, "film_num")
@@ -519,6 +524,75 @@ def _extract_company_name(source: JsonDict) -> str:
     if company_raw is not None:
         return str(company_raw)
     return ""
+
+
+def _extract_cik(
+    source: JsonDict,
+    company_name: str,
+    accession: str,
+) -> str:
+    """Extract a CIK using multiple fallback strategies."""
+    candidate = _coerce_cik(source.get("cik"))
+    if candidate is not None:
+        return candidate
+
+    ciks_raw = source.get("ciks")
+    if isinstance(ciks_raw, list):
+        for item in ciks_raw:
+            candidate = _coerce_cik(item)
+            if candidate is not None:
+                return candidate
+
+    candidate = _extract_cik_from_company(company_name)
+    if candidate is not None:
+        return candidate
+
+    candidate = _extract_cik_from_accession(accession)
+    if candidate is not None:
+        return candidate
+
+    return "0000000000"
+
+
+def _coerce_cik(value: JsonValue) -> str | None:
+    """Normalize a CIK value to a zero-padded 10-digit string."""
+    if value is None or isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        raw = str(value)
+    elif isinstance(value, float):
+        raw = str(int(value))
+    elif isinstance(value, str):
+        raw = value.strip()
+    else:
+        return None
+    digits = "".join(ch for ch in raw if ch.isdigit())
+    if not digits:
+        return None
+    if len(digits) > 10:
+        digits = digits[-10:]
+    cik = digits.zfill(10)
+    if cik == "0000000000":
+        return None
+    return cik
+
+
+def _extract_cik_from_company(company_name: str) -> str | None:
+    """Pull a CIK from display/company name strings when present."""
+    if not company_name:
+        return None
+    match = _CIK_PATTERN.search(company_name)
+    if not match:
+        return None
+    return _coerce_cik(match.group(1))
+
+
+def _extract_cik_from_accession(accession: str) -> str | None:
+    """Derive a CIK from the accession prefix when available."""
+    if not accession:
+        return None
+    prefix = accession.split("-", 1)[0]
+    return _coerce_cik(prefix)
 
 
 class EFTSAPIError(Exception):
