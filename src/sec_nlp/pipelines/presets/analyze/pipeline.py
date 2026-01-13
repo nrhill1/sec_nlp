@@ -1066,12 +1066,12 @@ class AnalyzePipeline(BasePipeline):
             market_context=market_context,
         )
         if output_files:
-            run_id = self.config.run_id
+            output_dir = self.config.get_symbol_output_dir(symbol)
             logger.info(
                 "Wrote %d analysis files for %s -> %s",
                 len(output_files),
                 symbol,
-                (self.config.out_path / symbol / str(run_id)).resolve(),
+                output_dir.resolve(),
             )
         timings["write_outputs"] = perf_counter() - t_write_start
         timings["total"] = sum(timings.values())
