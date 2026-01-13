@@ -278,10 +278,12 @@ class BaseConfig(BaseSettings, ABC):
             symbol: Stock ticker symbol
 
         Returns:
-            Path in the form <out_path>/<SYMBOL>/<pipeline_type>/<run_id>
+            Path in the form <out_path>/<SYMBOL>/<pipeline_type>/<short_id_or_run_id>
         """
         normalized_symbol = symbol.strip().upper()
-        run_component = str(self.run_id)
+        run_component = (
+            str(self._short_id) if self._short_id > 0 else str(self.run_id)
+        )
         symbol_out_path = (
             self.out_path
             / normalized_symbol

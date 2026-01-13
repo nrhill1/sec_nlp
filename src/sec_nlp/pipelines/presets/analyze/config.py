@@ -148,7 +148,7 @@ class SearchConfig(BaseModel):
         description="Maximum results per query",
     )
     score_threshold: float = Field(
-        default=0.7,
+        default=0.5,
         ge=0.0,
         le=1.0,
         description=(
@@ -390,6 +390,12 @@ class AnalyzeConfig(BaseConfig):
             efts_values.update(raw_efts)
         if "efts_enabled" in values:
             efts_values["enabled"] = values.get("efts_enabled")
+        if "auto_download" not in efts_values:
+            efts_values["auto_download"] = True
+        if "auto_download_limit" not in efts_values:
+            limit_value = values.get("limit")
+            if isinstance(limit_value, int) and limit_value > 0:
+                efts_values["auto_download_limit"] = limit_value
         if efts_values:
             values["efts"] = efts_values
         return values
@@ -654,7 +660,7 @@ class AnalyzeConfig(BaseConfig):
         description="Minimum confidence score to consider results relevant",
     )
     confidence_mode: Literal["llm", "calibrated"] = Field(
-        default="calibrated",
+        default="llm",
         description=(
             "How to set confidence_score: use raw LLM output or calibrate "
             "with query-term overlap and evidence signals"
