@@ -248,13 +248,12 @@ class AnalyzeConfig(BaseConfig):
         description="SEC EDGAR Full-Text Search integration for filing discovery",
     )
 
-    efts_enabled: bool | None = Field(
-        default=None,
+    efts_enabled: bool = Field(
+        default=True,
         description="Enable EFTS search via CLI flag (overrides efts.enabled).",
         json_schema_extra={
             "cli_args": {
                 "aliases": ["--efts-enabled", "--efts"],
-                "action": "store_true",
             }
         },
     )
@@ -286,13 +285,12 @@ class AnalyzeConfig(BaseConfig):
         description="Optional market enrichment configuration for the symbol range.",
     )
 
-    market_enabled: bool | None = Field(
-        default=None,
+    market_enabled: bool = Field(
+        default=True,
         description="Enable market enrichment via CLI flag (overrides market.enabled).",
         json_schema_extra={
             "cli_args": {
                 "aliases": ["--market-enabled"],
-                "action": "store_true",
             }
         },
     )
@@ -324,15 +322,18 @@ class AnalyzeConfig(BaseConfig):
             market_values.update(raw_market.model_dump())
         elif isinstance(raw_market, dict):
             market_values.update(raw_market)
-        market_flags = {
-            "enabled": values.get("market_enabled"),
-            "ticker": values.get("market_ticker"),
-            "granularity": values.get("market_granularity"),
-            "limit": values.get("market_limit"),
+        if "market_enabled" in values:
+            market_values["enabled"] = values.get("market_enabled")
+        optional_flags = {
+            "ticker": "market_ticker",
+            "granularity": "market_granularity",
+            "limit": "market_limit",
         }
-        for key, flag in market_flags.items():
-            if flag is not None:
-                market_values[key] = flag
+        for key, field in optional_flags.items():
+            if field in values:
+                flag = values.get(field)
+                if flag is not None:
+                    market_values[key] = flag
         if market_values:
             values["market"] = market_values
         return values
@@ -349,9 +350,8 @@ class AnalyzeConfig(BaseConfig):
             efts_values.update(raw_efts.model_dump())
         elif isinstance(raw_efts, dict):
             efts_values.update(raw_efts)
-        efts_enabled = values.get("efts_enabled")
-        if efts_enabled is not None:
-            efts_values["enabled"] = efts_enabled
+        if "efts_enabled" in values:
+            efts_values["enabled"] = values.get("efts_enabled")
         if efts_values:
             values["efts"] = efts_values
         return values
