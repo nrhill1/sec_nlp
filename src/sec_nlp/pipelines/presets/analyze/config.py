@@ -33,6 +33,44 @@ from sec_nlp.types import JsonDict, JsonValue
 
 from .market import MarketConfig, MarketGranularity
 
+_DEFAULT_MODE_TOPICS = {
+    FilingMode.proxy: [
+        "executive compensation",
+        "board composition",
+        "shareholder proposals",
+        "governance",
+        "say on pay",
+        "audit committee",
+        "related party",
+        "equity compensation",
+        "beneficial ownership",
+    ],
+    FilingMode.holdings: [
+        "information table",
+        "holdings",
+        "cusip",
+        "shares",
+        "value",
+        "investment discretion",
+        "voting authority",
+        "report date",
+        "position",
+    ],
+    FilingMode.registration: [
+        "risk factors",
+        "use of proceeds",
+        "business description",
+        "business overview",
+        "prospectus",
+    ],
+    FilingMode.shelf_registration: [
+        "risk factors",
+        "use of proceeds",
+        "business description",
+        "prospectus",
+    ],
+}
+
 
 class EFTSConfig(BaseModel):
     """Configuration for SEC EDGAR Full-Text Search (EFTS) integration."""
@@ -431,6 +469,39 @@ class AnalyzeConfig(BaseConfig):
                 values["llm"] = llm_values
             elif raw_llm is None:
                 values["llm"] = {"prompt_file": prompt_value}
+
+        topics_value = values.get("topics")
+        keywords_value = values.get("keywords")
+        has_topics = isinstance(topics_value, list) and any(
+            isinstance(item, str) and item.strip() for item in topics_value
+        )
+        has_keywords = isinstance(keywords_value, list) and any(
+            isinstance(item, str) and item.strip() for item in keywords_value
+        )
+        has_search_queries = False
+        raw_search = values.get("search")
+        if isinstance(raw_search, SearchConfig):
+            has_search_queries = bool(raw_search.queries)
+        elif is_json_mapping(raw_search):
+            raw_queries = raw_search.get("queries")
+            if isinstance(raw_queries, list):
+                has_search_queries = any(
+                    isinstance(item, str) and item.strip()
+                    for item in raw_queries
+                )
+
+        if not has_topics and not has_keywords and not has_search_queries:
+            vector_mode_value = values.get("vector_mode")
+            vector_mode_off = (
+                isinstance(vector_mode_value, str)
+                and vector_mode_value == "off"
+            )
+            if not vector_mode_off:
+                default_topics = _DEFAULT_MODE_TOPICS.get(mode)
+                if default_topics:
+                    values["topics"] = list(default_topics)
+                    if "min_topic_hits" not in values:
+                        values["min_topic_hits"] = 0
 
         return values
 
