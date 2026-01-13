@@ -12,6 +12,7 @@ from pydantic import (
     model_validator,
 )
 
+from sec_nlp.core.types import coerce_json_value
 from sec_nlp.pipelines import BaseResult
 from sec_nlp.pipelines.base.result import SummaryFieldValue
 from sec_nlp.pipelines.types import AnalysisResultDict
@@ -24,30 +25,6 @@ type EntityValue = JsonValue
 type StringListInput = list[str] | str | int | float | None
 
 ANALYSIS_OUTPUT_SCHEMA_VERSION = "1.1"
-
-
-def _coerce_json_value(value: JsonValue) -> JsonValue | None:
-    if isinstance(value, (str, int, float, bool)) or value is None:
-        return value
-    if isinstance(value, Sequence) and not isinstance(value, str):
-        items: list[JsonValue] = []
-        for item in value:
-            normalized = _coerce_json_value(item)
-            if normalized is None:
-                return None
-            items.append(normalized)
-        return items
-    if isinstance(value, Mapping):
-        normalized_dict: dict[str, JsonValue] = {}
-        for key, item in value.items():
-            if not isinstance(key, str):
-                return None
-            normalized_item = _coerce_json_value(item)
-            if normalized_item is None:
-                return None
-            normalized_dict[key] = normalized_item
-        return normalized_dict
-    return None
 
 
 def _normalize_key_point_item(item: StringListInput) -> str | None:
@@ -265,7 +242,7 @@ class AnalysisResult(BaseResult):
         normalized: dict[str, JsonValue] = {}
         for key, value in data.items():
             if isinstance(key, str):
-                normalized_value = _coerce_json_value(value)
+                normalized_value = coerce_json_value(value)
                 if normalized_value is not None:
                     normalized[key] = normalized_value
 
@@ -291,12 +268,12 @@ class AnalysisResult(BaseResult):
                         key = name.strip()
                 if key in normalized_entities:
                     key = f"{key}_{idx}"
-                normalized_item = _coerce_json_value(item)
+                normalized_item = coerce_json_value(item)
                 if normalized_item is not None:
                     normalized_entities[key] = normalized_item
             normalized["extracted_entities"] = normalized_entities
         elif not isinstance(entities, Mapping):
-            normalized_entity = _coerce_json_value(entities)
+            normalized_entity = coerce_json_value(entities)
             if normalized_entity is not None:
                 normalized["extracted_entities"] = {"value": normalized_entity}
             else:
@@ -443,6 +420,10 @@ class AnalysisOutput(BaseModel):
     results_by_section: dict[str, list[AnalysisResultDict]] = Field(
         default_factory=dict,
         description="Results grouped by filing section number",
+    )
+    relationship_timeline: dict[str, list[JsonDict]] = Field(
+        default_factory=dict,
+        description="Related filings grouped by relationship type",
     )
 
 

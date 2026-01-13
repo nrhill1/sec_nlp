@@ -21,6 +21,12 @@ from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, field_validator
 from unstructured.documents.elements import Element
 
 from sec_nlp.core.edgar.filing_mode import FilingMode
+from sec_nlp.core.edgar.holdings_parser import HoldingsParser
+from sec_nlp.core.edgar.relationship_resolver import (
+    RelationshipResolver,
+    build_related_filings_map,
+    serialize_relationship_graph,
+)
 from sec_nlp.core.infra.logger import format_size, logger
 from sec_nlp.core.ingest import filings
 from sec_nlp.core.ingest.downloader import download_filings
@@ -36,6 +42,7 @@ class LoaderRunMetadata(TypedDict):
     download_results: DownloadResults
     per_symbol_doc_counts: dict[str, int]
     total_documents: int
+    relationships: JsonDict
 
 
 class FilingRecord(Protocol):
@@ -48,6 +55,7 @@ def _default_meta() -> LoaderRunMetadata:
         "download_results": {},
         "per_symbol_doc_counts": {},
         "total_documents": 0,
+        "relationships": {},
     }
 
 
@@ -230,56 +238,71 @@ class Loader(BaseModel):
         # Gather and preprocess
         all_docs: list[Document] = []
         per_symbol_counts: dict[str, int] = {}
+        relationships_by_symbol: JsonDict = {}
 
         for symbol in sorted(self._symbols):
             try:
-                html_paths = self.html_paths_for_symbol(
-                    symbol=symbol,
-                    mode=mode,
-                    base=work_folder,
-                    limit=limit_per_symbol,
-                    start_date=after_date,
-                    end_date=before_date,
+                related_map, graph_payload = (
+                    self._build_relationships_for_symbol(symbol)
                 )
-                if html_paths:
-                    total_size = 0
-                    per_accession: dict[str, int] = {}
-                    for html_path in html_paths:
-                        try:
-                            sz = html_path.stat().st_size
-                            total_size += sz
-                            accession = html_path.parent.name
-                            per_accession[accession] = (
-                                per_accession.get(accession, 0) + sz
-                            )
+                relationships_by_symbol[symbol] = graph_payload
+                if mode == FilingMode.holdings:
+                    filing_dir = self._filing_dir(symbol, mode, work_folder)
+                    docs = self._load_holdings_documents(
+                        filing_dir=filing_dir,
+                        limit=limit_per_symbol,
+                        start_date=after_date,
+                        end_date=before_date,
+                    )
+                else:
+                    html_paths = self.html_paths_for_symbol(
+                        symbol=symbol,
+                        mode=mode,
+                        base=work_folder,
+                        limit=limit_per_symbol,
+                        start_date=after_date,
+                        end_date=before_date,
+                    )
+                    if html_paths:
+                        total_size = 0
+                        per_accession: dict[str, int] = {}
+                        for html_path in html_paths:
+                            try:
+                                sz = html_path.stat().st_size
+                                total_size += sz
+                                accession = html_path.parent.name
+                                per_accession[accession] = (
+                                    per_accession.get(accession, 0) + sz
+                                )
+                                logger.debug(
+                                    "File size [%s/%s]: %.1f KB",
+                                    accession,
+                                    html_path.name,
+                                    sz / 1024.0,
+                                )
+                            except OSError:
+                                logger.debug("Could not stat %s", html_path)
+                        for acc, sz in per_accession.items():
                             logger.debug(
-                                "File size [%s/%s]: %.1f KB",
-                                accession,
-                                html_path.name,
-                                sz / 1024.0,
+                                "Total size for %s (%s accession %s): %s",
+                                symbol,
+                                mode.form,
+                                acc,
+                                format_size(sz),
                             )
-                        except OSError:
-                            logger.debug("Could not stat %s", html_path)
-                    for acc, sz in per_accession.items():
-                        logger.debug(
-                            "Total size for %s (%s accession %s): %s",
+                        logger.info(
+                            "Total size for %s (%s): %s across %d files",
                             symbol,
                             mode.form,
-                            acc,
-                            format_size(sz),
+                            format_size(total_size),
+                            len(html_paths),
                         )
-                    logger.info(
-                        "Total size for %s (%s): %s across %d files",
-                        symbol,
-                        mode.form,
-                        format_size(total_size),
-                        len(html_paths),
+                    docs = self.batch_transform_html(
+                        list(html_paths),
+                        keywords=filter_keywords,
+                        section_filter=active_section_filter,
                     )
-                docs = self.batch_transform_html(
-                    list(html_paths),
-                    keywords=filter_keywords,
-                    section_filter=active_section_filter,
-                )
+                self._attach_related_filings(docs, related_map)
                 all_docs.extend(docs)
                 per_symbol_counts[symbol] = len(docs)
             except FileNotFoundError:
@@ -290,12 +313,14 @@ class Loader(BaseModel):
                 )
                 per_symbol_counts[symbol] = 0
 
-        self._last_meta = {
+        meta: LoaderRunMetadata = {
             "work_folder": str(work_folder),
             "download_results": download_results,
             "per_symbol_doc_counts": per_symbol_counts,
             "total_documents": len(all_docs),
+            "relationships": relationships_by_symbol,
         }
+        self._last_meta = meta
 
         return all_docs
 
@@ -334,6 +359,107 @@ class Loader(BaseModel):
             Filing date or None if not found
         """
         return filings.get_filing_date_from_dir(filing_dir)
+
+    def _build_relationships_for_symbol(
+        self, symbol: str
+    ) -> tuple[dict[str, list[JsonDict]], JsonDict]:
+        resolver = RelationshipResolver(self.downloads_folder)
+        graph = resolver.resolve_symbol(symbol)
+        related_map = build_related_filings_map(graph)
+        return related_map, serialize_relationship_graph(graph)
+
+    def _accession_dirs_for_filing_dir(
+        self,
+        filing_dir: Path,
+        limit: int | None,
+        start_date: date | None,
+        end_date: date | None,
+    ) -> list[Path]:
+        if not filing_dir.exists():
+            raise FileNotFoundError(f"No filings found at {filing_dir}")
+
+        accession_dirs = [
+            path for path in filing_dir.iterdir() if path.is_dir()
+        ]
+        dirs_with_dates: list[tuple[Path, date | None]] = []
+        for accession_dir in accession_dirs:
+            filing_date = filings.get_filing_date_from_dir(accession_dir)
+            if start_date or end_date:
+                if filing_date is None:
+                    dirs_with_dates.append((accession_dir, filing_date))
+                    continue
+                if start_date and filing_date < start_date:
+                    continue
+                if end_date and filing_date > end_date:
+                    continue
+            dirs_with_dates.append((accession_dir, filing_date))
+
+        def sort_key(item: tuple[Path, date | None]) -> tuple[date, float]:
+            path, filing_date = item
+            if filing_date:
+                return (filing_date, 0.0)
+            return (date.min, -path.stat().st_mtime)
+
+        dirs_with_dates.sort(key=sort_key, reverse=True)
+        sorted_dirs = [path for path, _ in dirs_with_dates]
+        return sorted_dirs[:limit] if limit else sorted_dirs
+
+    def _load_holdings_documents(
+        self,
+        filing_dir: Path,
+        limit: int | None,
+        start_date: date | None,
+        end_date: date | None,
+    ) -> list[Document]:
+        accession_dirs = self._accession_dirs_for_filing_dir(
+            filing_dir=filing_dir,
+            limit=limit,
+            start_date=start_date,
+            end_date=end_date,
+        )
+        parser = HoldingsParser()
+        docs: list[Document] = []
+        for accession_dir in accession_dirs:
+            docs.extend(parser.parse_accession_dir(accession_dir))
+        return docs
+
+    @staticmethod
+    def _attach_related_filings(
+        docs: Sequence[Document],
+        related_map: dict[str, list[JsonDict]],
+    ) -> None:
+        if not docs or not related_map:
+            return
+
+        for doc in docs:
+            metadata = doc.metadata or {}
+            accession = Loader._extract_accession(metadata)
+            if not accession:
+                continue
+            related = related_map.get(accession)
+            if not related:
+                continue
+            updated = dict(metadata)
+            if not updated.get("accession_number"):
+                updated["accession_number"] = accession
+            updated["related_filings"] = related
+            doc.metadata = updated
+
+    @staticmethod
+    def _extract_accession(metadata: JsonDict) -> str | None:
+        accession_value = metadata.get("accession_number") or metadata.get(
+            "accession"
+        )
+        if isinstance(accession_value, str) and accession_value.strip():
+            return accession_value.strip()
+        source = metadata.get("source") or metadata.get("file_path")
+        if isinstance(source, str) and source.strip():
+            parts = Path(source).parts
+            if "sec-edgar-filings" in parts:
+                idx = parts.index("sec-edgar-filings")
+                if idx + 3 < len(parts):
+                    return parts[idx + 3]
+        return None
 
     def html_paths_for_symbol(
         self,
@@ -743,34 +869,58 @@ class Loader(BaseModel):
         # Stream documents
         total_docs = 0
         per_symbol_counts: dict[str, int] = {}
+        relationships_by_symbol: JsonDict = {}
 
         for symbol in sorted(self._symbols):
             try:
-                html_paths = self.html_paths_for_symbol(
-                    symbol=symbol,
-                    mode=mode,
-                    base=work_folder,
-                    limit=limit_per_symbol,
-                    start_date=after_date,
-                    end_date=before_date,
+                related_map, graph_payload = (
+                    self._build_relationships_for_symbol(symbol)
                 )
-
+                relationships_by_symbol[symbol] = graph_payload
                 symbol_count = 0
-                for html_path in html_paths:
-                    try:
-                        docs = self.transform_html(
-                            html_path,
-                            keywords=filter_keywords,
-                            section_filter=active_section_filter,
-                        )
+                if mode == FilingMode.holdings:
+                    filing_dir = self._filing_dir(symbol, mode, work_folder)
+                    accession_dirs = self._accession_dirs_for_filing_dir(
+                        filing_dir=filing_dir,
+                        limit=limit_per_symbol,
+                        start_date=after_date,
+                        end_date=before_date,
+                    )
+                    parser = HoldingsParser()
+                    for accession_dir in accession_dirs:
+                        docs = parser.parse_accession_dir(accession_dir)
+                        self._attach_related_filings(docs, related_map)
                         for doc in docs:
                             yield doc
                             symbol_count += 1
                             total_docs += 1
-                    except Exception as e:
-                        logger.error(
-                            "Failed to transform %s: %s", html_path.name, e
-                        )
+                else:
+                    html_paths = self.html_paths_for_symbol(
+                        symbol=symbol,
+                        mode=mode,
+                        base=work_folder,
+                        limit=limit_per_symbol,
+                        start_date=after_date,
+                        end_date=before_date,
+                    )
+                    for html_path in html_paths:
+                        try:
+                            docs = self.transform_html(
+                                html_path,
+                                keywords=filter_keywords,
+                                section_filter=active_section_filter,
+                            )
+                            self._attach_related_filings(docs, related_map)
+                            for doc in docs:
+                                yield doc
+                                symbol_count += 1
+                                total_docs += 1
+                        except Exception as e:
+                            logger.error(
+                                "Failed to transform %s: %s",
+                                html_path.name,
+                                e,
+                            )
 
                 per_symbol_counts[symbol] = symbol_count
 
@@ -783,20 +933,17 @@ class Loader(BaseModel):
                 per_symbol_counts[symbol] = 0
 
         # Update metadata
-        self._last_meta = {
+        meta: LoaderRunMetadata = {
             "work_folder": str(work_folder),
             "download_results": download_results,
             "per_symbol_doc_counts": per_symbol_counts,
             "total_documents": total_docs,
+            "relationships": relationships_by_symbol,
         }
+        self._last_meta = meta
 
         # Return metadata
-        return {
-            "work_folder": str(work_folder),
-            "download_results": download_results,
-            "per_symbol_doc_counts": per_symbol_counts,
-            "total_documents": total_docs,
-        }
+        return meta
 
     def load_texts_stream(
         self,

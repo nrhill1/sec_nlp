@@ -14,14 +14,112 @@ from pydantic_settings import SettingsConfigDict
 
 from sec_nlp.core.edgar.filing_mode import FilingMode
 from sec_nlp.core.text.filters import SectionPattern, SectionType
+from sec_nlp.core.text.section_patterns import (
+    HOLDINGS_SECTION_PATTERNS,
+    PROXY_SECTION_PATTERNS,
+    REGISTRATION_SECTION_PATTERNS,
+)
+from sec_nlp.core.types import is_json_mapping
 from sec_nlp.pipelines.base.config import BaseConfig
 from sec_nlp.pipelines.llm.config import LLMConfig
 from sec_nlp.pipelines.metadata.filters import MetadataFilters
 from sec_nlp.pipelines.vector.config import VectorConfig
-from sec_nlp.prompts import ANALYZE_PROMPT_PATH
-from sec_nlp.types import JsonValue
+from sec_nlp.prompts import (
+    ANALYZE_PROMPT_PATH,
+    HOLDINGS_PROMPT_PATH,
+    PROXY_PROMPT_PATH,
+)
+from sec_nlp.types import JsonDict, JsonValue
 
 from .market import MarketConfig, MarketGranularity
+
+_DEFAULT_MODE_TOPICS = {
+    FilingMode.proxy: [
+        "executive compensation",
+        "board composition",
+        "shareholder proposals",
+        "governance",
+        "say on pay",
+        "audit committee",
+        "related party",
+        "equity compensation",
+        "beneficial ownership",
+    ],
+    FilingMode.holdings: [
+        "information table",
+        "holdings",
+        "cusip",
+        "shares",
+        "value",
+        "investment discretion",
+        "voting authority",
+        "report date",
+        "position",
+    ],
+    FilingMode.registration: [
+        "risk factors",
+        "use of proceeds",
+        "business description",
+        "business overview",
+        "prospectus",
+    ],
+    FilingMode.shelf_registration: [
+        "risk factors",
+        "use of proceeds",
+        "business description",
+        "prospectus",
+    ],
+}
+
+
+class EFTSConfig(BaseModel):
+    """Configuration for SEC EDGAR Full-Text Search (EFTS) integration."""
+
+    model_config = ConfigDict(
+        defer_build=True,
+        frozen=True,
+        extra="ignore",
+    )
+
+    enabled: bool = Field(
+        default=True,
+        description="Enable EFTS search to discover filings beyond local downloads",
+    )
+    limit: int = Field(
+        default=20,
+        ge=1,
+        le=100,
+        description="Maximum EFTS results to fetch per query",
+    )
+    score_threshold: float = Field(
+        default=0.0,
+        ge=0.0,
+        description="Minimum EFTS relevance score to include (0 = no threshold)",
+    )
+    auto_download: bool = Field(
+        default=True,
+        description="Automatically download high-scoring EFTS hits not yet local",
+    )
+    auto_download_limit: int = Field(
+        default=5,
+        ge=0,
+        le=20,
+        description="Maximum filings to auto-download from EFTS results (0 = disabled)",
+    )
+    forms: list[str] = Field(
+        default_factory=list,
+        description="Form types to include in EFTS search (empty = use pipeline mode)",
+    )
+    expand_date_range: bool = Field(
+        default=True,
+        description="Expand EFTS date range beyond pipeline config for broader discovery",
+    )
+    date_range_years: int = Field(
+        default=3,
+        ge=1,
+        le=10,
+        description="Years of filings to search when expand_date_range is enabled",
+    )
 
 
 class SearchConfig(BaseModel):
@@ -182,10 +280,26 @@ class AnalyzeConfig(BaseConfig):
         description="Post-analysis semantic search configuration",
     )
 
+    # EFTS (EDGAR Full-Text Search) Configuration
+    efts: EFTSConfig = Field(
+        default_factory=EFTSConfig,
+        description="SEC EDGAR Full-Text Search integration for filing discovery",
+    )
+
+    efts_enabled: bool = Field(
+        default=True,
+        description="Enable EFTS search via CLI flag (overrides efts.enabled).",
+        json_schema_extra={
+            "cli_args": {
+                "aliases": ["--efts-enabled", "--efts"],
+            }
+        },
+    )
+
     # Filing Parameters
     mode: FilingMode = Field(
         default=FilingMode.annual,
-        description="Filing type to process (10-K, 10-Q, or 8-K)",
+        description="Filing type to process (10-K, 10-Q, 8-K, DEF 14A, 13F-HR, S-1, S-3)",
     )
     loader_use_async: bool = Field(
         default=True,
@@ -209,13 +323,12 @@ class AnalyzeConfig(BaseConfig):
         description="Optional market enrichment configuration for the symbol range.",
     )
 
-    market_enabled: bool | None = Field(
-        default=None,
+    market_enabled: bool = Field(
+        default=True,
         description="Enable market enrichment via CLI flag (overrides market.enabled).",
         json_schema_extra={
             "cli_args": {
                 "aliases": ["--market-enabled"],
-                "action": "store_true",
             }
         },
     )
@@ -247,17 +360,149 @@ class AnalyzeConfig(BaseConfig):
             market_values.update(raw_market.model_dump())
         elif isinstance(raw_market, dict):
             market_values.update(raw_market)
-        market_flags = {
-            "enabled": values.get("market_enabled"),
-            "ticker": values.get("market_ticker"),
-            "granularity": values.get("market_granularity"),
-            "limit": values.get("market_limit"),
+        if "market_enabled" in values:
+            market_values["enabled"] = values.get("market_enabled")
+        optional_flags = {
+            "ticker": "market_ticker",
+            "granularity": "market_granularity",
+            "limit": "market_limit",
         }
-        for key, flag in market_flags.items():
-            if flag is not None:
-                market_values[key] = flag
+        for key, field in optional_flags.items():
+            if field in values:
+                flag = values.get(field)
+                if flag is not None:
+                    market_values[key] = flag
         if market_values:
             values["market"] = market_values
+        return values
+
+    @model_validator(mode="before")
+    @classmethod
+    def _apply_efts_flags(
+        cls, values: dict[str, JsonValue]
+    ) -> dict[str, JsonValue]:
+        """Apply CLI flags to EFTS config."""
+        efts_values: dict[str, JsonValue] = {}
+        raw_efts = values.get("efts")
+        if isinstance(raw_efts, EFTSConfig):
+            efts_values.update(raw_efts.model_dump())
+        elif isinstance(raw_efts, dict):
+            efts_values.update(raw_efts)
+        if "efts_enabled" in values:
+            efts_values["enabled"] = values.get("efts_enabled")
+        if efts_values:
+            values["efts"] = efts_values
+        return values
+
+    @staticmethod
+    def _combine_section_patterns(patterns: JsonDict) -> JsonValue:
+        combined_parts = []
+        for pattern in patterns.values():
+            if isinstance(pattern, str) and pattern:
+                combined_parts.append(f"({pattern})")
+        if not combined_parts:
+            return None
+        return "|".join(combined_parts)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _apply_mode_defaults(cls, values: JsonDict) -> JsonDict:
+        raw_mode = values.get("mode")
+        if isinstance(raw_mode, FilingMode):
+            mode = raw_mode
+        elif isinstance(raw_mode, str):
+            try:
+                mode = FilingMode(raw_mode)
+            except ValueError:
+                return values
+        else:
+            return values
+
+        section_type = values.get("section_type")
+        section_numbers = values.get("section_numbers")
+        custom_pattern = values.get("custom_section_pattern")
+        should_apply_sections = (
+            section_type is None
+            and not section_numbers
+            and custom_pattern is None
+        )
+
+        if should_apply_sections:
+            if mode == FilingMode.proxy:
+                combined = cls._combine_section_patterns(PROXY_SECTION_PATTERNS)
+            elif mode == FilingMode.holdings:
+                combined = cls._combine_section_patterns(
+                    HOLDINGS_SECTION_PATTERNS
+                )
+            elif mode in (
+                FilingMode.registration,
+                FilingMode.shelf_registration,
+            ):
+                combined = cls._combine_section_patterns(
+                    REGISTRATION_SECTION_PATTERNS
+                )
+            else:
+                combined = None
+
+            if combined is not None:
+                values["section_type"] = SectionType.CUSTOM
+                values["custom_section_pattern"] = combined
+
+        prompt_path = None
+        if mode == FilingMode.proxy:
+            prompt_path = PROXY_PROMPT_PATH
+        elif mode == FilingMode.holdings:
+            prompt_path = HOLDINGS_PROMPT_PATH
+
+        if prompt_path is not None:
+            prompt_value = str(prompt_path)
+            raw_llm = values.get("llm")
+            if isinstance(raw_llm, LLMConfig):
+                if raw_llm.prompt_file is None:
+                    llm_values = raw_llm.model_dump()
+                    llm_values["prompt_file"] = prompt_value
+                    values["llm"] = llm_values
+            elif is_json_mapping(raw_llm):
+                llm_values = dict(raw_llm)
+                if llm_values.get("prompt_file") is None:
+                    llm_values["prompt_file"] = prompt_value
+                values["llm"] = llm_values
+            elif raw_llm is None:
+                values["llm"] = {"prompt_file": prompt_value}
+
+        topics_value = values.get("topics")
+        keywords_value = values.get("keywords")
+        has_topics = isinstance(topics_value, list) and any(
+            isinstance(item, str) and item.strip() for item in topics_value
+        )
+        has_keywords = isinstance(keywords_value, list) and any(
+            isinstance(item, str) and item.strip() for item in keywords_value
+        )
+        has_search_queries = False
+        raw_search = values.get("search")
+        if isinstance(raw_search, SearchConfig):
+            has_search_queries = bool(raw_search.queries)
+        elif is_json_mapping(raw_search):
+            raw_queries = raw_search.get("queries")
+            if isinstance(raw_queries, list):
+                has_search_queries = any(
+                    isinstance(item, str) and item.strip()
+                    for item in raw_queries
+                )
+
+        if not has_topics and not has_keywords and not has_search_queries:
+            vector_mode_value = values.get("vector_mode")
+            vector_mode_off = (
+                isinstance(vector_mode_value, str)
+                and vector_mode_value == "off"
+            )
+            if not vector_mode_off:
+                default_topics = _DEFAULT_MODE_TOPICS.get(mode)
+                if default_topics:
+                    values["topics"] = list(default_topics)
+                    if "min_topic_hits" not in values:
+                        values["min_topic_hits"] = 0
+
         return values
 
     section_type: SectionType | None = Field(
@@ -517,6 +762,11 @@ class AnalyzeConfig(BaseConfig):
     include_raw_chunks: bool = Field(
         default=False,
         description="Include raw document chunks in output files",
+    )
+
+    show_timeline: bool = Field(
+        default=False,
+        description="Display related filing timelines in logs when available",
     )
 
     aggregate_by_filing: bool = Field(

@@ -19,7 +19,9 @@ from qdrant_client.models import Distance, VectorParams
 from tqdm import tqdm
 
 from sec_nlp import __version__ as sec_nlp_version
+from sec_nlp.core.edgar.efts_models import EFTSHit
 from sec_nlp.core.infra.logger import log_divider, logger
+from sec_nlp.core.ingest.downloader import download_accessions
 from sec_nlp.core.ingest.loader import Loader
 from sec_nlp.core.llm.chains import InputModelKeys, build_runnable
 from sec_nlp.core.text.deduplication import SimHashConfig, SimHashDeduplicator
@@ -28,9 +30,14 @@ from sec_nlp.core.text.section_extractor import SectionExtractor
 from sec_nlp.pipelines import BasePipeline
 from sec_nlp.pipelines.metadata.accession import get_accession_from_metadata
 from sec_nlp.pipelines.observability.telemetry import log_chunk_length_stats
-from sec_nlp.pipelines.types import AnalysisResultDict, MetadataRecord
+from sec_nlp.pipelines.types import (
+    AnalysisResultDict,
+    MetadataRecord,
+    MetadataScalar,
+    MetadataValue,
+)
 from sec_nlp.prompts import load_prompt_template
-from sec_nlp.types import ResultDict
+from sec_nlp.types import JsonDict, ResultDict
 
 from .config import AnalyzeConfig
 from .io.outputs import OutputFormatter
@@ -43,7 +50,12 @@ from .steps.analysis.instructions import AnalysisInstructionBuilder
 from .steps.indexing.vector_index import VectorIndexer
 from .steps.preprocess.preprocess import ChunkPreprocessor
 from .steps.preprocess.topic_scoring import build_topic_matcher
-from .steps.search.vector_search import SearchResultsByQuery, SearchRunnable
+from .steps.search.efts_search import EFTSSearchResult, run_efts_search
+from .steps.search.vector_search import (
+    SearchQueryResults,
+    SearchResultsByQuery,
+    SearchRunnable,
+)
 from .types import ChunkStats, SymbolRunMetadata, Timings
 
 type PromptInput = dict[
@@ -81,7 +93,7 @@ class AnalyzePipeline(BasePipeline):
 
     # Vector Store
     _vector_store: QdrantVectorStore = PrivateAttr()
-    _embedder: OllamaEmbeddings = PrivateAttr()
+    _embedder: OllamaEmbeddings | None = PrivateAttr(default=None)
 
     # Deduplication
     _deduplicator: SimHashDeduplicator = PrivateAttr()
@@ -89,6 +101,7 @@ class AnalyzePipeline(BasePipeline):
     # Output formatting
     _output_formatter: OutputFormatter = PrivateAttr()
     _analysis_instructions: str = PrivateAttr(default="")
+    _relationship_graphs: JsonDict = PrivateAttr(default_factory=dict)
 
     # Modular helpers
     _preprocessor: ChunkPreprocessor = PrivateAttr()
@@ -97,6 +110,12 @@ class AnalyzePipeline(BasePipeline):
     _search_runner: SearchRunnable = PrivateAttr()
     _search_results_by_query: SearchResultsByQuery | None = PrivateAttr(
         default=None
+    )
+    _efts_results_by_symbol: dict[str, list[EFTSSearchResult]] = PrivateAttr(
+        default_factory=dict
+    )
+    _market_context_by_symbol: dict[str, str] = PrivateAttr(
+        default_factory=dict
     )
 
     @classmethod
@@ -125,7 +144,10 @@ class AnalyzePipeline(BasePipeline):
             )
 
             # Build section filter if section filtering is configured
-            if self.config.section_type and self.config.section_numbers:
+            if self.config.section_type and (
+                self.config.section_numbers
+                or self.config.custom_section_pattern
+            ):
                 section_pattern = self.config.get_section_pattern()
                 if section_pattern is not None:
                     self._section_filter = SectionFilter(
@@ -377,22 +399,33 @@ class AnalyzePipeline(BasePipeline):
 
             # Run semantic search if queries are configured
             if self.config.get_search_queries():
-                if self._search_results_by_query is not None:
+                search_queries = self.config.get_search_queries()
+                if self._efts_results_by_symbol:
+                    hybrid_results = self._build_hybrid_search_results(
+                        self._search_results_by_query,
+                    )
+                    search_outputs = self._search_runner.export_results(
+                        hybrid_results,
+                        cached=True,
+                        queries=search_queries,
+                    )
+                elif self._search_results_by_query is not None:
                     search_outputs = self._search_runner.export_results(
                         self._search_results_by_query,
                         cached=True,
-                        queries=self.config.get_search_queries(),
+                        queries=search_queries,
                     )
                 else:
                     search_outputs = self._search_runner.run(
-                        queries=self.config.get_search_queries(),
+                        queries=search_queries,
                     )
                 all_outputs.extend(search_outputs)
                 metadata["search_results"] = len(search_outputs)
                 metadata["search_outputs"] = search_outputs
-                metadata["search_queries"] = list(
-                    self.config.get_search_queries()
-                )
+                metadata["search_queries"] = list(search_queries)
+
+            if self._relationship_graphs:
+                metadata["relationships"] = dict(self._relationship_graphs)
 
             self.config.complete_run(success=True)
             return AnalyzeResult(
@@ -411,6 +444,361 @@ class AnalyzePipeline(BasePipeline):
         finally:
             log_divider(logger, color="green")
 
+    def _cap_efts_download_limit(
+        self,
+        limit_per_symbol: int | None,
+    ) -> int | None:
+        if limit_per_symbol is not None:
+            return limit_per_symbol
+        auto_limit = self.config.efts.auto_download_limit
+        if auto_limit <= 0:
+            return 0
+        return auto_limit
+
+    @staticmethod
+    def _select_efts_accessions(
+        results: list[EFTSSearchResult],
+        accessions: list[str],
+        limit: int | None,
+    ) -> list[str]:
+        if not accessions:
+            return []
+        allowed = {accession for accession in accessions if accession}
+        if not allowed:
+            return []
+        best_scores: dict[str, float] = {}
+        for result in results:
+            for hit in result.hits:
+                accession = hit.accession_number
+                if accession not in allowed:
+                    continue
+                score = float(hit.score)
+                best = best_scores.get(accession)
+                if best is None or score > best:
+                    best_scores[accession] = score
+        ordered = sorted(
+            best_scores.items(),
+            key=lambda item: (-item[1], item[0]),
+        )
+        ranked = [accession for accession, _ in ordered]
+        if limit is None:
+            return ranked
+        return ranked[:limit]
+
+    def _download_efts_accessions(
+        self,
+        *,
+        symbol: str,
+        accessions: list[str],
+        results: list[EFTSSearchResult],
+    ) -> int:
+        if not accessions:
+            return 0
+
+        accession_set = set(accessions)
+        hits_by_accession: dict[str, EFTSHit] = {}
+        for result in results:
+            for hit in result.hits:
+                accession = hit.accession_number
+                if (
+                    accession in accession_set
+                    and accession not in hits_by_accession
+                ):
+                    hits_by_accession[accession] = hit
+        if not hits_by_accession:
+            return 0
+
+        accession_cik_map = {
+            accession: hit.cik for accession, hit in hits_by_accession.items()
+        }
+
+        download_results = download_accessions(
+            symbol=symbol,
+            accessions=accessions,
+            accession_cik_map=accession_cik_map,
+            mode=self.config.mode,
+            work_folder=self.config.dl_path,
+            company_name=self._loader.company_name,
+            email=self.config.email,
+        )
+
+        downloaded = 0
+        for result in download_results.values():
+            if not result.get("success"):
+                continue
+            count = result.get("downloaded")
+            if isinstance(count, int) and count > 0:
+                downloaded += 1
+        return downloaded
+
+    def _local_accessions(self, symbol: str) -> set[str]:
+        filing_dir = (
+            self.config.dl_path
+            / "sec-edgar-filings"
+            / symbol.upper()
+            / self.config.mode.form
+        )
+        if not filing_dir.exists():
+            return set()
+        return {path.name for path in filing_dir.iterdir() if path.is_dir()}
+
+    def _run_efts_for_symbol(
+        self,
+        *,
+        symbol: str,
+        queries: list[str],
+    ) -> tuple[list[EFTSSearchResult], list[str], bool]:
+        if not queries or not self.config.efts.enabled:
+            return [], [], False
+
+        local_accessions = self._local_accessions(symbol)
+        config = self.config.model_copy(update={"symbols": [symbol]})
+        try:
+            results = run_efts_search(
+                config=config,
+                queries=queries,
+                email=self.config.email,
+                local_accessions=local_accessions,
+            )
+        except Exception as exc:
+            logger.warning("EFTS search failed for %s: %s", symbol, exc)
+            return [], [], False
+
+        new_accessions: set[str] = set()
+        for result in results:
+            for accession in result.new_accessions:
+                new_accessions.add(accession)
+
+        return results, sorted(new_accessions), True
+
+    def _collect_efts_hits(
+        self,
+    ) -> tuple[
+        dict[str, list[tuple[Document, float]]],
+        dict[str, int],
+    ]:
+        hits_by_query: dict[str, list[tuple[Document, float]]] = defaultdict(
+            list
+        )
+        totals_by_query: dict[str, int] = defaultdict(int)
+
+        for symbol, results in self._efts_results_by_symbol.items():
+            if not results:
+                continue
+            local_accessions = self._local_accessions(symbol)
+            market_context = self._market_context_by_symbol.get(symbol)
+            for result in results:
+                query = result.query
+                if not query:
+                    continue
+                totals_by_query[query] += result.total
+                seen_accessions: set[str] = set()
+                for hit in result.hits:
+                    accession = hit.accession_number
+                    if accession in seen_accessions:
+                        continue
+                    seen_accessions.add(accession)
+                    tickers: list[MetadataScalar] = [
+                        ticker
+                        for ticker in hit.tickers
+                        if isinstance(ticker, str) and ticker
+                    ]
+                    metadata: dict[str, MetadataValue] = {
+                        "source": "efts",
+                        "search_source": "efts",
+                        "symbol": symbol.upper(),
+                        "accession_number": accession,
+                        "cik": hit.cik,
+                        "company_name": hit.company_name,
+                        "tickers": tickers,
+                        "form_type": hit.form_type,
+                        "filed_date": hit.filed_date.isoformat(),
+                        "efts_score": float(hit.score),
+                        "efts_query": query,
+                        "edgar_url": hit.edgar_url,
+                        "is_local": accession in local_accessions,
+                    }
+                    if market_context:
+                        metadata["market_enrichment_context"] = market_context
+                    doc = Document(
+                        page_content=hit.snippet,
+                        metadata=metadata,
+                    )
+                    hits_by_query[query].append((doc, float(hit.score)))
+
+        return dict(hits_by_query), dict(totals_by_query)
+
+    @staticmethod
+    def _normalize_scores(scores: list[float]) -> list[float]:
+        if not scores:
+            return []
+        low = min(scores)
+        high = max(scores)
+        if high <= low:
+            return [1.0 for _ in scores]
+        return [(score - low) / (high - low) for score in scores]
+
+    @staticmethod
+    def _adjust_efts_score(
+        normalized_score: float,
+        *,
+        vector_scores: list[float],
+        prefers_lower: bool,
+    ) -> float:
+        if not vector_scores:
+            return 1.0 - normalized_score if prefers_lower else normalized_score
+        best = min(vector_scores) if prefers_lower else max(vector_scores)
+        worst = max(vector_scores) if prefers_lower else min(vector_scores)
+        if best == worst:
+            return best
+        if prefers_lower:
+            return best + (1.0 - normalized_score) * (worst - best)
+        return worst + normalized_score * (best - worst)
+
+    @staticmethod
+    def _update_search_sources(
+        metadata: dict[str, MetadataValue],
+        source: str,
+    ) -> None:
+        existing = metadata.get("search_sources")
+        sources: list[MetadataScalar] = []
+        if isinstance(existing, list):
+            for item in existing:
+                if isinstance(item, str) and item not in sources:
+                    sources.append(item)
+        elif isinstance(existing, str):
+            sources.append(existing)
+        if source not in sources:
+            sources.append(source)
+        metadata["search_sources"] = sources
+
+    def _annotate_efts_match(
+        self,
+        docs: list[Document],
+        *,
+        query: str,
+        score: float,
+    ) -> None:
+        for doc in docs:
+            metadata: dict[str, MetadataValue] = dict(doc.metadata or {})
+            matches = metadata.get("efts_matches")
+            cleaned: list[dict[str, MetadataScalar]] = []
+            if isinstance(matches, list):
+                for item in matches:
+                    if isinstance(item, dict):
+                        filtered: dict[str, MetadataScalar] = {}
+                        for key, value in item.items():
+                            if isinstance(key, str) and isinstance(
+                                value, (str, int, float, bool)
+                            ):
+                                filtered[key] = value
+                            elif isinstance(key, str) and value is None:
+                                filtered[key] = value
+                        if filtered:
+                            cleaned.append(filtered)
+            already_present = False
+            for item in cleaned:
+                if item.get("query") == query:
+                    already_present = True
+                    break
+            if not already_present:
+                cleaned.append({"query": query, "score": float(score)})
+            metadata["efts_matches"] = cleaned
+            self._update_search_sources(metadata, "efts")
+            doc.metadata = metadata
+
+    def _build_hybrid_search_results(
+        self,
+        vector_results: SearchResultsByQuery | None,
+    ) -> SearchResultsByQuery:
+        base_results = vector_results or {}
+        efts_hits_by_query, efts_totals = self._collect_efts_hits()
+        if not efts_hits_by_query:
+            return base_results
+
+        distance_metric = self.config.vdb.qdrant_distance
+        prefers_lower = distance_metric in ("Cosine", "Euclid")
+
+        hybrid_results: SearchResultsByQuery = {}
+        all_queries = set(base_results) | set(efts_hits_by_query)
+        for query in all_queries:
+            vector_entry = base_results.get(query)
+            vector_filtered = (
+                list(vector_entry.filtered) if vector_entry else []
+            )
+            vector_total = vector_entry.total if vector_entry else 0
+            vector_scores = [float(score) for _, score in vector_filtered]
+            vector_accessions: dict[str, list[Document]] = defaultdict(list)
+            for doc, _ in vector_filtered:
+                metadata: dict[str, MetadataValue] = dict(doc.metadata or {})
+                self._update_search_sources(metadata, "vector")
+                doc.metadata = metadata
+                accession = get_accession_from_metadata(doc.metadata)
+                if accession:
+                    vector_accessions[accession].append(doc)
+
+            efts_hits = efts_hits_by_query.get(query, [])
+            efts_filtered: list[tuple[Document, float]] = []
+            for doc, raw_score in efts_hits:
+                accession = get_accession_from_metadata(doc.metadata)
+                if accession and accession in vector_accessions:
+                    self._annotate_efts_match(
+                        vector_accessions[accession],
+                        query=query,
+                        score=raw_score,
+                    )
+                    continue
+                efts_filtered.append((doc, raw_score))
+
+            normalized = self._normalize_scores(
+                [float(score) for _, score in efts_filtered]
+            )
+            combined = list(vector_filtered)
+            for (doc, raw_score), norm in zip(
+                efts_filtered, normalized, strict=True
+            ):
+                metadata: dict[str, MetadataValue] = dict(doc.metadata or {})
+                if "efts_score" not in metadata:
+                    metadata["efts_score"] = float(raw_score)
+                self._update_search_sources(metadata, "efts")
+                doc.metadata = metadata
+                adjusted_score = self._adjust_efts_score(
+                    norm,
+                    vector_scores=vector_scores,
+                    prefers_lower=prefers_lower,
+                )
+                combined.append((doc, adjusted_score))
+
+            total_hits = vector_total + efts_totals.get(query, 0)
+            hybrid_results[query] = SearchQueryResults(
+                filtered=combined,
+                total=total_hits,
+            )
+
+        return hybrid_results
+
+    @staticmethod
+    def _efts_accessions(results: list[EFTSSearchResult]) -> set[str]:
+        accessions: set[str] = set()
+        for result in results:
+            for hit in result.hits:
+                accessions.add(hit.accession_number)
+        return accessions
+
+    @staticmethod
+    def _filter_docs_by_accession(
+        docs: list[Document],
+        accessions: set[str],
+    ) -> list[Document]:
+        if not accessions:
+            return []
+        filtered: list[Document] = []
+        for doc in docs:
+            accession = get_accession_from_metadata(doc.metadata or {})
+            if accession in accessions:
+                filtered.append(doc)
+        return filtered
+
     def _process_symbol(self, symbol: str) -> tuple[list[Path], ChunkStats]:
         """Process a single symbol."""
         log_divider(logger, color="cyan")
@@ -420,16 +808,93 @@ class AnalyzePipeline(BasePipeline):
         timings: Timings = {}
 
         start_date, end_date = self.config.date_range
+        search_queries = self.config.get_search_queries()
+        limit_per_symbol = self.config.limit
+        perform_download = True
+        allowed_accessions: set[str] | None = None
+
+        if self.config.efts.enabled and search_queries:
+            t0 = perf_counter()
+            efts_results, new_accessions, efts_ok = self._run_efts_for_symbol(
+                symbol=symbol,
+                queries=search_queries,
+            )
+            timings["efts"] = perf_counter() - t0
+            if efts_ok:
+                self._efts_results_by_symbol[symbol] = efts_results
+                allowed_accessions = self._efts_accessions(efts_results)
+                total_hits = len(allowed_accessions)
+                logger.info(
+                    "EFTS search for %s: %d hits (%d new)",
+                    symbol,
+                    total_hits,
+                    len(new_accessions),
+                )
+                if not allowed_accessions:
+                    perform_download = False
+                    logger.info(
+                        "EFTS returned no matching filings for %s",
+                        symbol,
+                    )
+                if self.config.efts.auto_download:
+                    limit_per_symbol = self._cap_efts_download_limit(
+                        limit_per_symbol
+                    )
+                    if limit_per_symbol == 0:
+                        perform_download = False
+                        logger.info(
+                            "EFTS auto-download disabled for %s",
+                            symbol,
+                        )
+                    else:
+                        accessions_to_download = self._select_efts_accessions(
+                            efts_results,
+                            new_accessions,
+                            limit_per_symbol,
+                        )
+                        if accessions_to_download:
+                            t_download = perf_counter()
+                            downloaded = self._download_efts_accessions(
+                                symbol=symbol,
+                                accessions=accessions_to_download,
+                                results=efts_results,
+                            )
+                            timings["efts_download"] = (
+                                perf_counter() - t_download
+                            )
+                            if downloaded:
+                                logger.info(
+                                    "EFTS auto-download for %s: %d accessions",
+                                    symbol,
+                                    downloaded,
+                                )
+                                perform_download = False
+                            else:
+                                logger.info(
+                                    "EFTS auto-download for %s: no accessions downloaded",
+                                    symbol,
+                                )
+                        elif not new_accessions:
+                            perform_download = False
+                            logger.info(
+                                "EFTS auto-download skipped for %s (no new accessions)",
+                                symbol,
+                            )
 
         t0 = perf_counter()
         docs = self._loader.load_documents(
             mode=self.config.mode,
             start_date=start_date.isoformat() if start_date else None,
             end_date=end_date.isoformat() if end_date else None,
-            limit_per_symbol=self.config.limit,
-            perform_download=True,
+            limit_per_symbol=limit_per_symbol,
+            perform_download=perform_download,
             section_filter=self._section_filter,
         )
+        if allowed_accessions is not None:
+            docs = self._filter_docs_by_accession(docs, allowed_accessions)
+        relationships = self._loader.last_meta["relationships"]
+        if relationships:
+            self._relationship_graphs.update(relationships)
         timings["load"] = perf_counter() - t0
 
         if not docs:
@@ -470,6 +935,7 @@ class AnalyzePipeline(BasePipeline):
         market_data = self._build_market_enrichment(symbol, docs)
         market_context = self._format_market_context(market_data)
         if market_context:
+            self._market_context_by_symbol[symbol] = market_context
             for doc in docs:
                 metadata = dict(doc.metadata or {})
                 metadata["market_enrichment_context"] = market_context
@@ -624,7 +1090,7 @@ class AnalyzePipeline(BasePipeline):
                 topic_matcher=build_topic_matcher(topics),
                 min_topic_hits=self.config.min_topic_hits,
                 prioritize_topics=self.config.prioritize_topics,
-                embedder=self._embedder,
+                embedder=getattr(self, "_embedder", None),
             )
         return preprocessor.prepare_documents(docs)
 

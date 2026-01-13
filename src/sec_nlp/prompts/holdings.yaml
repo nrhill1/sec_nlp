@@ -8,9 +8,9 @@ template: |
 
   Your task is to analyze the following section and extract information about institutional holdings, position changes, and investment patterns.
 
-  {%- if context %}
-  Section Context: {context}
-  {%- endif %}
+  {{%- if context %}}
+  Section Context (may include market data): {context}
+  {{%- endif %}}
 
   Document Content:
   ---
@@ -57,6 +57,7 @@ template: |
   - Note any significant position changes (new positions, large increases/decreases, complete sales).
   - Identify the investment manager and reporting period.
   - 13F filers must have >$100M AUM; note the scale of positions.
+  - If market context is provided, use it as background only; avoid inferring causality.
   - Ignore cover pages, signatures, and standard SEC boilerplate.
 
   Respond with a single JSON object containing all fields above.

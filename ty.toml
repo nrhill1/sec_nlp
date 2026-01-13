@@ -8,10 +8,6 @@ redundant-cast = "error"
 unresolved-global = "error"
 unsupported-base = "error"
 
-[analysis]
-# Respect `type: ignore` comments (kept only for external modules).
-respect-type-ignore-comments = true
-
 [environment]
 extra-paths = ["./src", "./tests", "./types"]
 python-version = "3.13"
