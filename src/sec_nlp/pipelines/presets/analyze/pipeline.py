@@ -43,6 +43,7 @@ from .steps.analysis.instructions import AnalysisInstructionBuilder
 from .steps.indexing.vector_index import VectorIndexer
 from .steps.preprocess.preprocess import ChunkPreprocessor
 from .steps.preprocess.topic_scoring import build_topic_matcher
+from .steps.search.efts_search import EFTSSearchResult, run_efts_search
 from .steps.search.vector_search import SearchResultsByQuery, SearchRunnable
 from .types import ChunkStats, SymbolRunMetadata, Timings
 
@@ -418,6 +419,79 @@ class AnalyzePipeline(BasePipeline):
         finally:
             log_divider(logger, color="green")
 
+    def _cap_efts_download_limit(
+        self,
+        limit_per_symbol: int | None,
+    ) -> int | None:
+        if limit_per_symbol is not None:
+            return limit_per_symbol
+        auto_limit = self.config.efts.auto_download_limit
+        if auto_limit <= 0:
+            return 0
+        return auto_limit
+
+    def _local_accessions(self, symbol: str) -> set[str]:
+        filing_dir = (
+            self.config.dl_path
+            / "sec-edgar-filings"
+            / symbol.upper()
+            / self.config.mode.form
+        )
+        if not filing_dir.exists():
+            return set()
+        return {path.name for path in filing_dir.iterdir() if path.is_dir()}
+
+    def _run_efts_for_symbol(
+        self,
+        *,
+        symbol: str,
+        queries: list[str],
+    ) -> tuple[list[EFTSSearchResult], list[str], bool]:
+        if not queries or not self.config.efts.enabled:
+            return [], [], False
+
+        local_accessions = self._local_accessions(symbol)
+        config = self.config.model_copy(update={"symbols": [symbol]})
+        try:
+            results = run_efts_search(
+                config=config,
+                queries=queries,
+                email=self.config.email,
+                local_accessions=local_accessions,
+            )
+        except Exception as exc:
+            logger.warning("EFTS search failed for %s: %s", symbol, exc)
+            return [], [], False
+
+        new_accessions: set[str] = set()
+        for result in results:
+            for accession in result.new_accessions:
+                new_accessions.add(accession)
+
+        return results, sorted(new_accessions), True
+
+    @staticmethod
+    def _efts_accessions(results: list[EFTSSearchResult]) -> set[str]:
+        accessions: set[str] = set()
+        for result in results:
+            for hit in result.hits:
+                accessions.add(hit.accession_number)
+        return accessions
+
+    @staticmethod
+    def _filter_docs_by_accession(
+        docs: list[Document],
+        accessions: set[str],
+    ) -> list[Document]:
+        if not accessions:
+            return []
+        filtered: list[Document] = []
+        for doc in docs:
+            accession = get_accession_from_metadata(doc.metadata or {})
+            if accession in accessions:
+                filtered.append(doc)
+        return filtered
+
     def _process_symbol(self, symbol: str) -> tuple[list[Path], ChunkStats]:
         """Process a single symbol."""
         log_divider(logger, color="cyan")
@@ -427,16 +501,61 @@ class AnalyzePipeline(BasePipeline):
         timings: Timings = {}
 
         start_date, end_date = self.config.date_range
+        search_queries = self.config.get_search_queries()
+        limit_per_symbol = self.config.limit
+        perform_download = True
+        allowed_accessions: set[str] | None = None
+
+        if self.config.efts.enabled and search_queries:
+            t0 = perf_counter()
+            efts_results, new_accessions, efts_ok = self._run_efts_for_symbol(
+                symbol=symbol,
+                queries=search_queries,
+            )
+            timings["efts"] = perf_counter() - t0
+            if efts_ok:
+                allowed_accessions = self._efts_accessions(efts_results)
+                total_hits = len(allowed_accessions)
+                logger.info(
+                    "EFTS search for %s: %d hits (%d new)",
+                    symbol,
+                    total_hits,
+                    len(new_accessions),
+                )
+                if not allowed_accessions:
+                    perform_download = False
+                    logger.info(
+                        "EFTS returned no matching filings for %s",
+                        symbol,
+                    )
+                if self.config.efts.auto_download:
+                    limit_per_symbol = self._cap_efts_download_limit(
+                        limit_per_symbol
+                    )
+                    if limit_per_symbol == 0:
+                        perform_download = False
+                        logger.info(
+                            "EFTS auto-download disabled for %s",
+                            symbol,
+                        )
+                    elif not new_accessions:
+                        perform_download = False
+                        logger.info(
+                            "EFTS auto-download skipped for %s (no new accessions)",
+                            symbol,
+                        )
 
         t0 = perf_counter()
         docs = self._loader.load_documents(
             mode=self.config.mode,
             start_date=start_date.isoformat() if start_date else None,
             end_date=end_date.isoformat() if end_date else None,
-            limit_per_symbol=self.config.limit,
-            perform_download=True,
+            limit_per_symbol=limit_per_symbol,
+            perform_download=perform_download,
             section_filter=self._section_filter,
         )
+        if allowed_accessions is not None:
+            docs = self._filter_docs_by_accession(docs, allowed_accessions)
         relationships = self._loader.last_meta["relationships"]
         if relationships:
             self._relationship_graphs.update(relationships)
