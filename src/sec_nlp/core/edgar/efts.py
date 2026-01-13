@@ -372,6 +372,7 @@ class EFTSClient(BaseModel):
         filed_date = _extract_filed_date(source)
         accession = _extract_accession(source)
         company_name = _extract_company_name(source)
+        tickers = _extract_tickers(source, company_name)
         cik = _extract_cik(source, company_name, accession)
         form_type = _get_str(source, "form", "")
         file_number = _get_optional_str(source, "file_num")
@@ -382,6 +383,7 @@ class EFTSClient(BaseModel):
             accession_number=accession,
             cik=cik,
             company_name=company_name,
+            tickers=tickers,
             form_type=form_type,
             filed_date=filed_date,
             file_number=file_number,
@@ -524,6 +526,68 @@ def _extract_company_name(source: JsonDict) -> str:
     if company_raw is not None:
         return str(company_raw)
     return ""
+
+
+def _extract_tickers(source: JsonDict, company_name: str) -> list[str]:
+    """Extract ticker symbols from EFTS source data or company name."""
+    tickers: list[str] = []
+
+    raw_tickers = source.get("tickers")
+    if isinstance(raw_tickers, list):
+        for item in raw_tickers:
+            if isinstance(item, str):
+                _append_ticker(tickers, item)
+    elif isinstance(raw_tickers, str):
+        for item in re.split(r"[,\s/]+", raw_tickers):
+            _append_ticker(tickers, item)
+
+    raw_ticker = source.get("ticker")
+    if isinstance(raw_ticker, str):
+        _append_ticker(tickers, raw_ticker)
+
+    if not tickers:
+        tickers = _extract_tickers_from_company(company_name)
+
+    return tickers
+
+
+def _extract_tickers_from_company(company_name: str) -> list[str]:
+    """Parse tickers from the company display string."""
+    tickers: list[str] = []
+    if not company_name:
+        return tickers
+    for match in re.findall(r"\(([^)]+)\)", company_name):
+        for raw in re.split(r"[,/]", match):
+            cleaned = raw.strip()
+            if not cleaned:
+                continue
+            if "CIK" in cleaned.upper():
+                continue
+            _append_ticker(tickers, cleaned)
+    return tickers
+
+
+def _append_ticker(tickers: list[str], value: str) -> None:
+    cleaned = _normalize_ticker(value)
+    if cleaned and cleaned not in tickers:
+        tickers.append(cleaned)
+
+
+def _normalize_ticker(value: str) -> str | None:
+    cleaned = value.strip().upper().strip("()[]{}")
+    if not cleaned:
+        return None
+    if "CIK" in cleaned:
+        return None
+    if ":" in cleaned:
+        suffix = cleaned.split(":")[-1].strip()
+        if suffix:
+            cleaned = suffix
+    if not any(ch.isalpha() for ch in cleaned):
+        return None
+    if len(cleaned) > 10:
+        return None
+    return cleaned
 
 
 def _extract_cik(

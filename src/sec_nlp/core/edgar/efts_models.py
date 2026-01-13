@@ -122,6 +122,10 @@ class EFTSHit(BaseModel):
     company_name: str = Field(
         description="Company name from filing",
     )
+    tickers: list[str] = Field(
+        default_factory=list,
+        description="Ticker symbols associated with the filing when available",
+    )
     form_type: str = Field(
         description="SEC form type (e.g., 10-K, 8-K)",
     )
@@ -162,7 +166,13 @@ class EFTSHit(BaseModel):
 
     @property
     def ticker(self) -> str | None:
-        """Ticker is not directly available from EFTS; return None."""
+        """Return the first ticker symbol if available."""
+        if not self.tickers:
+            return None
+        for ticker in self.tickers:
+            cleaned = ticker.strip()
+            if cleaned:
+                return cleaned
         return None
 
 

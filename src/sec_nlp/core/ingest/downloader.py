@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Iterable
+import json
+import urllib.request
+from collections.abc import Iterable, Mapping, Sequence
 from datetime import date
 from pathlib import Path
+from typing import TypeGuard
 
 from sec_edgar_downloader import Downloader
 
@@ -13,6 +16,7 @@ from sec_nlp.core.edgar.filing_mode import FilingMode
 from sec_nlp.core.infra.logger import logger
 from sec_nlp.core.ingest import filings
 from sec_nlp.core.ingest.types import DownloadResult, DownloadResults
+from sec_nlp.types import JsonDict, JsonObject, JsonValue
 
 
 def _success_download_result(
@@ -118,6 +122,91 @@ def download_filings(
             download_results[symbol] = _error_download_result(str(exc))
 
     return download_results
+
+
+def download_accessions(
+    *,
+    symbol: str,
+    accessions: Sequence[str],
+    accession_cik_map: Mapping[str, str],
+    mode: FilingMode,
+    work_folder: Path,
+    company_name: str,
+    email: str,
+) -> DownloadResults:
+    """Download specific accession numbers into the standard filings folder."""
+    results: DownloadResults = {}
+    unique_accessions: list[str] = []
+    seen: set[str] = set()
+    for accession in accessions:
+        cleaned = accession.strip()
+        if not cleaned or cleaned in seen:
+            continue
+        seen.add(cleaned)
+        unique_accessions.append(cleaned)
+
+    if not unique_accessions:
+        return results
+
+    user_agent = f"{company_name} {email}"
+    submissions_cache: dict[str, JsonDict] = {}
+    supplemental_cache: dict[str, JsonDict] = {}
+
+    for accession in unique_accessions:
+        cik = accession_cik_map.get(accession)
+        if not isinstance(cik, str) or not cik.strip():
+            results[accession] = _error_download_result(
+                "Missing CIK for accession"
+            )
+            continue
+
+        try:
+            primary_doc = _lookup_primary_document(
+                accession=accession,
+                cik=cik,
+                user_agent=user_agent,
+                submissions_cache=submissions_cache,
+                supplemental_cache=supplemental_cache,
+            )
+        except Exception as exc:
+            logger.warning(
+                "Failed to resolve primary document for %s: %s",
+                accession,
+                exc,
+            )
+            results[accession] = _error_download_result(
+                "Primary document lookup failed"
+            )
+            continue
+
+        if primary_doc is None:
+            results[accession] = _error_download_result(
+                "Primary document not found"
+            )
+            continue
+
+        try:
+            downloaded, skipped = _download_accession_files(
+                accession=accession,
+                cik=cik,
+                primary_doc=primary_doc,
+                symbol=symbol,
+                mode=mode,
+                work_folder=work_folder,
+                user_agent=user_agent,
+            )
+            results[accession] = _success_download_result(
+                downloaded=downloaded,
+                form_type=mode.form,
+                skipped_existing=skipped,
+            )
+        except Exception as exc:
+            logger.warning(
+                "Failed to download accession %s: %s", accession, exc
+            )
+            results[accession] = _error_download_result(str(exc))
+
+    return results
 
 
 def _download_single_symbol(
@@ -250,3 +339,182 @@ async def download_filings_async(
     )
 
     return dict(results)
+
+
+def _lookup_primary_document(
+    *,
+    accession: str,
+    cik: str,
+    user_agent: str,
+    submissions_cache: dict[str, JsonDict],
+    supplemental_cache: dict[str, JsonDict],
+) -> str | None:
+    payload = submissions_cache.get(cik)
+    if payload is None:
+        payload = _fetch_submissions_payload(cik, user_agent)
+        submissions_cache[cik] = payload
+
+    primary_doc = _find_primary_document(payload, accession)
+    if primary_doc is not None:
+        return primary_doc
+
+    for name in _iter_submission_files(payload):
+        extra_payload = supplemental_cache.get(name)
+        if extra_payload is None:
+            extra_payload = _fetch_submission_file(name, user_agent)
+            supplemental_cache[name] = extra_payload
+        primary_doc = _find_primary_document(extra_payload, accession)
+        if primary_doc is not None:
+            return primary_doc
+
+    return None
+
+
+def _download_accession_files(
+    *,
+    accession: str,
+    cik: str,
+    primary_doc: str,
+    symbol: str,
+    mode: FilingMode,
+    work_folder: Path,
+    user_agent: str,
+) -> tuple[int, int]:
+    accession_dir = filings.filing_dir(work_folder, symbol, mode) / accession
+    accession_dir.mkdir(parents=True, exist_ok=True)
+
+    skipped_existing = 0
+    downloaded_accessions = 0
+
+    acc_no_dash = accession.replace("-", "")
+    cik_path = cik.lstrip("0")
+    base_url = (
+        f"https://www.sec.gov/Archives/edgar/data/{cik_path}/{acc_no_dash}/"
+    )
+
+    raw_path = accession_dir / "full-submission.txt"
+    if raw_path.exists():
+        skipped_existing += 1
+    else:
+        raw_url = f"{base_url}{accession}.txt"
+        _download_to_path(raw_url, raw_path, user_agent)
+
+    primary_doc_path = primary_doc.replace("\\", "/").lstrip("/")
+    primary_name = Path(primary_doc_path).name
+    primary_suffix = Path(primary_name).suffix.lower()
+    if primary_suffix == ".htm":
+        primary_suffix = ".html"
+    if not primary_suffix:
+        primary_suffix = ".html"
+    primary_path = accession_dir / f"primary-document{primary_suffix}"
+    if primary_path.exists():
+        skipped_existing += 1
+    else:
+        primary_url = f"{base_url}{primary_doc_path}"
+        _download_to_path(primary_url, primary_path, user_agent)
+
+    primary_ready = primary_path.exists()
+    if primary_ready or mode == FilingMode.holdings:
+        downloaded_accessions = 1
+
+    return downloaded_accessions, skipped_existing
+
+
+def _fetch_submissions_payload(cik: str, user_agent: str) -> JsonDict:
+    cik_value = cik.strip().zfill(10)
+    url = f"https://data.sec.gov/submissions/CIK{cik_value}.json"
+    return _fetch_json(url, user_agent)
+
+
+def _fetch_submission_file(name: str, user_agent: str) -> JsonDict:
+    url = f"https://data.sec.gov/submissions/{name}"
+    return _fetch_json(url, user_agent)
+
+
+def _fetch_json(url: str, user_agent: str) -> JsonDict:
+    request = urllib.request.Request(
+        url,
+        headers={
+            "User-Agent": user_agent,
+            "Accept": "application/json",
+        },
+    )
+    with urllib.request.urlopen(request) as response:
+        raw = response.read()
+    try:
+        payload: JsonValue = json.loads(raw.decode("utf-8"))
+    except Exception:
+        return {}
+    if isinstance(payload, dict):
+        return dict(payload)
+    return {}
+
+
+def _find_primary_document(payload: JsonDict, accession: str) -> str | None:
+    table = _extract_filing_table(payload)
+    accessions = table.get("accessionNumber")
+    documents = table.get("primaryDocument")
+    if isinstance(accessions, list) and isinstance(documents, list):
+        for acc, doc in zip(accessions, documents, strict=False):
+            if isinstance(acc, str) and acc == accession:
+                if isinstance(doc, str) and doc:
+                    return doc
+    return None
+
+
+def _extract_filing_table(payload: JsonDict) -> JsonDict:
+    filings_block = _coerce_json_dict(payload.get("filings"))
+    if filings_block:
+        recent = _coerce_json_dict(filings_block.get("recent"))
+        if recent:
+            return recent
+    return payload
+
+
+def _iter_submission_files(payload: JsonDict) -> Iterable[str]:
+    filings_block = _coerce_json_dict(payload.get("filings"))
+    if not filings_block:
+        return []
+    files_value = filings_block.get("files")
+    if not isinstance(files_value, list):
+        return []
+    names: list[str] = []
+    for item in files_value:
+        item_dict = _coerce_json_dict(item)
+        if not item_dict:
+            continue
+        name = item_dict.get("name")
+        if isinstance(name, str) and name:
+            names.append(name)
+    return names
+
+
+def _coerce_json_dict(value: JsonValue) -> JsonDict | None:
+    if not _is_json_object(value):
+        return None
+    cleaned: JsonDict = {}
+    for key, item in value.items():
+        cleaned[key] = item
+    return cleaned or None
+
+
+def _is_json_object(value: JsonValue) -> TypeGuard[JsonObject]:
+    if not isinstance(value, Mapping):
+        return False
+    for key in value:
+        if not isinstance(key, str):
+            return False
+    return True
+
+
+def _download_to_path(url: str, path: Path, user_agent: str) -> None:
+    request = urllib.request.Request(
+        url,
+        headers={
+            "User-Agent": user_agent,
+            "Accept": "application/octet-stream",
+        },
+    )
+    with urllib.request.urlopen(request) as response:
+        data = response.read()
+    path.write_bytes(data)

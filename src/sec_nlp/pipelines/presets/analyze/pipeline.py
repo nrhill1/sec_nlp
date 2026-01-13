@@ -19,7 +19,9 @@ from qdrant_client.models import Distance, VectorParams
 from tqdm import tqdm
 
 from sec_nlp import __version__ as sec_nlp_version
+from sec_nlp.core.edgar.efts_models import EFTSHit
 from sec_nlp.core.infra.logger import log_divider, logger
+from sec_nlp.core.ingest.downloader import download_accessions
 from sec_nlp.core.ingest.loader import Loader
 from sec_nlp.core.llm.chains import InputModelKeys, build_runnable
 from sec_nlp.core.text.deduplication import SimHashConfig, SimHashDeduplicator
@@ -453,6 +455,82 @@ class AnalyzePipeline(BasePipeline):
             return 0
         return auto_limit
 
+    @staticmethod
+    def _select_efts_accessions(
+        results: list[EFTSSearchResult],
+        accessions: list[str],
+        limit: int | None,
+    ) -> list[str]:
+        if not accessions:
+            return []
+        allowed = {accession for accession in accessions if accession}
+        if not allowed:
+            return []
+        best_scores: dict[str, float] = {}
+        for result in results:
+            for hit in result.hits:
+                accession = hit.accession_number
+                if accession not in allowed:
+                    continue
+                score = float(hit.score)
+                best = best_scores.get(accession)
+                if best is None or score > best:
+                    best_scores[accession] = score
+        ordered = sorted(
+            best_scores.items(),
+            key=lambda item: (-item[1], item[0]),
+        )
+        ranked = [accession for accession, _ in ordered]
+        if limit is None:
+            return ranked
+        return ranked[:limit]
+
+    def _download_efts_accessions(
+        self,
+        *,
+        symbol: str,
+        accessions: list[str],
+        results: list[EFTSSearchResult],
+    ) -> int:
+        if not accessions:
+            return 0
+
+        accession_set = set(accessions)
+        hits_by_accession: dict[str, EFTSHit] = {}
+        for result in results:
+            for hit in result.hits:
+                accession = hit.accession_number
+                if (
+                    accession in accession_set
+                    and accession not in hits_by_accession
+                ):
+                    hits_by_accession[accession] = hit
+        if not hits_by_accession:
+            return 0
+
+        accession_cik_map = {
+            accession: hit.cik for accession, hit in hits_by_accession.items()
+        }
+
+        download_results = download_accessions(
+            symbol=symbol,
+            accessions=accessions,
+            accession_cik_map=accession_cik_map,
+            mode=self.config.mode,
+            work_folder=self.config.dl_path,
+            company_name=self._loader.company_name,
+            email=self.config.email,
+        )
+
+        downloaded = 0
+        for result in download_results.values():
+            if not result.get("success"):
+                continue
+            count = result.get("downloaded")
+            if isinstance(count, int) and count > 0:
+                downloaded += 1
+        return downloaded
+
     def _local_accessions(self, symbol: str) -> set[str]:
         filing_dir = (
             self.config.dl_path
@@ -520,6 +598,11 @@ class AnalyzePipeline(BasePipeline):
                     if accession in seen_accessions:
                         continue
                     seen_accessions.add(accession)
+                    tickers: list[MetadataScalar] = [
+                        ticker
+                        for ticker in hit.tickers
+                        if isinstance(ticker, str) and ticker
+                    ]
                     metadata: dict[str, MetadataValue] = {
                         "source": "efts",
                         "search_source": "efts",
@@ -527,6 +610,7 @@ class AnalyzePipeline(BasePipeline):
                         "accession_number": accession,
                         "cik": hit.cik,
                         "company_name": hit.company_name,
+                        "tickers": tickers,
                         "form_type": hit.form_type,
                         "filed_date": hit.filed_date.isoformat(),
                         "efts_score": float(hit.score),
@@ -762,12 +846,40 @@ class AnalyzePipeline(BasePipeline):
                             "EFTS auto-download disabled for %s",
                             symbol,
                         )
-                    elif not new_accessions:
-                        perform_download = False
-                        logger.info(
-                            "EFTS auto-download skipped for %s (no new accessions)",
-                            symbol,
+                    else:
+                        accessions_to_download = self._select_efts_accessions(
+                            efts_results,
+                            new_accessions,
+                            limit_per_symbol,
                         )
+                        if accessions_to_download:
+                            t_download = perf_counter()
+                            downloaded = self._download_efts_accessions(
+                                symbol=symbol,
+                                accessions=accessions_to_download,
+                                results=efts_results,
+                            )
+                            timings["efts_download"] = (
+                                perf_counter() - t_download
+                            )
+                            if downloaded:
+                                logger.info(
+                                    "EFTS auto-download for %s: %d accessions",
+                                    symbol,
+                                    downloaded,
+                                )
+                                perform_download = False
+                            else:
+                                logger.info(
+                                    "EFTS auto-download for %s: no accessions downloaded",
+                                    symbol,
+                                )
+                        elif not new_accessions:
+                            perform_download = False
+                            logger.info(
+                                "EFTS auto-download skipped for %s (no new accessions)",
+                                symbol,
+                            )
 
         t0 = perf_counter()
         docs = self._loader.load_documents(

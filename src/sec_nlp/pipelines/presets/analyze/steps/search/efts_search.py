@@ -125,7 +125,32 @@ class EFTSSearchRunner(BaseModel):
 
     def _get_tickers(self) -> list[str]:
         """Get tickers to filter EFTS results."""
-        return list(self.config.symbols)
+        cleaned: list[str] = []
+        for symbol in self.config.symbols:
+            if isinstance(symbol, str):
+                normalized = symbol.strip().upper()
+                if normalized and normalized not in cleaned:
+                    cleaned.append(normalized)
+        return cleaned
+
+    @staticmethod
+    def _filter_hits_by_ticker(
+        hits: list[EFTSHit],
+        tickers: list[str],
+    ) -> list[EFTSHit]:
+        if not tickers:
+            return hits
+        allowed = {ticker.strip().upper() for ticker in tickers if ticker}
+        if not allowed:
+            return hits
+        filtered: list[EFTSHit] = []
+        for hit in hits:
+            hit_tickers = {
+                ticker.strip().upper() for ticker in hit.tickers if ticker
+            }
+            if hit_tickers & allowed:
+                filtered.append(hit)
+        return filtered
 
     async def search_queries(
         self, queries: list[str]
@@ -167,7 +192,30 @@ class EFTSSearchRunner(BaseModel):
                     limit=efts_config.limit,
                     score_threshold=efts_config.score_threshold,
                 )
-                results.append(result)
+                scoped_hits = self._filter_hits_by_ticker(
+                    result.hits,
+                    tickers,
+                )
+                if len(scoped_hits) != len(result.hits):
+                    logger.info(
+                        "EFTS ticker scope '%s': kept %d/%d hits",
+                        query,
+                        len(scoped_hits),
+                        len(result.hits),
+                    )
+                scoped_new_accessions = [
+                    hit.accession_number
+                    for hit in scoped_hits
+                    if hit.accession_number not in self.local_accessions
+                ]
+                results.append(
+                    EFTSSearchResult(
+                        query=query,
+                        hits=scoped_hits,
+                        total=len(scoped_hits),
+                        new_accessions=scoped_new_accessions,
+                    )
+                )
             except EFTSAPIError as e:
                 logger.error("EFTS search failed for query '%s': %s", query, e)
                 results.append(EFTSSearchResult(query=query))
@@ -290,6 +338,7 @@ class EFTSSearchRunner(BaseModel):
                         "accession_number": hit.accession_number,
                         "cik": hit.cik,
                         "company_name": hit.company_name,
+                        "tickers": hit.tickers,
                         "form_type": hit.form_type,
                         "filed_date": hit.filed_date.isoformat(),
                         "efts_score": hit.score,
