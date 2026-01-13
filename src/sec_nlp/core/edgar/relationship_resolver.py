@@ -458,7 +458,14 @@ class RelationshipResolver:
             filing
             for filing in filings
             if (filing.base_form_type or "") == "10-K"
+            and not filing.is_amendment
         ]
+        if not annuals:
+            annuals = [
+                filing
+                for filing in filings
+                if (filing.base_form_type or "") == "10-K"
+            ]
 
         for proxy in proxies:
             if proxy.fiscal_year is None:

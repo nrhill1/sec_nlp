@@ -9,7 +9,6 @@ from xml.etree import ElementTree
 from langchain_core.documents import Document
 
 from sec_nlp.core.infra.logger import logger
-from sec_nlp.core.ingest import filings
 from sec_nlp.types import JsonDict, JsonValue
 
 
@@ -226,6 +225,9 @@ class HoldingsParser:
         return docs
 
     def _build_base_metadata(self, accession_dir: Path) -> JsonDict:
+        # Local import avoids ingest/loader circular imports at module load.
+        from sec_nlp.core.ingest import filings
+
         filing_date = filings.get_filing_date_from_dir(accession_dir)
         filed_date = filing_date.isoformat() if filing_date else None
         return {

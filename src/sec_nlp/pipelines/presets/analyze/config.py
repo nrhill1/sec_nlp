@@ -1,7 +1,8 @@
 # src/sec_nlp/pipelines/presets/analyze/config.py
 """Configuration for generalized document analysis pipeline."""
 
-from typing import ClassVar, Literal, Self
+from collections.abc import Mapping
+from typing import ClassVar, Literal, Self, TypeGuard
 
 from pydantic import (
     BaseModel,
@@ -43,7 +44,7 @@ class EFTSConfig(BaseModel):
     )
 
     enabled: bool = Field(
-        default=False,
+        default=True,
         description="Enable EFTS search to discover filings beyond local downloads",
     )
     limit: int = Field(
@@ -365,6 +366,17 @@ class AnalyzeConfig(BaseConfig):
             return None
         return "|".join(combined_parts)
 
+    @staticmethod
+    def _is_json_mapping(
+        value: JsonValue,
+    ) -> TypeGuard[Mapping[str, JsonValue]]:
+        if not isinstance(value, Mapping):
+            return False
+        for key in value:
+            if not isinstance(key, str):
+                return False
+        return True
+
     @model_validator(mode="before")
     @classmethod
     def _apply_mode_defaults(cls, values: JsonDict) -> JsonDict:
@@ -416,22 +428,20 @@ class AnalyzeConfig(BaseConfig):
             prompt_path = HOLDINGS_PROMPT_PATH
 
         if prompt_path is not None:
+            prompt_value = str(prompt_path)
             raw_llm = values.get("llm")
             if isinstance(raw_llm, LLMConfig):
                 if raw_llm.prompt_file is None:
                     llm_values = raw_llm.model_dump()
-                    llm_values["prompt_file"] = prompt_path
+                    llm_values["prompt_file"] = prompt_value
                     values["llm"] = llm_values
-            elif isinstance(raw_llm, dict):
-                llm_values: JsonDict = {}
-                for key, value in raw_llm.items():
-                    if isinstance(key, str):
-                        llm_values[key] = value
+            elif cls._is_json_mapping(raw_llm):
+                llm_values = dict(raw_llm)
                 if llm_values.get("prompt_file") is None:
-                    llm_values["prompt_file"] = prompt_path
-                    values["llm"] = llm_values
+                    llm_values["prompt_file"] = prompt_value
+                values["llm"] = llm_values
             elif raw_llm is None:
-                values["llm"] = {"prompt_file": prompt_path}
+                values["llm"] = {"prompt_file": prompt_value}
 
         return values
 

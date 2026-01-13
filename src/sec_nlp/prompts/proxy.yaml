@@ -8,9 +8,9 @@ template: |
 
   Your task is to analyze the following section and extract information about executive compensation, board composition, shareholder proposals, and governance matters.
 
-  {%- if context %}
+  {{%- if context %}}
   Section Context: {context}
-  {%- endif %}
+  {{%- endif %}}
 
   Document Content:
   ---

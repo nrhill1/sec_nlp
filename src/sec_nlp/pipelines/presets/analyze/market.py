@@ -37,7 +37,7 @@ class MarketConfig(BaseModel):
     )
 
     enabled: bool = Field(
-        default=False,
+        default=True,
         description="Fetch market data for the analyzed range when enabled.",
     )
     ticker: str | None = Field(
