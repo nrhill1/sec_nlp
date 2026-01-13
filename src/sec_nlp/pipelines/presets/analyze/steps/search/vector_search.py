@@ -14,6 +14,7 @@ from langchain_qdrant import QdrantVectorStore
 from pydantic import BaseModel, ConfigDict, Field
 
 from sec_nlp.core.infra.logger import log_divider, logger
+from sec_nlp.core.types import coerce_bool, coerce_float
 from sec_nlp.pipelines.metadata.filters import (
     MetadataFilters,
     build_metadata_filter,
@@ -435,10 +436,10 @@ class SearchRunnable(
                         summary=metadata_payload.get("summary"),
                         tags=metadata_payload.get("tags"),
                         sentiment=metadata_payload.get("sentiment"),
-                        forward_looking=self._coerce_bool(
+                        forward_looking=coerce_bool(
                             metadata_payload.get("forward_looking")
                         ),
-                        confidence_score=self._coerce_float(
+                        confidence_score=coerce_float(
                             metadata_payload.get("confidence_score")
                         ),
                     )
@@ -640,29 +641,4 @@ class SearchRunnable(
                 if normalized is not None:
                     items.append(normalized)
             return items or None
-        return None
-
-    @staticmethod
-    def _coerce_bool(value: JsonValue | None) -> bool | None:
-        if isinstance(value, bool):
-            return value
-        if isinstance(value, (int, float)) and value in (0, 1):
-            return bool(value)
-        if isinstance(value, str):
-            cleaned = value.strip().lower()
-            if cleaned in ("true", "false"):
-                return cleaned == "true"
-        return None
-
-    @staticmethod
-    def _coerce_float(value: JsonValue | None) -> float | None:
-        if isinstance(value, bool):
-            return None
-        if isinstance(value, (int, float)):
-            return float(value)
-        if isinstance(value, str):
-            try:
-                return float(value)
-            except ValueError:
-                return None
         return None

@@ -8,7 +8,6 @@ import urllib.request
 from collections.abc import Iterable, Mapping, Sequence
 from datetime import date
 from pathlib import Path
-from typing import TypeGuard
 
 from sec_edgar_downloader import Downloader
 
@@ -16,7 +15,8 @@ from sec_nlp.core.edgar.filing_mode import FilingMode
 from sec_nlp.core.infra.logger import logger
 from sec_nlp.core.ingest import filings
 from sec_nlp.core.ingest.types import DownloadResult, DownloadResults
-from sec_nlp.types import JsonDict, JsonObject, JsonValue
+from sec_nlp.core.types import coerce_json_dict
+from sec_nlp.types import JsonDict, JsonValue
 
 
 def _success_download_result(
@@ -463,16 +463,16 @@ def _find_primary_document(payload: JsonDict, accession: str) -> str | None:
 
 
 def _extract_filing_table(payload: JsonDict) -> JsonDict:
-    filings_block = _coerce_json_dict(payload.get("filings"))
+    filings_block = coerce_json_dict(payload.get("filings"))
     if filings_block:
-        recent = _coerce_json_dict(filings_block.get("recent"))
+        recent = coerce_json_dict(filings_block.get("recent"))
         if recent:
             return recent
     return payload
 
 
 def _iter_submission_files(payload: JsonDict) -> Iterable[str]:
-    filings_block = _coerce_json_dict(payload.get("filings"))
+    filings_block = coerce_json_dict(payload.get("filings"))
     if not filings_block:
         return []
     files_value = filings_block.get("files")
@@ -480,31 +480,13 @@ def _iter_submission_files(payload: JsonDict) -> Iterable[str]:
         return []
     names: list[str] = []
     for item in files_value:
-        item_dict = _coerce_json_dict(item)
+        item_dict = coerce_json_dict(item)
         if not item_dict:
             continue
         name = item_dict.get("name")
         if isinstance(name, str) and name:
             names.append(name)
     return names
-
-
-def _coerce_json_dict(value: JsonValue) -> JsonDict | None:
-    if not _is_json_object(value):
-        return None
-    cleaned: JsonDict = {}
-    for key, item in value.items():
-        cleaned[key] = item
-    return cleaned or None
-
-
-def _is_json_object(value: JsonValue) -> TypeGuard[JsonObject]:
-    if not isinstance(value, Mapping):
-        return False
-    for key in value:
-        if not isinstance(key, str):
-            return False
-    return True
 
 
 def _download_to_path(url: str, path: Path, user_agent: str) -> None:

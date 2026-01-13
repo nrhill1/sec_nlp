@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Literal
 
 from sec_nlp.core.infra.logger import logger
+from sec_nlp.core.types import coerce_float
 from sec_nlp.pipelines.output_io import (
     build_accession_dir,
     write_json,
@@ -76,16 +77,6 @@ class OutputFormatter:
         except OSError:
             return None
 
-    def _coerce_score(self, value: object) -> float | None:
-        if isinstance(value, (int, float)):
-            return float(value)
-        if isinstance(value, str):
-            try:
-                return float(value)
-            except ValueError:
-                return None
-        return None
-
     def _confidence_bucket(self, score: float | None) -> str:
         if score is None:
             return "unknown"
@@ -99,7 +90,7 @@ class OutputFormatter:
         self, results: list[AnalysisResultDict]
     ) -> list[AnalysisResultDict]:
         def sort_score(result: AnalysisResultDict) -> float:
-            score = self._coerce_score(result.get("confidence_score"))
+            score = coerce_float(result.get("confidence_score"))
             return score if score is not None else -1.0
 
         sorted_results = sorted(
@@ -109,7 +100,7 @@ class OutputFormatter:
         )
         ranked: list[AnalysisResultDict] = []
         for idx, result in enumerate(sorted_results, start=1):
-            score = self._coerce_score(result.get("confidence_score"))
+            score = coerce_float(result.get("confidence_score"))
             enriched: AnalysisResultDict = {**result}
             enriched["rank"] = idx
             enriched["confidence_bucket"] = self._confidence_bucket(score)

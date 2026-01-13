@@ -15,14 +15,15 @@ import re
 import urllib.error
 import urllib.parse
 import urllib.request
-from collections.abc import Mapping, Sequence
+from collections.abc import Sequence
 from datetime import date
-from typing import Final, TypeGuard
+from typing import Final
 
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr
 
 from sec_nlp.core.infra.logger import logger
-from sec_nlp.types import JsonArray, JsonDict, JsonObject, JsonValue
+from sec_nlp.core.types import as_json_dict
+from sec_nlp.types import JsonArray, JsonDict, JsonValue
 
 from .efts_models import (
     EFTSError,
@@ -343,7 +344,7 @@ class EFTSClient(BaseModel):
 
         hits: list[EFTSHit] = []
         for raw_hit in raw_hits:
-            parsed = _as_json_dict(raw_hit)
+            parsed = as_json_dict(raw_hit)
             if parsed is None:
                 continue
             try:
@@ -395,28 +396,6 @@ class EFTSClient(BaseModel):
 
 
 # -- Helper functions for type-safe JSON parsing --
-
-
-def _as_json_dict(val: JsonValue) -> JsonDict | None:
-    """Convert a JsonValue to JsonDict if it's a dict, else None."""
-    if _is_json_object(val):
-        return _mapping_to_json_dict(val)
-    return None
-
-
-def _is_json_object(val: JsonValue) -> TypeGuard[JsonObject]:
-    """Check whether a JsonValue is a JsonObject with string keys."""
-    if not isinstance(val, Mapping):
-        return False
-    for key in val:
-        if not isinstance(key, str):
-            return False
-    return True
-
-
-def _mapping_to_json_dict(mapping: JsonObject) -> JsonDict:
-    """Convert a JsonObject (Mapping) to a mutable JsonDict."""
-    return {k: mapping[k] for k in mapping}
 
 
 def _get_dict(data: JsonDict, key: str) -> JsonDict:

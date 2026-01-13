@@ -1,8 +1,7 @@
 # src/sec_nlp/pipelines/presets/analyze/config.py
 """Configuration for generalized document analysis pipeline."""
 
-from collections.abc import Mapping
-from typing import ClassVar, Literal, Self, TypeGuard
+from typing import ClassVar, Literal, Self
 
 from pydantic import (
     BaseModel,
@@ -20,6 +19,7 @@ from sec_nlp.core.text.section_patterns import (
     PROXY_SECTION_PATTERNS,
     REGISTRATION_SECTION_PATTERNS,
 )
+from sec_nlp.core.types import is_json_mapping
 from sec_nlp.pipelines.base.config import BaseConfig
 from sec_nlp.pipelines.llm.config import LLMConfig
 from sec_nlp.pipelines.metadata.filters import MetadataFilters
@@ -366,17 +366,6 @@ class AnalyzeConfig(BaseConfig):
             return None
         return "|".join(combined_parts)
 
-    @staticmethod
-    def _is_json_mapping(
-        value: JsonValue,
-    ) -> TypeGuard[Mapping[str, JsonValue]]:
-        if not isinstance(value, Mapping):
-            return False
-        for key in value:
-            if not isinstance(key, str):
-                return False
-        return True
-
     @model_validator(mode="before")
     @classmethod
     def _apply_mode_defaults(cls, values: JsonDict) -> JsonDict:
@@ -435,7 +424,7 @@ class AnalyzeConfig(BaseConfig):
                     llm_values = raw_llm.model_dump()
                     llm_values["prompt_file"] = prompt_value
                     values["llm"] = llm_values
-            elif cls._is_json_mapping(raw_llm):
+            elif is_json_mapping(raw_llm):
                 llm_values = dict(raw_llm)
                 if llm_values.get("prompt_file") is None:
                     llm_values["prompt_file"] = prompt_value
