@@ -138,19 +138,8 @@ class EFTSSearchRunner(BaseModel):
         hits: list[EFTSHit],
         tickers: list[str],
     ) -> list[EFTSHit]:
-        if not tickers:
-            return hits
-        allowed = {ticker.strip().upper() for ticker in tickers if ticker}
-        if not allowed:
-            return hits
-        filtered: list[EFTSHit] = []
-        for hit in hits:
-            hit_tickers = {
-                ticker.strip().upper() for ticker in hit.tickers if ticker
-            }
-            if hit_tickers & allowed:
-                filtered.append(hit)
-        return filtered
+        _ = tickers
+        return hits
 
     async def search_queries(
         self, queries: list[str]

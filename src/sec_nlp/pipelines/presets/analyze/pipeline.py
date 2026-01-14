@@ -1012,6 +1012,28 @@ class AnalyzePipeline(BasePipeline):
                     len(docs_for_analysis),
                     symbol,
                 )
+                search_accession_docs = defaultdict(list)
+                for doc in docs_for_analysis:
+                    accession = get_accession_from_metadata(doc.metadata)
+                    search_accession_docs[accession].append(doc)
+                if len(search_accession_docs) == 1:
+                    only_accession = next(iter(search_accession_docs))
+                    log_chunk_length_stats(
+                        label="vector",
+                        symbol=symbol,
+                        accession=only_accession,
+                        docs=docs_for_analysis,
+                        prefix_color="dim",
+                    )
+                else:
+                    for accession in sorted(search_accession_docs):
+                        log_chunk_length_stats(
+                            label="vector",
+                            symbol=symbol,
+                            accession=accession,
+                            docs=search_accession_docs[accession],
+                            prefix_color="dim",
+                        )
         else:
             logger.info(
                 "Search not configured (no queries/topics) or vector store unavailable; skipping analysis"
