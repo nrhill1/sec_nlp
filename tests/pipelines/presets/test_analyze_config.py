@@ -1,6 +1,8 @@
 # tests/pipelines/presets/test_analyze_config.py
 """Tests for AnalyzeConfig validation."""
 
+from pathlib import Path
+
 import pytest
 from pydantic import ValidationError
 
@@ -33,3 +35,14 @@ def test_proxy_default_topics_do_not_override_cli() -> None:
         }
     )
     assert config.topics == ["custom governance topic"]
+
+
+def test_analyze_config_defaults_to_semantic_chunking(
+    tmp_path: Path,
+) -> None:
+    config = AnalyzeConfig(
+        symbols=["AAPL"],
+        out_path=tmp_path,
+        dl_path=tmp_path,
+    )
+    assert config.chunking_mode == "semantic"

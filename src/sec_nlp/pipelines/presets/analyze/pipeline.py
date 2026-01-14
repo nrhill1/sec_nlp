@@ -395,6 +395,7 @@ class AnalyzePipeline(BasePipeline):
                 for index, symbol in enumerate(pbar):
                     pbar.set_description(f"Processing {symbol}")
                     symbol_outputs, chunk_stats = self._process_symbol(symbol)
+                    symbol_outputs = list(set(symbol_outputs))
                     all_outputs.extend(symbol_outputs)
                     symbol_meta: SymbolRunMetadata = {
                         "outputs": len(symbol_outputs),
@@ -443,6 +444,7 @@ class AnalyzePipeline(BasePipeline):
                     search_outputs = self._search_runner.run(
                         queries=search_queries,
                     )
+                search_outputs = list(set(search_outputs))
                 all_outputs.extend(search_outputs)
                 metadata["search_results"] = len(search_outputs)
                 metadata["search_outputs"] = search_outputs
@@ -452,6 +454,7 @@ class AnalyzePipeline(BasePipeline):
                 metadata["relationships"] = dict(self._relationship_graphs)
 
             self.config.complete_run(success=True)
+            all_outputs = list(set(all_outputs))
             return AnalyzeResult(
                 success=True,
                 outputs=all_outputs,
