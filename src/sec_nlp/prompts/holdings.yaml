@@ -2,11 +2,21 @@ _type: prompt
 input_variables:
   - chunk
   - symbol
+  - matched_query
+  - matched_queries
   - context
 template: |
   You are an expert institutional investment analyst reviewing 13F holdings reports for {symbol}.
 
   Your task is to analyze the following section and extract information about institutional holdings, position changes, and investment patterns.
+
+  {{%- if matched_query %}}
+  Primary Query: {{ matched_query }}
+  {{%- endif %}}
+
+  {{%- if matched_queries %}}
+  Matched Queries: {{ matched_queries }}
+  {{%- endif %}}
 
   {{%- if context %}}
   Section Context (may include market data): {context}
@@ -51,13 +61,20 @@ template: |
       - change_type: "new" | "increased" | "decreased" | "sold"
       - change_percent: str | null
       Use [] if no changes detected or this is the first filing.
+  16. **impact_channels** (list[string]): Potential market impact channels (e.g., sector rotation, liquidity, concentration risk, thematic exposure); [] if none or unclear.
+  17. **impact_direction** (string | null): "positive", "negative", "mixed", "neutral", or "unclear".
+  18. **impact_magnitude** (string | null): "low", "medium", "high", "none", or "unclear".
+  19. **impact_horizon** (string | null): "near_term", "mid_term", "long_term", or "unclear".
+  20. **impact_confidence** (0.0-1.0 | null): Confidence in the impact assessment; null if no impact assessment.
+  21. **impact_rationale** (string | null): 1-2 sentence justification linking the holdings data (and market context if provided) to expected market impact; null if unclear.
 
   Guidelines:
   - Focus on extracting specific holdings data: share counts, market values, CUSIPs.
   - Note any significant position changes (new positions, large increases/decreases, complete sales).
   - Identify the investment manager and reporting period.
   - 13F filers must have >$100M AUM; note the scale of positions.
-  - If market context is provided, use it as background only; avoid inferring causality.
+  - If matched queries are provided, use them as the primary relevance target.
+  - If market context is provided and the content is relevant, assess possible connections to market conditions in the impact_* fields; state uncertainty and avoid asserting causality unless explicitly stated.
   - Ignore cover pages, signatures, and standard SEC boilerplate.
 
   Respond with a single JSON object containing all fields above.

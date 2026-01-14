@@ -40,6 +40,12 @@ from sec_nlp.prompts import load_prompt_template
 from sec_nlp.types import JsonDict, ResultDict
 
 from .config import AnalyzeConfig
+from .io.enhancements import (
+    build_peer_comparison,
+    build_symbol_profile,
+    write_peer_summary,
+    write_symbol_summary,
+)
 from .io.outputs import OutputFormatter
 from .io.result_writer import write_results
 from .market import MarketEnrichment, build_market_enrichment
@@ -117,6 +123,7 @@ class AnalyzePipeline(BasePipeline):
     _market_context_by_symbol: dict[str, str] = PrivateAttr(
         default_factory=dict
     )
+    _symbol_profiles: dict[str, JsonDict] = PrivateAttr(default_factory=dict)
 
     @classmethod
     def config_model(cls) -> type[AnalyzeConfig]:
@@ -396,6 +403,23 @@ class AnalyzePipeline(BasePipeline):
                     metadata[symbol] = symbol_meta
                     if index < last_index:
                         log_divider(logger, color="magenta")
+
+            if len(self._symbol_profiles) > 1:
+                run_component = (
+                    str(self.config.short_id)
+                    if self.config.short_id > 0
+                    else str(self.config.run_id)
+                )
+                peer_summary = build_peer_comparison(self._symbol_profiles)
+                peer_dir = (
+                    self.config.out_path / self.pipeline_type / run_component
+                )
+                peer_path = write_peer_summary(
+                    output_dir=peer_dir,
+                    summary=peer_summary,
+                )
+                if peer_path is not None:
+                    all_outputs.append(peer_path)
 
             # Run semantic search if queries are configured
             if self.config.get_search_queries():
@@ -1065,6 +1089,20 @@ class AnalyzePipeline(BasePipeline):
             market_data=market_data,
             market_context=market_context,
         )
+        self._symbol_profiles[symbol] = build_symbol_profile(
+            symbol=symbol,
+            results=relevant_results,
+        )
+        summary_path = write_symbol_summary(
+            output_dir=self.config.get_symbol_output_dir(symbol),
+            symbol=symbol,
+            run_id=self.config.run_id,
+            analysis_results=analysis_results,
+            relevant_results=relevant_results,
+            fallback_meta=docs[0].metadata or {},
+        )
+        if summary_path is not None:
+            output_files.append(summary_path)
         if output_files:
             output_dir = self.config.get_symbol_output_dir(symbol)
             logger.info(

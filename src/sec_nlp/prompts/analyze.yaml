@@ -42,6 +42,7 @@ template: |
   - Focus on substantive business info, risks, financial terms, agreements, or strategic insights.
   - For binding_status, distinguish binding vs non_binding vs conditional; list any contingencies explicitly stated.
   - For impact fields, only claim impacts that are explicit or tightly implied by the text; otherwise use null/[] and explain uncertainty in impact_rationale.
+  - When market context is provided and is_relevant is true, assess possible connections to market conditions in the impact_* fields; state uncertainty and avoid asserting causality unless explicitly stated.
   - Ignore tables of contents, headers/footers, and boilerplate.
   - Do not hallucinate entities; leave lists empty and optional fields null when absent.
   - Summaries must be specific and topic-aligned: include only details that directly support the query/topic intent; include entities, dates, amounts, and obligations when present; avoid vague phrasing.

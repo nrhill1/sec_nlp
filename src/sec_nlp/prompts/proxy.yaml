@@ -2,11 +2,21 @@ _type: prompt
 input_variables:
   - chunk
   - symbol
+  - matched_query
+  - matched_queries
   - context
 template: |
   You are an expert corporate governance analyst reviewing DEF 14A proxy statements for {symbol}.
 
   Your task is to analyze the following section and extract information about executive compensation, board composition, shareholder proposals, and governance matters.
+
+  {{%- if matched_query %}}
+  Primary Query: {{ matched_query }}
+  {{%- endif %}}
+
+  {{%- if matched_queries %}}
+  Matched Queries: {{ matched_queries }}
+  {{%- endif %}}
 
   {{%- if context %}}
   Section Context (may include market data): {context}
@@ -53,12 +63,19 @@ template: |
       - description: str
       - board_recommendation: "for" | "against" | null
       Otherwise null.
+  16. **impact_channels** (list[string]): Potential market impact channels (e.g., governance risk, shareholder activism, executive turnover, voting outcomes); [] if none or unclear.
+  17. **impact_direction** (string | null): "positive", "negative", "mixed", "neutral", or "unclear".
+  18. **impact_magnitude** (string | null): "low", "medium", "high", "none", or "unclear".
+  19. **impact_horizon** (string | null): "near_term", "mid_term", "long_term", or "unclear".
+  20. **impact_confidence** (0.0-1.0 | null): Confidence in the impact assessment; null if no impact assessment.
+  21. **impact_rationale** (string | null): 1-2 sentence justification linking the text (and market context if provided) to expected market impact; null if unclear.
 
   Guidelines:
   - Focus on executive compensation, board composition, shareholder proposals, and governance policies.
   - Extract specific dollar amounts, share counts, and percentages when present.
   - Note any related-party transactions or potential conflicts of interest.
-  - If market context is provided, use it as background only; avoid inferring causality.
+  - If matched queries are provided, use them as the primary relevance target.
+  - If market context is provided and the content is relevant, assess possible connections to market conditions in the impact_* fields; state uncertainty and avoid asserting causality unless explicitly stated.
   - Ignore tables of contents, headers/footers, and boilerplate legal disclaimers.
 
   Respond with a single JSON object containing all fields above.

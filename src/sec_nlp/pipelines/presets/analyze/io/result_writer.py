@@ -84,9 +84,10 @@ def write_results(
                 output_files.extend(
                     formatter.export(output, output_dir, accession)
                 )
-        else:
-            accession = get_accession_from_metadata(filing_meta)
-            symbol_for_output = resolve_symbol_for_output(symbol, filing_meta)
+            return output_files
+
+        accession = get_accession_from_metadata(filing_meta)
+        symbol_for_output = resolve_symbol_for_output(symbol, filing_meta)
         output = formatter.build_output(
             symbol=symbol_for_output,
             filing_meta=filing_meta,
