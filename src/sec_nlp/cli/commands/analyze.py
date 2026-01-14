@@ -13,6 +13,7 @@ from sec_nlp.core.infra.logger import (
     color_text,
     logger,
 )
+from sec_nlp.core.types import coerce_json_dict
 from sec_nlp.pipelines.base.result import BaseResult
 from sec_nlp.pipelines.presets.analyze import (
     AnalyzeConfig,
@@ -99,9 +100,11 @@ class AnalyzeCommand(AnalyzeConfig, PipelineCommand):
         cli_queries = values.get("cli_queries")
         if isinstance(cli_queries, list) and cli_queries:
             raw_search = values.get("search")
-            search_values: dict[str, JsonValue] = (
-                dict(raw_search) if isinstance(raw_search, dict) else {}
-            )
+            search_values: dict[str, JsonValue] = {}
+            if isinstance(raw_search, dict):
+                search_dict = coerce_json_dict(raw_search)
+                if search_dict is not None:
+                    search_values.update(search_dict)
             search_values["queries"] = cli_queries
             values["search"] = search_values
         return values

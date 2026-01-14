@@ -1,7 +1,7 @@
 # tests/pipelines/presets/test_analyze_enhancements.py
 """Tests for analysis enhancement summaries."""
 
-from sec_nlp.core.types import is_json_mapping
+from sec_nlp.core.types import coerce_json_dict
 from sec_nlp.pipelines.presets.analyze.io.enhancements import (
     build_peer_comparison,
     build_symbol_summary,
@@ -50,7 +50,7 @@ def test_build_symbol_summary_tracks_trends_and_comparisons() -> None:
     assert isinstance(trends, list)
     accessions: list[str] = []
     for row in trends:
-        assert is_json_mapping(row)
+        assert isinstance(row, dict)
         accession = row.get("accession")
         assert isinstance(accession, str)
         accessions.append(accession)
@@ -60,9 +60,12 @@ def test_build_symbol_summary_tracks_trends_and_comparisons() -> None:
     assert isinstance(comparisons, list)
     assert len(comparisons) == 1
     comparison = comparisons[0]
-    assert is_json_mapping(comparison)
-    tags_added = comparison.get("tags_added")
-    tags_removed = comparison.get("tags_removed")
+    comparison_dict = (
+        coerce_json_dict(comparison) if isinstance(comparison, dict) else None
+    )
+    assert comparison_dict is not None
+    tags_added = comparison_dict.get("tags_added")
+    tags_removed = comparison_dict.get("tags_removed")
     assert isinstance(tags_added, list)
     assert isinstance(tags_removed, list)
     added_values = [tag for tag in tags_added if isinstance(tag, str)]
@@ -71,16 +74,25 @@ def test_build_symbol_summary_tracks_trends_and_comparisons() -> None:
     assert "pricing" in removed_values
 
     rollup = summary.get("entity_rollup")
-    assert is_json_mapping(rollup)
-    company_rollup = rollup.get("company")
-    assert is_json_mapping(company_rollup)
-    assert company_rollup.get("unique") == 1
-    top_values = company_rollup.get("top")
+    rollup_dict = coerce_json_dict(rollup) if isinstance(rollup, dict) else None
+    assert rollup_dict is not None
+    company_rollup = rollup_dict.get("company")
+    company_dict = (
+        coerce_json_dict(company_rollup)
+        if isinstance(company_rollup, dict)
+        else None
+    )
+    assert company_dict is not None
+    assert company_dict.get("unique") == 1
+    top_values = company_dict.get("top")
     assert isinstance(top_values, list)
     assert top_values
     top_entry = top_values[0]
-    assert is_json_mapping(top_entry)
-    assert top_entry.get("count") == 2
+    top_dict = (
+        coerce_json_dict(top_entry) if isinstance(top_entry, dict) else None
+    )
+    assert top_dict is not None
+    assert top_dict.get("count") == 2
 
 
 def test_build_peer_comparison_ranks_net_sentiment() -> None:
@@ -107,5 +119,5 @@ def test_build_peer_comparison_ranks_net_sentiment() -> None:
     assert isinstance(sentiment_rank, list)
     assert sentiment_rank
     first_rank = sentiment_rank[0]
-    assert is_json_mapping(first_rank)
+    assert isinstance(first_rank, dict)
     assert first_rank.get("symbol") == "AAA"

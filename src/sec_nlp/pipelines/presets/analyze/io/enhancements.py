@@ -8,7 +8,7 @@ from datetime import date
 from pathlib import Path
 
 from sec_nlp.core.infra.logger import logger
-from sec_nlp.core.types import is_json_mapping
+from sec_nlp.core.types import coerce_json_dict
 from sec_nlp.pipelines.metadata.accession import group_results_by_accession
 from sec_nlp.pipelines.output_io import write_yaml
 from sec_nlp.pipelines.presets.analyze.market import _parse_date_value
@@ -201,16 +201,19 @@ def _extract_entity_names(value: JsonValue) -> list:
     if isinstance(value, str):
         cleaned = value.strip()
         return [cleaned] if cleaned else []
-    if is_json_mapping(value):
+    if isinstance(value, dict):
+        mapping = coerce_json_dict(value)
+        if mapping is None:
+            return names
         for key in _ENTITY_NAME_KEYS:
-            candidate = value.get(key)
+            candidate = mapping.get(key)
             if isinstance(candidate, str):
                 cleaned = candidate.strip()
                 if cleaned:
                     names.append(cleaned)
         if names:
             return names
-        for item in value.values():
+        for item in mapping.values():
             names.extend(_extract_entity_names(item))
         return names
     if isinstance(value, list):
@@ -231,9 +234,10 @@ def build_entity_rollup(
         if "extracted_entities" not in result:
             continue
         entities = result["extracted_entities"]
-        if not is_json_mapping(entities):
+        entities_dict = coerce_json_dict(entities)
+        if entities_dict is None:
             continue
-        for entity_type, value in entities.items():
+        for entity_type, value in entities_dict.items():
             for name in _extract_entity_names(value):
                 counts_by_type[entity_type][name] += 1
 

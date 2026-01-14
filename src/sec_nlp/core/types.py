@@ -30,9 +30,28 @@ def mapping_to_json_dict(mapping: JsonObject) -> JsonDict:
 
 def as_json_dict(value: JsonValue) -> JsonDict | None:
     """Coerce a JsonValue into a JsonDict if possible."""
-    if not is_json_object(value):
+    if not isinstance(value, Mapping):
         return None
-    return mapping_to_json_dict(value)
+    json_dict: JsonDict = {}
+    for key, item in value.items():
+        if not isinstance(key, str):
+            return None
+        normalized: JsonValue
+        if isinstance(item, Mapping):
+            nested = {}
+            for mapping_key, mapping_value in item.items():
+                if not isinstance(mapping_key, str):
+                    return None
+                nested[mapping_key] = mapping_value
+            normalized = nested
+        elif isinstance(item, Sequence) and not isinstance(item, str):
+            normalized = list(item)
+        elif isinstance(item, (str, int, float, bool)) or item is None:
+            normalized = item
+        else:
+            return None
+        json_dict[key] = normalized
+    return json_dict
 
 
 def coerce_json_dict(value: JsonValue) -> JsonDict | None:
