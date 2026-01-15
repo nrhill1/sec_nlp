@@ -62,10 +62,11 @@ def profile_func[**P, T](func: Callable[P, T]) -> Callable[P, T]:
             s = io.StringIO()
             ps = pstats.Stats(profiler, stream=s).sort_stats("cumulative")
             ps.print_stats(20)
-
-            logger.info(
-                "\n=== Profile for %s ===\n%s", func.__name__, s.getvalue()
-            )
+            output = s.getvalue().strip()
+            logger.info("=== Profile for %s ===", func.__name__)
+            if output:
+                for line in output.splitlines():
+                    logger.info(line)
 
     return wrapper
 
@@ -130,7 +131,10 @@ class Profiler:
                 ps.sort_stats(self.sort_by)
                 ps.print_stats(self.top_n)
                 output = s.getvalue().strip()
-            logger.info("\n=== Profiling Results ===\n%s", output)
+            logger.info("=== Profiling Results ===")
+            if output:
+                for line in output.splitlines():
+                    logger.info(line)
 
     def get_stats(self) -> pstats.Stats:
         """Get statistics object for further analysis."""

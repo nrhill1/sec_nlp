@@ -4,6 +4,7 @@
 
 ### Guidelines
 
+[`ty`](https://docs.astral.sh/ty/) is the type checker for this project.
 When fixing type errors, writing any new code, or modifying exsiting code:
 
 1. No `Any` typing -- if absolutely necessary, ensure the case for its use is presented to the user.

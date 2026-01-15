@@ -19,7 +19,7 @@ from sec_nlp.core.text.section_patterns import (
     PROXY_SECTION_PATTERNS,
     REGISTRATION_SECTION_PATTERNS,
 )
-from sec_nlp.core.types import is_json_mapping
+from sec_nlp.core.types import coerce_json_dict
 from sec_nlp.pipelines.base.config import BaseConfig
 from sec_nlp.pipelines.llm.config import LLMConfig
 from sec_nlp.pipelines.metadata.filters import MetadataFilters
@@ -148,7 +148,7 @@ class SearchConfig(BaseModel):
         description="Maximum results per query",
     )
     score_threshold: float = Field(
-        default=0.5,
+        default=0.4,
         ge=0.0,
         le=1.0,
         description=(
@@ -183,7 +183,7 @@ class SearchConfig(BaseModel):
         description="Run LLM analysis on search results",
     )
     analyze_limit: int = Field(
-        default=10,
+        default=5,
         ge=1,
         description="Maximum number of search hits to analyze per query",
     )
@@ -357,9 +357,13 @@ class AnalyzeConfig(BaseConfig):
         market_values: dict[str, JsonValue] = {}
         raw_market = values.get("market")
         if isinstance(raw_market, MarketConfig):
-            market_values.update(raw_market.model_dump())
+            market_dict = coerce_json_dict(raw_market.model_dump())
+            if market_dict is not None:
+                market_values.update(market_dict)
         elif isinstance(raw_market, dict):
-            market_values.update(raw_market)
+            market_dict = coerce_json_dict(raw_market)
+            if market_dict is not None:
+                market_values.update(market_dict)
         if "market_enabled" in values:
             market_values["enabled"] = values.get("market_enabled")
         optional_flags = {
@@ -385,9 +389,13 @@ class AnalyzeConfig(BaseConfig):
         efts_values: dict[str, JsonValue] = {}
         raw_efts = values.get("efts")
         if isinstance(raw_efts, EFTSConfig):
-            efts_values.update(raw_efts.model_dump())
+            efts_dict = coerce_json_dict(raw_efts.model_dump())
+            if efts_dict is not None:
+                efts_values.update(efts_dict)
         elif isinstance(raw_efts, dict):
-            efts_values.update(raw_efts)
+            efts_dict = coerce_json_dict(raw_efts)
+            if efts_dict is not None:
+                efts_values.update(efts_dict)
         if "efts_enabled" in values:
             efts_values["enabled"] = values.get("efts_enabled")
         if "auto_download" not in efts_values:
@@ -468,8 +476,8 @@ class AnalyzeConfig(BaseConfig):
                     llm_values = raw_llm.model_dump()
                     llm_values["prompt_file"] = prompt_value
                     values["llm"] = llm_values
-            elif is_json_mapping(raw_llm):
-                llm_values = dict(raw_llm)
+            elif isinstance(raw_llm, dict):
+                llm_values = coerce_json_dict(raw_llm) or {}
                 if llm_values.get("prompt_file") is None:
                     llm_values["prompt_file"] = prompt_value
                 values["llm"] = llm_values
@@ -488,8 +496,9 @@ class AnalyzeConfig(BaseConfig):
         raw_search = values.get("search")
         if isinstance(raw_search, SearchConfig):
             has_search_queries = bool(raw_search.queries)
-        elif is_json_mapping(raw_search):
-            raw_queries = raw_search.get("queries")
+        elif isinstance(raw_search, dict):
+            search_dict = coerce_json_dict(raw_search) or {}
+            raw_queries = search_dict.get("queries")
             if isinstance(raw_queries, list):
                 has_search_queries = any(
                     isinstance(item, str) and item.strip()
@@ -617,12 +626,12 @@ class AnalyzeConfig(BaseConfig):
         description="When true, order chunks by topic hit count before analysis",
     )
     top_k_chunks: int | None = Field(
-        default=60,
+        default=20,
         ge=1,
         description="Keep only the top-K scored chunks after preprocessing (None disables)",
     )
     adaptive_top_k_cap: int | None = Field(
-        default=None,
+        default=20,
         ge=1,
         description="Optional cap applied to top-k selection to prevent huge runs when many chunks remain",
     )
@@ -751,7 +760,7 @@ class AnalyzeConfig(BaseConfig):
         description="Number of bits for SimHash fingerprint (64 is standard)",
     )
     simhash_max_distance: int = Field(
-        default=3,
+        default=6,
         ge=0,
         le=32,
         description="Maximum hamming distance to consider documents as duplicates (lower = stricter)",
