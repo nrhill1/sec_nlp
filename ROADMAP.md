@@ -2,16 +2,16 @@
 
 Potential next steps and new features for sec-nlp.
 
-## Data Source Expansion
-- **Additional filing types**: Support for proxy statements (DEF 14A), S-1/S-3 registration statements, or 13F holdings reports
-- **Cross-referencing filings**: Link related filings (e.g., 10-K with related 8-Ks) to build fuller timelines
-- **EDGAR full-text search integration**: Combine local vector search with SEC's EFTS API for broader coverage
+## ~~Data Source Expansion~~
+- ~~**Additional filing types**: Support for proxy statements (DEF 14A), S-1/S-3 registration statements, or 13F holdings reports~~
+- ~~**Cross-referencing filings**: Link related filings (e.g., 10-K with related 8-Ks) to build fuller timelines~~
+- ~~**EDGAR full-text search integration**: Combine local vector search with SEC's EFTS API for broader coverage~~
 
-## Analysis Enhancements
-- **Multi-filing comparative analysis**: Compare language changes between consecutive 10-Ks (diff analysis, risk factor evolution)
-- **Peer comparison**: Analyze the same topic/section across multiple companies in a sector
-- **Sentiment trend tracking**: Track sentiment shifts in risk disclosures or MD&A sections over time
-- **Entity extraction pipeline**: Dedicated pipeline for named entities (people, companies, contracts, dates)
+## ~~Analysis Enhancements~~
+- ~~**Multi-filing comparative analysis**: Compare language changes between consecutive 10-Ks (diff analysis, risk factor evolution)~~
+- ~~**Peer comparison**: Analyze the same topic/section across multiple companies in a sector~~
+- ~~**Sentiment trend tracking**: Track sentiment shifts in risk disclosures or MD&A sections over time~~
+- ~~**Entity extraction pipeline**: Dedicated pipeline for named entities (people, companies, contracts, dates)~~
 
 ## New Domain Pipelines
 - **Insider transactions** (`Form 4`): Track insider buying/selling signals
