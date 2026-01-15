@@ -37,6 +37,8 @@ help:
 	@echo ""
 	@echo "Cleanup:"
 	@echo "  clean          Remove Rust build artifacts"
+	@echo "  clean-all      Remove Rust artifacts + maturin outputs + sccache"
+	@echo "  clean-sccache  Clear sccache cache (if installed)"
 
 # =========================================================================
 # Development
@@ -74,3 +76,20 @@ test:
 .PHONY: clean
 clean:
 	@cargo clean --manifest-path $(CARGO_MANIFEST)
+
+.PHONY: clean-sccache
+clean-sccache:
+	@if command -v sccache >/dev/null 2>&1; then \
+		echo "==> Clearing sccache..."; \
+		sccache --stop-server >/dev/null 2>&1 || true; \
+		sccache --clear || true; \
+	else \
+		echo "sccache not installed; skipping"; \
+	fi
+
+.PHONY: clean-all
+clean-all: clean
+	@echo "==> Removing maturin build artifacts..."
+	@rm -rf $(REPO_ROOT)/target/wheels $(REPO_ROOT)/target/sdist $(REPO_ROOT)/dist $(REPO_ROOT)/.maturin
+	@$(MAKE) clean-sccache
+	@echo "✓ Rust artifacts cleaned"

@@ -236,6 +236,9 @@ clean:
 	@find $(REPO_ROOT) -type f -name ".*~" -delete 2>/dev/null || true
 	@cd $(REPO_ROOT) && uv cache clean
 	@rm -rf $(PROFILE_DIR)
-	@rm -rf $(REPO_ROOT)/.ruff_cache $(REPO_ROOT)/htmlcov $(REPO_ROOT)/.coverage $(STUBS_DIR)
+	@rm -rf $(REPO_ROOT)/.ruff_cache $(REPO_ROOT)/htmlcov $(REPO_ROOT)/.coverage
+	@if [ -d $(STUBS_DIR) ]; then \
+		find $(STUBS_DIR) -mindepth 1 -maxdepth 1 ! -name "market" -exec rm -rf {} +; \
+	fi
 	@echo "✓ Python artifacts cleaned"
 	@echo ""

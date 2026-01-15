@@ -59,7 +59,10 @@ help:
 	@echo ""
 	@echo "Language-Specific:"
 	@echo "  py-<target>            Run Python target (e.g., py-lint, py-test)"
-	@echo "  market-<target>        Run Market (Rust) target (e.g., market-dev)"
+	@echo "  rs-<target>            Run Rust target (e.g., rs-dev)"
+	@echo "  rs-clean               Clean Rust build artifacts"
+	@echo "  rs-clean-all           Clean Rust artifacts + sccache"
+	@echo "  rs-clean-sccache       Clear sccache cache"
 	@echo "  maturin-dev            Build + install Rust extension via maturin"
 	@echo "  maturin-build          Build release wheels via maturin"
 	@echo "  maturin-sdist          Build a source distribution via maturin"
@@ -138,8 +141,8 @@ py-%: ready
 # Rust Targets (delegate to crates/market/Makefile)
 # =========================================================================
 
-.PHONY: market-%
-market-%:
+.PHONY: rs-%
+rs-%:
 	@$(MAKE) -C $(MARKET_DIR) $*
 
 # =========================================================================
@@ -277,9 +280,23 @@ clean:
 	@echo "╚════════════════════════════════════════════════════════════════╝"
 	@echo ""
 	@$(MAKE) py-clean
+	@$(MAKE) rs-clean
 	@rm -f $(STAMP_BOOTSTRAP) $(STAMP_UVSYNC)
 	@echo "✓ All artifacts cleaned"
 	@echo ""
+
+.PHONY: rs-clean
+rs-clean:
+	@$(MAKE) -C $(MARKET_DIR) clean
+
+.PHONY: rs-clean-all
+rs-clean-all:
+	@$(MAKE) -C $(MARKET_DIR) clean-all
+
+.PHONY: rs-clean-sccache
+rs-clean-sccache:
+	@$(MAKE) -C $(MARKET_DIR) clean-sccache
+
 
 .PHONY: nuclear-clean
 nuclear-clean: clean
