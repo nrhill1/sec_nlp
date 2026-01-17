@@ -322,12 +322,17 @@ class AnalyzePipeline(BasePipeline):
         )
 
         # Initialize output formatter
+        output_run_id = (
+            self.config.short_id
+            if self.config.short_id > 0
+            else self.config.run_id
+        )
         self._output_formatter = OutputFormatter(
             export_format=self.config.export_format,
             confidence_threshold=self.config.confidence_threshold,
             topics=keyword_terms,
             include_raw_chunks=self.config.include_raw_chunks,
-            run_id=str(self.config.run_id),
+            run_id=output_run_id,
             model_name=self.config.llm.model_name,
             confidence_mode=self.config.confidence_mode,
             prompt_path=self.config.llm.prompt_path,
@@ -1121,7 +1126,11 @@ class AnalyzePipeline(BasePipeline):
         summary_path = write_symbol_summary(
             output_dir=self.config.get_symbol_output_dir(symbol),
             symbol=symbol,
-            run_id=self.config.run_id,
+            run_id=(
+                self.config.short_id
+                if self.config.short_id > 0
+                else self.config.run_id
+            ),
             analysis_results=analysis_results,
             relevant_results=relevant_results,
             fallback_meta=docs[0].metadata or {},
@@ -1244,12 +1253,17 @@ class AnalyzePipeline(BasePipeline):
         """Expose result writing for tests and downstream usage."""
         formatter = getattr(self, "_output_formatter", None)
         if formatter is None:
+            output_run_id = (
+                self.config.short_id
+                if self.config.short_id > 0
+                else self.config.run_id
+            )
             formatter = OutputFormatter(
                 export_format=self.config.export_format,
                 confidence_threshold=self.config.confidence_threshold,
                 topics=self.config.topics or self.config.keywords,
                 include_raw_chunks=self.config.include_raw_chunks,
-                run_id=str(self.config.run_id),
+                run_id=output_run_id,
                 model_name=self.config.llm.model_name,
                 confidence_mode=self.config.confidence_mode,
                 prompt_path=self.config.llm.prompt_path,

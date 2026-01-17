@@ -37,7 +37,7 @@ class OutputFormatter:
         confidence_threshold: float,
         topics: list[str] | None = None,
         include_raw_chunks: bool = False,
-        run_id: str | None = None,
+        run_id: int | None = None,
         model_name: str | None = None,
         confidence_mode: str | None = None,
         prompt_path: Path | None = None,

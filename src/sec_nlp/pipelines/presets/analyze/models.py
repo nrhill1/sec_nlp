@@ -353,7 +353,7 @@ class OutputProvenance(BaseModel):
         defer_build=True,
     )
 
-    run_id: str | None = None
+    run_id: int | None = None
     pipeline_version: str | None = None
     model_name: str | None = None
     confidence_mode: str | None = None
