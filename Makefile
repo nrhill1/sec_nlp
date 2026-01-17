@@ -15,8 +15,8 @@ export RUSTC_WRAPPER ?= $(SCCACHE)
 
 # Nested Makefile directories
 PYTHON_DIR := $(ROOT_DIR)/src
-MARKET_DIR := $(ROOT_DIR)/crates/market
-MARKET_MANIFEST := $(MARKET_DIR)/Cargo.toml
+RUST_DIR := $(ROOT_DIR)/crates/market
+MARKET_MANIFEST := $(RUST_DIR)/Cargo.toml
 
 # Maturin
 MATURIN_FLAGS ?=
@@ -143,7 +143,7 @@ py-%: ready
 
 .PHONY: rs-%
 rs-%:
-	@$(MAKE) -C $(MARKET_DIR) $*
+	@$(MAKE) -C $(RUST_DIR) $*
 
 # =========================================================================
 # Maturin Targets
@@ -287,15 +287,15 @@ clean:
 
 .PHONY: rs-clean
 rs-clean:
-	@$(MAKE) -C $(MARKET_DIR) clean
+	@$(MAKE) -C $(RUST_DIR) clean
 
 .PHONY: rs-clean-all
 rs-clean-all:
-	@$(MAKE) -C $(MARKET_DIR) clean-all
+	@$(MAKE) -C $(RUST_DIR) clean-all
 
 .PHONY: rs-clean-sccache
 rs-clean-sccache:
-	@$(MAKE) -C $(MARKET_DIR) clean-sccache
+	@$(MAKE) -C $(RUST_DIR) clean-sccache
 
 
 .PHONY: nuclear-clean
