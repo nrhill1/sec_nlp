@@ -69,6 +69,16 @@ _DEFAULT_MODE_TOPICS = {
         "business description",
         "prospectus",
     ],
+    FilingMode.insider: [
+        "insider transactions",
+        "beneficial ownership",
+        "form 3",
+        "form 4",
+        "10b5-1",
+        "open market purchase",
+        "sale",
+        "equity award",
+    ],
 }
 
 

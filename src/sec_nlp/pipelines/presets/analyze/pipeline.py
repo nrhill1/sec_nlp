@@ -564,15 +564,20 @@ class AnalyzePipeline(BasePipeline):
         return downloaded
 
     def _local_accessions(self, symbol: str) -> set[str]:
-        filing_dir = (
-            self.config.dl_path
-            / "sec-edgar-filings"
-            / symbol.upper()
-            / self.config.mode.form
-        )
-        if not filing_dir.exists():
-            return set()
-        return {path.name for path in filing_dir.iterdir() if path.is_dir()}
+        accession_set = set()
+        for form_type in self.config.mode.forms:
+            filing_dir = (
+                self.config.dl_path
+                / "sec-edgar-filings"
+                / symbol.upper()
+                / form_type
+            )
+            if not filing_dir.exists():
+                continue
+            accession_set.update(
+                {path.name for path in filing_dir.iterdir() if path.is_dir()}
+            )
+        return accession_set
 
     def _run_efts_for_symbol(
         self,

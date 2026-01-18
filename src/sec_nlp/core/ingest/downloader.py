@@ -13,7 +13,6 @@ from sec_edgar_downloader import Downloader
 
 from sec_nlp.core.edgar.filing_mode import FilingMode
 from sec_nlp.core.infra.logger import logger
-from sec_nlp.core.ingest import filings
 from sec_nlp.core.ingest.types import DownloadResult, DownloadResults
 from sec_nlp.core.types import coerce_json_dict
 from sec_nlp.types import JsonDict, JsonValue
@@ -54,72 +53,86 @@ def download_filings(
     """Download filings for symbols into work_folder."""
     download_results: DownloadResults = {}
     downloader = Downloader(company_name, email, str(work_folder))
-    filing_type = mode.form
+    form_types = mode.forms
+    form_label = ", ".join(form_types)
 
     for symbol in sorted(symbols):
-        symbol_dir = filings.filing_dir(work_folder, symbol, mode)
-        existing_accessions: list[str] = []
-        if symbol_dir.exists():
-            existing_accessions = [
-                p.name for p in symbol_dir.iterdir() if p.is_dir()
-            ]
-            existing_count = len(existing_accessions)
-            if (
-                limit_per_symbol is not None
-                and existing_count >= limit_per_symbol
-            ):
-                logger.info(
-                    "Skipping download for %s %s; already have %d accessions (limit=%d)",
-                    symbol,
-                    filing_type,
-                    existing_count,
-                    limit_per_symbol,
-                )
-                download_results[symbol] = _success_download_result(
-                    downloaded=0,
-                    form_type=filing_type,
-                    skipped_existing=existing_count,
-                )
-                continue
-            if existing_count:
-                logger.info(
-                    "Found %d existing accessions for %s %s; downloading up to %s more",
-                    existing_count,
-                    symbol,
-                    filing_type,
-                    "unlimited"
-                    if limit_per_symbol is None
-                    else max(limit_per_symbol - existing_count, 0),
-                )
+        total_downloaded = 0
+        total_skipped = 0
+        errors = []
 
-        try:
-            download_limit = (
-                None
-                if limit_per_symbol is None
-                else max(limit_per_symbol - len(existing_accessions), 0)
+        for form_type in form_types:
+            symbol_dir = (
+                work_folder / "sec-edgar-filings" / symbol.upper() / form_type
             )
-            if download_limit == 0:
-                download_results[symbol] = _success_download_result(
-                    downloaded=0,
-                    form_type=filing_type,
-                    skipped_existing=len(existing_accessions),
+            existing_accessions = []
+            if symbol_dir.exists():
+                existing_accessions = [
+                    p.name for p in symbol_dir.iterdir() if p.is_dir()
+                ]
+                existing_count = len(existing_accessions)
+                if (
+                    limit_per_symbol is not None
+                    and existing_count >= limit_per_symbol
+                ):
+                    logger.info(
+                        "Skipping download for %s %s; already have %d accessions (limit=%d)",
+                        symbol,
+                        form_type,
+                        existing_count,
+                        limit_per_symbol,
+                    )
+                    total_skipped += existing_count
+                    continue
+                if existing_count:
+                    logger.info(
+                        "Found %d existing accessions for %s %s; downloading up to %s more",
+                        existing_count,
+                        symbol,
+                        form_type,
+                        "unlimited"
+                        if limit_per_symbol is None
+                        else max(limit_per_symbol - existing_count, 0),
+                    )
+
+            try:
+                download_limit = (
+                    None
+                    if limit_per_symbol is None
+                    else max(limit_per_symbol - len(existing_accessions), 0)
                 )
-                continue
-            n = downloader.get(
-                filing_type,
-                symbol,
-                after=after_date,
-                before=before_date,
-                limit=download_limit,
-                download_details=True,
+                if download_limit == 0:
+                    total_skipped += len(existing_accessions)
+                    continue
+                n = downloader.get(
+                    form_type,
+                    symbol,
+                    after=after_date,
+                    before=before_date,
+                    limit=download_limit,
+                    download_details=True,
+                )
+                total_downloaded += n or 0
+            except Exception as exc:
+                logger.error(
+                    "Download failed for %s %s: %s", symbol, form_type, exc
+                )
+                errors.append(f"{form_type}: {exc}")
+
+        if errors:
+            result = _error_download_result("; ".join(errors))
+            result["downloaded"] = total_downloaded
+            result["form_type"] = form_label
+            if total_skipped:
+                result["skipped_existing"] = total_skipped
+            download_results[symbol] = result
+        else:
+            result = _success_download_result(
+                downloaded=total_downloaded,
+                form_type=form_label,
+                skipped_existing=total_skipped if total_skipped else None,
             )
-            download_results[symbol] = _success_download_result(
-                downloaded=n or 0,
-                form_type=filing_type,
-            )
-        except Exception as exc:
-            logger.error("Download failed for %s: %s", symbol, exc)
-            download_results[symbol] = _error_download_result(str(exc))
+            download_results[symbol] = result
 
     return download_results
 
@@ -186,18 +199,46 @@ def download_accessions(
             continue
 
         try:
+            form_type = None
+            if mode == FilingMode.insider:
+                payload = submissions_cache.get(cik)
+                if payload is None:
+                    payload = _fetch_submissions_payload(cik, user_agent)
+                    submissions_cache[cik] = payload
+                form_value = _find_form_type(payload, accession)
+                if form_value is None:
+                    for name in _iter_submission_files(payload):
+                        extra_payload = supplemental_cache.get(name)
+                        if extra_payload is None:
+                            extra_payload = _fetch_submission_file(
+                                name, user_agent
+                            )
+                            supplemental_cache[name] = extra_payload
+                        form_value = _find_form_type(extra_payload, accession)
+                        if form_value is not None:
+                            break
+                form_type = _normalize_form_type(form_value)
+            if not isinstance(form_type, str) or not form_type:
+                form_type = mode.form
+
+            accession_dir = (
+                work_folder
+                / "sec-edgar-filings"
+                / symbol.upper()
+                / form_type
+                / accession
+            )
             downloaded, skipped = _download_accession_files(
                 accession=accession,
                 cik=cik,
                 primary_doc=primary_doc,
-                symbol=symbol,
+                accession_dir=accession_dir,
                 mode=mode,
-                work_folder=work_folder,
                 user_agent=user_agent,
             )
             results[accession] = _success_download_result(
                 downloaded=downloaded,
-                form_type=mode.form,
+                form_type=form_type,
                 skipped_existing=skipped,
             )
         except Exception as exc:
@@ -225,63 +266,20 @@ def _download_single_symbol(
     Returns:
         Tuple of (symbol, download_result)
     """
-    downloader = Downloader(company_name, email, str(work_folder))
-    filing_type = mode.form
-    symbol_dir = filings.filing_dir(work_folder, symbol, mode)
-    existing_accessions: list[str] = []
-
-    if symbol_dir.exists():
-        existing_accessions = [
-            p.name for p in symbol_dir.iterdir() if p.is_dir()
-        ]
-        existing_count = len(existing_accessions)
-        if limit_per_symbol is not None and existing_count >= limit_per_symbol:
-            logger.info(
-                "Skipping download for %s %s; already have %d accessions (limit=%d)",
-                symbol,
-                filing_type,
-                existing_count,
-                limit_per_symbol,
-            )
-            return (
-                symbol,
-                _success_download_result(
-                    downloaded=0,
-                    form_type=filing_type,
-                    skipped_existing=existing_count,
-                ),
-            )
-
-    try:
-        download_limit = (
-            None
-            if limit_per_symbol is None
-            else max(limit_per_symbol - len(existing_accessions), 0)
-        )
-        if download_limit == 0:
-            return (
-                symbol,
-                _success_download_result(
-                    downloaded=0,
-                    form_type=filing_type,
-                    skipped_existing=len(existing_accessions),
-                ),
-            )
-        n = downloader.get(
-            filing_type,
-            symbol,
-            after=after_date,
-            before=before_date,
-            limit=download_limit,
-            download_details=True,
-        )
-        return (
-            symbol,
-            _success_download_result(downloaded=n or 0, form_type=filing_type),
-        )
-    except Exception as exc:
-        logger.error("Download failed for %s: %s", symbol, exc)
-        return (symbol, _error_download_result(str(exc)))
+    results = download_filings(
+        symbols=[symbol],
+        mode=mode,
+        work_folder=work_folder,
+        company_name=company_name,
+        email=email,
+        after_date=after_date,
+        before_date=before_date,
+        limit_per_symbol=limit_per_symbol,
+    )
+    result = results.get(symbol)
+    if result is None:
+        return (symbol, _error_download_result("Download result missing"))
+    return (symbol, result)
 
 
 async def download_filings_async(
@@ -375,12 +373,10 @@ def _download_accession_files(
     accession: str,
     cik: str,
     primary_doc: str,
-    symbol: str,
+    accession_dir: Path,
     mode: FilingMode,
-    work_folder: Path,
     user_agent: str,
 ) -> tuple[int, int]:
-    accession_dir = filings.filing_dir(work_folder, symbol, mode) / accession
     accession_dir.mkdir(parents=True, exist_ok=True)
 
     skipped_existing = 0
@@ -459,6 +455,31 @@ def _find_primary_document(payload: JsonDict, accession: str) -> str | None:
             if isinstance(acc, str) and acc == accession:
                 if isinstance(doc, str) and doc:
                     return doc
+    return None
+
+
+def _normalize_form_type(value: JsonValue) -> JsonValue:
+    if not isinstance(value, str):
+        return None
+    cleaned = value.strip()
+    if not cleaned:
+        return None
+    if "/" in cleaned:
+        cleaned = cleaned.split("/", 1)[0]
+    return cleaned
+
+
+def _find_form_type(payload: JsonDict, accession: JsonValue) -> JsonValue:
+    if not isinstance(accession, str):
+        return None
+    table = _extract_filing_table(payload)
+    accessions = table.get("accessionNumber")
+    forms = table.get("form")
+    if isinstance(accessions, list) and isinstance(forms, list):
+        for acc, form_value in zip(accessions, forms, strict=False):
+            if isinstance(acc, str) and acc == accession:
+                if isinstance(form_value, str) and form_value:
+                    return form_value
     return None
 
 

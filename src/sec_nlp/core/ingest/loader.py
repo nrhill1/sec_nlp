@@ -22,6 +22,7 @@ from unstructured.documents.elements import Element
 
 from sec_nlp.core.edgar.filing_mode import FilingMode
 from sec_nlp.core.edgar.holdings_parser import HoldingsParser
+from sec_nlp.core.edgar.insider_parser import InsiderParser
 from sec_nlp.core.edgar.relationship_resolver import (
     RelationshipResolver,
     build_related_filings_map,
@@ -254,6 +255,14 @@ class Loader(BaseModel):
                         start_date=after_date,
                         end_date=before_date,
                     )
+                elif mode == FilingMode.insider:
+                    docs = self._load_insider_documents(
+                        symbol=symbol,
+                        base=work_folder,
+                        limit=limit_per_symbol,
+                        start_date=after_date,
+                        end_date=before_date,
+                    )
                 else:
                     html_paths = self.html_paths_for_symbol(
                         symbol=symbol,
@@ -404,6 +413,43 @@ class Loader(BaseModel):
         sorted_dirs = [path for path, _ in dirs_with_dates]
         return sorted_dirs[:limit] if limit else sorted_dirs
 
+    def _accession_dirs_for_filing_dirs(
+        self,
+        filing_dirs: Sequence[Path],
+        limit: int | None,
+        start_date: date | None,
+        end_date: date | None,
+    ) -> list[Path]:
+        existing_dirs = [path for path in filing_dirs if path.exists()]
+        if not existing_dirs:
+            raise FileNotFoundError("No filings found in configured folders")
+
+        dirs_with_dates: list[tuple[Path, date | None]] = []
+        for filing_dir in existing_dirs:
+            for accession_dir in filing_dir.iterdir():
+                if not accession_dir.is_dir():
+                    continue
+                filing_date = filings.get_filing_date_from_dir(accession_dir)
+                if start_date or end_date:
+                    if filing_date is None:
+                        dirs_with_dates.append((accession_dir, filing_date))
+                        continue
+                    if start_date and filing_date < start_date:
+                        continue
+                    if end_date and filing_date > end_date:
+                        continue
+                dirs_with_dates.append((accession_dir, filing_date))
+
+        def sort_key(item: tuple[Path, date | None]) -> tuple[date, float]:
+            path, filing_date = item
+            if filing_date:
+                return (filing_date, 0.0)
+            return (date.min, -path.stat().st_mtime)
+
+        dirs_with_dates.sort(key=sort_key, reverse=True)
+        sorted_dirs = [path for path, _ in dirs_with_dates]
+        return sorted_dirs[:limit] if limit else sorted_dirs
+
     def _load_holdings_documents(
         self,
         filing_dir: Path,
@@ -418,6 +464,31 @@ class Loader(BaseModel):
             end_date=end_date,
         )
         parser = HoldingsParser()
+        docs: list[Document] = []
+        for accession_dir in accession_dirs:
+            docs.extend(parser.parse_accession_dir(accession_dir))
+        return docs
+
+    def _load_insider_documents(
+        self,
+        *,
+        symbol: str,
+        base: Path,
+        limit: int | None,
+        start_date: date | None,
+        end_date: date | None,
+    ) -> list[Document]:
+        form_dirs = [
+            base / "sec-edgar-filings" / symbol.upper() / form_type
+            for form_type in FilingMode.insider.forms
+        ]
+        accession_dirs = self._accession_dirs_for_filing_dirs(
+            filing_dirs=form_dirs,
+            limit=limit,
+            start_date=start_date,
+            end_date=end_date,
+        )
+        parser = InsiderParser()
         docs: list[Document] = []
         for accession_dir in accession_dirs:
             docs.extend(parser.parse_accession_dir(accession_dir))
@@ -887,6 +958,28 @@ class Loader(BaseModel):
                         end_date=before_date,
                     )
                     parser = HoldingsParser()
+                    for accession_dir in accession_dirs:
+                        docs = parser.parse_accession_dir(accession_dir)
+                        self._attach_related_filings(docs, related_map)
+                        for doc in docs:
+                            yield doc
+                            symbol_count += 1
+                            total_docs += 1
+                elif mode == FilingMode.insider:
+                    form_dirs = [
+                        work_folder
+                        / "sec-edgar-filings"
+                        / symbol.upper()
+                        / form_type
+                        for form_type in FilingMode.insider.forms
+                    ]
+                    accession_dirs = self._accession_dirs_for_filing_dirs(
+                        filing_dirs=form_dirs,
+                        limit=limit_per_symbol,
+                        start_date=after_date,
+                        end_date=before_date,
+                    )
+                    parser = InsiderParser()
                     for accession_dir in accession_dirs:
                         docs = parser.parse_accession_dir(accession_dir)
                         self._attach_related_filings(docs, related_map)
