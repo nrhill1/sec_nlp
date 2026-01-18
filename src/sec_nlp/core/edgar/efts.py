@@ -41,6 +41,33 @@ _CIK_PATTERN: Final[re.Pattern[str]] = re.compile(
     r"\bCIK\s*(\d{1,10})\b",
     re.IGNORECASE,
 )
+_INSIDER_FORMS = {"3", "3/A", "4", "4/A", "5", "5/A"}
+_COMPANY_KEYWORDS = (
+    " INC",
+    " INC.",
+    " CORP",
+    " CORPORATION",
+    " LTD",
+    " LIMITED",
+    " LLC",
+    " PLC",
+    " LP",
+    " L.P.",
+    " LLP",
+    " CO",
+    " COMPANY",
+    " HOLDINGS",
+    " GROUP",
+    " TRUST",
+    " FUND",
+    " RESOURCES",
+    " MINING",
+    " MATERIALS",
+    " ENERGY",
+    " TECHNOLOGIES",
+    " SYSTEMS",
+    " ENTERPRISES",
+)
 
 
 class EFTSClientConfig(BaseModel):
@@ -498,10 +525,45 @@ def _extract_accession(source: JsonDict) -> str:
 
 def _extract_company_name(source: JsonDict) -> str:
     """Extract company name from source."""
+    form_type = _get_str(source, "form", "")
+    normalized_form = form_type.replace(" ", "").upper()
+    company_raw = source.get("company")
     display_names = source.get("display_names")
+
+    if normalized_form in _INSIDER_FORMS:
+        if isinstance(company_raw, str):
+            company_name = company_raw.strip()
+            if company_name:
+                return company_name
+        if isinstance(display_names, list) and display_names:
+            best_name = ""
+            best_score = -100
+            for item in display_names:
+                if not isinstance(item, str):
+                    continue
+                name = item.strip()
+                if not name:
+                    continue
+                upper = name.upper()
+                score = 0
+                if "CIK" not in upper:
+                    score += 2
+                if "(" in name and ")" in name and "CIK" not in upper:
+                    score += 1
+                if "," in name:
+                    score -= 1
+                for keyword in _COMPANY_KEYWORDS:
+                    if keyword in upper:
+                        score += 2
+                        break
+                if score > best_score:
+                    best_score = score
+                    best_name = name
+            if best_name:
+                return best_name
+
     if isinstance(display_names, list) and display_names:
         return str(display_names[0])
-    company_raw = source.get("company")
     if company_raw is not None:
         return str(company_raw)
     return ""

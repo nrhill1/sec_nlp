@@ -166,6 +166,7 @@ def format_table(
     border: bool = True,
     centered: bool = True,
     header_color: str = "cyan",
+    header_align: Literal["left", "right", "center"] | None = None,
     row_colors: list[str] | None = None,
 ) -> str:
     """Format data as an aligned table.
@@ -177,6 +178,7 @@ def format_table(
         border: Whether to show border characters
         centered: Whether to center the table in terminal
         header_color: Color for header row
+        header_align: Optional override for header alignment
         row_colors: Optional per-column colors for data rows
 
     Returns:
@@ -272,7 +274,7 @@ def format_table(
             _align_cell(
                 headers[i] if i < len(headers) else "",
                 widths[i],
-                _get_align(i),
+                header_align if header_align is not None else _get_align(i),
                 header_color,
             )
             for i in range(num_cols)
