@@ -18,10 +18,10 @@ Potential next steps and new features for sec-nlp.
   - ~~Sources: Forms 3/4 XML, issuer/insider identifiers, 10b5-1 flags~~
   - ~~Extract: transaction codes, dates, prices, shares, ownership type, initial holdings, direct vs indirect ownership, relationship to issuer, derivative vs non-derivative, nature of ownership, security title, conversion/exercise price, transaction type (open market vs grant), ownership footnotes, transaction ID~~
   - ~~Outputs: net-buying signals, cluster-buy detection, alert hooks~~
-- **Risk factor clustering**: Group and categorize risk factors across companies
-  - Sources: 10-K risk factors and 10-Q updates
-  - Extract: clause-level risk statements, themes, sector tags
-  - Outputs: taxonomy clusters, novelty signals, peer comparisons
+- ~~**Risk factor clustering**: Group and categorize risk factors across companies~~
+  - ~~Sources: 10-K risk factors and 10-Q updates~~
+  - ~~Extract: clause-level risk statements, themes, sector tags~~
+  - ~~Outputs: taxonomy clusters, novelty signals, peer comparisons~~
 - **Material contracts expansion**: Beyond Exhibit 10, analyze other exhibits (Exhibit 21 subsidiaries, Exhibit 23 consents)
   - Sources: exhibit index and selected exhibits (21, 23, 99, 101)
   - Extract: subsidiary lists, auditor consents, key obligations, counterparties
