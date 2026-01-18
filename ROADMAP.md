@@ -14,10 +14,10 @@ Potential next steps and new features for sec-nlp.
 - ~~**Entity extraction pipeline**: Dedicated pipeline for named entities (people, companies, contracts, dates)~~
 
 ## New Domain Pipelines
-- **Insider trading info extraction** (`Form 3`/`Form 4`): Track insider buying/selling signals
-  - Sources: Forms 3/4 XML, issuer/insider identifiers, 10b5-1 flags
-  - Extract: transaction codes, dates, prices, shares, ownership type, initial holdings, direct vs indirect ownership, relationship to issuer, derivative vs non-derivative, nature of ownership, security title, conversion/exercise price, transaction type (open market vs grant), ownership footnotes, transaction ID
-  - Outputs: net-buying signals, cluster-buy detection, alert hooks
+- ~~**Insider trading info extraction** (`Form 3`/`Form 4`): Track insider buying/selling signals~~
+  - ~~Sources: Forms 3/4 XML, issuer/insider identifiers, 10b5-1 flags~~
+  - ~~Extract: transaction codes, dates, prices, shares, ownership type, initial holdings, direct vs indirect ownership, relationship to issuer, derivative vs non-derivative, nature of ownership, security title, conversion/exercise price, transaction type (open market vs grant), ownership footnotes, transaction ID~~
+  - ~~Outputs: net-buying signals, cluster-buy detection, alert hooks~~
 - **Risk factor clustering**: Group and categorize risk factors across companies
   - Sources: 10-K risk factors and 10-Q updates
   - Extract: clause-level risk statements, themes, sector tags

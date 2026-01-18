@@ -39,12 +39,13 @@ class TestFilingMode:
     def test_filing_mode_iteration(self) -> None:
         """Test that all FilingMode values can be iterated."""
         modes = list(FilingMode)
-        assert len(modes) == 7
+        assert len(modes) == 8
         assert FilingMode.annual in modes
         assert FilingMode.quarterly in modes
         assert FilingMode.current in modes
         assert FilingMode.proxy in modes
         assert FilingMode.holdings in modes
+        assert FilingMode.insider in modes
         assert FilingMode.registration in modes
         assert FilingMode.shelf_registration in modes
 
@@ -100,6 +101,15 @@ class TestFilingMode:
         assert FilingMode.holdings.form == "13F-HR"
         assert str(FilingMode.holdings) == "holdings"
         assert FilingMode("holdings") == FilingMode.holdings
+        assert FilingMode.holdings.forms == ("13F-HR",)
+
+    def test_filing_mode_insider(self) -> None:
+        """Test insider filing mode for Forms 3/4."""
+        assert FilingMode.insider.value == "insider"
+        assert FilingMode.insider.form == "4"
+        assert FilingMode.insider.forms == ("3", "4")
+        assert str(FilingMode.insider) == "insider"
+        assert FilingMode("insider") == FilingMode.insider
 
     def test_filing_mode_description(self) -> None:
         """Test description property for all filing modes."""
@@ -114,6 +124,10 @@ class TestFilingMode:
         )
         assert (
             FilingMode.holdings.description == "Institutional Holdings Report"
+        )
+        assert (
+            FilingMode.insider.description
+            == "Insider Ownership Reports (Forms 3/4)"
         )
         assert (
             FilingMode.registration.description
