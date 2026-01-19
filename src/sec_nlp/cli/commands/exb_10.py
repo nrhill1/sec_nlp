@@ -13,7 +13,7 @@ from sec_nlp.pipelines.presets.exb_10 import (
 
 
 class Exb10(Exhibit10Config, PipelineCommand):
-    """Extract supplier contract information from Exhibit 10 of 10-K documents.
+    """Extract material contract signals from Exhibit 10 and related exhibits.
 
     Examples:
         # Analyze Exhibit 10 contracts for a company

@@ -7,7 +7,8 @@ from enum import StrEnum
 class FilingMode(StrEnum):
     """
     Enum values are CLI/user-facing tokens.
-    Use .form to get the SEC form code (e.g., "10-K", "S-1").
+    Use .form to get the primary SEC form code (e.g., "10-K", "S-1").
+    Use .forms to get all SEC form codes for the mode.
     """
 
     annual = "annual"  # 10-K
@@ -15,6 +16,7 @@ class FilingMode(StrEnum):
     current = "current"  # 8-K
     proxy = "proxy"  # DEF 14A
     holdings = "holdings"  # 13F-HR
+    insider = "insider"  # Forms 3/4
     registration = "registration"  # S-1
     shelf_registration = "shelf"  # S-3
 
@@ -30,6 +32,7 @@ class FilingMode(StrEnum):
             FilingMode.current: "8-K",
             FilingMode.proxy: "DEF 14A",
             FilingMode.holdings: "13F-HR",
+            FilingMode.insider: "4",
             FilingMode.registration: "S-1",
             FilingMode.shelf_registration: "S-3",
         }
@@ -47,10 +50,18 @@ class FilingMode(StrEnum):
             FilingMode.current: "Current Report (Material Events)",
             FilingMode.proxy: "Proxy Statement (Shareholder Meeting)",
             FilingMode.holdings: "Institutional Holdings Report",
+            FilingMode.insider: "Insider Ownership Reports (Forms 3/4)",
             FilingMode.registration: "Registration Statement (IPO)",
             FilingMode.shelf_registration: "Shelf Registration Statement",
         }
         return descriptions.get(self, "Unknown")
+
+    @property
+    def forms(self):
+        """Return all SEC form types associated with this mode."""
+        if self == FilingMode.insider:
+            return ("3", "4")
+        return (self.form,)
 
     @property
     def is_periodic(self) -> bool:

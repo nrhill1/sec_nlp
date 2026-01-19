@@ -5,6 +5,7 @@ from _typeshed import Incomplete
 from sec_nlp.core.edgar.filing_mode import FilingMode as FilingMode
 from sec_nlp.pipelines.base.config import BaseConfig as BaseConfig
 from sec_nlp.pipelines.vector.config import VectorConfig as VectorConfig
+from sec_nlp.types import JsonValue as JsonValue
 
 from .steps.extract.contract_types import (
     ContractCategory as ContractCategory,
@@ -21,6 +22,7 @@ class Exhibit10Config(BaseConfig):
     search: SearchConfig
     search_only: bool
     mode: FilingMode
+    exhibit_numbers: list[JsonValue]
     limit: int | None
     batch_size: int
     contract_categories: list[str]
@@ -47,6 +49,8 @@ class Exhibit10Config(BaseConfig):
     def validate_mode(cls, v: FilingMode) -> FilingMode: ...
     @classmethod
     def normalize_contract_categories(cls, v: list[str] | str) -> list[str]: ...
+    @classmethod
+    def normalize_exhibit_numbers(cls, v: JsonValue) -> list[JsonValue]: ...
     def expand_contract_categories(self) -> Self: ...
     def get_active_categories(self) -> list[ContractCategory]: ...
     def get_category_keywords(self) -> list[str]: ...

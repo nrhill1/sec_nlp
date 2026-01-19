@@ -28,6 +28,7 @@ from sec_nlp.pipelines.vector.query import scroll_exists
 from sec_nlp.types import JsonValue, ResultDict
 
 from .config import Exhibit10Config
+from .io.exhibit_summary import write_exhibit_summary
 from .io.outputs import write_exhibit10_outputs
 from .models import Exhibit10Result
 from .steps.extract.exhibits import collect_exhibit_documents
@@ -87,7 +88,7 @@ class Exhibit10Pipeline(BasePipeline):
     # Class attributes
     pipeline_type: ClassVar[Literal["exhibit10"]] = "exhibit10"
     description: ClassVar[str] = (
-        "Analyze material contracts from SEC filing Exhibit 10 sections"
+        "Analyze Exhibit 10 material contracts and related exhibits (10, 21, 23, 99, 101)"
     )
 
     requires_llm: ClassVar[bool] = False
@@ -264,7 +265,7 @@ class Exhibit10Pipeline(BasePipeline):
         )
 
         if not exhibit10_docs:
-            logger.warning("No Exhibit 10 sections found for %s", symbol)
+            logger.warning("No exhibit sections found for %s", symbol)
             return []
 
         # Drop link-only reference stubs (e.g., “incorporated by reference” anchor lists)
@@ -283,9 +284,16 @@ class Exhibit10Pipeline(BasePipeline):
 
         if not filtered_docs:
             logger.warning(
-                "No Exhibit 10 chunks remaining after filtering for %s", symbol
+                "No exhibit chunks remaining after filtering for %s", symbol
             )
-            return []
+            summary_outputs = write_exhibit_summary(
+                symbol=symbol,
+                docs=exhibit10_docs,
+                config=self.config,
+            )
+            if summary_outputs:
+                logger.info("Finished processing %s", symbol)
+            return summary_outputs
 
         stats.log(symbol=symbol, filtered_chunk_count=len(filtered_docs))
 
@@ -309,9 +317,7 @@ class Exhibit10Pipeline(BasePipeline):
                     symbol,
                 )
             if not filtered_docs:
-                logger.info(
-                    "All Exhibit 10 chunks already indexed for %s", symbol
-                )
+                logger.info("All exhibit chunks already indexed for %s", symbol)
                 return []
 
         logger.info(
@@ -346,6 +352,13 @@ class Exhibit10Pipeline(BasePipeline):
             symbol=symbol,
             docs=filtered_docs,
             config=self.config,
+        )
+        output_files.extend(
+            write_exhibit_summary(
+                symbol=symbol,
+                docs=exhibit10_docs,
+                config=self.config,
+            )
         )
         logger.info("Finished processing %s", symbol)
 
@@ -513,12 +526,16 @@ class Exhibit10Pipeline(BasePipeline):
         if not docs:
             return []
 
+        max_non_keyword_chunks = self.config.max_non_keyword_chunks
+        if self._has_non_contract_exhibits():
+            max_non_keyword_chunks = None
+
         filtered, stats = KeywordMatcher.filter_docs_by_keywords(
             docs,
             self.config.search_terms,
             min_chars=self.config.min_chunk_chars,
             dedupe=self.config.dedupe_chunks,
-            max_non_keyword_chunks=self.config.max_non_keyword_chunks,
+            max_non_keyword_chunks=max_non_keyword_chunks,
             max_chunks=None,
         )
 
@@ -538,6 +555,15 @@ class Exhibit10Pipeline(BasePipeline):
         log_filter_stats(symbol=symbol, stats=stats)
 
         return filtered
+
+    def _has_non_contract_exhibits(self) -> bool:
+        for value in self.config.exhibit_numbers:
+            if not isinstance(value, str):
+                continue
+            base = value.split(".")[0].strip()
+            if base and base != "10":
+                return True
+        return False
 
     def _accession_exists_in_vectordb(self, accession_number: str) -> bool:
         """Check if chunks for an accession number already exist in the vector DB.

@@ -1,6 +1,7 @@
 # src/sec_nlp/pipelines/presets/exb_10/config.py
 """Config model for the Exhibit 10 pipeline."""
 
+from collections.abc import Sequence
 from typing import ClassVar, Literal, Self
 
 from pydantic import Field, field_validator, model_validator
@@ -9,6 +10,7 @@ from pydantic_settings import SettingsConfigDict
 from sec_nlp.core.edgar.filing_mode import FilingMode
 from sec_nlp.pipelines.base.config import BaseConfig
 from sec_nlp.pipelines.vector.config import VectorConfig
+from sec_nlp.types import JsonValue
 
 from .steps.extract.contract_types import (
     ContractCategory,
@@ -60,6 +62,13 @@ class Exhibit10Config(BaseConfig):
     mode: FilingMode = Field(
         default=FilingMode.annual,
         description="Filing type (10-K annual, 10-Q quarterly, or 8-K current for Exhibit 10 material contracts)",
+    )
+    exhibit_numbers: list[JsonValue] = Field(
+        default_factory=lambda: ["10", "21", "23", "99", "101"],
+        description="Exhibit numbers to include (e.g., 10, 21, 23, 99, 101)",
+        json_schema_extra={
+            "cli_args": {"nargs": "+", "action": "extend"},
+        },
     )
 
     limit: int | None = Field(
@@ -213,6 +222,32 @@ class Exhibit10Config(BaseConfig):
         if isinstance(v, str):
             v = [part.strip() for part in v.replace(",", " ").split() if part]
         return [cat.lower().strip() for cat in v]
+
+    @field_validator("exhibit_numbers", mode="before")
+    @classmethod
+    def normalize_exhibit_numbers(cls, v: JsonValue) -> list[JsonValue]:
+        """Normalize exhibit number inputs into a stable list."""
+        if isinstance(v, (str, int, float)):
+            values = [v]
+        elif isinstance(v, Sequence) and not isinstance(v, str):
+            values = list(v)
+        else:
+            values = ["10"]
+
+        normalized: list[JsonValue] = []
+        seen = set()
+        for item in values:
+            if item is None or isinstance(item, bool):
+                continue
+            cleaned = str(item).strip().lower()
+            if not cleaned:
+                continue
+            cleaned = cleaned.replace("_", ".").replace("-", ".")
+            if cleaned in seen:
+                continue
+            seen.add(cleaned)
+            normalized.append(cleaned)
+        return normalized or ["10"]
 
     @model_validator(mode="after")
     def expand_contract_categories(self) -> Self:

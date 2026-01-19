@@ -115,7 +115,7 @@ class EFTSSearchRunner(BaseModel):
             return list(efts_config.forms)
 
         # Fall back to pipeline mode
-        return [self.config.mode.form]
+        return list(self.config.mode.forms)
 
     def _get_ciks(self) -> list[str]:
         """Get CIKs for configured symbols."""

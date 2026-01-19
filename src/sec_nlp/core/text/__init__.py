@@ -21,6 +21,13 @@ from .keyword import (
     KeywordScore,
     KeywordSpec,
 )
+from .risk_factors import (
+    RiskFactorClusterConfig,
+    build_risk_factor_clusters,
+    cluster_risk_factors,
+    dedupe_risk_factor_statements,
+    extract_risk_factor_statements,
+)
 from .section_extractor import (
     ExtractedSection,
     SectionBoundary,
@@ -54,6 +61,11 @@ __all__ = (
     "KeywordMatcher",
     "KeywordScore",
     "KeywordSpec",
+    "RiskFactorClusterConfig",
+    "extract_risk_factor_statements",
+    "dedupe_risk_factor_statements",
+    "cluster_risk_factors",
+    "build_risk_factor_clusters",
     "SectionExtractor",
     "ExtractedSection",
     "SectionBoundary",

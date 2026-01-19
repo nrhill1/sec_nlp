@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 from datetime import date, timedelta
 from typing import Literal
 
@@ -23,6 +24,9 @@ from sec_nlp.cli.formatting import (
 from sec_nlp.core.edgar.efts import EFTSAPIError, create_efts_client
 from sec_nlp.core.edgar.efts_models import EFTSHit
 from sec_nlp.core.infra.logger import color_text, logger
+
+_CIK_DISPLAY_RE = re.compile(r"\s*\(CIK\s*\d{1,10}\)\s*", re.IGNORECASE)
+_TRAILING_PARENS_RE = re.compile(r"\s*\(([^)]+)\)\s*$")
 
 
 class EFTS(BaseModel):
@@ -106,26 +110,70 @@ class EFTS(BaseModel):
         if not hits:
             return "No results found"
 
-        headers = ["FILED", "FORM", "COMPANY", "SCORE"]
+        headers = [
+            "FILED",
+            "FORM",
+            "COMPANY",
+            "TICKER",
+            "CIK",
+            "ACCESSION",
+            "SCORE",
+        ]
         column_specs = [
             ColumnSpec(header="FILED", align="left", color="blue"),
             ColumnSpec(header="FORM", align="center"),
             ColumnSpec(header="COMPANY", align="left"),
+            ColumnSpec(header="TICKER", align="center"),
+            ColumnSpec(header="CIK", align="right"),
+            ColumnSpec(header="ACCESSION", align="left"),
             ColumnSpec(header="SCORE", align="right", color="green"),
         ]
 
         rows: list[list[str]] = []
         for hit in hits:
-            company = (
-                hit.company_name[:40] + "..."
-                if len(hit.company_name) > 40
-                else hit.company_name
+            company = hit.company_name.strip()
+            if company:
+                stripped = _CIK_DISPLAY_RE.sub("", company).strip()
+                if stripped:
+                    company = stripped
+
+                if hit.tickers:
+                    match = _TRAILING_PARENS_RE.search(company)
+                    if match:
+                        content = match.group(1).strip()
+                        if content:
+                            tokens = [
+                                token.strip().upper()
+                                for token in re.split(r"[,/]", content)
+                                if token.strip()
+                            ]
+                            normalized = {
+                                ticker.strip().upper()
+                                for ticker in hit.tickers
+                                if ticker.strip()
+                            }
+                            if (
+                                tokens
+                                and normalized
+                                and set(tokens).issubset(normalized)
+                            ):
+                                company = company[: match.start()].rstrip()
+
+            display_company = (
+                company[:32] + "..." if len(company) > 32 else company
             )
+            ticker = hit.ticker or "—"
+            accession = hit.accession_number or "—"
+            if len(accession) > 20:
+                accession = accession[:17] + "..."
             rows.append(
                 [
                     hit.filed_date.isoformat(),
                     hit.form_type,
-                    company,
+                    display_company,
+                    ticker,
+                    hit.cik,
+                    accession,
                     f"{hit.score:.2f}",
                 ]
             )
@@ -136,6 +184,7 @@ class EFTS(BaseModel):
             column_specs=column_specs,
             border=True,
             centered=True,
+            header_align="center",
         )
 
     def _print_simple(self, hits: list[EFTSHit]) -> None:
@@ -196,10 +245,18 @@ class EFTS(BaseModel):
 
     def cli_cmd(self) -> None:
         """Execute an EFTS search."""
+        use_plain_output = self.format == "table"
+
+        def emit_info(message: str) -> None:
+            if use_plain_output:
+                print(message)
+            else:
+                logger.info(message)
+
         header = format_section_header(
             "SEC EDGAR Full-Text Search", style="box"
         )
-        logger.info(header)
+        emit_info(header)
 
         # Show search parameters
         start_date, end_date = self._get_date_range()
@@ -227,9 +284,9 @@ class EFTS(BaseModel):
         )
 
         for info in params_info:
-            logger.info(center_text(info))
+            emit_info(info)
 
-        logger.info(format_divider())
+        emit_info(format_divider(centered=False))
 
         # Run the async search
         loop = asyncio.new_event_loop()
@@ -252,7 +309,7 @@ class EFTS(BaseModel):
                 loop.close()
 
         if not hits:
-            logger.info(
+            emit_info(
                 format_status(
                     "No filings matched your search", status="warning"
                 )
@@ -260,14 +317,12 @@ class EFTS(BaseModel):
             return
 
         # Show results count
-        logger.info(
-            center_text(
-                format_key_value(
-                    "Results", f"{len(hits)} filings found", label_color="green"
-                )
+        emit_info(
+            format_key_value(
+                "Results", f"{len(hits)} filings found", label_color="green"
             )
         )
-        logger.info("")
+        emit_info("")
 
         # Render output based on format
         if self.format == "json":
@@ -278,8 +333,8 @@ class EFTS(BaseModel):
             table_str = self._render_table(hits)
             print(table_str)
             if self.show_snippets:
-                logger.info("")
-                logger.info(
+                emit_info("")
+                emit_info(
                     center_text(
                         color_text(
                             "Use --format simple to see text snippets",

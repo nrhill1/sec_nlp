@@ -3,6 +3,7 @@
 
 from sec_nlp.core.types import coerce_json_dict
 from sec_nlp.pipelines.presets.analyze.io.enhancements import (
+    build_executive_comp_summary,
     build_peer_comparison,
     build_symbol_summary,
 )
@@ -121,3 +122,101 @@ def test_build_peer_comparison_ranks_net_sentiment() -> None:
     first_rank = sentiment_rank[0]
     assert isinstance(first_rank, dict)
     assert first_rank.get("symbol") == "AAA"
+
+
+def test_build_executive_comp_summary_tracks_peer_deltas_and_yoy() -> None:
+    result_one: AnalysisResultDict = {
+        "source_metadata": {
+            "accession_number": "0001",
+            "filing_date": "2023-03-01",
+            "form_type": "DEF 14A",
+        },
+        "tags": ["executive_compensation"],
+        "extracted_entities": {
+            "executives": [
+                {
+                    "name": "Jane Doe",
+                    "title": "CEO",
+                    "compensation": "2.0 million",
+                }
+            ]
+        },
+        "compensation_data": {
+            "base_salary": "1.2 million",
+            "bonus": "0.3 million",
+            "equity": "0.5 million",
+        },
+        "performance_metrics": ["Adjusted EBITDA", "Revenue growth"],
+        "peer_set": ["Peer A", "Peer B"],
+        "pay_for_performance_flags": ["Pay-for-performance aligned"],
+    }
+    result_two: AnalysisResultDict = {
+        "source_metadata": {
+            "accession_number": "0002",
+            "filing_date": "2024-03-01",
+            "form_type": "DEF 14A",
+        },
+        "tags": ["executive_compensation"],
+        "extracted_entities": {
+            "executives": [
+                {
+                    "name": "Jane Doe",
+                    "title": "CEO",
+                    "compensation": "2.5 million",
+                }
+            ]
+        },
+        "compensation_data": {
+            "base_salary": "1.4 million",
+            "bonus": "0.4 million",
+            "equity": "0.7 million",
+        },
+        "performance_metrics": ["Adjusted EBITDA"],
+        "peer_set": ["Peer A", "Peer C"],
+        "pay_for_performance_flags": ["TSR weighting 50%"],
+    }
+    results = [result_one, result_two]
+
+    summary = build_executive_comp_summary(
+        symbol="ACME",
+        run_id=101,
+        analysis_results=results,
+        relevant_results=results,
+        fallback_meta={},
+    )
+
+    filings = summary.get("filings")
+    assert isinstance(filings, list)
+    assert len(filings) == 2
+
+    yoy_changes = summary.get("yoy_changes")
+    assert isinstance(yoy_changes, list)
+    assert yoy_changes
+    first_change = yoy_changes[0]
+    change_dict = (
+        coerce_json_dict(first_change)
+        if isinstance(first_change, dict)
+        else None
+    )
+    assert change_dict is not None
+    assert change_dict.get("name") == "Jane Doe"
+    delta = change_dict.get("delta")
+    assert isinstance(delta, float)
+    assert abs(delta - 500000.0) < 0.01
+
+    peer_deltas = summary.get("peer_deltas")
+    assert isinstance(peer_deltas, list)
+    assert peer_deltas
+    first_delta = peer_deltas[0]
+    delta_dict = (
+        coerce_json_dict(first_delta) if isinstance(first_delta, dict) else None
+    )
+    assert delta_dict is not None
+    added = delta_dict.get("added")
+    removed = delta_dict.get("removed")
+    assert isinstance(added, list)
+    assert isinstance(removed, list)
+    added_values = [item for item in added if isinstance(item, str)]
+    removed_values = [item for item in removed if isinstance(item, str)]
+    assert "Peer C" in added_values
+    assert "Peer B" in removed_values

@@ -345,6 +345,9 @@ def _gather_config() -> ConfigData | None:
                 questionary.Choice(title="proxy (DEF 14A)", value="proxy"),
                 questionary.Choice(title="holdings (13F-HR)", value="holdings"),
                 questionary.Choice(
+                    title="insider (Forms 3/4)", value="insider"
+                ),
+                questionary.Choice(
                     title="registration (S-1)", value="registration"
                 ),
                 questionary.Choice(

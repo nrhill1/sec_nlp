@@ -273,6 +273,30 @@ class TestEFTSClient:
         assert hit.score == 15.5
         assert "warranty" in hit.snippet
 
+    def test_parse_hit_prefers_issuer_for_insider_forms(self) -> None:
+        """Prefer issuer name for Form 3/4 hits when available."""
+        config = EFTSClientConfig(user_agent="Test")
+        client = EFTSClient(config=config)
+
+        raw_hit = {
+            "_score": 12.1,
+            "_source": {
+                "adsh": "0001801368-24-000123",
+                "cik": "0002006182",
+                "company": "MP Materials Corp",
+                "display_names": [
+                    "Dhillon Mannik S. (CIK 0002006182)",
+                    "MP Materials Corp (MP)",
+                ],
+                "form": "4",
+                "file_date": "2024-01-15",
+            },
+        }
+
+        hit = client._parse_hit(raw_hit)
+
+        assert hit.company_name == "MP Materials Corp"
+
     def test_build_url(self) -> None:
         """Test URL building."""
         config = EFTSClientConfig(user_agent="Test")
