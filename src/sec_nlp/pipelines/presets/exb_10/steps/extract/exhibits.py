@@ -21,6 +21,7 @@ from sec_nlp.pipelines.observability.telemetry import (
     log_exhibit_stats,
 )
 from sec_nlp.pipelines.presets.exb_10.config import Exhibit10Config
+from sec_nlp.types import JsonValue
 
 
 @dataclass
@@ -59,6 +60,12 @@ def collect_exhibit_documents(
 ) -> tuple[list[Document], ExhibitStats]:
     """Parse Exhibit 10 content (full submissions + downloaded HTML) into chunks."""
     start_date, end_date = config.date_range
+    exhibit_numbers = _normalize_exhibit_numbers(config.exhibit_numbers)
+    exhibit_numbers_str = [
+        value for value in exhibit_numbers if isinstance(value, str)
+    ]
+    expected_bases = _collect_exhibit_bases(exhibit_numbers)
+    has_non_contract_exhibits = any(base != "10" for base in expected_bases)
 
     # Use disk-based downloader which fetches ALL files including separate exhibits
     from sec_edgar_downloader import Downloader
@@ -128,7 +135,7 @@ def collect_exhibit_documents(
                 exhibit_downloader.download_exhibits_from_index(
                     accession_number=accession_number,
                     cik=cik,
-                    exhibit_numbers=["10"],
+                    exhibit_numbers=exhibit_numbers_str,
                     output_dir=accession_dir,
                 )
             )
@@ -145,7 +152,7 @@ def collect_exhibit_documents(
             )
 
     exhibit_filter = create_exhibit_filter(
-        exhibit_numbers=["10"],
+        exhibit_numbers=exhibit_numbers_str,
         search_window=3000,
         filter_indices=True,
     )
@@ -182,15 +189,16 @@ def collect_exhibit_documents(
                 exhibit_number=doc_exhibit_number,
             )
 
-            if (
+            apply_keyword_prefilter = (
                 use_keyword_prefilter
                 and keyword_terms
-                and not KeywordMatcher.has_keyword_hit(
-                    exhibit_doc.content,
-                    keyword_terms,
-                    keyword_categories,
-                    min_categories=config.require_keyword_categories,
-                )
+                and _is_contract_exhibit(doc_exhibit_number)
+            )
+            if apply_keyword_prefilter and not KeywordMatcher.has_keyword_hit(
+                exhibit_doc.content,
+                keyword_terms,
+                keyword_categories,
+                min_categories=config.require_keyword_categories,
             ):
                 stats.prefilter_skips["no_keyword_terms"] += 1
                 if allowed_no_kw_remaining > 0:
@@ -255,15 +263,16 @@ def collect_exhibit_documents(
 
             logger.debug("Scanning file for Exhibit 10: %s", html_file.name)
 
-            if (
+            html_keyword_prefilter = (
                 use_keyword_prefilter
                 and keyword_terms
-                and not KeywordMatcher.has_keyword_hit(
-                    html_content,
-                    keyword_terms,
-                    keyword_categories,
-                    min_categories=config.require_keyword_categories,
-                )
+                and not has_non_contract_exhibits
+            )
+            if html_keyword_prefilter and not KeywordMatcher.has_keyword_hit(
+                html_content,
+                keyword_terms,
+                keyword_categories,
+                min_categories=config.require_keyword_categories,
             ):
                 stats.prefilter_skips["no_keyword_terms"] += 1
                 if allowed_no_kw_remaining > 0:
@@ -339,3 +348,38 @@ def collect_exhibit_documents(
 
     stats.log(symbol)
     return exhibit10_docs, stats
+
+
+def _normalize_exhibit_numbers(values: list[JsonValue]) -> list[JsonValue]:
+    cleaned: list[JsonValue] = []
+    seen = set()
+    for item in values:
+        if not isinstance(item, str):
+            continue
+        raw = item.strip()
+        if not raw:
+            continue
+        normalized = raw.replace("_", ".").replace("-", ".")
+        if normalized in seen:
+            continue
+        seen.add(normalized)
+        cleaned.append(normalized)
+    return cleaned or ["10"]
+
+
+def _collect_exhibit_bases(values: list[JsonValue]) -> list[JsonValue]:
+    bases: list[JsonValue] = []
+    for item in values:
+        if not isinstance(item, str):
+            continue
+        base = item.split(".")[0].strip()
+        if base and base not in bases:
+            bases.append(base)
+    return bases
+
+
+def _is_contract_exhibit(value: JsonValue) -> bool:
+    if isinstance(value, str):
+        base = value.split(".")[0].strip()
+        return base == "10"
+    return False

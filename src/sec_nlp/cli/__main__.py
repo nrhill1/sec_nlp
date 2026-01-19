@@ -62,6 +62,7 @@ _MULTI_VALUE_FLAGS: set[str] = {
     "--search.queries",
     "--queries",
     "--material-keywords",
+    "--exhibit-numbers",
 }
 
 _FALSEY: set[str] = {"false", "0", "no", "off", "n"}
