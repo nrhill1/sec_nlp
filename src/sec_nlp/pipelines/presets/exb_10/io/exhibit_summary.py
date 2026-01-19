@@ -35,6 +35,14 @@ _FIRM_RE = re.compile(
     r"B\.V\.|AG))\b"
 )
 
+_FIRM_PREFIXES = [
+    "consent of the independent registered public accounting firm",
+    "independent registered public accounting firm",
+    "consent of",
+    "we hereby consent",
+    "we consent",
+]
+
 _OBLIGATION_TERMS = [
     "shall",
     "must",
@@ -412,10 +420,16 @@ def _extract_subsidiaries(value: JsonValue) -> list[JsonDict]:
             continue
         parts = [part.strip() for part in re.split(r"\t|\s{2,}", cleaned)]
         parts = [part for part in parts if part]
-        if len(parts) < 2:
-            continue
-        name = _strip_footnote(parts[0])
-        jurisdiction = _strip_footnote(parts[1])
+        name = None
+        jurisdiction = None
+        if len(parts) >= 2:
+            name = _strip_footnote(parts[0])
+            jurisdiction = _strip_footnote(parts[1])
+        else:
+            tokens = cleaned.split()
+            if len(tokens) >= 2:
+                name = _strip_footnote(" ".join(tokens[:-1]))
+                jurisdiction = _strip_footnote(tokens[-1])
         if not name or not jurisdiction:
             continue
         key = f"{name.lower()}|{jurisdiction.lower()}"
@@ -456,8 +470,22 @@ def _scan_firm_lines(lines):
     for line in lines:
         match = _FIRM_RE.search(line)
         if match:
-            return match.group(1).strip()
+            candidate = _clean_firm_name(match.group(1))
+            if candidate:
+                return candidate
     return None
+
+
+def _clean_firm_name(value):
+    cleaned = value.strip()
+    if ". " in cleaned:
+        cleaned = cleaned.split(". ")[-1].strip()
+    lowered = cleaned.lower()
+    for prefix in _FIRM_PREFIXES:
+        if lowered.startswith(prefix):
+            cleaned = cleaned[len(prefix) :].strip(" ,.-")
+            break
+    return cleaned.strip()
 
 
 def _find_consent_date(text):
@@ -558,7 +586,6 @@ def _text_from_html(value: JsonValue):
     text = re.sub(r"(?i)<t[dh][^>]*>", "\t", text)
     text = re.sub(r"<[^>]+>", " ", text)
     text = html.unescape(text)
-    text = re.sub(r"[ \t]+", " ", text)
     text = re.sub(r" *\n *", "\n", text)
     return text.strip()
 

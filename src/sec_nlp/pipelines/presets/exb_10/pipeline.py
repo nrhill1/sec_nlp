@@ -88,7 +88,7 @@ class Exhibit10Pipeline(BasePipeline):
     # Class attributes
     pipeline_type: ClassVar[Literal["exhibit10"]] = "exhibit10"
     description: ClassVar[str] = (
-        "Analyze material contracts and related exhibits (10, 21, 23, 99, 101)"
+        "Analyze Exhibit 10 material contracts and related exhibits (10, 21, 23, 99, 101)"
     )
 
     requires_llm: ClassVar[bool] = False

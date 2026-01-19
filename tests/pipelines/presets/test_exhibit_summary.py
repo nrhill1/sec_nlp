@@ -97,8 +97,12 @@ def test_build_exhibit_summary_extracts_core_details(tmp_path: Path) -> None:
 
     exhibit_23 = as_json_dict(details.get("23"))
     assert exhibit_23 is not None
-    assert "Deloitte" in (exhibit_23.get("auditor_name"), "")
-    assert "March 1, 2023" in (exhibit_23.get("consent_date"), "")
+    auditor_name = exhibit_23.get("auditor_name")
+    auditor_text = auditor_name if isinstance(auditor_name, str) else ""
+    assert "Deloitte" in auditor_text
+    consent_date = exhibit_23.get("consent_date")
+    consent_text = consent_date if isinstance(consent_date, str) else ""
+    assert "March 1, 2023" in consent_text
 
     exhibit_10 = as_json_dict(details.get("10"))
     assert exhibit_10 is not None
