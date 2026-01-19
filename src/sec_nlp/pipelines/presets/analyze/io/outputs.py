@@ -2,26 +2,28 @@
 """Output formatting and export for the analyze pipeline."""
 
 import csv
+import json
 from collections import defaultdict
 from hashlib import sha256
 from pathlib import Path
 from typing import Literal
 
 from sec_nlp.core.infra.logger import logger
-from sec_nlp.core.types import coerce_float
+from sec_nlp.core.types import coerce_float, coerce_json_dict
 from sec_nlp.pipelines.output_io import (
     build_accession_dir,
     write_json,
     write_yaml,
 )
 from sec_nlp.pipelines.types import AnalysisResultDict, MetadataMap
-from sec_nlp.types import JsonDict
+from sec_nlp.types import JsonDict, JsonValue
 
 from ..market import MarketEnrichment
 from ..models import (
     Aggregates,
     AnalysisDiagnostics,
     AnalysisOutput,
+    ExecutiveCompSummary,
     ExecutiveSummary,
     FilingInfo,
     OutputProvenance,
@@ -306,12 +308,14 @@ class OutputFormatter:
             filing_date=_meta_str("filing_date"),
         )
         relationship_timeline = self._build_relationship_timeline(filing_meta)
+        executive_comp_summary = self._build_exec_comp_summary(ranked_results)
 
         return AnalysisOutput(
             symbol=symbol,
             search_queries=search_queries or [],
             filing=filing,
             executive_summary=executive_summary,
+            executive_comp_summary=executive_comp_summary,
             aggregates=aggregates,
             diagnostics=diagnostics,
             provenance=provenance,
@@ -321,6 +325,128 @@ class OutputFormatter:
             results_by_query=self._group_by_query(ranked_results),
             results_by_section=self._group_by_section(ranked_results),
             relationship_timeline=relationship_timeline,
+        )
+
+    def _build_exec_comp_summary(
+        self, results: list[AnalysisResultDict]
+    ) -> ExecutiveCompSummary | None:
+        if not results:
+            return None
+
+        executives: list[JsonDict] = []
+        compensation_items: list[JsonDict] = []
+        performance_metrics: list[JsonValue] = []
+        peer_set: list[JsonValue] = []
+        pay_flags: list[JsonValue] = []
+        notes: list[JsonValue] = []
+
+        seen_execs: set[int] = set()
+        seen_comp: set[int] = set()
+        seen_metrics: set[int] = set()
+        seen_peers: set[int] = set()
+        seen_flags: set[int] = set()
+        seen_notes: set[int] = set()
+
+        def _key_hash(value: JsonValue) -> int | None:
+            if isinstance(value, str):
+                cleaned = value.strip().lower()
+                return hash(cleaned) if cleaned else None
+            if isinstance(value, (int, float, bool)):
+                return hash(value)
+            try:
+                encoded = json.dumps(value, sort_keys=True, ensure_ascii=True)
+            except Exception:
+                return None
+            return hash(encoded)
+
+        def _append_unique(
+            bucket: list[JsonValue], seen: set[int], value: JsonValue
+        ) -> None:
+            key = _key_hash(value)
+            if key is None or key in seen:
+                return
+            seen.add(key)
+            bucket.append(value)
+
+        def _append_unique_dict(
+            bucket: list[JsonDict], seen: set[int], value: JsonValue
+        ) -> None:
+            mapping = coerce_json_dict(value)
+            if mapping is None:
+                return
+            key = _key_hash(mapping)
+            if key is None or key in seen:
+                return
+            seen.add(key)
+            bucket.append(mapping)
+
+        has_comp_data = False
+
+        for result in results:
+            entities = coerce_json_dict(result.get("extracted_entities"))
+            if entities is not None:
+                exec_list = entities.get("executives")
+                if isinstance(exec_list, list):
+                    for entry in exec_list:
+                        entry_dict = coerce_json_dict(entry)
+                        if entry_dict is None:
+                            continue
+                        name_value = entry_dict.get("name")
+                        name_key = (
+                            _key_hash(name_value)
+                            if isinstance(name_value, str)
+                            else None
+                        )
+                        if name_key is not None and name_key in seen_execs:
+                            continue
+                        if name_key is not None:
+                            seen_execs.add(name_key)
+                        executives.append(entry_dict)
+                        has_comp_data = True
+
+            comp_data = result.get("compensation_data")
+            if comp_data is not None:
+                _append_unique_dict(compensation_items, seen_comp, comp_data)
+                if compensation_items:
+                    has_comp_data = True
+
+            metrics = result.get("performance_metrics")
+            if isinstance(metrics, list):
+                for metric in metrics:
+                    _append_unique(performance_metrics, seen_metrics, metric)
+                if performance_metrics:
+                    has_comp_data = True
+
+            peers = result.get("peer_set")
+            if isinstance(peers, list):
+                for peer in peers:
+                    _append_unique(peer_set, seen_peers, peer)
+                if peer_set:
+                    has_comp_data = True
+
+            flags = result.get("pay_for_performance_flags")
+            if isinstance(flags, list):
+                for flag in flags:
+                    _append_unique(pay_flags, seen_flags, flag)
+                if pay_flags:
+                    has_comp_data = True
+
+            summary = result.get("summary")
+            if isinstance(summary, str):
+                cleaned = summary.strip()
+                if cleaned:
+                    _append_unique(notes, seen_notes, cleaned)
+
+        if not has_comp_data:
+            return None
+
+        return ExecutiveCompSummary(
+            executives=executives,
+            compensation_items=compensation_items,
+            performance_metrics=performance_metrics,
+            peer_set=peer_set,
+            pay_for_performance_flags=pay_flags,
+            notes=notes,
         )
 
     def _build_aggregates(

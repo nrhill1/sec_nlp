@@ -163,6 +163,11 @@ class AnalysisResultDict(TypedDict, total=False):
     evidence_spans: list[dict[str, str | int | float]]
     source_excerpt: str | None
     extracted_entities: dict[str, JsonValue]
+    compensation_data: JsonValue
+    proposal_info: JsonValue
+    performance_metrics: list[JsonValue]
+    peer_set: list[JsonValue]
+    pay_for_performance_flags: list[JsonValue]
     follow_up_questions: list[str]
 
     # Provenance

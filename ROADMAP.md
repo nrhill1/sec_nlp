@@ -26,10 +26,10 @@ Potential next steps and new features for sec-nlp.
   - Sources: exhibit index and selected exhibits (21, 23, 99, 101)
   - Extract: subsidiary lists, auditor consents, key obligations, counterparties
   - Outputs: structured exhibit summaries, coverage gaps, change tracking
-- **Executive compensation** (proxy DEF 14A): Extract comp structures, peer benchmarks
-  - Sources: DEF 14A tables (SCT, grants, exercises) and CD&A narrative
-  - Extract: base/bonus/equity breakdown, performance metrics, peer sets
-  - Outputs: YoY comp changes, pay-for-performance flags, peer deltas
+- ~~**Executive compensation** (proxy DEF 14A): Extract comp structures, peer benchmarks~~
+  - ~~Sources: DEF 14A tables (SCT, grants, exercises) and CD&A narrative~~
+  - ~~Extract: base/bonus/equity breakdown, performance metrics, peer sets~~
+  - ~~Outputs: YoY comp changes, pay-for-performance flags, peer deltas~~
 
 ## Technical Improvements
 - **Incremental indexing**: Detect new filings and add only deltas to vector store

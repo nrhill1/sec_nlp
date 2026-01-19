@@ -158,6 +158,26 @@ class AnalysisResult(BaseResult):
         default_factory=dict,
         description="Named entities extracted from content",
     )
+    compensation_data: JsonDict | None = Field(
+        default=None,
+        description="Compensation breakdown when available",
+    )
+    proposal_info: JsonDict | None = Field(
+        default=None,
+        description="Proxy proposal details when available",
+    )
+    performance_metrics: list[JsonValue] = Field(
+        default_factory=list,
+        description="Compensation performance metrics mentioned in the chunk",
+    )
+    peer_set: list[JsonValue] = Field(
+        default_factory=list,
+        description="Peer group companies referenced for compensation benchmarking",
+    )
+    pay_for_performance_flags: list[JsonValue] = Field(
+        default_factory=list,
+        description="Pay-for-performance alignment/misalignment indicators",
+    )
     tags: list[str] = Field(
         default_factory=list,
         description="Classifier tags or labels assigned to the chunk",
@@ -216,6 +236,9 @@ class AnalysisResult(BaseResult):
         "missing_query_terms",
         "impact_channels",
         "contingencies",
+        "performance_metrics",
+        "peer_set",
+        "pay_for_performance_flags",
         mode="before",
     )
     @classmethod
@@ -325,6 +348,41 @@ class ExecutiveSummary(BaseModel):
     )
 
 
+class ExecutiveCompSummary(BaseModel):
+    """Executive compensation summary extracted from proxy filings."""
+
+    model_config = ConfigDict(
+        frozen=True,
+        extra="ignore",
+        defer_build=True,
+    )
+
+    executives: list[JsonDict] = Field(
+        default_factory=list,
+        description="Executives and roles mentioned in the filing",
+    )
+    compensation_items: list[JsonDict] = Field(
+        default_factory=list,
+        description="Compensation breakdown entries from the filing",
+    )
+    performance_metrics: list[JsonValue] = Field(
+        default_factory=list,
+        description="Performance metrics tied to compensation outcomes",
+    )
+    peer_set: list[JsonValue] = Field(
+        default_factory=list,
+        description="Peer companies used for compensation benchmarking",
+    )
+    pay_for_performance_flags: list[JsonValue] = Field(
+        default_factory=list,
+        description="Pay-for-performance alignment/misalignment notes",
+    )
+    notes: list[JsonValue] = Field(
+        default_factory=list,
+        description="Additional executive compensation observations",
+    )
+
+
 class AnalysisDiagnostics(BaseModel):
     """Diagnostic information for debugging and performance analysis."""
 
@@ -399,6 +457,10 @@ class AnalysisOutput(BaseModel):
     )
     filing: FilingInfo
     executive_summary: ExecutiveSummary
+    executive_comp_summary: ExecutiveCompSummary | None = Field(
+        default=None,
+        description="Executive compensation summary when available",
+    )
     aggregates: Aggregates
     diagnostics: AnalysisDiagnostics
     provenance: OutputProvenance | None = None

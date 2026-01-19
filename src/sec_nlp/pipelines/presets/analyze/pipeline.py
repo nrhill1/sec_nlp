@@ -20,6 +20,7 @@ from tqdm import tqdm
 
 from sec_nlp import __version__ as sec_nlp_version
 from sec_nlp.core.edgar.efts_models import EFTSHit
+from sec_nlp.core.edgar.filing_mode import FilingMode
 from sec_nlp.core.infra.logger import log_divider, logger
 from sec_nlp.core.ingest.downloader import download_accessions
 from sec_nlp.core.ingest.loader import Loader
@@ -43,6 +44,7 @@ from .config import AnalyzeConfig
 from .io.enhancements import (
     build_peer_comparison,
     build_symbol_profile,
+    write_executive_comp_summary,
     write_peer_summary,
     write_symbol_summary,
 )
@@ -1142,6 +1144,21 @@ class AnalyzePipeline(BasePipeline):
         )
         if summary_path is not None:
             output_files.append(summary_path)
+        if self.config.mode == FilingMode.proxy:
+            exec_comp_path = write_executive_comp_summary(
+                output_dir=self.config.get_symbol_output_dir(symbol),
+                symbol=symbol,
+                run_id=(
+                    self.config.short_id
+                    if self.config.short_id > 0
+                    else self.config.run_id
+                ),
+                analysis_results=analysis_results,
+                relevant_results=relevant_results,
+                fallback_meta=docs[0].metadata or {},
+            )
+            if exec_comp_path is not None:
+                output_files.append(exec_comp_path)
         if output_files:
             output_dir = self.config.get_symbol_output_dir(symbol)
             logger.info(

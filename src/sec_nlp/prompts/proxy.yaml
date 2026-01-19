@@ -58,22 +58,25 @@ template: |
       - option_awards: str | null
       - total: str | null
       Otherwise null.
-  15. **proposal_info** (object | null): If shareholder/management proposal:
+  15. **performance_metrics** (list[string]): Named metrics tied to compensation outcomes (e.g., TSR, EBITDA, ROIC); [] if none.
+  16. **peer_set** (list[string]): Peer companies used for compensation benchmarking; [] if none.
+  17. **pay_for_performance_flags** (list[string]): Notes about pay-for-performance alignment/misalignment or say-on-pay outcomes; [] if none.
+  18. **proposal_info** (object | null): If shareholder/management proposal:
       - proposal_type: "management" | "shareholder"
       - description: str
       - board_recommendation: "for" | "against" | null
       Otherwise null.
-  16. **impact_channels** (list[string]): Potential market impact channels (e.g., governance risk, shareholder activism, executive turnover, voting outcomes); [] if none or unclear.
-  17. **impact_direction** (string | null): "positive", "negative", "mixed", "neutral", or "unclear".
-  18. **impact_magnitude** (string | null): "low", "medium", "high", "none", or "unclear".
-  19. **impact_horizon** (string | null): "near_term", "mid_term", "long_term", or "unclear".
-  20. **impact_confidence** (0.0-1.0 | null): Confidence in the impact assessment; null if no impact assessment.
-  21. **impact_rationale** (string | null): 1-2 sentence justification linking the text (and market context if provided) to expected market impact; null if unclear.
+  19. **impact_channels** (list[string]): Potential market impact channels (e.g., governance risk, shareholder activism, executive turnover, voting outcomes); [] if none or unclear.
+  20. **impact_direction** (string | null): "positive", "negative", "mixed", "neutral", or "unclear".
+  21. **impact_magnitude** (string | null): "low", "medium", "high", "none", or "unclear".
+  22. **impact_horizon** (string | null): "near_term", "mid_term", "long_term", or "unclear".
+  23. **impact_confidence** (0.0-1.0 | null): Confidence in the impact assessment; null if no impact assessment.
+  24. **impact_rationale** (string | null): 1-2 sentence justification linking the text (and market context if provided) to expected market impact; null if unclear.
 
   Guidelines:
   - Focus on executive compensation, board composition, shareholder proposals, and governance policies.
   - Extract specific dollar amounts, share counts, and percentages when present.
-  - Note any related-party transactions or potential conflicts of interest.
+  - Note any related-party transactions, peer sets, or compensation performance metrics.
   - If matched queries are provided, use them as the primary relevance target.
   - If market context is provided and the content is relevant, assess possible connections to market conditions in the impact_* fields; state uncertainty and avoid asserting causality unless explicitly stated.
   - Ignore tables of contents, headers/footers, and boilerplate legal disclaimers.
