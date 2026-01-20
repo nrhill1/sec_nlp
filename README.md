@@ -132,7 +132,8 @@ downloads/      # raw SEC downloads (sec-edgar-filings)
 outputs/
   <SYMBOL>/
     analyze/<run_id>/<accession>/analysis.{yaml,json,csv}
-    exhibit/<run_id>/<symbol>_exhibit_<run_id>.{yaml,json,csv}
+    exhibit/<run_id>/<symbol>_exhibit_index_<run_id>.{yaml,json,csv}
+    exhibit/<run_id>/<symbol>_exhibit_summary_<run_id>.{yaml,json}
     warranty/<run_id>/<symbol>_warranty_<accession>_<run_id>.json
     warranty/<run_id>/<symbol>_warranty_combined_<run_id>.csv
 logs/

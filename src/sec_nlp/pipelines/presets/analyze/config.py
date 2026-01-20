@@ -627,7 +627,7 @@ class AnalyzeConfig(BasePipelineSettings):
         description="Minimum number of topic keyword hits required to keep a chunk",
     )
     max_chunk_length: int | None = Field(
-        default=200000,
+        default=1_000_000,
         ge=10,
         description="Optional maximum characters allowed per chunk (None disables)",
     )

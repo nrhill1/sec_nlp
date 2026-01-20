@@ -91,7 +91,9 @@ def write_exhibit_summary(
     symbol_value = _normalize_symbol(symbol)
     output_dir = config.get_symbol_output_dir(symbol_value)
     output_dir.mkdir(parents=True, exist_ok=True)
-    base_name = build_run_file_stem(symbol_value, "exhibits", config.run_id)
+    base_name = build_run_file_stem(
+        symbol_value, "exhibit_summary", config.run_id
+    )
 
     if config.export_format in ("yaml", "both"):
         yaml_file = output_dir / f"{base_name}.yaml"

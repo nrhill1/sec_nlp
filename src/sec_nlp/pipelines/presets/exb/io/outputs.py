@@ -74,7 +74,7 @@ def write_exhibit_outputs(
     # Write into a run-scoped directory and postfix filenames with run_id
     symbol_out_path = config.get_symbol_output_dir(symbol)
     symbol_out_path.mkdir(parents=True, exist_ok=True)
-    base_name = build_run_file_stem(symbol, "exhibit", config.run_id)
+    base_name = build_run_file_stem(symbol, "exhibit_index", config.run_id)
 
     # Build output data structure
     output_data = _build_output_data(
@@ -370,7 +370,7 @@ def write_indexing_manifest(
     symbol_out_path.mkdir(parents=True, exist_ok=True)
     out_file = (
         symbol_out_path
-        / f"{build_run_file_stem(symbol, 'exhibit', config.run_id)}.yaml"
+        / f"{build_run_file_stem(symbol, 'exhibit_index', config.run_id)}.yaml"
     )
 
     manifest = _build_output_data(
