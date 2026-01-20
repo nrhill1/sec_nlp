@@ -9,7 +9,7 @@ from langchain_core.runnables import Runnable
 from pydantic import BaseModel, Field
 
 from sec_nlp.core.llm.chains import ResultOutputParser, build_runnable
-from sec_nlp.pipelines import BaseResult
+from sec_nlp.pipelines import BasePipelineResult
 from sec_nlp.types import JsonDict, JsonValue
 
 
@@ -21,7 +21,7 @@ class MockInput(BaseModel):
     max_length: int = Field(default=100, description="Maximum length")
 
 
-class MockOutput(BaseResult):
+class MockOutput(BasePipelineResult):
     """Mock output model for testing."""
 
     pipeline_type: ClassVar[str] = "mock"
@@ -87,7 +87,7 @@ class MockOutputParser:
         """Test handling of JSON missing required fields."""
 
         # Create a model with required fields
-        class StrictOutput(BaseResult):
+        class StrictOutput(BasePipelineResult):
             pipeline_type: ClassVar[str] = "strict"
             result: str  # Required field
 

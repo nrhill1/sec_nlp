@@ -20,7 +20,7 @@ from sec_nlp.core.text.section_patterns import (
     REGISTRATION_SECTION_PATTERNS,
 )
 from sec_nlp.core.types import coerce_json_dict
-from sec_nlp.pipelines.base.config import BaseConfig
+from sec_nlp.pipelines.base.config import BasePipelineSettings
 from sec_nlp.pipelines.llm.config import LLMConfig
 from sec_nlp.pipelines.metadata.filters import MetadataFilters
 from sec_nlp.pipelines.vector.config import VectorConfig
@@ -207,7 +207,7 @@ class SearchConfig(BaseModel):
     )
 
 
-class AnalyzeConfig(BaseConfig):
+class AnalyzeConfig(BasePipelineSettings):
     """Configuration for generalized document analysis pipeline."""
 
     model_config = SettingsConfigDict(

@@ -4,7 +4,7 @@
 from pydantic import Field
 from pydantic_settings import CliPositionalArg
 
-from sec_nlp.cli.command import PipelineCommand
+from sec_nlp.cli.command import BasePipelineCommand
 from sec_nlp.core.infra.logger import bullet_line, logger
 from sec_nlp.pipelines.presets.exb import (
     ExhibitConfig,
@@ -12,7 +12,7 @@ from sec_nlp.pipelines.presets.exb import (
 )
 
 
-class Exb(ExhibitConfig, PipelineCommand):
+class Exb(ExhibitConfig, BasePipelineCommand):
     """Extract exhibit content by category.
 
     Examples:

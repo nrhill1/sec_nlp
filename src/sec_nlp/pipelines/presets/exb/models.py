@@ -5,7 +5,7 @@ from typing import ClassVar, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from sec_nlp.pipelines import BaseResult
+from sec_nlp.pipelines import BasePipelineResult
 from sec_nlp.types import JsonValue
 
 
@@ -18,7 +18,7 @@ class ExhibitInput(BaseModel):
     symbol: str
 
 
-class ExhibitContractResult(BaseResult):
+class ExhibitContractResult(BasePipelineResult):
     """Result container for a contract exhibit chunk."""
 
     pipeline_type: ClassVar[Literal["exhibit"]] = "exhibit"
@@ -90,7 +90,7 @@ class ExhibitContractResult(BaseResult):
         return fields
 
 
-class ExhibitResult(BaseResult):
+class ExhibitResult(BasePipelineResult):
     """Result model for overall exhibit pipeline."""
 
     pipeline_type: ClassVar[Literal["exhibit"]] = "exhibit"

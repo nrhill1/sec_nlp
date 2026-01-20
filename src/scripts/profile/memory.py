@@ -23,7 +23,7 @@ from pydantic_settings import (  # noqa: E402
 )
 
 from sec_nlp.core.infra.logger import logger, setup_logging  # noqa: E402
-from sec_nlp.pipelines.base.result import BaseResult  # noqa: E402
+from sec_nlp.pipelines.base.result import BasePipelineResult  # noqa: E402
 from sec_nlp.pipelines.presets.analyze import (  # noqa: E402
     AnalyzeConfig,
     AnalyzePipeline,
@@ -113,7 +113,7 @@ class MemoryProfileConfig(BaseSettings):
         """Run pipeline with memory profiling."""
         logger.info("Creating pipeline... (%s)", self.pipeline)
 
-        result: BaseResult
+        result: BasePipelineResult
         if self.pipeline == "exb":
             exb_cfg = ExhibitConfig(
                 verbose=True,

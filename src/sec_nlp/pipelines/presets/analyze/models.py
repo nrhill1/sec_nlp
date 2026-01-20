@@ -13,7 +13,7 @@ from pydantic import (
 )
 
 from sec_nlp.core.types import coerce_json_value
-from sec_nlp.pipelines import BaseResult
+from sec_nlp.pipelines import BasePipelineResult
 from sec_nlp.pipelines.base.result import SummaryFieldValue
 from sec_nlp.pipelines.types import AnalysisResultDict
 from sec_nlp.types import JsonDict, JsonValue
@@ -78,7 +78,7 @@ class AnalysisInput(BaseModel):
     )
 
 
-class AnalysisResult(BaseResult):
+class AnalysisResult(BasePipelineResult):
     """Result model for individual chunk analysis."""
 
     pipeline_type: ClassVar[Literal["analyze"]] = "analyze"
@@ -489,7 +489,7 @@ class AnalysisOutput(BaseModel):
     )
 
 
-class AnalyzeResult(BaseResult):
+class AnalyzeResult(BasePipelineResult):
     """Result model for overall semantic search pipeline."""
 
     model_config = ConfigDict(

@@ -8,10 +8,10 @@ from pydantic import Field, field_validator
 from pydantic_settings import SettingsConfigDict
 
 from sec_nlp.core.edgar.filing_mode import FilingMode
-from sec_nlp.pipelines.base.config import BaseConfig
+from sec_nlp.pipelines.base.config import BasePipelineSettings
 
 
-class WarrantyConfig(BaseConfig):
+class WarrantyConfig(BasePipelineSettings):
     """Configuration for SEC warranty data pipeline (XBRL-only, no LLM)."""
 
     model_config = SettingsConfigDict(

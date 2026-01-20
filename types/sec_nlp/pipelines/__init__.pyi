@@ -1,7 +1,7 @@
 from .base import (
-    BaseConfig as BaseConfig,
     BasePipeline as BasePipeline,
-    BaseResult as BaseResult,
+    BasePipelineResult as BasePipelineResult,
+    BasePipelineSettings as BasePipelineSettings,
     PipelineValidator as PipelineValidator,
     ValidationReport as ValidationReport,
     ValidationResult as ValidationResult,
@@ -27,8 +27,8 @@ from .vector import VectorConfig as VectorConfig
 
 __all__ = [
     "BasePipeline",
-    "BaseResult",
-    "BaseConfig",
+    "BasePipelineResult",
+    "BasePipelineSettings",
     "LLMConfig",
     "VectorConfig",
     "DocumentList",

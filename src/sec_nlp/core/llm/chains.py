@@ -9,10 +9,10 @@ from langchain_core.prompts.base import BasePromptTemplate
 from langchain_core.runnables import Runnable, RunnableSerializable
 from pydantic import BaseModel
 
-from sec_nlp.pipelines import BaseResult
+from sec_nlp.pipelines import BasePipelineResult
 
 
-class ResultOutputParser[R: BaseResult](
+class ResultOutputParser[R: BasePipelineResult](
     PydanticOutputParser[R],
 ):
     """Output parser to validate and format LLM output."""
@@ -50,7 +50,7 @@ type InputModelKeys = (
 
 def build_runnable[
     I: BaseModel,
-    R: BaseResult,
+    R: BasePipelineResult,
 ](
     *,
     prompt: BasePromptTemplate,

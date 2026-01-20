@@ -7,36 +7,36 @@ from pathlib import Path
 import pytest
 
 from sec_nlp.pipelines import (
-    BaseConfig,
     BasePipeline,
-    BaseResult,
+    BasePipelineResult,
+    BasePipelineSettings,
 )
 from sec_nlp.types import JsonValue
 
 
-class _ConcreteResult(BaseResult):
+class _ConcreteResult(BasePipelineResult):
     pipeline_type = "concrete"
 
     def summary_fields(self) -> dict[str, JsonValue]:
         return {"success": self.success}
 
 
-class _ConcreteConfig(BaseConfig):
+class _ConcreteConfig(BasePipelineSettings):
     pipeline_type = "concrete"
 
     def pipeline_label(self) -> str:
         return "Concrete"
 
 
-class TestBaseResult:
-    """Tests for BaseResult class."""
+class TestBasePipelineResult:
+    """Tests for BasePipelineResult class."""
 
     def test_base_result_is_abstract(self) -> None:
-        """BaseResult cannot be instantiated directly."""
-        assert inspect.isabstract(BaseResult)
+        """BasePipelineResult cannot be instantiated directly."""
+        assert inspect.isabstract(BasePipelineResult)
 
     def test_concrete_result_initialization(self) -> None:
-        """Test that a concrete BaseResult subclass initializes with defaults."""
+        """Test that a concrete BasePipelineResult subclass initializes with defaults."""
         result = _ConcreteResult()
 
         assert result.success is True
@@ -46,7 +46,7 @@ class TestBaseResult:
         assert result.raw_output is None
 
     def test_concrete_result_with_custom_values(self) -> None:
-        """Test BaseResult subclass with custom values."""
+        """Test BasePipelineResult subclass with custom values."""
         outputs = [Path("/tmp/output1.txt"), Path("/tmp/output2.txt")]
         metadata = {"key": "value", "count": 42}
 
@@ -83,15 +83,15 @@ class TestBaseResult:
         assert result.is_success() is False
 
 
-class TestBaseConfig:
-    """Tests for BaseConfig class."""
+class TestBasePipelineSettings:
+    """Tests for BasePipelineSettings class."""
 
     def test_base_config_is_abstract(self) -> None:
-        """BaseConfig cannot be instantiated directly."""
-        assert inspect.isabstract(BaseConfig)
+        """BasePipelineSettings cannot be instantiated directly."""
+        assert inspect.isabstract(BasePipelineSettings)
 
     def test_base_config_default_values(self) -> None:
-        """Test BaseConfig default values."""
+        """Test BasePipelineSettings default values."""
         config = _ConcreteConfig()
 
         assert config.verbose is False
@@ -100,7 +100,7 @@ class TestBaseConfig:
         assert config.log_file is None
 
     def test_base_config_with_custom_values(self) -> None:
-        """Test BaseConfig with custom values."""
+        """Test BasePipelineSettings with custom values."""
         log_file = Path("/tmp/test.log")
 
         config = _ConcreteConfig(
@@ -130,7 +130,7 @@ class TestBaseConfig:
     def test_base_config_log_file_creates_parent_dir(
         self,
         tmp_path: Path,
-        temp_pipeline_config: BaseConfig,
+        temp_pipeline_config: BasePipelineSettings,
     ) -> None:
         """Test that setup_paths creates log_file parent directory."""
         log_file = tmp_path / "logs" / "nested" / "test.log"
@@ -156,13 +156,13 @@ class TestBasePipeline:
     def test_concrete_pipeline_can_be_instantiated(self) -> None:
         """Test that concrete pipeline subclass can be instantiated."""
 
-        class ConcreteResult(BaseResult):
+        class ConcreteResult(BasePipelineResult):
             pipeline_type = "concrete"
 
             def summary_fields(self) -> dict[str, JsonValue]:
                 return {"success": self.success}
 
-        class ConcreteConfig(BaseConfig):
+        class ConcreteConfig(BasePipelineSettings):
             pipeline_type = "concrete"
 
             def pipeline_label(self) -> str:
@@ -195,13 +195,13 @@ class TestBasePipeline:
     def test_pipeline_run_method_must_be_implemented(self) -> None:
         """Test that run() method must be implemented."""
 
-        class ConcreteResult(BaseResult):
+        class ConcreteResult(BasePipelineResult):
             pipeline_type = "test"
 
             def summary_fields(self) -> dict[str, JsonValue]:
                 return {"success": self.success}
 
-        class ConcreteConfig(BaseConfig):
+        class ConcreteConfig(BasePipelineSettings):
             pipeline_type = "test"
 
             def pipeline_label(self) -> str:
@@ -227,13 +227,13 @@ class TestBasePipeline:
     def test_pipeline_get_config_model(self) -> None:
         """Test get_config_model class method."""
 
-        class ConcreteResult(BaseResult):
+        class ConcreteResult(BasePipelineResult):
             pipeline_type = "test"
 
             def summary_fields(self) -> dict[str, JsonValue]:
                 return {"success": self.success}
 
-        class ConcreteConfig(BaseConfig):
+        class ConcreteConfig(BasePipelineSettings):
             pipeline_type = "test"
             custom_field: str = "test"
 
@@ -265,14 +265,14 @@ class TestBasePipeline:
     def test_pipeline_get_result_model(self) -> None:
         """Test get_result_model class method."""
 
-        class ConcreteResult(BaseResult):
+        class ConcreteResult(BasePipelineResult):
             pipeline_type = "test"
             custom_output: str = "result"
 
             def summary_fields(self) -> dict[str, JsonValue]:
                 return {"success": self.success}
 
-        class ConcreteConfig(BaseConfig):
+        class ConcreteConfig(BasePipelineSettings):
             pipeline_type = "test"
 
             def pipeline_label(self) -> str:
@@ -303,13 +303,13 @@ class TestBasePipeline:
     def test_pipeline_model_post_init_called(self) -> None:
         """Test that model_post_init is called during initialization."""
 
-        class ConcreteResult(BaseResult):
+        class ConcreteResult(BasePipelineResult):
             pipeline_type = "test"
 
             def summary_fields(self) -> dict[str, JsonValue]:
                 return {"success": self.success}
 
-        class ConcreteConfig(BaseConfig):
+        class ConcreteConfig(BasePipelineSettings):
             pipeline_type = "test"
 
             def pipeline_label(self) -> str:
@@ -344,13 +344,13 @@ class TestBasePipeline:
     def test_pipeline_cli_cmd_calls_run(self) -> None:
         """Test that cli_cmd() calls run()."""
 
-        class ConcreteResult(BaseResult):
+        class ConcreteResult(BasePipelineResult):
             pipeline_type = "test"
 
             def summary_fields(self) -> dict[str, JsonValue]:
                 return {"success": self.success}
 
-        class ConcreteConfig(BaseConfig):
+        class ConcreteConfig(BasePipelineSettings):
             pipeline_type = "test"
 
             def pipeline_label(self) -> str:
@@ -388,13 +388,13 @@ class TestBasePipeline:
     def test_pipeline_requires_config_model_method(self) -> None:
         """Test that pipeline raises TypeError if config_model() is missing."""
 
-        class ConcreteResult(BaseResult):
+        class ConcreteResult(BasePipelineResult):
             pipeline_type = "test"
 
             def summary_fields(self) -> dict[str, JsonValue]:
                 return {"success": self.success}
 
-        class ConcreteConfig(BaseConfig):
+        class ConcreteConfig(BasePipelineSettings):
             pipeline_type = "test"
 
             def pipeline_label(self) -> str:
@@ -420,13 +420,13 @@ class TestBasePipeline:
     def test_pipeline_requires_result_model_method(self) -> None:
         """Test that pipeline raises TypeError if result_model() is missing."""
 
-        class ConcreteResult(BaseResult):
+        class ConcreteResult(BasePipelineResult):
             pipeline_type = "test"
 
             def summary_fields(self) -> dict[str, JsonValue]:
                 return {"success": self.success}
 
-        class ConcreteConfig(BaseConfig):
+        class ConcreteConfig(BasePipelineSettings):
             pipeline_type = "test"
 
             def pipeline_label(self) -> str:

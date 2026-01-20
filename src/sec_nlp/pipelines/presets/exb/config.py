@@ -8,7 +8,7 @@ from pydantic import Field, field_validator, model_validator
 from pydantic_settings import SettingsConfigDict
 
 from sec_nlp.core.edgar.filing_mode import FilingMode
-from sec_nlp.pipelines.base.config import BaseConfig
+from sec_nlp.pipelines.base.config import BasePipelineSettings
 from sec_nlp.pipelines.vector.config import VectorConfig
 from sec_nlp.types import JsonValue
 
@@ -27,7 +27,7 @@ _EXHIBIT_CATEGORY_NUMBERS = {
 }
 
 
-class ExhibitConfig(BaseConfig):
+class ExhibitConfig(BasePipelineSettings):
     """Configuration for SEC exhibit extraction pipeline."""
 
     model_config = SettingsConfigDict(

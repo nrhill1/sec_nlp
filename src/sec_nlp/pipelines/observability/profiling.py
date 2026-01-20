@@ -13,7 +13,7 @@ from types import TracebackType
 
 from scripts.profile.utils import Profiler
 from sec_nlp.core.infra.logger import logger
-from sec_nlp.pipelines.base.result import BaseResult
+from sec_nlp.pipelines.base.result import BasePipelineResult
 from sec_nlp.types import JsonDict, JsonObject
 
 
@@ -199,8 +199,10 @@ class PipelineProfiler(AbstractContextManager):
                     logger.info("    %d) %s", idx, line)
 
     # Result helpers -----------------------------------------------------------
-    def attach_metadata(self, result: BaseResult | None) -> BaseResult | None:
-        """Attach profiling metadata to a BaseResult (via model_copy)."""
+    def attach_metadata(
+        self, result: BasePipelineResult | None
+    ) -> BasePipelineResult | None:
+        """Attach profiling metadata to a BasePipelineResult (via model_copy)."""
         if result is None:
             return None
 

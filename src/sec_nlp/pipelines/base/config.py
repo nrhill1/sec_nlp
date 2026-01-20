@@ -23,7 +23,7 @@ from sec_nlp.types import InitSubclassKwargs, JsonDict, JsonObject
 _CLASSVAR_UNSET = "__UNSET__"
 
 
-class BaseConfig(BaseSettings, ABC):
+class BasePipelineSettings(BaseSettings, ABC):
     """Base config type for all pipelines.
 
     Configuration is loaded from (in order of precedence):
@@ -134,7 +134,7 @@ class BaseConfig(BaseSettings, ABC):
         # Ensure frozen=True is not overridden
         if cls.model_config.get("frozen") is not True:
             raise TypeError(
-                f"{cls.__name__} must not override frozen=True from BaseConfig"
+                f"{cls.__name__} must not override frozen=True from BasePipelineSettings"
             )
 
     def model_post_init(self, __context: JsonObject | None) -> None:

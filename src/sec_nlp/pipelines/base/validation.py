@@ -20,7 +20,7 @@ from sec_nlp.pipelines.exceptions import (
 from sec_nlp.pipelines.utils import is_valid_email
 from sec_nlp.types import JsonValue
 
-from .config import BaseConfig
+from .config import BasePipelineSettings
 
 
 class ValidationResult(BaseModel):
@@ -104,7 +104,9 @@ class PipelineValidator(BaseModel):
         defer_build=True,
     )
 
-    config: BaseConfig = Field(description="Pipeline configuration to validate")
+    config: BasePipelineSettings = Field(
+        description="Pipeline configuration to validate"
+    )
     report: ValidationReport = Field(
         default_factory=ValidationReport,
         description="Validation report accumulator",
@@ -498,7 +500,7 @@ class PipelineValidator(BaseModel):
 
 
 def validate_pipeline(
-    config: BaseConfig, print_report: bool = True
+    config: BasePipelineSettings, print_report: bool = True
 ) -> ValidationReport:
     """Convenience entrypoint to validate a pipeline config.
 

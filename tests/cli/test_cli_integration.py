@@ -12,7 +12,9 @@ from pydantic import ValidationError
 class TestExbCLIIntegration:
     """Integration tests for exb CLI command with sys.argv."""
 
-    @patch("sec_nlp.cli.command.PipelineCommand._run_pipeline", autospec=True)
+    @patch(
+        "sec_nlp.cli.command.BasePipelineCommand._run_pipeline", autospec=True
+    )
     def test_exb_basic_command(
         self,
         mock_run_pipeline: Mock,
@@ -46,7 +48,9 @@ class TestExbCLIIntegration:
         # Verify pipeline was called
         assert mock_run_pipeline.called
 
-    @patch("sec_nlp.cli.command.PipelineCommand._run_pipeline", autospec=True)
+    @patch(
+        "sec_nlp.cli.command.BasePipelineCommand._run_pipeline", autospec=True
+    )
     def test_exb_multiple_symbols(
         self,
         mock_run_pipeline: Mock,
@@ -87,7 +91,9 @@ class TestExbCLIIntegration:
         assert "DE" in config.symbols
         assert "PCAR" in config.symbols
 
-    @patch("sec_nlp.cli.command.PipelineCommand._run_pipeline", autospec=True)
+    @patch(
+        "sec_nlp.cli.command.BasePipelineCommand._run_pipeline", autospec=True
+    )
     def test_exb_no_llm_config(
         self,
         mock_run_pipeline: Mock,
@@ -120,7 +126,9 @@ class TestExbCLIIntegration:
         assert config.symbols == ["CAT", "DE", "GE", "CMI", "PCAR"]
         assert "llm" not in type(config).model_fields
 
-    @patch("sec_nlp.cli.command.PipelineCommand._run_pipeline", autospec=True)
+    @patch(
+        "sec_nlp.cli.command.BasePipelineCommand._run_pipeline", autospec=True
+    )
     def test_exb_nested_vdb_config(
         self,
         mock_run_pipeline: Mock,
@@ -159,7 +167,9 @@ class TestExbCLIIntegration:
         assert config.vdb.embedding_model == "nomic-embed-text"
         assert config.vdb.qdrant_port == 6333
 
-    @patch("sec_nlp.cli.command.PipelineCommand._run_pipeline", autospec=True)
+    @patch(
+        "sec_nlp.cli.command.BasePipelineCommand._run_pipeline", autospec=True
+    )
     def test_exb_nested_search_config(
         self,
         mock_run_pipeline: Mock,
@@ -197,7 +207,9 @@ class TestExbCLIIntegration:
         assert config.search.limit == 20
         assert config.search.score_threshold == 0.7
 
-    @patch("sec_nlp.cli.command.PipelineCommand._run_pipeline", autospec=True)
+    @patch(
+        "sec_nlp.cli.command.BasePipelineCommand._run_pipeline", autospec=True
+    )
     def test_exb_search_queries_list(
         self,
         mock_run_pipeline: Mock,
@@ -238,7 +250,9 @@ class TestExbCLIIntegration:
         assert "exclusive contracts" in config.search.queries
         assert "aftermarket provisions" in config.search.queries
 
-    @patch("sec_nlp.cli.command.PipelineCommand._run_pipeline", autospec=True)
+    @patch(
+        "sec_nlp.cli.command.BasePipelineCommand._run_pipeline", autospec=True
+    )
     def test_exb_search_terms_list(
         self,
         mock_run_pipeline: Mock,
@@ -278,7 +292,9 @@ class TestExbCLIIntegration:
         assert len(config.search_terms) == 3
         assert "custom1" in config.search_terms
 
-    @patch("sec_nlp.cli.command.PipelineCommand._run_pipeline", autospec=True)
+    @patch(
+        "sec_nlp.cli.command.BasePipelineCommand._run_pipeline", autospec=True
+    )
     def test_exb_all_nested_configs(
         self,
         mock_run_pipeline: Mock,
@@ -340,14 +356,16 @@ class TestAnalyzeCLIIntegration:
     """Integration tests for analyze CLI command."""
 
     @patch(
-        "sec_nlp.cli.command.PipelineCommand._should_collect_metrics",
+        "sec_nlp.cli.command.BasePipelineCommand._should_collect_metrics",
         return_value=False,
     )
     @patch(
-        "sec_nlp.cli.command.PipelineCommand._should_validate",
+        "sec_nlp.cli.command.BasePipelineCommand._should_validate",
         return_value=False,
     )
-    @patch("sec_nlp.cli.command.PipelineCommand._run_pipeline", autospec=True)
+    @patch(
+        "sec_nlp.cli.command.BasePipelineCommand._run_pipeline", autospec=True
+    )
     def test_analyze_cli_nested_llm_override(
         self,
         mock_run_pipeline: Mock,
@@ -421,7 +439,9 @@ class TestAnalyzeCLIIntegration:
 class TestWarrantyCLIIntegration:
     """Integration tests for warranty CLI command with sys.argv."""
 
-    @patch("sec_nlp.cli.command.PipelineCommand._run_pipeline", autospec=True)
+    @patch(
+        "sec_nlp.cli.command.BasePipelineCommand._run_pipeline", autospec=True
+    )
     def test_warranty_basic_command(
         self,
         mock_run_pipeline: Mock,
@@ -453,7 +473,9 @@ class TestWarrantyCLIIntegration:
 
         assert mock_run_pipeline.called
 
-    @patch("sec_nlp.cli.command.PipelineCommand._run_pipeline", autospec=True)
+    @patch(
+        "sec_nlp.cli.command.BasePipelineCommand._run_pipeline", autospec=True
+    )
     def test_warranty_xbrl_only(
         self,
         mock_run_pipeline: Mock,
@@ -490,7 +512,9 @@ class TestWarrantyCLIIntegration:
 class TestCLIBooleanFlags:
     """Tests for boolean flag handling in CLI."""
 
-    @patch("sec_nlp.cli.command.PipelineCommand._run_pipeline", autospec=True)
+    @patch(
+        "sec_nlp.cli.command.BasePipelineCommand._run_pipeline", autospec=True
+    )
     def test_dry_run_flag(
         self,
         mock_run_pipeline: Mock,

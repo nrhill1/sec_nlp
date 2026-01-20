@@ -3,7 +3,7 @@ from typing import ClassVar, Literal
 from _typeshed import Incomplete
 from pydantic import BaseModel
 
-from sec_nlp.pipelines import BaseResult as BaseResult
+from sec_nlp.pipelines import BasePipelineResult as BasePipelineResult
 from sec_nlp.types import JsonValue as JsonValue
 
 class ExhibitInput(BaseModel):
@@ -11,7 +11,7 @@ class ExhibitInput(BaseModel):
     chunk: str
     symbol: str
 
-class ExhibitContractResult(BaseResult):
+class ExhibitContractResult(BasePipelineResult):
     pipeline_type: ClassVar[Literal["exhibit"]]
     model_config: Incomplete
     is_relevant: bool
@@ -29,6 +29,6 @@ class ExhibitContractResult(BaseResult):
     reasoning: str | None
     def summary_fields(self) -> dict[str, JsonValue]: ...
 
-class ExhibitResult(BaseResult):
+class ExhibitResult(BasePipelineResult):
     pipeline_type: ClassVar[Literal["exhibit"]]
     def summary_fields(self) -> dict[str, JsonValue]: ...

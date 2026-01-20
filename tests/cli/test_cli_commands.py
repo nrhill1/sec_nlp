@@ -101,7 +101,7 @@ class TestExbCommand:
         assert len(cmd.search_terms) == 3
         assert "custom1" in cmd.search_terms
 
-    @patch("sec_nlp.cli.command.PipelineCommand._run_pipeline")
+    @patch("sec_nlp.cli.command.BasePipelineCommand._run_pipeline")
     def test_exb_cli_cmd_execution(
         self, mock_run_pipeline: Mock, tmp_path: Path
     ) -> None:
@@ -122,7 +122,7 @@ class TestExbCommand:
         # Verify _run_pipeline was called
         mock_run_pipeline.assert_called_once()
 
-    @patch("sec_nlp.cli.command.PipelineCommand._run_pipeline")
+    @patch("sec_nlp.cli.command.BasePipelineCommand._run_pipeline")
     def test_exb_cli_cmd_with_outputs(
         self, mock_run_pipeline: Mock, tmp_path: Path
     ) -> None:
@@ -188,7 +188,7 @@ class TestWarrantyCommand:
         assert cmd.xbrl_only is True
         assert "llm" not in type(cmd).model_fields
 
-    @patch("sec_nlp.cli.command.PipelineCommand._run_pipeline")
+    @patch("sec_nlp.cli.command.BasePipelineCommand._run_pipeline")
     def test_warranty_cli_cmd_execution(
         self, mock_run_pipeline: Mock, tmp_path: Path
     ) -> None:
@@ -292,7 +292,7 @@ class TestNestedModelConfiguration:
 class TestCommandErrorHandling:
     """Tests for error handling in CLI commands."""
 
-    @patch("sec_nlp.cli.command.PipelineCommand._run_pipeline")
+    @patch("sec_nlp.cli.command.BasePipelineCommand._run_pipeline")
     def test_exb_handles_pipeline_error(
         self, mock_run_pipeline: Mock, tmp_path: Path
     ) -> None:
@@ -313,7 +313,7 @@ class TestCommandErrorHandling:
 
         assert mock_run_pipeline.called
 
-    @patch("sec_nlp.cli.command.PipelineCommand._run_pipeline")
+    @patch("sec_nlp.cli.command.BasePipelineCommand._run_pipeline")
     def test_warranty_handles_no_outputs(
         self, mock_run_pipeline: Mock, tmp_path: Path
     ) -> None:
@@ -334,7 +334,7 @@ class TestCommandErrorHandling:
 
         assert mock_run_pipeline.called
 
-    @patch("sec_nlp.cli.command.PipelineCommand._run_pipeline")
+    @patch("sec_nlp.cli.command.BasePipelineCommand._run_pipeline")
     def test_warranty_handles_pipeline_error(
         self, mock_run_pipeline: Mock, tmp_path: Path
     ) -> None:

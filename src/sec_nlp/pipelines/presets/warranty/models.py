@@ -5,11 +5,11 @@ from typing import ClassVar, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from sec_nlp.pipelines import BaseResult
+from sec_nlp.pipelines import BasePipelineResult
 from sec_nlp.types import JsonValue
 
 
-class WarrantyResult(BaseResult):
+class WarrantyResult(BasePipelineResult):
     """Result model for warranty data extraction."""
 
     model_config = ConfigDict(

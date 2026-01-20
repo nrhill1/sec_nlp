@@ -9,8 +9,8 @@ from pydantic import BaseModel, ConfigDict, field_validator
 from sec_nlp.core.infra.logger import logger
 from sec_nlp.types import ConfigValue, InitSubclassKwargs
 
-from .config import BaseConfig
-from .result import BaseResult
+from .config import BasePipelineSettings
+from .result import BasePipelineResult
 
 __all__: tuple[str, ...] = ("BasePipeline",)
 
@@ -41,7 +41,7 @@ class BasePipeline(BaseModel, ABC):
     requires_llm: ClassVar[bool] = False
     requires_vector_db: ClassVar[bool] = False
 
-    config: BaseConfig
+    config: BasePipelineSettings
 
     @classmethod
     def __pydantic_init_subclass__(cls, **kwargs: InitSubclassKwargs) -> None:
@@ -65,7 +65,9 @@ class BasePipeline(BaseModel, ABC):
 
     @field_validator("config")
     @classmethod
-    def validate_config(cls, value: BaseConfig) -> BaseConfig:
+    def validate_config(
+        cls, value: BasePipelineSettings
+    ) -> BasePipelineSettings:
         """Ensure config matches the pipeline's config_model."""
         config_model = cls.get_config_model()
         if not isinstance(value, config_model):
@@ -82,7 +84,7 @@ class BasePipeline(BaseModel, ABC):
         self._validate_requirements()
         self._build_components()
 
-    def cli_cmd(self) -> BaseResult:
+    def cli_cmd(self) -> BasePipelineResult:
         """Run the pipeline with CliApp.run(<pipeline_class>)"""
         return self.run()
 
@@ -109,7 +111,7 @@ class BasePipeline(BaseModel, ABC):
                 )
 
     @abstractmethod
-    def run(self) -> BaseResult:
+    def run(self) -> BasePipelineResult:
         """
         Execute the pipeline.
 
@@ -127,18 +129,18 @@ class BasePipeline(BaseModel, ABC):
 
     @classmethod
     @abstractmethod
-    def config_model(cls) -> type[BaseConfig]:
+    def config_model(cls) -> type[BasePipelineSettings]:
         """Return the configuration class for this pipeline."""
         raise NotImplementedError
 
     @classmethod
     @abstractmethod
-    def result_model(cls) -> type[BaseResult]:
+    def result_model(cls) -> type[BasePipelineResult]:
         """Return the result class for this pipeline."""
         raise NotImplementedError
 
     @classmethod
-    def get_config_model(cls) -> type[BaseConfig]:
+    def get_config_model(cls) -> type[BasePipelineSettings]:
         """
         Get the config class for this pipeline type.
 
@@ -151,7 +153,7 @@ class BasePipeline(BaseModel, ABC):
         return cls.config_model()
 
     @classmethod
-    def get_result_model(cls) -> type[BaseResult]:
+    def get_result_model(cls) -> type[BasePipelineResult]:
         """
         Get the result class for this pipeline type.
 

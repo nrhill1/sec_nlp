@@ -4,9 +4,11 @@ from typing import ClassVar, Literal
 from _typeshed import Incomplete
 
 from sec_nlp.core.edgar.filing_mode import FilingMode as FilingMode
-from sec_nlp.pipelines.base.config import BaseConfig as BaseConfig
+from sec_nlp.pipelines.base.config import (
+    BasePipelineSettings as BasePipelineSettings,
+)
 
-class WarrantyConfig(BaseConfig):
+class WarrantyConfig(BasePipelineSettings):
     model_config: Incomplete
     pipeline_type: ClassVar[Literal["warranty"]]
     mode: FilingMode

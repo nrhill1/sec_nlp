@@ -14,7 +14,7 @@ _CLASSVAR_UNSET = "__UNSET__"
 type SummaryFieldValue = str | bool | int | float | None
 
 
-class BaseResult(BaseModel, ABC):
+class BasePipelineResult(BaseModel, ABC):
     """Base result type for all pipelines."""
 
     pipeline_type: ClassVar[str] = _CLASSVAR_UNSET
@@ -61,7 +61,7 @@ class BaseResult(BaseModel, ABC):
 
         if cls.model_config.get("frozen") is not True:
             raise TypeError(
-                f"{cls.__name__} must not override frozen=True from BaseResult"
+                f"{cls.__name__} must not override frozen=True from BasePipelineResult"
             )
 
     @abstractmethod

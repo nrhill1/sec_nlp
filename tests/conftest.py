@@ -15,7 +15,7 @@ from _pytest.logging import LogCaptureFixture
 from langchain_core.documents import Document
 
 from sec_nlp.core.ingest.loader import Loader
-from sec_nlp.pipelines import BaseConfig
+from sec_nlp.pipelines import BasePipelineSettings
 from sec_nlp.types import JsonDict
 from tests.fixtures.sample_filings import (
     SAMPLE_ERROR_HTML,
@@ -30,7 +30,7 @@ from tests.utils.typing import BenchmarkCompare, MemoryTracker
 logger = logging.getLogger(__name__)
 
 
-class TempPipelineConfig(BaseConfig):
+class TempPipelineConfig(BasePipelineSettings):
     """Minimal config used to isolate pipeline paths during tests."""
 
     pipeline_type = "temp_test"

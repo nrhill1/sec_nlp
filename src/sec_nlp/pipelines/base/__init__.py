@@ -3,9 +3,9 @@
 
 from sec_nlp.core.infra.logger import logger
 
-from .config import BaseConfig
+from .config import BasePipelineSettings
 from .pipeline import BasePipeline
-from .result import BaseResult
+from .result import BasePipelineResult
 from .validation import (
     PipelineValidator,
     ValidationReport,
@@ -15,8 +15,8 @@ from .validation import (
 
 __all__: tuple[str, ...] = (
     "BasePipeline",
-    "BaseConfig",
-    "BaseResult",
+    "BasePipelineSettings",
+    "BasePipelineResult",
     "PipelineValidator",
     "ValidationReport",
     "ValidationResult",

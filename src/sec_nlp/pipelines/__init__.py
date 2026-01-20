@@ -2,9 +2,9 @@
 """Pipeline implementations."""
 
 from .base import (  # noqa: I001
-    BaseConfig,
+    BasePipelineSettings,
     BasePipeline,
-    BaseResult,
+    BasePipelineResult,
     PipelineValidator,
     ValidationReport,
     ValidationResult,
@@ -31,9 +31,9 @@ from .vector import VectorConfig
 __all__: tuple[str, ...] = (
     # Base
     "BasePipeline",
-    "BaseResult",
+    "BasePipelineResult",
     # Config
-    "BaseConfig",
+    "BasePipelineSettings",
     "LLMConfig",
     "VectorConfig",
     "DocumentList",

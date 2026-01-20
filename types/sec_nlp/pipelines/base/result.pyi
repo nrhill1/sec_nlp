@@ -14,7 +14,7 @@ from sec_nlp.types import (
 
 type SummaryFieldValue = str | bool | int | float | None
 
-class BaseResult(BaseModel, ABC, metaclass=abc.ABCMeta):
+class BasePipelineResult(BaseModel, ABC, metaclass=abc.ABCMeta):
     pipeline_type: ClassVar[str]
     model_config: Incomplete
     success: bool

@@ -17,7 +17,7 @@ from sec_nlp.types import (
     JsonObject as JsonObject,
 )
 
-class BaseConfig(BaseSettings, ABC, metaclass=abc.ABCMeta):
+class BasePipelineSettings(BaseSettings, ABC, metaclass=abc.ABCMeta):
     pipeline_type: ClassVar[str]
     model_config: Incomplete
     email: str

@@ -3,7 +3,9 @@ from typing import ClassVar, Literal, Self
 from _typeshed import Incomplete
 
 from sec_nlp.core.edgar.filing_mode import FilingMode as FilingMode
-from sec_nlp.pipelines.base.config import BaseConfig as BaseConfig
+from sec_nlp.pipelines.base.config import (
+    BasePipelineSettings as BasePipelineSettings,
+)
 from sec_nlp.pipelines.vector.config import VectorConfig as VectorConfig
 from sec_nlp.types import JsonValue as JsonValue
 
@@ -13,7 +15,7 @@ from .steps.extract.contract_types import (
 )
 from .steps.search.search_config import SearchConfig as SearchConfig
 
-class ExhibitConfig(BaseConfig):
+class ExhibitConfig(BasePipelineSettings):
     model_config: Incomplete
     pipeline_type: ClassVar[Literal["exhibit"]]
     symbols: list[str]
