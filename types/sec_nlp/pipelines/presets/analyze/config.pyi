@@ -85,7 +85,6 @@ class AnalyzeConfig(BasePipelineSettings):
     export_format: Literal["json", "csv", "yaml", "both", "yaml_csv"]
     include_raw_chunks: bool
     aggregate_by_filing: bool
-    validate_config: bool
     collect_metrics: bool
     def pipeline_label(self) -> str: ...
     def get_search_queries(self) -> list[str]: ...

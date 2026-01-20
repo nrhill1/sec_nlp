@@ -91,7 +91,6 @@ _BOOLEAN_FLAGS: set[str] = {
     "--trace-log-prompts",
     "--use-llm-summary",
     "--use-section-filter",
-    "--validate-config",
     "--vector-store-relevant",
     "--verbose",
     "--force",

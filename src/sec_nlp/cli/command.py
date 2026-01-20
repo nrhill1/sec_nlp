@@ -192,7 +192,7 @@ class BasePipelineCommand(BaseModel, ABC):
         )
 
     def _should_validate(self) -> bool:
-        return bool(getattr(self, "validate_config", False))
+        return True
 
     def _should_collect_metrics(self) -> bool:
         return bool(getattr(self, "collect_metrics", False))

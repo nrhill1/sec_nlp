@@ -799,12 +799,7 @@ class AnalyzeConfig(BasePipelineSettings):
         description="Aggregate results by filing (vs per-chunk output)",
     )
 
-    # Validation Options
-    validate_config: bool = Field(
-        default=True,
-        description="Run pre-flight validation before execution",
-    )
-
+    # Metrics Options
     collect_metrics: bool = Field(
         default=True,
         description="Collect and report performance metrics",
