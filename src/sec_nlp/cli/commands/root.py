@@ -16,7 +16,7 @@ from sec_nlp.core.infra.logger import logger
 from .analyze import AnalyzeCommand
 from .clean import Clean
 from .efts import EFTS
-from .exb_10 import Exb10
+from .exb import Exb
 from .market import Market
 from .qdrant import Qdrant
 from .runs import Runs
@@ -46,9 +46,7 @@ class Root(BaseSettings):
         description="Run the warranty pipeline"
     )
 
-    exb_10: CliSubCommand[Exb10] = Field(
-        description="Run the Exhibit 10 pipeline"
-    )
+    exb: CliSubCommand[Exb] = Field(description="Run the exhibit pipeline")
 
     efts: CliSubCommand[EFTS] = Field(
         description="Search SEC EDGAR filings using Full-Text Search API"

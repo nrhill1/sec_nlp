@@ -19,7 +19,7 @@ from .observability import (
 from .types import (
     AnalysisResultDict,
     DocumentList,
-    Exhibit10ResultDict,
+    ExhibitResultDict,
     FilingMetadata,
     PathList,
     SourceMetadata,
@@ -44,7 +44,7 @@ __all__: tuple[str, ...] = (
     "AnalysisResultDict",
     "WarrantyExtractionDict",
     "WarrantyAggregateDict",
-    "Exhibit10ResultDict",
+    "ExhibitResultDict",
     # Validation
     "validate_pipeline",
     "PipelineValidator",

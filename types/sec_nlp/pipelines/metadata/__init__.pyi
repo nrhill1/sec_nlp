@@ -2,7 +2,7 @@ from .accession import (
     get_accession_from_metadata as get_accession_from_metadata,
     group_results_by_accession as group_results_by_accession,
 )
-from .exhibit10 import (
+from .exhibit import (
     build_rollups as build_rollups,
     prepare_vector_docs as prepare_vector_docs,
 )

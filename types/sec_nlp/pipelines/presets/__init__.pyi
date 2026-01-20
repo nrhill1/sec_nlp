@@ -2,9 +2,9 @@ from .analyze import (
     AnalyzeConfig as AnalyzeConfig,
     AnalyzePipeline as AnalyzePipeline,
 )
-from .exb_10 import (
-    Exhibit10Config as Exhibit10Config,
-    Exhibit10Pipeline as Exhibit10Pipeline,
+from .exb import (
+    ExhibitConfig as ExhibitConfig,
+    ExhibitPipeline as ExhibitPipeline,
 )
 from .warranty import (
     WarrantyConfig as WarrantyConfig,
@@ -14,8 +14,8 @@ from .warranty import (
 __all__ = [
     "AnalyzeConfig",
     "AnalyzePipeline",
-    "Exhibit10Config",
-    "Exhibit10Pipeline",
+    "ExhibitConfig",
+    "ExhibitPipeline",
     "WarrantyConfig",
     "WarrantyPipeline",
 ]

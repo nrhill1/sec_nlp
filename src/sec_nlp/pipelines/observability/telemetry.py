@@ -142,7 +142,7 @@ def log_exhibit_stats(
     filtered_chunk_count: int | None = None,
     prefilter_skips: dict[str, int] | None = None,
 ) -> None:
-    """Log a concise summary of extracted Exhibit 10 content."""
+    """Log a concise summary of extracted exhibit content."""
     parts = [
         f"chunks={chunk_count}",
         f"sections={sections_found}",
@@ -160,7 +160,7 @@ def log_exhibit_stats(
         )
         parts.append(f"prefilter_skips={skip_text}")
 
-    logger.info("Exhibit 10 stats for %s: %s", symbol, " ".join(parts))
+    logger.info("Exhibit stats for %s: %s", symbol, " ".join(parts))
 
 
 def log_document_metadata(

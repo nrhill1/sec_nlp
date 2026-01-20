@@ -231,12 +231,12 @@ class WarrantyAggregateDict(TypedDict, total=False):
 
 
 # =============================================================================
-# Exhibit 10 Pipeline TypedDicts
+# Exhibit Pipeline TypedDicts
 # =============================================================================
 
 
-class Exhibit10ResultDict(TypedDict, total=False):
-    """Result dict from Exhibit 10 contract analysis."""
+class ExhibitResultDict(TypedDict, total=False):
+    """Result dict from exhibit contract analysis."""
 
     is_relevant: bool
     relevance_score: float | None
@@ -282,6 +282,6 @@ __all__: tuple[str, ...] = (
     # Warranty pipeline
     "WarrantyExtractionDict",
     "WarrantyAggregateDict",
-    # Exhibit 10 pipeline
-    "Exhibit10ResultDict",
+    # Exhibit pipeline
+    "ExhibitResultDict",
 )

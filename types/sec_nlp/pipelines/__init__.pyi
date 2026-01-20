@@ -16,7 +16,7 @@ from .observability import (
 from .types import (
     AnalysisResultDict as AnalysisResultDict,
     DocumentList as DocumentList,
-    Exhibit10ResultDict as Exhibit10ResultDict,
+    ExhibitResultDict as ExhibitResultDict,
     FilingMetadata as FilingMetadata,
     PathList as PathList,
     SourceMetadata as SourceMetadata,
@@ -38,7 +38,7 @@ __all__ = [
     "AnalysisResultDict",
     "WarrantyExtractionDict",
     "WarrantyAggregateDict",
-    "Exhibit10ResultDict",
+    "ExhibitResultDict",
     "validate_pipeline",
     "PipelineValidator",
     "ValidationReport",

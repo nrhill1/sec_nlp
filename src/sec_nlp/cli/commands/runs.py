@@ -44,7 +44,7 @@ class RunsLs(BaseModel):
 
     pipeline: str | None = Field(
         default=None,
-        description="Filter by pipeline type (e.g., exhibit10, warranty)",
+        description="Filter by pipeline type (e.g., exhibit, warranty)",
     )
     status: Literal["running", "completed", "failed"] | None = Field(
         default=None,
