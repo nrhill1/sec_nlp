@@ -11,9 +11,9 @@ from langchain_core.runnables import (
 )
 from pydantic import BaseModel as BaseModel
 
-from sec_nlp.pipelines import BaseResult as BaseResult
+from sec_nlp.pipelines import BasePipelineResult as BasePipelineResult
 
-class ResultOutputParser[R: BaseResult](PydanticOutputParser[R]):
+class ResultOutputParser[R: BasePipelineResult](PydanticOutputParser[R]):
     pydantic_object: type[R]
     def __init__(self, pydantic_object: type[R]) -> None: ...
     def parse(self, text: str) -> R: ...
@@ -25,7 +25,7 @@ type InputModelKeys = (
     str | int | float | bool | None | list[str] | dict[str, str]
 )
 
-def build_runnable[I: BaseModel, R: BaseResult](
+def build_runnable[I: BaseModel, R: BasePipelineResult](
     *,
     prompt: BasePromptTemplate,
     llm: BaseLanguageModel[str],

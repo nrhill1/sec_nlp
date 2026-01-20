@@ -28,7 +28,7 @@ def sample_runs() -> list[RunRecord]:
         RunRecord(
             record_id=1,
             run_id="run-incomplete",
-            pipeline_type="exb10",
+            pipeline_type="exhibit",
             started_at=now - timedelta(hours=2),
             completed_at=None,
             status="running",
@@ -39,7 +39,7 @@ def sample_runs() -> list[RunRecord]:
         RunRecord(
             record_id=2,
             run_id="run-finished",
-            pipeline_type="exb10",
+            pipeline_type="exhibit",
             started_at=now - timedelta(hours=3),
             completed_at=now - timedelta(hours=2, minutes=30),
             status="running",
@@ -50,7 +50,7 @@ def sample_runs() -> list[RunRecord]:
         RunRecord(
             record_id=3,
             run_id="run-failed",
-            pipeline_type="exb10",
+            pipeline_type="exhibit",
             started_at=now - timedelta(hours=4),
             completed_at=now - timedelta(hours=3, minutes=50),
             status="failed",

@@ -1,4 +1,4 @@
 from .__main__ import main as main
-from .command import PipelineCommand as PipelineCommand
+from .command import BasePipelineCommand as BasePipelineCommand
 
-__all__ = ["main", "PipelineCommand"]
+__all__ = ["main", "BasePipelineCommand"]

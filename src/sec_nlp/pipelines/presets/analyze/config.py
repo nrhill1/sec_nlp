@@ -20,7 +20,7 @@ from sec_nlp.core.text.section_patterns import (
     REGISTRATION_SECTION_PATTERNS,
 )
 from sec_nlp.core.types import coerce_json_dict
-from sec_nlp.pipelines.base.config import BaseConfig
+from sec_nlp.pipelines.base.config import BasePipelineSettings
 from sec_nlp.pipelines.llm.config import LLMConfig
 from sec_nlp.pipelines.metadata.filters import MetadataFilters
 from sec_nlp.pipelines.vector.config import VectorConfig
@@ -207,7 +207,7 @@ class SearchConfig(BaseModel):
     )
 
 
-class AnalyzeConfig(BaseConfig):
+class AnalyzeConfig(BasePipelineSettings):
     """Configuration for generalized document analysis pipeline."""
 
     model_config = SettingsConfigDict(
@@ -627,7 +627,7 @@ class AnalyzeConfig(BaseConfig):
         description="Minimum number of topic keyword hits required to keep a chunk",
     )
     max_chunk_length: int | None = Field(
-        default=200000,
+        default=1_000_000,
         ge=10,
         description="Optional maximum characters allowed per chunk (None disables)",
     )
@@ -799,12 +799,7 @@ class AnalyzeConfig(BaseConfig):
         description="Aggregate results by filing (vs per-chunk output)",
     )
 
-    # Validation Options
-    validate_config: bool = Field(
-        default=True,
-        description="Run pre-flight validation before execution",
-    )
-
+    # Metrics Options
     collect_metrics: bool = Field(
         default=True,
         description="Collect and report performance metrics",

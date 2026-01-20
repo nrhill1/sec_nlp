@@ -5,9 +5,9 @@ from pydantic import BaseModel
 
 from sec_nlp.pipelines.base import BasePipeline
 
-__all__ = ["PipelineCommand"]
+__all__ = ["BasePipelineCommand"]
 
-class PipelineCommand(BaseModel, ABC, metaclass=abc.ABCMeta):
+class BasePipelineCommand(BaseModel, ABC, metaclass=abc.ABCMeta):
     @classmethod
     @abstractmethod
     def pipeline_class(cls) -> type[BasePipeline]: ...

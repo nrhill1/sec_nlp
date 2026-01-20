@@ -103,7 +103,6 @@ def test_vector_search_logs_chunk_stats(tmp_path, monkeypatch) -> None:
         search=SearchConfig(queries=["market demand shift"]),
         efts=EFTSConfig(enabled=False),
         market=MarketConfig(enabled=False),
-        validate_config=False,
         collect_metrics=False,
     )
 

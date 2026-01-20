@@ -2,7 +2,7 @@
 """Shared metadata helpers for pipelines."""
 
 from .accession import get_accession_from_metadata, group_results_by_accession
-from .exhibit10 import build_rollups, prepare_vector_docs
+from .exhibit import build_rollups, prepare_vector_docs
 from .filters import (
     MetadataFilters,
     MetadataFilterValue,

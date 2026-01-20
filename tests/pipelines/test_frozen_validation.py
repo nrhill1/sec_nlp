@@ -5,25 +5,25 @@ import pytest
 from pydantic import ConfigDict
 from pydantic_settings import SettingsConfigDict
 
-from sec_nlp.pipelines.base import BasePipeline, BaseResult
-from sec_nlp.pipelines.base.config import BaseConfig
+from sec_nlp.pipelines.base import BasePipeline, BasePipelineResult
+from sec_nlp.pipelines.base.config import BasePipelineSettings
 from sec_nlp.types import JsonObject
 
 
 def test_base_result_frozen_override_raises() -> None:
-    """Test that overriding frozen=True in BaseResult subclass raises TypeError."""
+    """Test that overriding frozen=True in BasePipelineResult subclass raises TypeError."""
     with pytest.raises(TypeError, match="must not override frozen=True"):
 
-        class BadResult(BaseResult):
+        class BadResult(BasePipelineResult):
             pipeline_type = "bad"
             model_config = ConfigDict(frozen=False)
 
 
 def test_base_config_frozen_override_raises() -> None:
-    """Test that overriding frozen=True in BaseConfig subclass raises TypeError."""
+    """Test that overriding frozen=True in BasePipelineSettings subclass raises TypeError."""
     with pytest.raises(TypeError, match="must not override frozen=True"):
 
-        class BadConfig(BaseConfig):
+        class BadConfig(BasePipelineSettings):
             pipeline_type = "bad"
             model_config = SettingsConfigDict(frozen=False)
 
@@ -35,13 +35,13 @@ def test_base_pipeline_frozen_override_raises() -> None:
     """Test that overriding frozen=True in BasePipeline subclass raises TypeError."""
     with pytest.raises(TypeError, match="must not override frozen=True"):
 
-        class TestConfig(BaseConfig):
+        class TestConfig(BasePipelineSettings):
             pipeline_type = "test"
 
             def pipeline_label(self) -> str:
                 return "Test"
 
-        class TestResult(BaseResult):
+        class TestResult(BasePipelineResult):
             pipeline_type = "test"
 
             def summary_fields(self) -> JsonObject:
@@ -70,13 +70,13 @@ def test_base_pipeline_frozen_override_raises() -> None:
 def test_valid_subclasses_work() -> None:
     """Test that valid subclasses without frozen override work correctly."""
 
-    class GoodConfig(BaseConfig):
+    class GoodConfig(BasePipelineSettings):
         pipeline_type = "good"
 
         def pipeline_label(self) -> str:
             return "Good"
 
-    class GoodResult(BaseResult):
+    class GoodResult(BasePipelineResult):
         pipeline_type = "good"
 
         def summary_fields(self) -> JsonObject:

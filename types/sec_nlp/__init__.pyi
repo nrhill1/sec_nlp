@@ -12,9 +12,9 @@ from .core.llm import (
     build_runnable as build_runnable,
 )
 from .pipelines import (
-    BaseConfig as BaseConfig,
     BasePipeline as BasePipeline,
-    BaseResult as BaseResult,
+    BasePipelineResult as BasePipelineResult,
+    BasePipelineSettings as BasePipelineSettings,
 )
 
 __all__ = [
@@ -26,9 +26,9 @@ __all__ = [
     "setup_logging",
     "build_ollama_llm",
     "build_runnable",
-    "BaseConfig",
+    "BasePipelineSettings",
     "BasePipeline",
-    "BaseResult",
+    "BasePipelineResult",
 ]
 
 __version__: Incomplete

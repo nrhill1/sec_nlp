@@ -5,7 +5,9 @@ from types import TracebackType
 from _typeshed import Incomplete
 
 from sec_nlp.core.infra.logger import logger as logger
-from sec_nlp.pipelines.base.result import BaseResult as BaseResult
+from sec_nlp.pipelines.base.result import (
+    BasePipelineResult as BasePipelineResult,
+)
 from sec_nlp.types import (
     JsonDict as JsonDict,
     JsonObject as JsonObject,
@@ -38,5 +40,5 @@ class PipelineProfiler(AbstractContextManager):
     def peak_memory_mb(self) -> float | None: ...
     def to_metadata(self) -> JsonObject: ...
     def attach_metadata(
-        self, result: BaseResult | None
-    ) -> BaseResult | None: ...
+        self, result: BasePipelineResult | None
+    ) -> BasePipelineResult | None: ...

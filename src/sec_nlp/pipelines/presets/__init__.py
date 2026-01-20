@@ -2,14 +2,14 @@
 """Out of the box pipelines."""
 
 from .analyze import AnalyzeConfig, AnalyzePipeline
-from .exb_10 import Exhibit10Config, Exhibit10Pipeline
+from .exb import ExhibitConfig, ExhibitPipeline
 from .warranty import WarrantyConfig, WarrantyPipeline
 
 __all__: tuple[str, ...] = (
     "AnalyzeConfig",
     "AnalyzePipeline",
-    "Exhibit10Config",
-    "Exhibit10Pipeline",
+    "ExhibitConfig",
+    "ExhibitPipeline",
     "WarrantyConfig",
     "WarrantyPipeline",
 )

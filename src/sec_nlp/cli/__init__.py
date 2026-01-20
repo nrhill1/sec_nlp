@@ -2,7 +2,7 @@
 """CLI entry point and command utilities."""
 
 from .__main__ import main
-from .command import PipelineCommand
+from .command import BasePipelineCommand
 from .formatting import (
     ColumnSpec,
     center_text,
@@ -22,7 +22,7 @@ from .validation import (
 
 __all__: tuple[str, ...] = (
     "main",
-    "PipelineCommand",
+    "BasePipelineCommand",
     "ColumnSpec",
     "center_text",
     "format_config_block",

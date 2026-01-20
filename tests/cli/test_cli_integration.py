@@ -9,16 +9,18 @@ import pytest
 from pydantic import ValidationError
 
 
-class TestExb10CLIIntegration:
-    """Integration tests for exb_10 CLI command with sys.argv."""
+class TestExbCLIIntegration:
+    """Integration tests for exb CLI command with sys.argv."""
 
-    @patch("sec_nlp.cli.command.PipelineCommand._run_pipeline", autospec=True)
-    def test_exb10_basic_command(
+    @patch(
+        "sec_nlp.cli.command.BasePipelineCommand._run_pipeline", autospec=True
+    )
+    def test_exb_basic_command(
         self,
         mock_run_pipeline: Mock,
         tmp_path: Path,
     ) -> None:
-        """Test basic exb_10 command via CLI."""
+        """Test basic exb command via CLI."""
         from pydantic_settings import CliApp
 
         from sec_nlp.cli.commands import Root
@@ -31,7 +33,7 @@ class TestExb10CLIIntegration:
         # Simulate CLI arguments
         sys.argv = [
             "cli",
-            "exb-10",
+            "exb",
             "CAT",
             "--email",
             "test@example.com",
@@ -46,13 +48,15 @@ class TestExb10CLIIntegration:
         # Verify pipeline was called
         assert mock_run_pipeline.called
 
-    @patch("sec_nlp.cli.command.PipelineCommand._run_pipeline", autospec=True)
-    def test_exb10_multiple_symbols(
+    @patch(
+        "sec_nlp.cli.command.BasePipelineCommand._run_pipeline", autospec=True
+    )
+    def test_exb_multiple_symbols(
         self,
         mock_run_pipeline: Mock,
         tmp_path: Path,
     ) -> None:
-        """Test exb_10 with multiple symbols."""
+        """Test exb with multiple symbols."""
         from pydantic_settings import CliApp
 
         from sec_nlp.cli.commands import Root
@@ -64,7 +68,7 @@ class TestExb10CLIIntegration:
 
         sys.argv = [
             "cli",
-            "exb-10",
+            "exb",
             "CAT",
             "DE",
             "PCAR",
@@ -87,13 +91,15 @@ class TestExb10CLIIntegration:
         assert "DE" in config.symbols
         assert "PCAR" in config.symbols
 
-    @patch("sec_nlp.cli.command.PipelineCommand._run_pipeline", autospec=True)
-    def test_exb10_no_llm_config(
+    @patch(
+        "sec_nlp.cli.command.BasePipelineCommand._run_pipeline", autospec=True
+    )
+    def test_exb_no_llm_config(
         self,
         mock_run_pipeline: Mock,
         tmp_path: Path,
     ) -> None:
-        """LLM config flags are ignored for Exhibit10 (no LLM support)."""
+        """LLM config flags are ignored for Exhibit (no LLM support)."""
         from pydantic_settings import CliApp
 
         from sec_nlp.cli.commands import Root
@@ -105,7 +111,7 @@ class TestExb10CLIIntegration:
 
         sys.argv = [
             "cli",
-            "exb-10",
+            "exb",
             "--email",
             "test@example.com",
             "--dl-path",
@@ -120,8 +126,10 @@ class TestExb10CLIIntegration:
         assert config.symbols == ["CAT", "DE", "GE", "CMI", "PCAR"]
         assert "llm" not in type(config).model_fields
 
-    @patch("sec_nlp.cli.command.PipelineCommand._run_pipeline", autospec=True)
-    def test_exb10_nested_vdb_config(
+    @patch(
+        "sec_nlp.cli.command.BasePipelineCommand._run_pipeline", autospec=True
+    )
+    def test_exb_nested_vdb_config(
         self,
         mock_run_pipeline: Mock,
         tmp_path: Path,
@@ -138,7 +146,7 @@ class TestExb10CLIIntegration:
 
         sys.argv = [
             "cli",
-            "exb-10",
+            "exb",
             "--email",
             "test@example.com",
             "--dl-path",
@@ -159,8 +167,10 @@ class TestExb10CLIIntegration:
         assert config.vdb.embedding_model == "nomic-embed-text"
         assert config.vdb.qdrant_port == 6333
 
-    @patch("sec_nlp.cli.command.PipelineCommand._run_pipeline", autospec=True)
-    def test_exb10_nested_search_config(
+    @patch(
+        "sec_nlp.cli.command.BasePipelineCommand._run_pipeline", autospec=True
+    )
+    def test_exb_nested_search_config(
         self,
         mock_run_pipeline: Mock,
         tmp_path: Path,
@@ -177,7 +187,7 @@ class TestExb10CLIIntegration:
 
         sys.argv = [
             "cli",
-            "exb-10",
+            "exb",
             "--email",
             "test@example.com",
             "--dl-path",
@@ -197,8 +207,10 @@ class TestExb10CLIIntegration:
         assert config.search.limit == 20
         assert config.search.score_threshold == 0.7
 
-    @patch("sec_nlp.cli.command.PipelineCommand._run_pipeline", autospec=True)
-    def test_exb10_search_queries_list(
+    @patch(
+        "sec_nlp.cli.command.BasePipelineCommand._run_pipeline", autospec=True
+    )
+    def test_exb_search_queries_list(
         self,
         mock_run_pipeline: Mock,
         tmp_path: Path,
@@ -215,7 +227,7 @@ class TestExb10CLIIntegration:
 
         sys.argv = [
             "cli",
-            "exb-10",
+            "exb",
             "--email",
             "test@example.com",
             "--dl-path",
@@ -238,8 +250,10 @@ class TestExb10CLIIntegration:
         assert "exclusive contracts" in config.search.queries
         assert "aftermarket provisions" in config.search.queries
 
-    @patch("sec_nlp.cli.command.PipelineCommand._run_pipeline", autospec=True)
-    def test_exb10_search_terms_list(
+    @patch(
+        "sec_nlp.cli.command.BasePipelineCommand._run_pipeline", autospec=True
+    )
+    def test_exb_search_terms_list(
         self,
         mock_run_pipeline: Mock,
         tmp_path: Path,
@@ -256,7 +270,7 @@ class TestExb10CLIIntegration:
 
         sys.argv = [
             "cli",
-            "exb-10",
+            "exb",
             "--email",
             "test@example.com",
             "--dl-path",
@@ -278,8 +292,10 @@ class TestExb10CLIIntegration:
         assert len(config.search_terms) == 3
         assert "custom1" in config.search_terms
 
-    @patch("sec_nlp.cli.command.PipelineCommand._run_pipeline", autospec=True)
-    def test_exb10_all_nested_configs(
+    @patch(
+        "sec_nlp.cli.command.BasePipelineCommand._run_pipeline", autospec=True
+    )
+    def test_exb_all_nested_configs(
         self,
         mock_run_pipeline: Mock,
         tmp_path: Path,
@@ -296,7 +312,7 @@ class TestExb10CLIIntegration:
 
         sys.argv = [
             "cli",
-            "exb-10",
+            "exb",
             "--email",
             "test@example.com",
             "--dl-path",
@@ -340,14 +356,16 @@ class TestAnalyzeCLIIntegration:
     """Integration tests for analyze CLI command."""
 
     @patch(
-        "sec_nlp.cli.command.PipelineCommand._should_collect_metrics",
+        "sec_nlp.cli.command.BasePipelineCommand._should_collect_metrics",
         return_value=False,
     )
     @patch(
-        "sec_nlp.cli.command.PipelineCommand._should_validate",
+        "sec_nlp.cli.command.BasePipelineCommand._should_validate",
         return_value=False,
     )
-    @patch("sec_nlp.cli.command.PipelineCommand._run_pipeline", autospec=True)
+    @patch(
+        "sec_nlp.cli.command.BasePipelineCommand._run_pipeline", autospec=True
+    )
     def test_analyze_cli_nested_llm_override(
         self,
         mock_run_pipeline: Mock,
@@ -421,7 +439,9 @@ class TestAnalyzeCLIIntegration:
 class TestWarrantyCLIIntegration:
     """Integration tests for warranty CLI command with sys.argv."""
 
-    @patch("sec_nlp.cli.command.PipelineCommand._run_pipeline", autospec=True)
+    @patch(
+        "sec_nlp.cli.command.BasePipelineCommand._run_pipeline", autospec=True
+    )
     def test_warranty_basic_command(
         self,
         mock_run_pipeline: Mock,
@@ -453,7 +473,9 @@ class TestWarrantyCLIIntegration:
 
         assert mock_run_pipeline.called
 
-    @patch("sec_nlp.cli.command.PipelineCommand._run_pipeline", autospec=True)
+    @patch(
+        "sec_nlp.cli.command.BasePipelineCommand._run_pipeline", autospec=True
+    )
     def test_warranty_xbrl_only(
         self,
         mock_run_pipeline: Mock,
@@ -490,7 +512,9 @@ class TestWarrantyCLIIntegration:
 class TestCLIBooleanFlags:
     """Tests for boolean flag handling in CLI."""
 
-    @patch("sec_nlp.cli.command.PipelineCommand._run_pipeline", autospec=True)
+    @patch(
+        "sec_nlp.cli.command.BasePipelineCommand._run_pipeline", autospec=True
+    )
     def test_dry_run_flag(
         self,
         mock_run_pipeline: Mock,
@@ -508,7 +532,7 @@ class TestCLIBooleanFlags:
 
         sys.argv = [
             "cli",
-            "exb-10",
+            "exb",
             "--email",
             "test@example.com",
             "--dl-path",

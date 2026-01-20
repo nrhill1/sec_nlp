@@ -18,7 +18,7 @@ from sec_nlp.pipelines.exceptions import (
 from sec_nlp.pipelines.utils import is_valid_email as is_valid_email
 from sec_nlp.types import JsonValue as JsonValue
 
-from .config import BaseConfig as BaseConfig
+from .config import BasePipelineSettings as BasePipelineSettings
 
 class ValidationResult(BaseModel):
     model_config: Incomplete
@@ -40,10 +40,10 @@ class ValidationReport(BaseModel):
 
 class PipelineValidator(BaseModel):
     model_config: Incomplete
-    config: BaseConfig
+    config: BasePipelineSettings
     report: ValidationReport
     def validate_all(self) -> ValidationReport: ...
 
 def validate_pipeline(
-    config: BaseConfig, print_report: bool = True
+    config: BasePipelineSettings, print_report: bool = True
 ) -> ValidationReport: ...

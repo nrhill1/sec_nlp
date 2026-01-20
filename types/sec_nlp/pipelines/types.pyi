@@ -25,7 +25,7 @@ __all__ = [
     "AnalysisResultDict",
     "WarrantyExtractionDict",
     "WarrantyAggregateDict",
-    "Exhibit10ResultDict",
+    "ExhibitResultDict",
 ]
 
 type DocumentList = list[Document]
@@ -167,7 +167,7 @@ class WarrantyAggregateDict(TypedDict, total=False):
     net_revenue_from_xbrl: bool
     xbrl_conflicted_fields: set[str]
 
-class Exhibit10ResultDict(TypedDict, total=False):
+class ExhibitResultDict(TypedDict, total=False):
     is_relevant: bool
     relevance_score: float | None
     contract_type: str | None

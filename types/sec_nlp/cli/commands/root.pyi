@@ -8,7 +8,7 @@ from sec_nlp.core.infra.logger import logger as logger
 
 from .analyze import AnalyzeCommand as AnalyzeCommand
 from .clean import Clean as Clean
-from .exb_10 import Exb10 as Exb10
+from .exb import Exb as Exb
 from .qdrant import Qdrant as Qdrant
 from .runs import Runs as Runs
 from .version import Version as Version
@@ -18,7 +18,7 @@ class Root(BaseSettings):
     model_config: Incomplete
     analyze: CliSubCommand[AnalyzeCommand]
     warranty: CliSubCommand[Warranty]
-    exb_10: CliSubCommand[Exb10]
+    exb: CliSubCommand[Exb]
     clean: CliSubCommand[Clean]
     qdrant: CliSubCommand[Qdrant]
     runs: CliSubCommand[Runs]

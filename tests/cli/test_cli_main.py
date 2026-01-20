@@ -203,10 +203,10 @@ class TestNormalizeCliArgs:
         argv = [
             "--search.export-results",
             "false",
-            "--validate-config",
+            "--verbose",
             "0",
         ]
         normalized = _normalize_cli_args(argv)
 
         assert "--no-search.export-results" in normalized
-        assert "--no-validate-config" in normalized
+        assert "--no-verbose" in normalized

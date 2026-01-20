@@ -4,27 +4,27 @@
 from pathlib import Path
 from unittest.mock import Mock, patch
 
-from sec_nlp.cli.commands.exb_10 import Exb10
+from sec_nlp.cli.commands.exb import Exb
 from sec_nlp.cli.commands.warranty import Warranty
 
 
-class TestExb10Command:
-    """Tests for Exb10 CLI command."""
+class TestExbCommand:
+    """Tests for Exb CLI command."""
 
-    def test_exb10_inherits_from_exhibit10_config(self) -> None:
-        """Test that Exb10 inherits from Exhibit10Config."""
-        from sec_nlp.pipelines.presets.exb_10 import Exhibit10Config
+    def test_exb_inherits_from_exhibit_config(self) -> None:
+        """Test that Exb inherits from ExhibitConfig."""
+        from sec_nlp.pipelines.presets.exb import ExhibitConfig
 
-        assert issubclass(Exb10, Exhibit10Config)
+        assert issubclass(Exb, ExhibitConfig)
 
-    def test_exb10_basic_configuration(self, tmp_path: Path) -> None:
-        """Test basic Exb10 configuration."""
+    def test_exb_basic_configuration(self, tmp_path: Path) -> None:
+        """Test basic Exb configuration."""
         dl_path = tmp_path / "downloads"
         out_path = tmp_path / "outputs"
         dl_path.mkdir()
         out_path.mkdir()
 
-        cmd = Exb10(
+        cmd = Exb(
             email="test@example.com",
             dl_path=dl_path,
             out_path=out_path,
@@ -35,7 +35,7 @@ class TestExb10Command:
         assert cmd.symbols == ["CAT"]
         assert cmd.dl_path == dl_path
 
-    def test_exb10_nested_vdb_config(self, tmp_path: Path) -> None:
+    def test_exb_nested_vdb_config(self, tmp_path: Path) -> None:
         """Test configuring nested VectorConfig settings."""
         from sec_nlp.pipelines.vector import VectorConfig
 
@@ -44,7 +44,7 @@ class TestExb10Command:
         dl_path.mkdir()
         out_path.mkdir()
 
-        cmd = Exb10(
+        cmd = Exb(
             email="test@example.com",
             dl_path=dl_path,
             out_path=out_path,
@@ -59,16 +59,16 @@ class TestExb10Command:
         assert cmd.vdb.qdrant_host == "localhost"
         assert cmd.vdb.qdrant_port == 6333
 
-    def test_exb10_nested_search_config(self, tmp_path: Path) -> None:
+    def test_exb_nested_search_config(self, tmp_path: Path) -> None:
         """Test configuring nested SearchConfig settings."""
-        from sec_nlp.pipelines.presets.exb_10 import SearchConfig
+        from sec_nlp.pipelines.presets.exb import SearchConfig
 
         dl_path = tmp_path / "downloads"
         out_path = tmp_path / "outputs"
         dl_path.mkdir()
         out_path.mkdir()
 
-        cmd = Exb10(
+        cmd = Exb(
             email="test@example.com",
             dl_path=dl_path,
             out_path=out_path,
@@ -84,14 +84,14 @@ class TestExb10Command:
         assert cmd.search.limit == 20
         assert cmd.search.score_threshold == 0.7
 
-    def test_exb10_search_terms_configuration(self, tmp_path: Path) -> None:
+    def test_exb_search_terms_configuration(self, tmp_path: Path) -> None:
         """Test configuring search terms list."""
         dl_path = tmp_path / "downloads"
         out_path = tmp_path / "outputs"
         dl_path.mkdir()
         out_path.mkdir()
 
-        cmd = Exb10(
+        cmd = Exb(
             email="test@example.com",
             dl_path=dl_path,
             out_path=out_path,
@@ -101,8 +101,8 @@ class TestExb10Command:
         assert len(cmd.search_terms) == 3
         assert "custom1" in cmd.search_terms
 
-    @patch("sec_nlp.cli.command.PipelineCommand._run_pipeline")
-    def test_exb10_cli_cmd_execution(
+    @patch("sec_nlp.cli.command.BasePipelineCommand._run_pipeline")
+    def test_exb_cli_cmd_execution(
         self, mock_run_pipeline: Mock, tmp_path: Path
     ) -> None:
         """Test that cli_cmd executes the pipeline."""
@@ -111,7 +111,7 @@ class TestExb10Command:
         dl_path.mkdir()
         out_path.mkdir()
 
-        cmd = Exb10(
+        cmd = Exb(
             email="test@example.com",
             dl_path=dl_path,
             out_path=out_path,
@@ -122,8 +122,8 @@ class TestExb10Command:
         # Verify _run_pipeline was called
         mock_run_pipeline.assert_called_once()
 
-    @patch("sec_nlp.cli.command.PipelineCommand._run_pipeline")
-    def test_exb10_cli_cmd_with_outputs(
+    @patch("sec_nlp.cli.command.BasePipelineCommand._run_pipeline")
+    def test_exb_cli_cmd_with_outputs(
         self, mock_run_pipeline: Mock, tmp_path: Path
     ) -> None:
         """Test cli_cmd runs without error."""
@@ -132,7 +132,7 @@ class TestExb10Command:
         dl_path.mkdir()
         out_path.mkdir()
 
-        cmd = Exb10(
+        cmd = Exb(
             email="test@example.com",
             dl_path=dl_path,
             out_path=out_path,
@@ -188,7 +188,7 @@ class TestWarrantyCommand:
         assert cmd.xbrl_only is True
         assert "llm" not in type(cmd).model_fields
 
-    @patch("sec_nlp.cli.command.PipelineCommand._run_pipeline")
+    @patch("sec_nlp.cli.command.BasePipelineCommand._run_pipeline")
     def test_warranty_cli_cmd_execution(
         self, mock_run_pipeline: Mock, tmp_path: Path
     ) -> None:
@@ -212,9 +212,9 @@ class TestWarrantyCommand:
 class TestNestedModelConfiguration:
     """Tests for nested model configuration across all commands."""
 
-    def test_multiple_nested_configs_exb10(self, tmp_path: Path) -> None:
-        """Test configuring multiple nested models in Exb10."""
-        from sec_nlp.pipelines.presets.exb_10 import SearchConfig
+    def test_multiple_nested_configs_exb(self, tmp_path: Path) -> None:
+        """Test configuring multiple nested models in Exb."""
+        from sec_nlp.pipelines.presets.exb import SearchConfig
         from sec_nlp.pipelines.vector import VectorConfig
 
         dl_path = tmp_path / "downloads"
@@ -222,7 +222,7 @@ class TestNestedModelConfiguration:
         dl_path.mkdir()
         out_path.mkdir()
 
-        cmd = Exb10(
+        cmd = Exb(
             email="test@example.com",
             dl_path=dl_path,
             out_path=out_path,
@@ -243,14 +243,14 @@ class TestNestedModelConfiguration:
 
     def test_list_field_configuration(self, tmp_path: Path) -> None:
         """Test configuring list fields (symbols, queries, search_terms)."""
-        from sec_nlp.pipelines.presets.exb_10 import SearchConfig
+        from sec_nlp.pipelines.presets.exb import SearchConfig
 
         dl_path = tmp_path / "downloads"
         out_path = tmp_path / "outputs"
         dl_path.mkdir()
         out_path.mkdir()
 
-        cmd = Exb10(
+        cmd = Exb(
             email="test@example.com",
             dl_path=dl_path,
             out_path=out_path,
@@ -278,7 +278,7 @@ class TestNestedModelConfiguration:
         dl_path.mkdir()
         out_path.mkdir()
 
-        cmd = Exb10(
+        cmd = Exb(
             email="test@example.com",
             dl_path=dl_path,
             out_path=out_path,
@@ -292,8 +292,8 @@ class TestNestedModelConfiguration:
 class TestCommandErrorHandling:
     """Tests for error handling in CLI commands."""
 
-    @patch("sec_nlp.cli.command.PipelineCommand._run_pipeline")
-    def test_exb10_handles_pipeline_error(
+    @patch("sec_nlp.cli.command.BasePipelineCommand._run_pipeline")
+    def test_exb_handles_pipeline_error(
         self, mock_run_pipeline: Mock, tmp_path: Path
     ) -> None:
         """Test that cli_cmd handles pipeline errors gracefully."""
@@ -302,7 +302,7 @@ class TestCommandErrorHandling:
         dl_path.mkdir()
         out_path.mkdir()
 
-        cmd = Exb10(
+        cmd = Exb(
             email="test@example.com",
             dl_path=dl_path,
             out_path=out_path,
@@ -313,7 +313,7 @@ class TestCommandErrorHandling:
 
         assert mock_run_pipeline.called
 
-    @patch("sec_nlp.cli.command.PipelineCommand._run_pipeline")
+    @patch("sec_nlp.cli.command.BasePipelineCommand._run_pipeline")
     def test_warranty_handles_no_outputs(
         self, mock_run_pipeline: Mock, tmp_path: Path
     ) -> None:
@@ -334,7 +334,7 @@ class TestCommandErrorHandling:
 
         assert mock_run_pipeline.called
 
-    @patch("sec_nlp.cli.command.PipelineCommand._run_pipeline")
+    @patch("sec_nlp.cli.command.BasePipelineCommand._run_pipeline")
     def test_warranty_handles_pipeline_error(
         self, mock_run_pipeline: Mock, tmp_path: Path
     ) -> None:

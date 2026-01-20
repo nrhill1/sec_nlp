@@ -110,7 +110,6 @@ def _make_config(
         vector_mode="off",
         export_format="json",
         search=SearchConfig(queries=[]),
-        validate_config=False,
         collect_metrics=False,
         top_k_chunks=top_k_chunks,
         adaptive_top_k_cap=adaptive_top_k_cap,
@@ -241,7 +240,6 @@ def test_run_uses_cached_search_results(tmp_path: Path) -> None:
         vector_mode="read",
         export_format="json",
         search=SearchConfig(queries=["cached-query"]),
-        validate_config=False,
         collect_metrics=False,
     )
     pipeline = _CachedSearchPipeline(config=config)

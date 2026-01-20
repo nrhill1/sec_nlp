@@ -23,9 +23,9 @@ from .core.llm import (
     build_runnable,
 )
 from .pipelines import (
-    BaseConfig,
     BasePipeline,
-    BaseResult,
+    BasePipelineResult,
+    BasePipelineSettings,
 )
 
 __all__: tuple[str, ...] = (
@@ -41,7 +41,7 @@ __all__: tuple[str, ...] = (
     "build_ollama_llm",
     "build_runnable",
     # Pipelines
-    "BaseConfig",
+    "BasePipelineSettings",
     "BasePipeline",
-    "BaseResult",
+    "BasePipelineResult",
 )

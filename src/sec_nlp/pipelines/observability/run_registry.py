@@ -150,7 +150,7 @@ class RunRegistry:
 
         Args:
             run_id: Unique run identifier (from config.run_id)
-            pipeline_type: Type of pipeline (e.g., 'exhibit10')
+            pipeline_type: Type of pipeline (e.g., 'exhibit')
             started_at: Start timestamp (defaults to now UTC)
             output_dir: Output directory path
 

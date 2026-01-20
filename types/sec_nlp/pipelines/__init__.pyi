@@ -1,7 +1,7 @@
 from .base import (
-    BaseConfig as BaseConfig,
     BasePipeline as BasePipeline,
-    BaseResult as BaseResult,
+    BasePipelineResult as BasePipelineResult,
+    BasePipelineSettings as BasePipelineSettings,
     PipelineValidator as PipelineValidator,
     ValidationReport as ValidationReport,
     ValidationResult as ValidationResult,
@@ -16,7 +16,7 @@ from .observability import (
 from .types import (
     AnalysisResultDict as AnalysisResultDict,
     DocumentList as DocumentList,
-    Exhibit10ResultDict as Exhibit10ResultDict,
+    ExhibitResultDict as ExhibitResultDict,
     FilingMetadata as FilingMetadata,
     PathList as PathList,
     SourceMetadata as SourceMetadata,
@@ -27,8 +27,8 @@ from .vector import VectorConfig as VectorConfig
 
 __all__ = [
     "BasePipeline",
-    "BaseResult",
-    "BaseConfig",
+    "BasePipelineResult",
+    "BasePipelineSettings",
     "LLMConfig",
     "VectorConfig",
     "DocumentList",
@@ -38,7 +38,7 @@ __all__ = [
     "AnalysisResultDict",
     "WarrantyExtractionDict",
     "WarrantyAggregateDict",
-    "Exhibit10ResultDict",
+    "ExhibitResultDict",
     "validate_pipeline",
     "PipelineValidator",
     "ValidationReport",

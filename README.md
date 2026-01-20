@@ -1,18 +1,18 @@
 # sec-nlp
 
 [![codecov](https://codecov.io/gh/nrhill1/sec_nlp/graph/badge.svg)](https://codecov.io/gh/nrhill1/sec_nlp)
-NLP tools for SEC filings. Analyze filings with local LLMs, run semantic search, and extract targeted signals (Exhibit 10 contracts, warranty accruals) using a fast CLI.
+NLP tools for SEC filings. Analyze filings with local LLMs, run semantic search, and extract targeted signals (exhibits, warranty accruals) using a fast CLI.
 
 ## Highlights
 - Local-first LLM analysis with Ollama (no hosted APIs)
 - Topic/keyword filtering, chunking, and relevance scoring
 - Optional semantic search and vector indexing with Qdrant (in-memory by default)
-- Purpose-built pipelines: `analyze`, `exb-10`, `warranty`
+- Purpose-built pipelines: `analyze`, `exb`, `warranty`
 - Structured outputs (YAML/JSON/CSV), run registry, and logs
 
 ## Requirements
 - Python 3.13+
-- Ollama running locally for LLM and embedding models (analyze, exb-10)
+- Ollama running locally for LLM and embedding models (analyze, exb)
 - Qdrant optional for persistent vector storage (in-memory by default)
 - Docker (optional) for `sec-nlp qdrant up`
 
@@ -20,7 +20,7 @@ NLP tools for SEC filings. Analyze filings with local LLMs, run semantic search,
 | Pipeline | What it does | Notes |
 | --- | --- | --- |
 | `analyze` | Generalized topic analysis + LLM summaries and scores | Requires Ollama (LLM + embeddings). Vector DB optional; disable with `--vector-mode off`. |
-| `exb-10` | Find and index Exhibit 10 contract signals | Uses embeddings + vector store; no LLM. |
+| `exb` | Find and index exhibit documents by category | Uses embeddings + vector store; no LLM. |
 | `warranty` | Extract warranty accrual/payout data from XBRL | Deterministic, no LLM. |
 
 Docs:
@@ -46,7 +46,7 @@ SEC EDGAR requests require a valid email address.
 ```
 # .env
 ANALYZE_EMAIL=you@example.com
-EXB10_EMAIL=you@example.com
+EXB_EMAIL=you@example.com
 WARRANTY_EMAIL=you@example.com
 ```
 
@@ -54,7 +54,7 @@ WARRANTY_EMAIL=you@example.com
 Defaults:
 - LLM: `llama3.2:1b`
 - Analyze embeddings: `bge-m3`
-- Exhibit 10 embeddings: `mxbai-embed-large`
+- Exhibit embeddings: `mxbai-embed-large`
 
 Example:
 ```
@@ -69,7 +69,8 @@ ollama pull mxbai-embed-large
 sec-nlp analyze AAPL --preset quick
 sec-nlp analyze AAPL --topics warranty recall
 sec-nlp analyze AAPL --section-type item --section-numbers 1A
-sec-nlp exb-10 DE --search-terms exclusive aftermarket
+sec-nlp exb DE --exhibit-categories subsidiaries consents
+sec-nlp exb DE --search-terms exclusive aftermarket
 sec-nlp warranty AAPL
 ```
 
@@ -88,7 +89,7 @@ Use `--preset <name>` with `sec-nlp analyze`.
 
 ## CLI overview
 - `sec-nlp analyze` - Generalized LLM analysis (topics, keywords, section filters, vector search)
-- `sec-nlp exb-10` - Exhibit 10 contract indexing and search
+- `sec-nlp exb` - Exhibit indexing and search
 - `sec-nlp warranty` - Warranty XBRL extraction
 - `sec-nlp market` - Query the Rust-backed market extension for latest or historical quotes
 - `sec-nlp qdrant` - Manage Qdrant collections and Docker container
@@ -106,7 +107,7 @@ Configuration is loaded in this order:
 
 Pipeline env prefixes:
 - `ANALYZE_`
-- `EXB10_`
+- `EXB_`
 - `WARRANTY_`
 
 Nested fields use double underscores. Examples:
@@ -114,7 +115,7 @@ Nested fields use double underscores. Examples:
 ANALYZE_LLM__MODEL_NAME=llama3.2:1b
 ANALYZE_LLM__BASE_URL=http://localhost:11434
 ANALYZE_VDB__QDRANT_LOCATION=:memory:
-EXB10_VDB__QDRANT_URL=http://localhost:6333
+EXB_VDB__QDRANT_URL=http://localhost:6333
 ```
 Nested CLI fields use dot notation, e.g. `--llm.model-name` or `--vdb.embedding-model`.
 
@@ -131,7 +132,8 @@ downloads/      # raw SEC downloads (sec-edgar-filings)
 outputs/
   <SYMBOL>/
     analyze/<run_id>/<accession>/analysis.{yaml,json,csv}
-    exhibit10/<run_id>/<symbol>_exhibit10_<run_id>.{yaml,json,csv}
+    exhibit/<run_id>/<symbol>_exhibit_index_<run_id>.{yaml,json,csv}
+    exhibit/<run_id>/<symbol>_exhibit_summary_<run_id>.{yaml,json}
     warranty/<run_id>/<symbol>_warranty_<accession>_<run_id>.json
     warranty/<run_id>/<symbol>_warranty_combined_<run_id>.csv
 logs/
@@ -152,7 +154,7 @@ This uses Docker and stores data in `./qdrant_storage`.
 Then point pipelines to it:
 ```
 ANALYZE_VDB__QDRANT_URL=http://localhost:6333
-EXB10_VDB__QDRANT_URL=http://localhost:6333
+EXB_VDB__QDRANT_URL=http://localhost:6333
 ```
 
 ## Development

@@ -2,9 +2,9 @@
 """Pipeline implementations."""
 
 from .base import (  # noqa: I001
-    BaseConfig,
+    BasePipelineSettings,
     BasePipeline,
-    BaseResult,
+    BasePipelineResult,
     PipelineValidator,
     ValidationReport,
     ValidationResult,
@@ -19,7 +19,7 @@ from .observability import (
 from .types import (
     AnalysisResultDict,
     DocumentList,
-    Exhibit10ResultDict,
+    ExhibitResultDict,
     FilingMetadata,
     PathList,
     SourceMetadata,
@@ -31,9 +31,9 @@ from .vector import VectorConfig
 __all__: tuple[str, ...] = (
     # Base
     "BasePipeline",
-    "BaseResult",
+    "BasePipelineResult",
     # Config
-    "BaseConfig",
+    "BasePipelineSettings",
     "LLMConfig",
     "VectorConfig",
     "DocumentList",
@@ -44,7 +44,7 @@ __all__: tuple[str, ...] = (
     "AnalysisResultDict",
     "WarrantyExtractionDict",
     "WarrantyAggregateDict",
-    "Exhibit10ResultDict",
+    "ExhibitResultDict",
     # Validation
     "validate_pipeline",
     "PipelineValidator",

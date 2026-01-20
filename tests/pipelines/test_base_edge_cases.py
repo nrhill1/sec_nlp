@@ -8,14 +8,14 @@ from unittest.mock import patch
 import pytest
 
 from sec_nlp.pipelines import (
-    BaseConfig,
     BasePipeline,
-    BaseResult,
+    BasePipelineResult,
+    BasePipelineSettings,
 )
 from sec_nlp.types import JsonObject
 
 
-class EdgeCaseConfig(BaseConfig):
+class EdgeCaseConfig(BasePipelineSettings):
     """Config for edge case testing."""
 
     pipeline_type: ClassVar[str] = "edge_case"
@@ -25,7 +25,7 @@ class EdgeCaseConfig(BaseConfig):
         return "Edge Case"
 
 
-class EdgeCaseResult(BaseResult):
+class EdgeCaseResult(BasePipelineResult):
     """Result for edge case testing."""
 
     pipeline_type: ClassVar[str] = "edge_case"
@@ -55,8 +55,8 @@ class EdgeCasePipeline(BasePipeline):
         pass
 
 
-class TestBaseResultEdgeCases:
-    """Edge case tests for BaseResult."""
+class TestBasePipelineResultEdgeCases:
+    """Edge case tests for BasePipelineResult."""
 
     def test_result_with_empty_outputs(self) -> None:
         """Test result with explicitly empty outputs list."""
@@ -102,7 +102,7 @@ class TestBaseResultEdgeCases:
     def test_result_with_very_long_raw_output(self) -> None:
         """Test result can handle very long raw output."""
         long_output: str = "x" * 1_000_000  # 1MB of data
-        result: BaseResult = EdgeCaseResult(raw_output=long_output)
+        result: BasePipelineResult = EdgeCaseResult(raw_output=long_output)
         assert result.raw_output is not None
         assert len(result.raw_output) == 1_000_000
 
@@ -142,13 +142,13 @@ class TestBaseResultEdgeCases:
         assert "EdgeCaseResult" in repr_str
 
 
-class TestBaseConfigEdgeCases:
-    """Edge case tests for BaseConfig."""
+class TestBasePipelineSettingsEdgeCases:
+    """Edge case tests for BasePipelineSettings."""
 
     def test_config_log_file_under_tmp_path(
         self,
         tmp_path: Path,
-        temp_pipeline_config: BaseConfig,
+        temp_pipeline_config: BasePipelineSettings,
     ) -> None:
         """Test that setup_paths creates log_file parent directory."""
         relative_path = Path("logs/test.log")

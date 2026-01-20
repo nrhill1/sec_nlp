@@ -8,7 +8,9 @@ from sec_nlp.core.text.filters import (
     SectionPattern as SectionPattern,
     SectionType as SectionType,
 )
-from sec_nlp.pipelines.base.config import BaseConfig as BaseConfig
+from sec_nlp.pipelines.base.config import (
+    BasePipelineSettings as BasePipelineSettings,
+)
 from sec_nlp.pipelines.llm.config import LLMConfig as LLMConfig
 from sec_nlp.pipelines.metadata.filters import (
     MetadataFilters as MetadataFilters,
@@ -29,7 +31,7 @@ class SearchConfig(BaseModel):
     export_results: bool
     metadata_filters: MetadataFilters
 
-class AnalyzeConfig(BaseConfig):
+class AnalyzeConfig(BasePipelineSettings):
     model_config: Incomplete
     pipeline_type: ClassVar[Literal["analyze"]]
     preset: (
@@ -83,7 +85,6 @@ class AnalyzeConfig(BaseConfig):
     export_format: Literal["json", "csv", "yaml", "both", "yaml_csv"]
     include_raw_chunks: bool
     aggregate_by_filing: bool
-    validate_config: bool
     collect_metrics: bool
     def pipeline_label(self) -> str: ...
     def get_search_queries(self) -> list[str]: ...

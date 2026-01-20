@@ -71,7 +71,6 @@ def _make_config(
             vector_mode=vector_mode,
             export_format="json",
             search=search,
-            validate_config=False,
             collect_metrics=False,
         )
     return AnalyzeConfig(
@@ -81,7 +80,6 @@ def _make_config(
         vector_mode=vector_mode,
         export_format="json",
         search=search,
-        validate_config=False,
         collect_metrics=False,
         topics=topics,
     )
@@ -204,7 +202,6 @@ def test_export_results_writes_summary_with_unique_hits(
         vector_mode="read",
         export_format="json",
         search=search,
-        validate_config=False,
         collect_metrics=False,
     )
     runner = SearchRunnable(config=config, vector_store=None)

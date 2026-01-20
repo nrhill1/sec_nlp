@@ -23,14 +23,14 @@ from pydantic_settings import (  # noqa: E402
 )
 
 from sec_nlp.core.infra.logger import logger, setup_logging  # noqa: E402
-from sec_nlp.pipelines.base.result import BaseResult  # noqa: E402
+from sec_nlp.pipelines.base.result import BasePipelineResult  # noqa: E402
 from sec_nlp.pipelines.presets.analyze import (  # noqa: E402
     AnalyzeConfig,
     AnalyzePipeline,
 )
-from sec_nlp.pipelines.presets.exb_10 import (  # noqa: E402
-    Exhibit10Config,
-    Exhibit10Pipeline,
+from sec_nlp.pipelines.presets.exb import (  # noqa: E402
+    ExhibitConfig,
+    ExhibitPipeline,
 )
 from sec_nlp.pipelines.presets.warranty import (  # noqa: E402
     WarrantyConfig,
@@ -57,7 +57,7 @@ class MemoryProfileConfig(BaseSettings):
         extra="ignore",
     )
 
-    pipeline: Literal["exb-10", "warranty", "analyze"] = Field(
+    pipeline: Literal["exb", "warranty", "analyze"] = Field(
         default="analyze",
         description="Pipeline to profile",
     )
@@ -113,9 +113,9 @@ class MemoryProfileConfig(BaseSettings):
         """Run pipeline with memory profiling."""
         logger.info("Creating pipeline... (%s)", self.pipeline)
 
-        result: BaseResult
-        if self.pipeline == "exb-10":
-            exb_cfg = Exhibit10Config(
+        result: BasePipelineResult
+        if self.pipeline == "exb":
+            exb_cfg = ExhibitConfig(
                 verbose=True,
                 email="test@example.com",
                 symbols=self.symbols,
@@ -124,7 +124,7 @@ class MemoryProfileConfig(BaseSettings):
                 dry_run=self.dry_run,
                 batch_size=self.batch_size,
             )
-            exb_pipeline = Exhibit10Pipeline(config=exb_cfg)
+            exb_pipeline = ExhibitPipeline(config=exb_cfg)
             logger.info("Running pipeline...")
             result = exb_pipeline.run()
         elif self.pipeline == "warranty":

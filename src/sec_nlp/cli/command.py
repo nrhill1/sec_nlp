@@ -19,16 +19,16 @@ from sec_nlp.core.infra.logger import (
     logger,
 )
 from sec_nlp.pipelines.base import BasePipeline
-from sec_nlp.pipelines.base.config import BaseConfig
-from sec_nlp.pipelines.base.result import BaseResult
+from sec_nlp.pipelines.base.config import BasePipelineSettings
+from sec_nlp.pipelines.base.result import BasePipelineResult
 from sec_nlp.pipelines.base.validation import validate_pipeline
 from sec_nlp.pipelines.observability.metrics import track_pipeline_metrics
 from sec_nlp.pipelines.observability.profiling import PipelineProfiler
 
-__all__ = ("PipelineCommand",)
+__all__ = ("BasePipelineCommand",)
 
 
-class PipelineCommand(BaseModel, ABC):
+class BasePipelineCommand(BaseModel, ABC):
     """Base behavior for CLI commands that wrap a pipeline."""
 
     @classmethod
@@ -44,9 +44,9 @@ class PipelineCommand(BaseModel, ABC):
         """Validate CLI command wiring after Pydantic model construction."""
         super().__pydantic_init_subclass__(**kwargs)
 
-        if not issubclass(cls, BaseConfig):
+        if not issubclass(cls, BasePipelineSettings):
             raise TypeError(
-                f"{cls.__name__} must inherit from BaseConfig to be used as a CLI command"
+                f"{cls.__name__} must inherit from BasePipelineSettings to be used as a CLI command"
             )
 
         if "pipeline_class" in cls.__abstractmethods__:
@@ -150,14 +150,14 @@ class PipelineCommand(BaseModel, ABC):
             for label, value in items:
                 logger.info(format_key_value(label, value))
 
-    def _validation_config(self) -> BaseConfig:
-        if isinstance(self, BaseConfig):
+    def _validation_config(self) -> BasePipelineSettings:
+        if isinstance(self, BasePipelineSettings):
             return self
         raise TypeError(
-            f"{type(self).__name__} must inherit from BaseConfig to validate"
+            f"{type(self).__name__} must inherit from BasePipelineSettings to validate"
         )
 
-    def _handle_result(self, result: BaseResult) -> None:
+    def _handle_result(self, result: BasePipelineResult) -> None:
         pipeline_name = self._pipeline_type() or "Pipeline"
         logger.info(format_divider())
 
@@ -192,7 +192,7 @@ class PipelineCommand(BaseModel, ABC):
         )
 
     def _should_validate(self) -> bool:
-        return bool(getattr(self, "validate_config", False))
+        return True
 
     def _should_collect_metrics(self) -> bool:
         return bool(getattr(self, "collect_metrics", False))
@@ -206,7 +206,7 @@ class PipelineCommand(BaseModel, ABC):
     def _handle_missing_symbols(self) -> None:
         logger.error(color_text("No symbols provided.", color="red"))
 
-    def _run_pipeline(self) -> BaseResult:
+    def _run_pipeline(self) -> BasePipelineResult:
         pipeline_cls = self._get_pipeline_class()
         profile_root = getattr(self, "profile_dir", None)
         profiler = PipelineProfiler(
@@ -215,16 +215,16 @@ class PipelineCommand(BaseModel, ABC):
             output_root=Path(profile_root) if profile_root else None,
         )
 
-        result: BaseResult | None = None
+        result: BasePipelineResult | None = None
         try:
             with profiler:
-                if isinstance(self, BaseConfig):
-                    config: BaseConfig = self
+                if isinstance(self, BasePipelineSettings):
+                    config: BasePipelineSettings = self
                     pipeline = pipeline_cls(config=config)
                     result = pipeline.run()
                 else:
                     raise TypeError(
-                        f"{type(self).__name__} must inherit from BaseConfig to run pipeline validation"
+                        f"{type(self).__name__} must inherit from BasePipelineSettings to run pipeline validation"
                     )
         except Exception as e:
             logger.error(
@@ -255,7 +255,7 @@ class PipelineCommand(BaseModel, ABC):
         except Exception:
             logger.debug("Unable to stash profiling metadata on config")
 
-    def _record_run_completion(self, result: BaseResult | None) -> None:
+    def _record_run_completion(self, result: BasePipelineResult | None) -> None:
         """Update the run registry with profiling metadata if available."""
         complete_run = getattr(self, "complete_run", None)
         if complete_run is None:

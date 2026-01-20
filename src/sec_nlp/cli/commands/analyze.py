@@ -4,7 +4,7 @@
 from pydantic import Field, model_validator
 from pydantic_settings import CliPositionalArg
 
-from sec_nlp.cli.command import PipelineCommand
+from sec_nlp.cli.command import BasePipelineCommand
 from sec_nlp.cli.formatting import (
     format_key_value,
     format_status,
@@ -14,7 +14,7 @@ from sec_nlp.core.infra.logger import (
     logger,
 )
 from sec_nlp.core.types import coerce_json_dict
-from sec_nlp.pipelines.base.result import BaseResult
+from sec_nlp.pipelines.base.result import BasePipelineResult
 from sec_nlp.pipelines.presets.analyze import (
     AnalyzeConfig,
     AnalyzePipeline,
@@ -23,7 +23,7 @@ from sec_nlp.pipelines.presets.analyze import (
 from sec_nlp.types import JsonValue
 
 
-class AnalyzeCommand(AnalyzeConfig, PipelineCommand):
+class AnalyzeCommand(AnalyzeConfig, BasePipelineCommand):
     """Analyze SEC filings with section/topic filters, LLM analysis, and optional vector search.
 
     Presets provide quick configuration:
@@ -88,7 +88,7 @@ class AnalyzeCommand(AnalyzeConfig, PipelineCommand):
             base_dict = self.model_dump()
             base_dict.update(config_dict)
             new_config = AnalyzeCommand.model_validate(base_dict)
-            PipelineCommand.cli_cmd(new_config)
+            BasePipelineCommand.cli_cmd(new_config)
         except Exception as e:
             logger.error(color_text(f"Configuration error: {e}", color="red"))
 
@@ -167,7 +167,7 @@ class AnalyzeCommand(AnalyzeConfig, PipelineCommand):
             formatted = format_key_value(label, value)
             logger.info(formatted)
 
-    def _handle_result(self, result: BaseResult) -> None:
+    def _handle_result(self, result: BasePipelineResult) -> None:
         """Handle analyze-specific result output."""
         if not isinstance(result, AnalyzeResult):
             super()._handle_result(result)

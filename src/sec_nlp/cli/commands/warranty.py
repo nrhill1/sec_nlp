@@ -4,14 +4,14 @@
 from pydantic import Field
 from pydantic_settings import CliPositionalArg
 
-from sec_nlp.cli.command import PipelineCommand
+from sec_nlp.cli.command import BasePipelineCommand
 from sec_nlp.pipelines.presets.warranty import (
     WarrantyConfig,
     WarrantyPipeline,
 )
 
 
-class Warranty(WarrantyConfig, PipelineCommand):
+class Warranty(WarrantyConfig, BasePipelineCommand):
     """Extract warranty-related data from SEC filings."""
 
     @classmethod

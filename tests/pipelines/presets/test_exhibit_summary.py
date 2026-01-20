@@ -1,13 +1,13 @@
 # tests/pipelines/presets/test_exhibit_summary.py
-"""Tests for expanded exhibit summaries in the Exhibit 10 pipeline."""
+"""Tests for expanded exhibit summaries in the exhibit pipeline."""
 
 from pathlib import Path
 
 from langchain_core.documents import Document
 
 from sec_nlp.core.types import as_json_dict
-from sec_nlp.pipelines.presets.exb_10.config import Exhibit10Config
-from sec_nlp.pipelines.presets.exb_10.io.exhibit_summary import (
+from sec_nlp.pipelines.presets.exb.config import ExhibitConfig
+from sec_nlp.pipelines.presets.exb.io.exhibit_summary import (
     build_exhibit_summary,
 )
 
@@ -17,7 +17,7 @@ def _make_config(tmp_path: Path, exhibit_numbers):
     out_path = tmp_path / "outputs"
     dl_path.mkdir(parents=True, exist_ok=True)
     out_path.mkdir(parents=True, exist_ok=True)
-    return Exhibit10Config(
+    return ExhibitConfig(
         email="test@example.com",
         dl_path=dl_path,
         out_path=out_path,

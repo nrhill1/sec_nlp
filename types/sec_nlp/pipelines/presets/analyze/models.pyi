@@ -3,7 +3,7 @@ from typing import ClassVar, Literal
 from _typeshed import Incomplete
 from pydantic import BaseModel
 
-from sec_nlp.pipelines import BaseResult as BaseResult
+from sec_nlp.pipelines import BasePipelineResult as BasePipelineResult
 from sec_nlp.pipelines.base.result import SummaryFieldValue as SummaryFieldValue
 from sec_nlp.pipelines.types import AnalysisResultDict as AnalysisResultDict
 from sec_nlp.types import (
@@ -25,7 +25,7 @@ class AnalysisInput(BaseModel):
     topic_hits: list[str] | None
     analysis_instructions: str | None
 
-class AnalysisResult(BaseResult):
+class AnalysisResult(BasePipelineResult):
     pipeline_type: ClassVar[Literal["analyze"]]
     model_config: Incomplete
     is_relevant: bool
@@ -104,7 +104,7 @@ class AnalysisOutput(BaseModel):
     diagnostics: AnalysisDiagnostics
     results: list[AnalysisResultDict]
 
-class AnalyzeResult(BaseResult):
+class AnalyzeResult(BasePipelineResult):
     model_config: Incomplete
     pipeline_type: ClassVar[Literal["analyze"]]
     def summary_fields(self) -> dict[str, SummaryFieldValue]: ...
