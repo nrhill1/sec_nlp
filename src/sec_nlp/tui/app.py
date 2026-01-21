@@ -136,6 +136,15 @@ class SecNlpTuiApp(App):
         height: auto;
     }
 
+    .segment-label {
+        width: 18;
+    }
+
+    .segment-detail {
+        color: #8b93a1;
+        width: 1fr;
+    }
+
     .segment-row.state-running {
         color: #f3d8a2;
     }
@@ -291,7 +300,7 @@ class SecNlpTuiApp(App):
             if match_index is None:
                 return
             segment_panel = self.query_one(SegmentPanel)
-            segment_panel.advance_to(match_index)
+            segment_panel.advance_to(match_index, line)
 
         async def on_exit(returncode: int) -> None:
             self._active_process = None

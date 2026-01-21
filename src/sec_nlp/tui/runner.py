@@ -10,9 +10,10 @@ from collections.abc import Awaitable, Callable, Sequence
 
 from sec_nlp.types import ConfigScalar
 
-type LineHandler = Callable[[ConfigScalar], Awaitable[None] | None]
-type ExitHandler = Callable[[int], Awaitable[None] | None]
-type StartHandler = Callable[[Process], Awaitable[None] | None]
+type Handler[T] = Callable[[T], Awaitable[None] | None]
+type LineHandler = Handler[ConfigScalar]
+type ExitHandler = Handler[int]
+type StartHandler = Handler[Process]
 
 _ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
 
@@ -23,16 +24,8 @@ def strip_ansi(value: ConfigScalar) -> ConfigScalar:
     return _ANSI_RE.sub("", value)
 
 
-async def _maybe_await(
-    handler: LineHandler | ExitHandler, value: ConfigScalar
-) -> None:
+async def _maybe_await[T](handler: Handler[T], value: T) -> None:
     result = handler(value)
-    if asyncio.iscoroutine(result):
-        await result
-
-
-async def _maybe_await_start(handler: StartHandler, process: Process) -> None:
-    result = handler(process)
     if asyncio.iscoroutine(result):
         await result
 
@@ -54,7 +47,7 @@ async def run_cli(
     )
 
     if on_start is not None:
-        await _maybe_await_start(on_start, process)
+        await _maybe_await(on_start, process)
 
     if process.stdout is None:
         returncode = await process.wait()

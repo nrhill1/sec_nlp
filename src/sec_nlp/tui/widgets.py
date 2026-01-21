@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from textual.containers import Horizontal, Vertical, VerticalScroll
-from textual.widget import Widget
 from textual.widgets import (
     Checkbox,
     Input,
@@ -23,6 +24,8 @@ from sec_nlp.tui.interfaces import (
 )
 from sec_nlp.tui.specs import SegmentSpec
 from sec_nlp.types import ConfigScalar
+
+type _FieldWidget = Input | Checkbox | Select
 
 _STATE_ICONS: dict[ConfigScalar, ConfigScalar] = {
     "pending": "[ ]",
@@ -66,12 +69,14 @@ class SegmentRow(Horizontal):
         self._state: ConfigScalar = "pending"
         self._spinner = Spinner()
         self._status = Static(str(_STATE_ICONS[self._state]))
-        self._label = Static(str(spec.label))
+        self._label = Static(str(spec.label), classes="segment-label")
+        self._detail = Static("", classes="segment-detail")
 
     def compose(self):
         yield self._spinner
         yield self._status
         yield self._label
+        yield self._detail
 
     @property
     def state(self) -> ConfigScalar:
@@ -88,6 +93,15 @@ class SegmentRow(Horizontal):
             self._spinner.start()
         else:
             self._spinner.stop()
+
+    def set_detail(self, detail: ConfigScalar | None) -> None:
+        if detail is None:
+            self._detail.update("")
+            return
+        text = str(detail)
+        if len(text) > 120:
+            text = text[:117] + "..."
+        self._detail.update(text)
 
 
 class SegmentPanel(Vertical):
@@ -114,7 +128,9 @@ class SegmentPanel(Vertical):
         total = max(len(self._rows), 1)
         self._progress.update(total=total, progress=0)
 
-    def advance_to(self, index: int) -> None:
+    def advance_to(
+        self, index: int, detail: ConfigScalar | None = None
+    ) -> None:
         if index < 0 or index >= len(self._rows):
             return
         if index > self._current_index:
@@ -123,6 +139,7 @@ class SegmentPanel(Vertical):
             for idx in range(self._current_index + 1, index):
                 self._rows[idx].set_state("done")
         self._rows[index].set_state("running")
+        self._rows[index].set_detail(detail)
         self._current_index = index
         self._update_progress()
 
@@ -137,6 +154,7 @@ class SegmentPanel(Vertical):
     def reset(self) -> None:
         for row in self._rows:
             row.set_state("pending")
+            row.set_detail(None)
         self._current_index = -1
         self._update_progress()
 
@@ -150,7 +168,7 @@ class FormView(VerticalScroll):
     def __init__(self) -> None:
         super().__init__(classes="panel")
         self._form_spec: FormSpec | None = None
-        self._fields: dict[ConfigScalar, Widget] = {}
+        self._fields: dict[ConfigScalar, _FieldWidget] = {}
         self._extra_args: Input | None = None
 
     def set_form(self, form_spec: FormSpec) -> None:
@@ -163,9 +181,9 @@ class FormView(VerticalScroll):
             row = Horizontal(classes="form-row")
             label = Label(str(field.label), classes="field-label")
             widget = self._build_widget(field)
+            self.mount(row)
             row.mount(label)
             row.mount(widget)
-            self.mount(row)
             self._fields[field.key] = widget
 
         extra_row = Horizontal(classes="form-row")
@@ -176,9 +194,9 @@ class FormView(VerticalScroll):
             placeholder=str(form_spec.extra_args_placeholder),
             id="extra-args",
         )
+        self.mount(extra_row)
         extra_row.mount(extra_label)
         extra_row.mount(extra_input)
-        self.mount(extra_row)
         self._extra_args = extra_input
 
     def get_values(self) -> dict[ConfigScalar, ConfigScalar]:
@@ -189,7 +207,13 @@ class FormView(VerticalScroll):
             elif isinstance(widget, Checkbox):
                 values[key] = widget.value
             elif isinstance(widget, Select):
-                values[key] = widget.value or ""
+                value = widget.value
+                if value is None:
+                    values[key] = ""
+                elif isinstance(value, (str, int, float, bool, Path)):
+                    values[key] = value
+                else:
+                    values[key] = ""
             else:
                 values[key] = ""
         return values
@@ -199,7 +223,7 @@ class FormView(VerticalScroll):
             return None
         return self._extra_args.value
 
-    def _build_widget(self, field: FieldSpec) -> Widget:
+    def _build_widget(self, field: FieldSpec) -> _FieldWidget:
         if field.kind == FIELD_KIND_BOOL:
             widget = Checkbox()
             if field.default is not None:

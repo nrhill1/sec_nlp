@@ -3,9 +3,10 @@ from collections.abc import Awaitable, Callable, Sequence
 
 from sec_nlp.types import ConfigScalar
 
-type LineHandler = Callable[[ConfigScalar], Awaitable[None] | None]
-type ExitHandler = Callable[[int], Awaitable[None] | None]
-type StartHandler = Callable[[Process], Awaitable[None] | None]
+type Handler[T] = Callable[[T], Awaitable[None] | None]
+type LineHandler = Handler[ConfigScalar]
+type ExitHandler = Handler[int]
+type StartHandler = Handler[Process]
 
 def strip_ansi(value: ConfigScalar) -> ConfigScalar: ...
 async def run_cli(
