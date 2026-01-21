@@ -19,7 +19,7 @@ from textual.widgets import (
     Static,
 )
 
-from sec_nlp.tui.interfaces import build_cli_args, get_form_spec
+from sec_nlp.tui.interfaces import FormSpec, build_cli_args, get_form_spec
 from sec_nlp.tui.runner import run_cli
 from sec_nlp.tui.specs import find_pipeline_spec, get_pipeline_specs
 from sec_nlp.tui.widgets import FormView, SegmentPanel
@@ -36,21 +36,49 @@ class SegmentMatcher:
                     segment_regexes.append(re.compile(raw))
             compiled.append(segment_regexes)
         self._patterns = compiled
+        self._current_index = -1
 
     def match(self, line: ConfigScalar) -> int | None:
         if not isinstance(line, str):
             return None
-        for idx, patterns in enumerate(self._patterns):
+        match_index = self._match_forward(line)
+        if match_index is None:
+            return None
+        if match_index > self._current_index:
+            self._current_index = match_index
+        return match_index
+
+    def _match_forward(self, line: ConfigScalar) -> int | None:
+        if not isinstance(line, str):
+            return None
+        start_index = self._current_index + 1
+        if start_index < 0:
+            start_index = 0
+        for idx in range(start_index, len(self._patterns)):
+            patterns = self._patterns[idx]
             for pattern in patterns:
                 if pattern.search(line):
                     return idx
+        if 0 <= self._current_index < len(self._patterns):
+            for pattern in self._patterns[self._current_index]:
+                if pattern.search(line):
+                    return self._current_index
+        return None
+        for pattern in patterns:
+            if pattern.search(line):
+                return idx
         return None
 
 
 class SecNlpTuiApp(App):
     CSS = """
     Screen {
-        background: #10131a;
+        background: #0b0f16;
+        color: #e6e2d7;
+    }
+
+    Header, Footer {
+        background: #0f1624;
         color: #e6e2d7;
     }
 
@@ -60,8 +88,8 @@ class SecNlpTuiApp(App):
 
     #sidebar {
         width: 30;
-        background: #161b24;
-        border: round #2c3442;
+        background: #111827;
+        border: round #2f3948;
         padding: 1 1;
     }
 
@@ -70,8 +98,8 @@ class SecNlpTuiApp(App):
     }
 
     .panel {
-        background: #151a23;
-        border: round #2c3442;
+        background: #151d2a;
+        border: round #2b3442;
         padding: 1 2;
         margin: 0 0 1 0;
     }
@@ -85,10 +113,23 @@ class SecNlpTuiApp(App):
     #pipeline-list {
         height: 1fr;
         margin-top: 1;
+        background: #0f1520;
+        border: round #2b3442;
+    }
+
+    ListView > ListItem {
+        padding: 0 1;
+    }
+
+    ListView > ListItem.--highlight,
+    ListView > ListItem.-highlight,
+    ListView > ListItem:focus {
+        background: #243044;
+        color: #f3d8a2;
     }
 
     #pipeline-desc {
-        color: #b8c0cc;
+        color: #aab2c2;
         margin-top: 1;
     }
 
@@ -105,39 +146,55 @@ class SecNlpTuiApp(App):
 
     .field-label {
         width: 22;
-        color: #b8c0cc;
+        color: #aab2c2;
     }
 
-    Input, Select {
-        background: #0f131a;
+    Input, Select, Checkbox {
+        background: #0c121c;
         border: round #2c3442;
+        color: #e6e2d7;
+    }
+
+    Checkbox {
+        padding: 0 1;
     }
 
     Button {
-        border: round #39424f;
-        background: #1d2431;
+        border: round #3a4557;
+        background: #1a2230;
+        color: #e6e2d7;
+        text-style: bold;
         margin-right: 1;
     }
 
     Button#run {
-        background: #2b4b42;
+        background: #1f4b3a;
+        border: round #2a5c47;
     }
 
     Button#stop {
-        background: #4b2b2b;
+        background: #4a2323;
+        border: round #6b2a2a;
     }
 
     #status {
         margin-left: 1;
-        color: #b8c0cc;
+        color: #aab2c2;
+    }
+
+    ProgressBar {
+        background: #0f1520;
+        color: #f3d8a2;
     }
 
     .segment-row {
         height: auto;
+        padding: 0 1;
     }
 
     .segment-label {
         width: 18;
+        text-style: bold;
     }
 
     .segment-detail {
@@ -146,6 +203,7 @@ class SecNlpTuiApp(App):
     }
 
     .segment-row.state-running {
+        background: #1b2332;
         color: #f3d8a2;
     }
 
@@ -155,10 +213,11 @@ class SecNlpTuiApp(App):
 
     .segment-row.state-error {
         color: #f4a4a4;
+        background: #2b1717;
     }
 
     #log-panel {
-        background: #0f131a;
+        background: #0b111b;
         border: round #2c3442;
         padding: 1;
         height: 1fr;
@@ -236,6 +295,7 @@ class SecNlpTuiApp(App):
         self._pipeline_key = spec.key
         form_view = self.query_one(FormView)
         form_view.set_form(form_spec)
+        form_view.call_after_refresh(form_view.focus_first)
         segment_panel = self.query_one(SegmentPanel)
         segment_panel.load_segments(spec.segments)
         desc = self.query_one("#pipeline-desc", Static)
@@ -255,6 +315,17 @@ class SecNlpTuiApp(App):
 
         form_view = self.query_one(FormView)
         values = form_view.get_values()
+        if self._requires_symbols(form_spec):
+            symbols = self._split_symbols(values.get("symbols"))
+            if not symbols:
+                log_panel = self.query_one("#log-panel", RichLog)
+                log_panel.clear()
+                log_panel.write(
+                    "Add at least one symbol to run. Interactive setup is not available in the TUI."
+                )
+                self._set_status("Symbols required")
+                form_view.focus_field("symbols")
+                return
         extra_args = form_view.get_extra_args()
         extra = extra_args if extra_args is not None else ""
         args = build_cli_args(form_spec, values, extra)
@@ -342,6 +413,15 @@ class SecNlpTuiApp(App):
         stop_button = self.query_one("#stop", Button)
         run_button.disabled = running
         stop_button.disabled = not running
+
+    def _requires_symbols(self, form_spec: FormSpec) -> bool:
+        return any(field.key == "symbols" for field in form_spec.fields)
+
+    def _split_symbols(self, value: ConfigScalar | None) -> list[ConfigScalar]:
+        if not isinstance(value, str):
+            return []
+        cleaned = value.replace(",", " ")
+        return [part for part in cleaned.split() if part]
 
 
 def main() -> None:

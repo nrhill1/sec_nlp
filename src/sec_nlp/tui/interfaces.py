@@ -295,6 +295,14 @@ def _split_extra_args(value: ConfigScalar) -> list[ConfigScalar]:
         return [part for part in value.split() if part]
 
 
+def _normalize_value(value: ConfigScalar | None) -> ConfigScalar | None:
+    if value is None:
+        return None
+    if isinstance(value, str) and not value.strip():
+        return None
+    return value
+
+
 def build_cli_args(
     form_spec: FormSpec,
     values: dict[ConfigScalar, ConfigScalar],
@@ -304,7 +312,7 @@ def build_cli_args(
     flags: list[ConfigScalar] = []
 
     for field in form_spec.fields:
-        value = values.get(field.key)
+        value = _normalize_value(values.get(field.key))
         if field.kind == FIELD_KIND_BOOL:
             if field.cli_flag is None:
                 continue
@@ -316,6 +324,8 @@ def build_cli_args(
             continue
 
         if field.kind == FIELD_KIND_LIST:
+            if value is None:
+                value = _normalize_value(field.default)
             items = _split_list(value)
             if not items:
                 continue
@@ -326,6 +336,8 @@ def build_cli_args(
                 positional.extend(items)
             continue
 
+        if value is None:
+            value = _normalize_value(field.default)
         if value is None:
             continue
 

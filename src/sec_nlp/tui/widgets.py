@@ -199,6 +199,19 @@ class FormView(VerticalScroll):
         extra_row.mount(extra_input)
         self._extra_args = extra_input
 
+    def focus_first(self) -> None:
+        for widget in self._fields.values():
+            widget.focus()
+            return
+        if self._extra_args is not None:
+            self._extra_args.focus()
+
+    def focus_field(self, key: ConfigScalar) -> None:
+        widget = self._fields.get(key)
+        if widget is None:
+            return
+        widget.focus()
+
     def get_values(self) -> dict[ConfigScalar, ConfigScalar]:
         values: dict[ConfigScalar, ConfigScalar] = {}
         for key, widget in self._fields.items():

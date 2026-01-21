@@ -42,6 +42,7 @@ async def run_cli(
 
     process = await asyncio.create_subprocess_exec(
         *command,
+        stdin=asyncio.subprocess.DEVNULL,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.STDOUT,
     )

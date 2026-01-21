@@ -30,3 +30,11 @@ def test_build_cli_args_disables_default_true_bool() -> None:
     values = {"symbols": "AAPL", "market_enabled": False}
     args = build_cli_args(form_spec, values)
     assert "--no-market-enabled" in args
+
+
+def test_build_cli_args_skips_empty_text() -> None:
+    form_spec = get_form_spec("analyze")
+    assert form_spec is not None
+    values = {"symbols": "AAPL", "limit": ""}
+    args = build_cli_args(form_spec, values)
+    assert "--limit" not in args
