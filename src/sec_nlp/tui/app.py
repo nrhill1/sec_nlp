@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import re
 from asyncio.subprocess import Process
+from pathlib import Path
 
 from textual.app import App, ComposeResult
 from textual.containers import Horizontal, Vertical
@@ -20,10 +21,13 @@ from textual.widgets import (
 )
 
 from sec_nlp.tui.interfaces import FormSpec, build_cli_args, get_form_spec
+from sec_nlp.tui.market import load_market_snapshot
 from sec_nlp.tui.runner import run_cli
 from sec_nlp.tui.specs import find_pipeline_spec, get_pipeline_specs
-from sec_nlp.tui.widgets import FormView, SegmentPanel
+from sec_nlp.tui.widgets import FormView, MarketPanel, SegmentPanel
 from sec_nlp.types import ConfigScalar
+
+_OUTPUT_PATH_RE = re.compile(r"(?P<path>[^\\s]+\\.(?:json|ya?ml))")
 
 
 class SegmentMatcher:
@@ -139,6 +143,11 @@ class SecNlpTuiApp(App):
         margin-bottom: 1;
     }
 
+    #status-row {
+        height: auto;
+        margin-bottom: 1;
+    }
+
     .form-row {
         height: auto;
         margin-bottom: 1;
@@ -180,6 +189,9 @@ class SecNlpTuiApp(App):
     #status {
         margin-left: 1;
         color: #aab2c2;
+        background: #0f1520;
+        padding: 0 1;
+        border: round #2c3442;
     }
 
     ProgressBar {
@@ -216,6 +228,50 @@ class SecNlpTuiApp(App):
         background: #2b1717;
     }
 
+    .segment-panel {
+        width: 1fr;
+    }
+
+    .market-panel {
+        width: 46;
+        min-width: 34;
+        background: #131c2a;
+        border: round #2f3f5a;
+    }
+
+    .market-controls {
+        height: auto;
+        margin-bottom: 1;
+    }
+
+    .market-label {
+        width: 7;
+        color: #aab2c2;
+    }
+
+    #market-summary {
+        color: #d0d6e0;
+        margin-bottom: 1;
+    }
+
+    #market-chart {
+        background: #0c121c;
+        border: round #2b3442;
+        color: #9fe2c6;
+        padding: 1 1;
+        height: 7;
+    }
+
+    #market-detail {
+        color: #aab2c2;
+        margin-top: 1;
+    }
+
+    #market-context {
+        color: #8b93a1;
+        margin-top: 1;
+    }
+
     #log-panel {
         background: #0b111b;
         border: round #2c3442;
@@ -236,6 +292,7 @@ class SecNlpTuiApp(App):
         self._segment_matcher: SegmentMatcher | None = None
         self._run_task: asyncio.Task | None = None
         self._active_process: Process | None = None
+        self._output_paths: list[Path] = []
 
     def compose(self) -> ComposeResult:
         yield Header(show_clock=True)
@@ -254,7 +311,9 @@ class SecNlpTuiApp(App):
                     yield Button("Run", id="run")
                     yield Button("Stop", id="stop", disabled=True)
                     yield Static("Idle", id="status")
-                yield SegmentPanel()
+                with Horizontal(id="status-row"):
+                    yield SegmentPanel()
+                    yield MarketPanel()
                 yield RichLog(id="log-panel", wrap=True, highlight=False)
         yield Footer()
 
@@ -298,6 +357,15 @@ class SecNlpTuiApp(App):
         form_view.call_after_refresh(form_view.focus_first)
         segment_panel = self.query_one(SegmentPanel)
         segment_panel.load_segments(spec.segments)
+        market_panel = self.query_one(MarketPanel)
+        if spec.key == "analyze":
+            market_panel.set_message(
+                "Run analyze with market enabled to populate this view."
+            )
+        else:
+            market_panel.set_message(
+                "Market data is available in the analyze pipeline."
+            )
         desc = self.query_one("#pipeline-desc", Static)
         desc.update(str(spec.description))
 
@@ -333,11 +401,14 @@ class SecNlpTuiApp(App):
 
         log_panel = self.query_one("#log-panel", RichLog)
         log_panel.clear()
+        self._output_paths = []
 
         segment_panel = self.query_one(SegmentPanel)
         segment_panel.reset()
         if spec.segments:
             segment_panel.advance_to(0)
+        market_panel = self.query_one(MarketPanel)
+        market_panel.reset()
 
         pattern_groups = tuple(segment.patterns for segment in spec.segments)
         self._segment_matcher = SegmentMatcher(pattern_groups)
@@ -364,6 +435,7 @@ class SecNlpTuiApp(App):
         async def on_line(line: ConfigScalar) -> None:
             log_panel = self.query_one("#log-panel", RichLog)
             log_panel.write(str(line))
+            self._capture_output_path(line)
             matcher = self._segment_matcher
             if matcher is None:
                 return
@@ -377,6 +449,7 @@ class SecNlpTuiApp(App):
             self._active_process = None
             segment_panel = self.query_one(SegmentPanel)
             segment_panel.finish(returncode == 0)
+            self._refresh_market_panel()
             status = (
                 "Completed" if returncode == 0 else f"Failed ({returncode})"
             )
@@ -422,6 +495,24 @@ class SecNlpTuiApp(App):
             return []
         cleaned = value.replace(",", " ")
         return [part for part in cleaned.split() if part]
+
+    def _capture_output_path(self, line: ConfigScalar) -> None:
+        if not isinstance(line, str):
+            return
+        for match in _OUTPUT_PATH_RE.finditer(line):
+            path_text = match.group("path").rstrip(".,)")
+            if not path_text:
+                continue
+            path = Path(path_text)
+            if not path.is_absolute():
+                path = Path.cwd() / path
+            if path not in self._output_paths:
+                self._output_paths.append(path)
+
+    def _refresh_market_panel(self) -> None:
+        market_panel = self.query_one(MarketPanel)
+        snapshot = load_market_snapshot(self._output_paths)
+        market_panel.set_snapshot(snapshot)
 
 
 def main() -> None:

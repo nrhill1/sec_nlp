@@ -22,6 +22,17 @@ from sec_nlp.tui.interfaces import (
     FieldSpec,
     FormSpec,
 )
+from sec_nlp.tui.market import (
+    MARKET_METRIC_ADJCLOSE,
+    MARKET_METRIC_CLOSE,
+    MARKET_METRIC_RANGE,
+    MARKET_METRIC_VOLUME,
+    MARKET_STYLE_BARS,
+    MARKET_STYLE_POINTS,
+    MarketSnapshot,
+    build_market_chart_lines,
+    select_market_series,
+)
 from sec_nlp.tui.specs import SegmentSpec
 from sec_nlp.types import ConfigScalar
 
@@ -106,7 +117,7 @@ class SegmentRow(Horizontal):
 
 class SegmentPanel(Vertical):
     def __init__(self) -> None:
-        super().__init__(classes="panel")
+        super().__init__(classes="panel segment-panel")
         self._rows: list[SegmentRow] = []
         self._segment_keys: list[ConfigScalar] = []
         self._current_index = -1
@@ -268,3 +279,176 @@ class FormView(VerticalScroll):
                 str(field.placeholder) if field.placeholder is not None else ""
             )
         )
+
+
+_MARKET_METRIC_LABELS: dict[ConfigScalar, ConfigScalar] = {
+    MARKET_METRIC_CLOSE: "Close",
+    MARKET_METRIC_VOLUME: "Volume",
+    MARKET_METRIC_RANGE: "Range",
+    MARKET_METRIC_ADJCLOSE: "Adj Close",
+}
+
+_MARKET_STYLE_LABELS: dict[ConfigScalar, ConfigScalar] = {
+    MARKET_STYLE_BARS: "Bars",
+    MARKET_STYLE_POINTS: "Points",
+}
+
+
+class MarketPanel(Vertical):
+    def __init__(self) -> None:
+        super().__init__(classes="panel market-panel")
+        metric_options = [
+            (str(label), str(key))
+            for key, label in _MARKET_METRIC_LABELS.items()
+        ]
+        style_options = [
+            (str(label), str(key))
+            for key, label in _MARKET_STYLE_LABELS.items()
+        ]
+        self._metric_select = Select(
+            metric_options,
+            value=str(MARKET_METRIC_CLOSE),
+            allow_blank=False,
+            id="market-metric",
+        )
+        self._style_select = Select(
+            style_options,
+            value=str(MARKET_STYLE_BARS),
+            allow_blank=False,
+            id="market-style",
+        )
+        self._normalize_toggle = Checkbox(
+            label="Normalize",
+            value=True,
+            id="market-normalize",
+        )
+        self._summary = Static("", id="market-summary")
+        self._chart = Static("", id="market-chart")
+        self._detail = Static("", id="market-detail")
+        self._context_label = Static("", id="market-context")
+        self._snapshot: MarketSnapshot | None = None
+        self._message: ConfigScalar | None = (
+            "Run analyze with market enabled to populate this view."
+        )
+
+    def compose(self):
+        yield Label("Market", classes="panel-title")
+        with Horizontal(classes="market-controls"):
+            yield Label("Metric", classes="market-label")
+            yield self._metric_select
+            yield Label("View", classes="market-label")
+            yield self._style_select
+            yield self._normalize_toggle
+        yield self._summary
+        yield self._chart
+        yield self._detail
+        yield self._context_label
+
+    def on_select_changed(self, event: Select.Changed) -> None:
+        if event.select in (self._metric_select, self._style_select):
+            self._render_snapshot()
+
+    def on_checkbox_changed(self, event: Checkbox.Changed) -> None:
+        if event.checkbox is self._normalize_toggle:
+            self._render_snapshot()
+
+    def on_resize(self) -> None:
+        self._render_snapshot()
+
+    def set_snapshot(self, snapshot: MarketSnapshot | None) -> None:
+        self._snapshot = snapshot
+        self._render_snapshot()
+
+    def set_message(self, message: ConfigScalar | None) -> None:
+        self._message = message
+        if self._snapshot is None:
+            self._render_snapshot()
+
+    def reset(self) -> None:
+        self._snapshot = None
+        self._render_snapshot()
+
+    def _render_snapshot(self) -> None:
+        if self._snapshot is None:
+            message = self._message or "No market data yet."
+            self._summary.update(str(message))
+            self._chart.update("(no market data)")
+            self._detail.update("")
+            self._context_label.update("")
+            return
+
+        metric_key = self._select_value(
+            self._metric_select, MARKET_METRIC_CLOSE
+        )
+        style_key = self._select_value(self._style_select, MARKET_STYLE_BARS)
+        normalize = bool(self._normalize_toggle.value)
+
+        series = select_market_series(self._snapshot, metric_key)
+        label = _MARKET_METRIC_LABELS.get(metric_key, "Metric")
+        summary = self._build_summary(self._snapshot)
+        self._summary.update(str(summary))
+        chart_lines = build_market_chart_lines(
+            series,
+            width=self._chart_width(),
+            height=6,
+            style=style_key,
+            normalize=normalize,
+        )
+        self._chart.update(
+            "\n".join(str(line) for line in chart_lines)
+            if chart_lines
+            else "(no chart data)"
+        )
+        detail = self._build_detail(label, series)
+        self._detail.update(str(detail))
+        context = self._snapshot.correlation
+        self._context_label.update(str(context) if context else "")
+
+    def _build_summary(self, snapshot: MarketSnapshot) -> ConfigScalar:
+        window = f"{snapshot.window_start}..{snapshot.window_end}"
+        parts = [
+            f"{snapshot.ticker} {snapshot.granularity}",
+            f"window {window}",
+        ]
+        if snapshot.filing_date:
+            parts.append(f"filing {snapshot.filing_date}")
+        return " | ".join(parts)
+
+    def _build_detail(
+        self, label: ConfigScalar, series: list[float]
+    ) -> ConfigScalar:
+        if not series:
+            return ""
+        min_value = min(series)
+        max_value = max(series)
+        last_value = series[-1]
+        delta = last_value - series[0]
+        return (
+            f"{label}: last {self._format_number(last_value)} "
+            f"range {self._format_number(min_value)}..{self._format_number(max_value)} "
+            f"delta {self._format_number(delta)}"
+        )
+
+    def _format_number(self, value: float) -> ConfigScalar:
+        abs_value = abs(value)
+        if abs_value >= 1_000_000_000:
+            return f"{value / 1_000_000_000:.2f}B"
+        if abs_value >= 1_000_000:
+            return f"{value / 1_000_000:.2f}M"
+        if abs_value >= 1_000:
+            return f"{value / 1_000:.2f}K"
+        return f"{value:.2f}"
+
+    def _select_value(
+        self, select: Select, default: ConfigScalar
+    ) -> ConfigScalar:
+        value = select.value
+        if isinstance(value, str) and value:
+            return value
+        return default
+
+    def _chart_width(self) -> int:
+        width = self.size.width - 4
+        if width < 10:
+            return 10
+        return width
