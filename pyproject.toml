@@ -38,6 +38,8 @@ dependencies = [
 [project.scripts]
 sec-nlp = "sec_nlp.cli.__main__:main"
 sec-nlp-tui = "sec_nlp.tui.app:main"
+snlp = "sec_nlp.tui.app:main"
+sn = "sec_nlp.tui.app:main"
 profile-memory = "scripts.profile.memory:main"
 check-imports = "scripts.build.check_imports:main"
 

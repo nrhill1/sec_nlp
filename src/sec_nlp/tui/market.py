@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import date, datetime
@@ -15,11 +16,13 @@ MARKET_METRIC_CLOSE = "close"
 MARKET_METRIC_VOLUME = "volume"
 MARKET_METRIC_RANGE = "range"
 MARKET_METRIC_ADJCLOSE = "adjclose"
+MARKET_METRIC_RETURNS = "returns"
 MARKET_METRICS: tuple[ConfigScalar, ...] = (
     MARKET_METRIC_CLOSE,
     MARKET_METRIC_VOLUME,
     MARKET_METRIC_RANGE,
     MARKET_METRIC_ADJCLOSE,
+    MARKET_METRIC_RETURNS,
 )
 
 MARKET_STYLE_BARS = "bars"
@@ -161,6 +164,9 @@ def select_market_series(
         return [quote.range_value() for quote in snapshot.quotes]
     if metric == MARKET_METRIC_ADJCLOSE:
         return [quote.adjclose_value for quote in snapshot.quotes]
+    if metric == MARKET_METRIC_RETURNS:
+        prices = [quote.close_value for quote in snapshot.quotes]
+        return compute_returns(prices)
     return [quote.close_value for quote in snapshot.quotes]
 
 
@@ -171,7 +177,9 @@ def build_market_chart_lines(
     height: int,
     style: ConfigScalar,
     normalize: bool,
-) -> list[ConfigScalar]:
+    overlay: Sequence[float] | None = None,
+) -> list[str]:
+    """Build ASCII chart lines, optionally with an overlay (e.g. SMA)."""
     if not values or width <= 0 or height <= 0:
         return []
 
@@ -179,28 +187,171 @@ def build_market_chart_lines(
     if not series:
         return []
 
-    min_value = min(series)
-    max_value = max(series)
+    # Compute overlay levels if provided
+    overlay_levels: list[int] | None = None
+    if overlay:
+        overlay_compressed = _compress_series(overlay, width)
+        all_vals = list(series) + list(overlay_compressed)
+    else:
+        all_vals = list(series)
+
+    min_value = min(all_vals)
+    max_value = max(all_vals)
     if not normalize:
         if min_value > 0:
             min_value = 0.0
         elif max_value < 0:
             max_value = 0.0
     scale = max_value - min_value if max_value != min_value else 1.0
-    levels = [
-        int(round((value - min_value) / scale * (height - 1)))
-        for value in series
-    ]
 
-    lines: list[ConfigScalar] = []
+    def to_level(v: float) -> int:
+        return int(round((v - min_value) / scale * (height - 1)))
+
+    levels = [to_level(v) for v in series]
+    if overlay:
+        overlay_compressed = _compress_series(overlay, width)
+        overlay_levels = [to_level(v) for v in overlay_compressed]
+
+    lines: list[str] = []
     for row in range(height - 1, -1, -1):
         chars: list[str] = []
-        for level in levels:
-            if style == MARKET_STYLE_POINTS:
+        for idx, level in enumerate(levels):
+            ov_hit = overlay_levels is not None and overlay_levels[idx] == row
+            if ov_hit:
+                chars.append("-")  # overlay marker
+            elif style == MARKET_STYLE_POINTS:
                 chars.append("*" if level == row else " ")
             else:
                 chars.append("#" if level >= row else " ")
         lines.append("".join(chars).rstrip())
+    return lines
+
+
+def build_sparkline(values: Sequence[float], width: int) -> str:
+    """Return a one-line sparkline using block characters.
+
+    Uses levels ▁▂▃▄▅▆▇█ to convey relative magnitude.
+    """
+    blocks = "▁▂▃▄▅▆▇█"
+    if not values or width <= 0:
+        return ""
+    series = _compress_series(values, width)
+    if not series:
+        return ""
+    lo = min(series)
+    hi = max(series)
+    if hi == lo:
+        return blocks[0] * len(series)
+    chars: list[str] = []
+    for v in series:
+        idx = int((v - lo) / (hi - lo) * (len(blocks) - 1))
+        chars.append(blocks[idx])
+    return "".join(chars)
+
+
+@dataclass(frozen=True)
+class SeriesStats:
+    count: int
+    first: float
+    last: float
+    min_value: float
+    max_value: float
+    mean: float
+    stddev: float
+    delta: float
+    pct_change: float
+    autocorr_lag1: float | None
+
+
+def compute_returns(values: Sequence[float]) -> list[float]:
+    if len(values) < 2:
+        return []
+    returns: list[float] = []
+    prev = values[0]
+    for cur in values[1:]:
+        if prev == 0:
+            returns.append(0.0)
+        else:
+            returns.append((cur - prev) / abs(prev))
+        prev = cur
+    return returns
+
+
+def compute_sma(values: Sequence[float], window: int = 5) -> list[float]:
+    """Compute simple moving average with given window."""
+    if not values or window < 1:
+        return []
+    n = len(values)
+    sma: list[float] = []
+    for i in range(n):
+        start = max(0, i - window + 1)
+        chunk = values[start : i + 1]
+        sma.append(sum(chunk) / len(chunk))
+    return sma
+
+
+def _mean(values: Sequence[float]) -> float:
+    return sum(values) / len(values) if values else 0.0
+
+
+def _stddev(values: Sequence[float], mean: float | None = None) -> float:
+    if not values:
+        return 0.0
+    mu = _mean(values) if mean is None else mean
+    var = sum((v - mu) ** 2 for v in values) / len(values)
+    return math.sqrt(var)
+
+
+def autocorr_lag1(values: Sequence[float]) -> float | None:
+    if len(values) < 2:
+        return None
+    x = values
+    mu = _mean(x)
+    num = sum((x[i] - mu) * (x[i - 1] - mu) for i in range(1, len(x)))
+    den = sum((v - mu) ** 2 for v in x)
+    if den == 0:
+        return None
+    return num / den
+
+
+def calculate_stats(values: Sequence[float]) -> SeriesStats | None:
+    if not values:
+        return None
+    first = values[0]
+    last = values[-1]
+    mu = _mean(values)
+    sd = _stddev(values, mu)
+    delt = last - first
+    pct = (delt / abs(first)) if first != 0 else 0.0
+    return SeriesStats(
+        count=len(values),
+        first=first,
+        last=last,
+        min_value=min(values),
+        max_value=max(values),
+        mean=mu,
+        stddev=sd,
+        delta=delt,
+        pct_change=pct,
+        autocorr_lag1=autocorr_lag1(values),
+    )
+
+
+def format_stats_lines(values: Sequence[float]) -> list[str]:
+    stats = calculate_stats(values)
+    if stats is None:
+        return []
+
+    def f(x: float) -> str:
+        return f"{x:.4f}"
+
+    ac = f(stats.autocorr_lag1) if stats.autocorr_lag1 is not None else "n/a"
+    lines = [
+        f"count {stats.count} | first {f(stats.first)} | last {f(stats.last)}",
+        f"min {f(stats.min_value)} | max {f(stats.max_value)} | mean {f(stats.mean)}",
+        f"std {f(stats.stddev)} | delta {f(stats.delta)} | pct {stats.pct_change * 100:.2f}%",
+        f"autocorr(lag1) {ac}",
+    ]
     return lines
 
 

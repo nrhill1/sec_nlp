@@ -18,16 +18,23 @@ from textual.widgets import (
     ListView,
     RichLog,
     Static,
+    TabbedContent,
+    TabPane,
 )
 
 from sec_nlp.tui.interfaces import FormSpec, build_cli_args, get_form_spec
 from sec_nlp.tui.market import load_market_snapshot
 from sec_nlp.tui.runner import run_cli
 from sec_nlp.tui.specs import find_pipeline_spec, get_pipeline_specs
-from sec_nlp.tui.widgets import FormView, MarketPanel, SegmentPanel
+from sec_nlp.tui.widgets import (
+    FormView,
+    MarketPanel,
+    ResultsPanel,
+    SegmentPanel,
+)
 from sec_nlp.types import ConfigScalar
 
-_OUTPUT_PATH_RE = re.compile(r"(?P<path>[^\\s]+\\.(?:json|ya?ml))")
+_OUTPUT_PATH_RE = re.compile(r"(?P<path>[^\s]+\.(?:json|ya?ml))")
 
 
 class SegmentMatcher:
@@ -67,10 +74,6 @@ class SegmentMatcher:
             for pattern in self._patterns[self._current_index]:
                 if pattern.search(line):
                     return self._current_index
-        return None
-        for pattern in patterns:
-            if pattern.search(line):
-                return idx
         return None
 
 
@@ -154,7 +157,7 @@ class SecNlpTuiApp(App):
     }
 
     .field-label {
-        width: 22;
+        width: 18;
         color: #aab2c2;
     }
 
@@ -166,6 +169,27 @@ class SecNlpTuiApp(App):
 
     Checkbox {
         padding: 0 1;
+    }
+
+    .collapsible-section {
+        margin-bottom: 1;
+    }
+
+    .section-header {
+        background: #1a2230;
+        color: #f3d8a2;
+        padding: 0 1;
+        text-style: bold;
+        cursor: pointer;
+    }
+
+    .section-header:hover {
+        background: #243044;
+    }
+
+    .section-content {
+        padding-left: 1;
+        margin-top: 0;
     }
 
     Button {
@@ -272,11 +296,72 @@ class SecNlpTuiApp(App):
         margin-top: 1;
     }
 
+    #market-stats {
+        color: #c6ccb7;
+        background: #0f1520;
+        border: round #2b3442;
+        padding: 0 1;
+        margin-top: 1;
+    }
+
+    .results-panel {
+        width: 1fr;
+    }
+
+    .results-row {
+        height: auto;
+        margin-top: 1;
+    }
+
+    #results-list {
+        width: 36;
+        background: #0f1520;
+        border: round #2b3442;
+        height: 12;
+        margin-right: 1;
+    }
+
+    #results-view {
+        height: 12;
+        background: #0c121c;
+        border: round #2b3442;
+        color: #e6e2d7;
+        padding: 1;
+    }
+
     #log-panel {
         background: #0b111b;
         border: round #2c3442;
         padding: 1;
         height: 1fr;
+    }
+
+    #results-filter {
+        margin-bottom: 1;
+    }
+
+    TabbedContent {
+        background: #0b0f16;
+    }
+
+    TabPane {
+        padding: 1 2;
+    }
+
+    .market-full {
+        height: 1fr;
+    }
+
+    .results-full {
+        height: 1fr;
+    }
+
+    #results-view-full {
+        height: 1fr;
+        background: #0c121c;
+        border: round #2b3442;
+        color: #e6e2d7;
+        padding: 1;
     }
     """
 
@@ -284,6 +369,9 @@ class SecNlpTuiApp(App):
         ("q", "quit", "Quit"),
         ("r", "run_pipeline", "Run"),
         ("s", "stop_pipeline", "Stop"),
+        ("1", "switch_tab('run')", "Run tab"),
+        ("2", "switch_tab('market')", "Market tab"),
+        ("3", "switch_tab('results')", "Results tab"),
     ]
 
     def __init__(self) -> None:
@@ -306,15 +394,22 @@ class SecNlpTuiApp(App):
                 yield ListView(*items, id="pipeline-list")
                 yield Static(id="pipeline-desc")
             with Vertical(id="main"):
-                yield FormView()
-                with Horizontal(id="actions"):
-                    yield Button("Run", id="run")
-                    yield Button("Stop", id="stop", disabled=True)
-                    yield Static("Idle", id="status")
-                with Horizontal(id="status-row"):
-                    yield SegmentPanel()
-                    yield MarketPanel()
-                yield RichLog(id="log-panel", wrap=True, highlight=False)
+                with TabbedContent(initial="run"):
+                    with TabPane("Run", id="run"):
+                        yield FormView()
+                        with Horizontal(id="actions"):
+                            yield Button("Run", id="run-btn")
+                            yield Button("Stop", id="stop-btn", disabled=True)
+                            yield Static("Idle", id="status")
+                        with Horizontal(id="status-row"):
+                            yield SegmentPanel()
+                        yield RichLog(
+                            id="log-panel", wrap=True, highlight=False
+                        )
+                    with TabPane("Market", id="market"):
+                        yield MarketPanel(classes="market-full")
+                    with TabPane("Results", id="results"):
+                        yield ResultsPanel(classes="results-full")
         yield Footer()
 
     def on_mount(self) -> None:
@@ -330,6 +425,10 @@ class SecNlpTuiApp(App):
         item_id = event.item.id
         if item_id is None:
             return
+        # Only handle selections that correspond to pipeline keys
+        valid_keys = {str(spec.key) for spec in get_pipeline_specs()}
+        if str(item_id) not in valid_keys:
+            return
         self._select_pipeline(str(item_id))
 
     def action_run_pipeline(self) -> None:
@@ -339,10 +438,14 @@ class SecNlpTuiApp(App):
         self._stop_run()
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
-        if event.button.id == "run":
+        if event.button.id == "run-btn":
             self._start_run()
-        elif event.button.id == "stop":
+        elif event.button.id == "stop-btn":
             self._stop_run()
+
+    def action_switch_tab(self, tab_id: str) -> None:
+        tabs = self.query_one(TabbedContent)
+        tabs.active = tab_id
 
     def _select_pipeline(self, key: ConfigScalar) -> None:
         spec = find_pipeline_spec(str(key))
@@ -450,6 +553,7 @@ class SecNlpTuiApp(App):
             segment_panel = self.query_one(SegmentPanel)
             segment_panel.finish(returncode == 0)
             self._refresh_market_panel()
+            self._refresh_results_panel()
             status = (
                 "Completed" if returncode == 0 else f"Failed ({returncode})"
             )
@@ -482,8 +586,8 @@ class SecNlpTuiApp(App):
         status.update(str(message))
 
     def _set_running(self, running: bool) -> None:
-        run_button = self.query_one("#run", Button)
-        stop_button = self.query_one("#stop", Button)
+        run_button = self.query_one("#run-btn", Button)
+        stop_button = self.query_one("#stop-btn", Button)
         run_button.disabled = running
         stop_button.disabled = not running
 
@@ -513,6 +617,15 @@ class SecNlpTuiApp(App):
         market_panel = self.query_one(MarketPanel)
         snapshot = load_market_snapshot(self._output_paths)
         market_panel.set_snapshot(snapshot)
+
+    def _refresh_results_panel(self) -> None:
+        results_panel = self.query_one(ResultsPanel)
+        yaml_paths = [
+            path
+            for path in self._output_paths
+            if path.suffix.lower() in (".yaml", ".yml")
+        ]
+        results_panel.set_paths(yaml_paths)
 
 
 def main() -> None:

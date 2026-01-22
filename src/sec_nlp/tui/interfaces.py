@@ -23,6 +23,14 @@ class FieldSpec:
     default: ConfigScalar | None = None
     choices: tuple[ConfigScalar, ...] = ()
     help: ConfigScalar | None = None
+    section: ConfigScalar | None = None
+
+
+@dataclass(frozen=True)
+class SectionSpec:
+    key: ConfigScalar
+    label: ConfigScalar
+    collapsed: bool = False
 
 
 @dataclass(frozen=True)
@@ -31,16 +39,34 @@ class FormSpec:
     fields: tuple[FieldSpec, ...]
     extra_args_label: ConfigScalar
     extra_args_placeholder: ConfigScalar
+    sections: tuple[SectionSpec, ...] = ()
 
+
+# Section keys
+SECTION_CORE = "core"
+SECTION_SEARCH = "search"
+SECTION_MARKET = "market"
+SECTION_PROCESSING = "processing"
+SECTION_OUTPUT = "output"
+
+ANALYZE_SECTIONS: tuple[SectionSpec, ...] = (
+    SectionSpec(key=SECTION_CORE, label="Core Settings"),
+    SectionSpec(key=SECTION_SEARCH, label="Search & Analysis"),
+    SectionSpec(key=SECTION_MARKET, label="Market Data", collapsed=True),
+    SectionSpec(key=SECTION_PROCESSING, label="Processing", collapsed=True),
+    SectionSpec(key=SECTION_OUTPUT, label="Output", collapsed=True),
+)
 
 ANALYZE_FIELDS: tuple[FieldSpec, ...] = (
+    # Core settings
     FieldSpec(
         key="symbols",
         label="Symbols",
         kind=FIELD_KIND_LIST,
         cli_flag=None,
         placeholder="AAPL MSFT NVDA",
-        help="Positional symbols",
+        help="Space or comma-separated stock symbols",
+        section=SECTION_CORE,
     ),
     FieldSpec(
         key="preset",
@@ -55,7 +81,8 @@ ANALYZE_FIELDS: tuple[FieldSpec, ...] = (
             "comprehensive",
             "rare_earths",
         ),
-        help="Optional preset profile",
+        help="Preset profile for common configurations",
+        section=SECTION_CORE,
     ),
     FieldSpec(
         key="mode",
@@ -73,6 +100,8 @@ ANALYZE_FIELDS: tuple[FieldSpec, ...] = (
             "shelf",
         ),
         default="annual",
+        help="Filing mode (10-K, 10-Q, 8-K, etc.)",
+        section=SECTION_CORE,
     ),
     FieldSpec(
         key="limit",
@@ -80,13 +109,27 @@ ANALYZE_FIELDS: tuple[FieldSpec, ...] = (
         kind=FIELD_KIND_TEXT,
         cli_flag="--limit",
         placeholder="5",
+        help="Maximum filings to process per symbol",
+        section=SECTION_CORE,
     ),
+    FieldSpec(
+        key="email",
+        label="Email",
+        kind=FIELD_KIND_TEXT,
+        cli_flag="--email",
+        placeholder="you@example.com",
+        help="Email for SEC EDGAR user-agent",
+        section=SECTION_CORE,
+    ),
+    # Search & Analysis
     FieldSpec(
         key="topics",
         label="Topics",
         kind=FIELD_KIND_LIST,
         cli_flag="--topics",
         placeholder="pricing power, margin pressure",
+        help="Topics for semantic analysis",
+        section=SECTION_SEARCH,
     ),
     FieldSpec(
         key="keywords",
@@ -94,6 +137,8 @@ ANALYZE_FIELDS: tuple[FieldSpec, ...] = (
         kind=FIELD_KIND_LIST,
         cli_flag="--keywords",
         placeholder="recall, warranty, impairment",
+        help="Keywords to search for",
+        section=SECTION_SEARCH,
     ),
     FieldSpec(
         key="queries",
@@ -101,6 +146,8 @@ ANALYZE_FIELDS: tuple[FieldSpec, ...] = (
         kind=FIELD_KIND_LIST,
         cli_flag="--queries",
         placeholder="supply chain constraints",
+        help="Semantic search queries",
+        section=SECTION_SEARCH,
     ),
     FieldSpec(
         key="vector_mode",
@@ -109,27 +156,8 @@ ANALYZE_FIELDS: tuple[FieldSpec, ...] = (
         cli_flag="--vector-mode",
         choices=("off", "read", "write"),
         default="write",
-    ),
-    FieldSpec(
-        key="market_enabled",
-        label="Market enabled",
-        kind=FIELD_KIND_BOOL,
-        cli_flag="--market-enabled",
-        default=True,
-    ),
-    FieldSpec(
-        key="market_ticker",
-        label="Market ticker",
-        kind=FIELD_KIND_TEXT,
-        cli_flag="--market-ticker",
-        placeholder="SPY",
-    ),
-    FieldSpec(
-        key="batch_size",
-        label="Batch size",
-        kind=FIELD_KIND_TEXT,
-        cli_flag="--batch-size",
-        placeholder="8",
+        help="Vector DB mode: off/read/write",
+        section=SECTION_SEARCH,
     ),
     FieldSpec(
         key="top_k_chunks",
@@ -137,13 +165,120 @@ ANALYZE_FIELDS: tuple[FieldSpec, ...] = (
         kind=FIELD_KIND_TEXT,
         cli_flag="--top-k-chunks",
         placeholder="20",
+        help="Number of chunks to retrieve",
+        section=SECTION_SEARCH,
+    ),
+    # Market data
+    FieldSpec(
+        key="market_enabled",
+        label="Enabled",
+        kind=FIELD_KIND_BOOL,
+        cli_flag="--market-enabled",
+        default=True,
+        help="Enable market data enrichment",
+        section=SECTION_MARKET,
+    ),
+    FieldSpec(
+        key="market_ticker",
+        label="Ticker",
+        kind=FIELD_KIND_TEXT,
+        cli_flag="--market-ticker",
+        placeholder="SPY",
+        help="Benchmark ticker for correlation",
+        section=SECTION_MARKET,
+    ),
+    FieldSpec(
+        key="market_granularity",
+        label="Granularity",
+        kind=FIELD_KIND_CHOICE,
+        cli_flag="--market-granularity",
+        choices=("daily", "weekly", "monthly"),
+        default="daily",
+        help="Market data granularity",
+        section=SECTION_MARKET,
+    ),
+    FieldSpec(
+        key="market_limit",
+        label="Days",
+        kind=FIELD_KIND_TEXT,
+        cli_flag="--market-limit",
+        placeholder="60",
+        help="Number of periods of market data",
+        section=SECTION_MARKET,
+    ),
+    # Processing
+    FieldSpec(
+        key="batch_size",
+        label="Batch size",
+        kind=FIELD_KIND_TEXT,
+        cli_flag="--batch-size",
+        placeholder="8",
+        help="LLM batch size for parallel requests",
+        section=SECTION_PROCESSING,
     ),
     FieldSpec(
         key="max_chunk_length",
-        label="Max chunk length",
+        label="Max chunk",
         kind=FIELD_KIND_TEXT,
         cli_flag="--max-chunk-length",
         placeholder="1000000",
+        help="Maximum chunk length in characters",
+        section=SECTION_PROCESSING,
+    ),
+    FieldSpec(
+        key="chunk_size",
+        label="Chunk size",
+        kind=FIELD_KIND_TEXT,
+        cli_flag="--chunk-size",
+        placeholder="512",
+        help="Chunk size for text splitting",
+        section=SECTION_PROCESSING,
+    ),
+    FieldSpec(
+        key="chunk_overlap",
+        label="Chunk overlap",
+        kind=FIELD_KIND_TEXT,
+        cli_flag="--chunk-overlap",
+        placeholder="64",
+        help="Overlap between chunks",
+        section=SECTION_PROCESSING,
+    ),
+    FieldSpec(
+        key="confidence_threshold",
+        label="Confidence",
+        kind=FIELD_KIND_TEXT,
+        cli_flag="--confidence-threshold",
+        placeholder="0.6",
+        help="Minimum confidence for results",
+        section=SECTION_PROCESSING,
+    ),
+    # Output
+    FieldSpec(
+        key="verbose",
+        label="Verbose",
+        kind=FIELD_KIND_BOOL,
+        cli_flag="--verbose",
+        default=False,
+        help="Enable verbose output",
+        section=SECTION_OUTPUT,
+    ),
+    FieldSpec(
+        key="dry_run",
+        label="Dry run",
+        kind=FIELD_KIND_BOOL,
+        cli_flag="--dry-run",
+        default=False,
+        help="Show what would be done",
+        section=SECTION_OUTPUT,
+    ),
+    FieldSpec(
+        key="out_path",
+        label="Output path",
+        kind=FIELD_KIND_TEXT,
+        cli_flag="--out-path",
+        placeholder="./output",
+        help="Output directory path",
+        section=SECTION_OUTPUT,
     ),
 )
 
@@ -251,7 +386,8 @@ FORM_SPECS: tuple[FormSpec, ...] = (
         pipeline_key="analyze",
         fields=ANALYZE_FIELDS,
         extra_args_label="Extra args",
-        extra_args_placeholder="--market-granularity daily --market-limit 60",
+        extra_args_placeholder="--enable-tracing --trace-log-prompts",
+        sections=ANALYZE_SECTIONS,
     ),
     FormSpec(
         pipeline_key="exb",
