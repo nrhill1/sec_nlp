@@ -7,6 +7,7 @@ from pathlib import Path
 from rich.syntax import Syntax
 from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.widgets import (
+    Button,
     Checkbox,
     Input,
     Label,
@@ -183,61 +184,84 @@ class SegmentPanel(Vertical):
         self._progress.update(total=total, progress=done_count)
 
 
+class FieldRow(Horizontal):
+    def __init__(
+        self,
+        label: ConfigScalar,
+        widget: _FieldWidget,
+        help_text: ConfigScalar | None,
+    ) -> None:
+        super().__init__(classes="form-row")
+        self._label = Label(str(label), classes="field-label")
+        self._widget = widget
+        if help_text:
+            self.tooltip = str(help_text)
+
+    def compose(self):
+        yield self._label
+        yield self._widget
+
+
 class CollapsibleSection(Vertical):
     """A collapsible section with a toggle header."""
 
     def __init__(
         self,
         section_spec: SectionSpec,
-        classes: str = "collapsible-section",
+        rows: list[FieldRow],
+        classes: ConfigScalar = "collapsible-section",
     ) -> None:
-        super().__init__(classes=classes)
+        classes_text = None if classes is None else str(classes)
+        super().__init__(classes=classes_text)
         self._spec = section_spec
         self._collapsed = section_spec.collapsed
         icon = "▶" if self._collapsed else "▼"
-        self._header = Static(
+        self._header = Button(
             f"{icon} {section_spec.label}",
             classes="section-header",
             id=f"section-header-{section_spec.key}",
         )
-        self._content = Vertical(
-            classes="section-content",
-            id=f"section-content-{section_spec.key}",
-        )
-        # Will be set by FormView._build_section
-        self._pending_fields: list[FieldSpec] = []
-        self._form_view: FormView | None = None
+        self._rows = rows
+        self._content: Vertical | None = None
 
     def on_mount(self) -> None:
-        if self._collapsed:
-            self._content.set_styles("display: none;")
-        # Mount pending fields if set by FormView
-        if self._pending_fields and self._form_view is not None:
-            for field in self._pending_fields:
-                row = self._form_view._build_field_row(field)
-                self._content.mount(row)
-            self._pending_fields = []
+        self._apply_collapsed()
 
     def compose(self):
         yield self._header
-        yield self._content
+        with Vertical(
+            classes="section-content",
+            id=f"section-content-{self._spec.key}",
+        ) as content:
+            self._content = content
+            for row in self._rows:
+                yield row
 
-    def on_click(self, event) -> None:
-        # Check if header was clicked
-        if self._header in event.style_path:
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button is self._header:
             self.toggle()
 
     def toggle(self) -> None:
         self._collapsed = not self._collapsed
         icon = "▶" if self._collapsed else "▼"
-        self._header.update(f"{icon} {self._spec.label}")
+        self._header.label = f"{icon} {self._spec.label}"
+        self._apply_collapsed()
+
+    def _apply_collapsed(self) -> None:
+        content = self._content
+        if content is None:
+            return
         if self._collapsed:
-            self._content.set_styles("display: none;")
+            content.set_styles("display: none;")
         else:
-            self._content.set_styles("display: block;")
+            content.set_styles("display: block;")
 
     @property
     def content(self) -> Vertical:
+        if self._content is None:
+            return self.query_one(
+                f"#section-content-{self._spec.key}", Vertical
+            )
         return self._content
 
 
@@ -282,41 +306,30 @@ class FormView(VerticalScroll):
             row = self._build_field_row(field)
             self.mount(row)
 
-        extra_row = Horizontal(classes="form-row")
-        extra_label = Label(
-            str(form_spec.extra_args_label), classes="field-label"
-        )
         extra_input = Input(
             placeholder=str(form_spec.extra_args_placeholder),
             id="extra-args",
         )
-        extra_row.tooltip = "Additional CLI arguments"
+        extra_row = FieldRow(
+            form_spec.extra_args_label,
+            extra_input,
+            "Additional CLI arguments",
+        )
         self.mount(extra_row)
-        extra_row.mount(extra_label)
-        extra_row.mount(extra_input)
         self._extra_args = extra_input
 
     def _build_section(
         self, section_spec: SectionSpec, fields: list[FieldSpec]
     ) -> CollapsibleSection:
         """Build a collapsible section with fields pre-populated."""
-        section = CollapsibleSection(section_spec)
-        # Store field rows to be mounted after section content is ready
-        section._pending_fields = fields
-        section._form_view = self
-        return section
+        rows = [self._build_field_row(field) for field in fields]
+        return CollapsibleSection(section_spec, rows)
 
     def _build_field_row(self, field: FieldSpec) -> Horizontal:
         """Build a row containing a label and widget for a field."""
-        row = Horizontal(classes="form-row")
-        label = Label(str(field.label), classes="field-label")
         widget = self._build_widget(field)
-        if field.help:
-            row.tooltip = str(field.help)
-        row.mount(label)
-        row.mount(widget)
         self._fields[field.key] = widget
-        return row
+        return FieldRow(field.label, widget, field.help)
 
     def focus_first(self) -> None:
         for widget in self._fields.values():
@@ -402,10 +415,21 @@ _MARKET_STYLE_LABELS: dict[ConfigScalar, ConfigScalar] = {
     MARKET_STYLE_POINTS: "Points",
 }
 
+MARKET_DISPLAY_FULL = "full"
+MARKET_DISPLAY_CHART = "chart"
+MARKET_DISPLAY_STATS = "stats"
+
+_MARKET_DISPLAY_LABELS: dict[ConfigScalar, ConfigScalar] = {
+    MARKET_DISPLAY_FULL: "Full",
+    MARKET_DISPLAY_CHART: "Chart",
+    MARKET_DISPLAY_STATS: "Stats",
+}
+
 
 class MarketPanel(Vertical):
-    def __init__(self, classes: str = "panel market-panel") -> None:
-        super().__init__(classes=classes)
+    def __init__(self, classes: ConfigScalar = "panel market-panel") -> None:
+        classes_text = None if classes is None else str(classes)
+        super().__init__(classes=classes_text)
         metric_options = [
             (str(label), str(key))
             for key, label in _MARKET_METRIC_LABELS.items()
@@ -413,6 +437,10 @@ class MarketPanel(Vertical):
         style_options = [
             (str(label), str(key))
             for key, label in _MARKET_STYLE_LABELS.items()
+        ]
+        display_options = [
+            (str(label), str(key))
+            for key, label in _MARKET_DISPLAY_LABELS.items()
         ]
         self._metric_select = Select(
             metric_options,
@@ -425,6 +453,12 @@ class MarketPanel(Vertical):
             value=str(MARKET_STYLE_BARS),
             allow_blank=False,
             id="market-style",
+        )
+        self._display_select = Select(
+            display_options,
+            value=str(MARKET_DISPLAY_FULL),
+            allow_blank=False,
+            id="market-display",
         )
         self._normalize_toggle = Checkbox(
             label="Normalize",
@@ -453,6 +487,8 @@ class MarketPanel(Vertical):
             yield self._metric_select
             yield Label("View", classes="market-label")
             yield self._style_select
+            yield Label("Display", classes="market-label")
+            yield self._display_select
             yield self._normalize_toggle
             yield self._sma_toggle
         yield self._summary
@@ -462,7 +498,11 @@ class MarketPanel(Vertical):
         yield self._context_label
 
     def on_select_changed(self, event: Select.Changed) -> None:
-        if event.select in (self._metric_select, self._style_select):
+        if event.select in (
+            self._metric_select,
+            self._style_select,
+            self._display_select,
+        ):
             self._render_snapshot()
 
     def on_checkbox_changed(self, event: Checkbox.Changed) -> None:
@@ -486,6 +526,10 @@ class MarketPanel(Vertical):
         self._render_snapshot()
 
     def _render_snapshot(self) -> None:
+        display_key = self._select_value(
+            self._display_select, MARKET_DISPLAY_FULL
+        )
+        self._apply_display(display_key)
         if self._snapshot is None:
             message = self._message or "No market data yet."
             self._summary.update(str(message))
@@ -531,6 +575,22 @@ class MarketPanel(Vertical):
         self._stats.update("\n".join(str(line) for line in stats_lines))
         context = self._snapshot.correlation
         self._context_label.update(str(context) if context else "")
+
+    def _apply_display(self, display: ConfigScalar) -> None:
+        show_chart = display in (MARKET_DISPLAY_FULL, MARKET_DISPLAY_CHART)
+        show_stats = display in (MARKET_DISPLAY_FULL, MARKET_DISPLAY_STATS)
+        show_context = display in (MARKET_DISPLAY_FULL, MARKET_DISPLAY_STATS)
+        show_detail = show_chart
+        self._set_visible(self._chart, show_chart)
+        self._set_visible(self._detail, show_detail)
+        self._set_visible(self._stats, show_stats)
+        self._set_visible(self._context_label, show_context)
+
+    def _set_visible(self, widget: Static, visible: bool) -> None:
+        if visible:
+            widget.set_styles("display: block;")
+        else:
+            widget.set_styles("display: none;")
 
     def _build_summary(self, snapshot: MarketSnapshot) -> ConfigScalar:
         window = f"{snapshot.window_start}..{snapshot.window_end}"
@@ -583,8 +643,9 @@ class MarketPanel(Vertical):
 
 
 class ResultsPanel(Vertical):
-    def __init__(self, classes: str = "panel results-panel") -> None:
-        super().__init__(classes=classes)
+    def __init__(self, classes: ConfigScalar = "panel results-panel") -> None:
+        classes_text = None if classes is None else str(classes)
+        super().__init__(classes=classes_text)
         self._filter_input = Input(
             placeholder="Filter files...", id="results-filter"
         )

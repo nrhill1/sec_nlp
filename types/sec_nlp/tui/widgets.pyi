@@ -1,10 +1,14 @@
-from textual.containers import Horizontal, Vertical, VerticalScroll
-from textual.widgets import Static
+from pathlib import Path
 
-from sec_nlp.tui.interfaces import FormSpec
+from textual.containers import Horizontal, Vertical, VerticalScroll
+from textual.widgets import Checkbox, Input, Select, Static
+
+from sec_nlp.tui.interfaces import FormSpec, SectionSpec
 from sec_nlp.tui.market import MarketSnapshot
 from sec_nlp.tui.specs import SegmentSpec
 from sec_nlp.types import ConfigScalar
+
+type _FieldWidget = Input | Checkbox | Select
 
 class Spinner(Static):
     def __init__(self) -> None: ...
@@ -28,6 +32,25 @@ class SegmentPanel(Vertical):
     def finish(self, success: bool) -> None: ...
     def reset(self) -> None: ...
 
+class FieldRow(Horizontal):
+    def __init__(
+        self,
+        label: ConfigScalar,
+        widget: _FieldWidget,
+        help_text: ConfigScalar | None,
+    ) -> None: ...
+
+class CollapsibleSection(Vertical):
+    def __init__(
+        self,
+        section_spec: SectionSpec,
+        rows: list[FieldRow],
+        classes: ConfigScalar = ...,
+    ) -> None: ...
+    def toggle(self) -> None: ...
+    @property
+    def content(self) -> Vertical: ...
+
 class FormView(VerticalScroll):
     def __init__(self) -> None: ...
     def set_form(self, form_spec: FormSpec) -> None: ...
@@ -37,7 +60,11 @@ class FormView(VerticalScroll):
     def get_extra_args(self) -> ConfigScalar | None: ...
 
 class MarketPanel(Vertical):
-    def __init__(self) -> None: ...
+    def __init__(self, classes: ConfigScalar = ...) -> None: ...
     def set_snapshot(self, snapshot: MarketSnapshot | None) -> None: ...
     def set_message(self, message: ConfigScalar | None) -> None: ...
     def reset(self) -> None: ...
+
+class ResultsPanel(Vertical):
+    def __init__(self, classes: ConfigScalar = ...) -> None: ...
+    def set_paths(self, paths: list[Path]) -> None: ...

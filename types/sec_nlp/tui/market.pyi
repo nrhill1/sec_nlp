@@ -8,6 +8,7 @@ MARKET_METRIC_CLOSE: ConfigScalar
 MARKET_METRIC_VOLUME: ConfigScalar
 MARKET_METRIC_RANGE: ConfigScalar
 MARKET_METRIC_ADJCLOSE: ConfigScalar
+MARKET_METRIC_RETURNS: ConfigScalar
 MARKET_METRICS: tuple[ConfigScalar, ...]
 
 MARKET_STYLE_BARS: ConfigScalar
@@ -37,6 +38,19 @@ class MarketSnapshot:
     quotes: tuple[MarketQuotePoint, ...]
     correlation: ConfigScalar | None
 
+@dataclass(frozen=True)
+class SeriesStats:
+    count: int
+    first: float
+    last: float
+    min_value: float
+    max_value: float
+    mean: float
+    stddev: float
+    delta: float
+    pct_change: float
+    autocorr_lag1: float | None
+
 def load_market_snapshot(paths: Sequence[Path]) -> MarketSnapshot | None: ...
 def extract_market_snapshot(
     payload: JsonValue | None,
@@ -51,4 +65,11 @@ def build_market_chart_lines(
     height: int,
     style: ConfigScalar,
     normalize: bool,
+    overlay: Sequence[float] | None = None,
 ) -> list[ConfigScalar]: ...
+def build_sparkline(values: Sequence[float], width: int) -> ConfigScalar: ...
+def compute_returns(values: Sequence[float]) -> list[float]: ...
+def compute_sma(values: Sequence[float], window: int = 5) -> list[float]: ...
+def autocorr_lag1(values: Sequence[float]) -> float | None: ...
+def calculate_stats(values: Sequence[float]) -> SeriesStats | None: ...
+def format_stats_lines(values: Sequence[float]) -> list[ConfigScalar]: ...

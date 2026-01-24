@@ -3,7 +3,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 
 from textual.app import App, ComposeResult
-from textual.widgets import Checkbox, Input
+from textual.widgets import Checkbox, Input, Select
 
 from sec_nlp.tui.interfaces import get_form_spec
 from sec_nlp.tui.market import MarketQuotePoint, MarketSnapshot
@@ -243,5 +243,38 @@ def test_form_view_collects_values() -> None:
             assert values["symbols"] == "AAPL MSFT"
             assert values["market_enabled"] is False
             assert view.get_extra_args() == "--market-limit 10"
+
+    asyncio.run(run_test())
+
+
+def test_form_view_sections_toggle() -> None:
+    app = FormApp()
+    form_spec = get_form_spec("analyze")
+    assert form_spec is not None
+
+    async def run_test() -> None:
+        async with app.run_test() as pilot:
+            view = app.query_one(FormView)
+            view.set_form(form_spec)
+            await pilot.pause()
+            sections = view._sections
+            assert sections
+            core_section = sections.get("core")
+            assert core_section is not None
+            initial = core_section._collapsed
+            core_section.toggle()
+            assert core_section._collapsed is not initial
+
+    asyncio.run(run_test())
+
+
+def test_market_panel_display_select() -> None:
+    app = MarketApp()
+
+    async def run_test() -> None:
+        async with app.run_test():
+            panel = app.query_one(MarketPanel)
+            display_select = panel.query_one("#market-display", Select)
+            assert display_select.value == "full"
 
     asyncio.run(run_test())

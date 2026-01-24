@@ -17,6 +17,13 @@ class FieldSpec:
     default: ConfigScalar | None
     choices: tuple[ConfigScalar, ...]
     help: ConfigScalar | None
+    section: ConfigScalar | None
+
+@dataclass(frozen=True)
+class SectionSpec:
+    key: ConfigScalar
+    label: ConfigScalar
+    collapsed: bool
 
 @dataclass(frozen=True)
 class FormSpec:
@@ -24,7 +31,15 @@ class FormSpec:
     fields: tuple[FieldSpec, ...]
     extra_args_label: ConfigScalar
     extra_args_placeholder: ConfigScalar
+    sections: tuple[SectionSpec, ...]
 
+SECTION_CORE: ConfigScalar
+SECTION_SEARCH: ConfigScalar
+SECTION_MARKET: ConfigScalar
+SECTION_PROCESSING: ConfigScalar
+SECTION_OUTPUT: ConfigScalar
+
+ANALYZE_SECTIONS: tuple[SectionSpec, ...]
 ANALYZE_FIELDS: tuple[FieldSpec, ...]
 EXB_FIELDS: tuple[FieldSpec, ...]
 WARRANTY_FIELDS: tuple[FieldSpec, ...]
