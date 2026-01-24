@@ -234,8 +234,7 @@ class CollapsibleSection(Vertical):
             id=f"section-content-{self._spec.key}",
         ) as content:
             self._content = content
-            for row in self._rows:
-                yield row
+            yield from self._rows
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button is self._header:
@@ -322,10 +321,12 @@ class FormView(VerticalScroll):
         self, section_spec: SectionSpec, fields: list[FieldSpec]
     ) -> CollapsibleSection:
         """Build a collapsible section with fields pre-populated."""
-        rows = [self._build_field_row(field) for field in fields]
+        rows: list[FieldRow] = [
+            self._build_field_row(field) for field in fields
+        ]
         return CollapsibleSection(section_spec, rows)
 
-    def _build_field_row(self, field: FieldSpec) -> Horizontal:
+    def _build_field_row(self, field: FieldSpec) -> FieldRow:
         """Build a row containing a label and widget for a field."""
         widget = self._build_widget(field)
         self._fields[field.key] = widget
