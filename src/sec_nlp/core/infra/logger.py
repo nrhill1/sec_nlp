@@ -87,6 +87,14 @@ class PaddedColoredFormatter(ColoredFormatter):
         return base.rstrip("\n")
 
 
+class FileSafeFormatter(logging.Formatter):
+    """Formatter that strips ANSI + non-ASCII for file logs."""
+
+    def format(self, record: logging.LogRecord):
+        base = super().format(record)
+        return _sanitize_for_file(base)
+
+
 def get_timestamped_log_path(
     prefix: str = "run_log", ext: str = ".log"
 ) -> Path:
@@ -203,9 +211,11 @@ def setup_logging(
     log_path = Path(log_file)
     log_path.parent.mkdir(parents=True, exist_ok=True)
 
-    file_handler = logging.FileHandler(log_path, encoding="utf-8")
+    file_handler = logging.FileHandler(
+        log_path, encoding="ascii", errors="ignore"
+    )
     file_handler.setLevel("DEBUG")
-    file_formatter = logging.Formatter(log_format, datefmt=date_format)
+    file_formatter = FileSafeFormatter(log_format, datefmt=date_format)
     file_handler.setFormatter(file_formatter)
     root_logger.addHandler(file_handler)
 
@@ -305,6 +315,30 @@ def color_text(text: str, *, color: str) -> str:
 
 
 _ANSI_RE: re.Pattern[str] = re.compile(r"\x1b\[[0-9;]*m")
+_UNICODE_TRANSLATIONS = {
+    ord("╔"): "+",
+    ord("╗"): "+",
+    ord("╚"): "+",
+    ord("╝"): "+",
+    ord("║"): "|",
+    ord("═"): "-",
+    ord("─"): "-",
+    ord("•"): "*",
+    ord("➜"): ">",
+    ord("✓"): "OK",
+    ord("⚠"): "WARN",
+    ord("❌"): "ERR",
+    ord("💥"): "FAIL",
+    ord("ℹ"): "INFO",
+    ord("🐛"): "DBG",
+    ord("✗"): "ERR",
+}
+
+
+def _sanitize_for_file(text):
+    cleaned = _ANSI_RE.sub("", text)
+    cleaned = cleaned.translate(_UNICODE_TRANSLATIONS)
+    return cleaned.encode("ascii", "ignore").decode()
 
 
 def _visible_len(text: str) -> int:
@@ -358,7 +392,7 @@ def log_divider(
     """Log a divider without timestamp/metadata, surrounded by blank lines."""
     line = divider_line(length=length, color=color)
     raw_msg = f"\n{line}\n"
-    plain_msg = _ANSI_RE.sub("", raw_msg)
+    plain_msg = _sanitize_for_file(raw_msg)
 
     target_handlers = logger.handlers or logging.getLogger().handlers
 

@@ -112,6 +112,10 @@ class SegmentRow(Horizontal):
     def state(self) -> ConfigScalar:
         return self._state
 
+    @property
+    def label(self) -> ConfigScalar:
+        return self._spec.label
+
     def set_state(self, state: ConfigScalar) -> None:
         if state == self._state:
             return
@@ -141,12 +145,15 @@ class SegmentPanel(Vertical):
         self._segment_keys: list[ConfigScalar] = []
         self._current_index = -1
         self._progress = ProgressBar(total=1, show_percentage=False)
-        self._list_container = Vertical(classes="segment-list")
+        self._list_container = VerticalScroll(classes="segment-list")
+        self._list_container.show_vertical_scrollbar = True
+        self._status = Static("", classes="segment-status")
 
     def compose(self):
         yield Label("Segments", classes="panel-title")
         yield self._progress
         yield self._list_container
+        yield self._status
 
     def load_segments(self, segments: tuple[SegmentSpec, ...]) -> None:
         self._rows = [SegmentRow(spec) for spec in segments]
@@ -157,6 +164,7 @@ class SegmentPanel(Vertical):
             self._list_container.mount(row)
         total = max(len(self._rows), 1)
         self._progress.update(total=total, progress=0)
+        self._set_status("Ready to run.", None)
 
     def advance_to(
         self, index: int, detail: ConfigScalar | None = None
@@ -172,13 +180,19 @@ class SegmentPanel(Vertical):
         self._rows[index].set_detail(detail)
         self._current_index = index
         self._update_progress()
+        label = self._rows[index].label
+        step = f"Step {index + 1}/{len(self._rows)}: {label}"
+        self._set_status(step, detail)
 
     def finish(self, success: bool) -> None:
         if success:
             for row in self._rows:
                 row.set_state("done")
+            self._set_status("Pipeline completed.", None)
         elif 0 <= self._current_index < len(self._rows):
             self._rows[self._current_index].set_state("error")
+            label = self._rows[self._current_index].label
+            self._set_status(f"Failed at: {label}", None)
         self._update_progress()
 
     def reset(self) -> None:
@@ -187,11 +201,23 @@ class SegmentPanel(Vertical):
             row.set_detail(None)
         self._current_index = -1
         self._update_progress()
+        self._set_status("Ready to run.", None)
 
     def _update_progress(self) -> None:
         done_count = sum(1 for row in self._rows if row.state == "done")
         total = max(len(self._rows), 1)
         self._progress.update(total=total, progress=done_count)
+
+    def _set_status(
+        self, message: ConfigScalar, detail: ConfigScalar | None
+    ) -> None:
+        if detail is None:
+            self._status.update(str(message))
+            return
+        detail_text = str(detail)
+        if len(detail_text) > 140:
+            detail_text = detail_text[:137] + "..."
+        self._status.update(f"{message}\n{detail_text}")
 
 
 class FieldRow(Horizontal):
@@ -301,6 +327,8 @@ class FormView(VerticalScroll):
         self._active_section_key: ConfigScalar | None = None
         self._section_mode_active = False
         self._section_field_keys: dict[ConfigScalar, list[ConfigScalar]] = {}
+        self._section_select: Select | None = None
+        self._section_row: FieldRow | None = None
 
     def set_form(self, form_spec: FormSpec) -> None:
         self._form_spec = form_spec
@@ -310,6 +338,8 @@ class FormView(VerticalScroll):
         self._extra_row = None
         self._active_section_key = None
         self._section_field_keys = {}
+        self._section_select = None
+        self._section_row = None
         self.remove_children()
         self.mount(Label("Configuration", classes="panel-title"))
 
@@ -329,6 +359,9 @@ class FormView(VerticalScroll):
 
         # Build sections with their fields inline
         if form_spec.sections:
+            section_row = self._build_section_switcher(form_spec.sections)
+            self.mount(section_row)
+            self._section_row = section_row
             for section_spec in form_spec.sections:
                 section_widget = self._build_section(
                     section_spec, section_fields.get(section_spec.key, [])
@@ -355,6 +388,7 @@ class FormView(VerticalScroll):
         self._extra_args = extra_input
         self._extra_row = extra_row
         self._set_active_section(None)
+        self.scroll_home(animate=False, immediate=True)
 
     def _build_section(
         self, section_spec: SectionSpec, fields: list[FieldSpec]
@@ -367,6 +401,18 @@ class FormView(VerticalScroll):
             section_spec, rows, on_toggle=self._handle_section_toggle
         )
 
+    def _build_section_switcher(
+        self, sections: tuple[SectionSpec, ...]
+    ) -> FieldRow:
+        options: list[tuple[str, str]] = [("All sections", "__all__")]
+        for section in sections:
+            options.append((str(section.label), str(section.key)))
+        select = Select(options, value="__all__", allow_blank=False)
+        self._section_select = select
+        row = FieldRow("Section", select, "Choose a section to focus")
+        row.add_class("section-switcher")
+        return row
+
     def _build_field_row(self, field: FieldSpec) -> FieldRow:
         """Build a row containing a label and widget for a field."""
         widget = self._build_widget(field)
@@ -378,11 +424,27 @@ class FormView(VerticalScroll):
         if active is not None:
             self._focus_section_first(active)
             return
+        if self._section_select is not None:
+            self._section_select.focus()
+            return
         for widget in self._fields.values():
             widget.focus()
             return
         if self._extra_args is not None:
             self._extra_args.focus()
+
+    def on_select_changed(self, event: Select.Changed) -> None:
+        if self._section_select is None:
+            return
+        if event.select is not self._section_select:
+            return
+        value = event.value
+        if value is None or value == "__all__":
+            self._set_active_section(None)
+            return
+        if not isinstance(value, (str, int, float, Path)):
+            return
+        self._set_active_section(value)
 
     def _focus_section_first(self, key: ConfigScalar) -> None:
         field_keys = self._section_field_keys.get(key)
@@ -410,10 +472,23 @@ class FormView(VerticalScroll):
         self._section_mode_active = key is not None
         if was_active != self._section_mode_active:
             self.post_message(SectionModeChanged(self._section_mode_active))
+        self._sync_section_select()
         if key is None:
             self.call_after_refresh(self.focus_first)
         else:
             self.call_after_refresh(lambda: self._focus_section_first(key))
+
+    def _sync_section_select(self) -> None:
+        if self._section_select is None:
+            return
+        desired = (
+            "__all__"
+            if self._active_section_key is None
+            else str(self._active_section_key)
+        )
+        current = self._section_select.value
+        if current != desired:
+            self._section_select.value = desired
 
     def _apply_section_visibility(self) -> None:
         active = self._active_section_key

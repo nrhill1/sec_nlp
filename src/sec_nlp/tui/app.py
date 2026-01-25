@@ -4,11 +4,13 @@ from __future__ import annotations
 
 import asyncio
 import re
+import time
 from asyncio.subprocess import Process
 from pathlib import Path
 
 from textual.app import App, ComposeResult
 from textual.containers import Horizontal, Vertical
+from textual.timer import Timer
 from textual.widgets import (
     Button,
     Footer,
@@ -36,6 +38,7 @@ from sec_nlp.tui.widgets import (
 from sec_nlp.types import ConfigScalar
 
 _OUTPUT_PATH_RE = re.compile(r"(?P<path>[^\s]+\.(?:json|ya?ml))")
+_PROGRESS_RE = re.compile(r"\[[^]]*<[^]]*\]")
 
 
 class SegmentMatcher:
@@ -81,13 +84,13 @@ class SegmentMatcher:
 class SecNlpTuiApp(App):
     CSS = """
     Screen {
-        background: #0a0f14;
-        color: #e8e3d9;
+        background: #000000;
+        color: #f5f5f5;
     }
 
     Header, Footer {
-        background: #101725;
-        color: #e8e3d9;
+        background: #000000;
+        color: #f5f5f5;
     }
 
     #layout {
@@ -96,25 +99,28 @@ class SecNlpTuiApp(App):
 
     #sidebar {
         width: 30;
-        background: #0f1724;
-        border: round #334155;
+        background: #0b0b0b;
+        border: round #2b2b2b;
         padding: 1 1;
     }
 
     #main {
         padding: 1 2;
         height: 1fr;
+        background: #000000;
+        color: #f5f5f5;
     }
 
     .panel {
-        background: #141c28;
-        border: round #2f3c50;
+        background: #141414;
+        border: round #2b2b2b;
         padding: 1 2;
         margin: 0 0 1 0;
+        color: #f5f5f5;
     }
 
     .panel-title {
-        color: #f3c57b;
+        color: #f5f5f5;
         text-style: bold;
         margin-bottom: 1;
     }
@@ -122,8 +128,8 @@ class SecNlpTuiApp(App):
     #pipeline-list {
         height: 1fr;
         margin-top: 1;
-        background: #0f1522;
-        border: round #2f3c50;
+        background: #111111;
+        border: round #2b2b2b;
     }
 
     ListView > ListItem {
@@ -133,12 +139,12 @@ class SecNlpTuiApp(App):
     ListView > ListItem.--highlight,
     ListView > ListItem.-highlight,
     ListView > ListItem:focus {
-        background: #1f2a3a;
-        color: #f3c57b;
+        background: #1a1a1a;
+        color: #5eead4;
     }
 
     #pipeline-desc {
-        color: #9aa6b2;
+        color: #c7c7c7;
         margin-top: 1;
     }
 
@@ -149,7 +155,7 @@ class SecNlpTuiApp(App):
     }
 
     #status-row {
-        height: auto;
+        height: 1fr;
         margin-bottom: 1;
     }
 
@@ -158,20 +164,32 @@ class SecNlpTuiApp(App):
         margin-bottom: 1;
     }
 
+    .section-switcher {
+        margin-bottom: 1;
+    }
+
     .field-label {
         width: 18;
-        color: #9aa6b2;
+        color: #c7c7c7;
     }
 
     Input, Select, Checkbox {
-        background: #0c131f;
-        border: round #334155;
-        color: #e8e3d9;
+        background: #0f0f0f;
+        border: round #2b2b2b;
+        color: #f5f5f5;
+    }
+
+    Button, Input, Select, Checkbox, Tab, .section-header, ListView > ListItem {
+        transition: background 0.2 linear 0, color 0.2 linear 0, border 0.2 linear 0;
+    }
+
+    .segment-row, #status, .segment-status {
+        transition: background 0.2 linear 0, color 0.2 linear 0, border 0.2 linear 0;
     }
 
     Input:focus, Select:focus, Checkbox:focus {
-        border: round #f3c57b;
-        color: #f8eed1;
+        border: round #5eead4;
+        color: #f5f5f5;
     }
 
     Checkbox {
@@ -183,24 +201,24 @@ class SecNlpTuiApp(App):
     }
 
     .section-header {
-        background: #162133;
-        color: #f3c57b;
+        background: #1a1a1a;
+        color: #f5f5f5;
         padding: 0 1;
         text-style: bold;
     }
 
     .section-header:hover {
-        background: #1f2a3a;
+        background: #1a1a1a;
     }
 
     Button.section-header {
-        border: none;
+        border: round #2b2b2b;
         content-align: left middle;
         width: 1fr;
     }
 
     Button.section-header:focus {
-        border: round #f3c57b;
+        border: round #5eead4;
     }
 
     .section-content {
@@ -208,53 +226,59 @@ class SecNlpTuiApp(App):
         margin-top: 0;
     }
 
-    .section-active {
-        height: 1fr;
-    }
-
-    .section-active .section-content {
-        height: 1fr;
-    }
-
     .section-hidden {
         display: none;
     }
 
+    .section-active .section-header {
+        background: #0f3d3a;
+        border: round #1f6f69;
+        color: #d8f4f1;
+    }
+
     Button {
-        border: round #3a4a63;
-        background: #1c2533;
-        color: #e8e3d9;
+        border: round #2b2b2b;
+        background: #1a1a1a;
+        color: #f5f5f5;
         text-style: bold;
         margin-right: 1;
     }
 
     Button:focus {
-        border: round #f3c57b;
+        border: round #5eead4;
     }
 
     Button#run {
-        background: #1f5b43;
-        border: round #2e7d58;
-        color: #dff5ea;
+        background: #0f3d3a;
+        border: round #1f6f69;
+        color: #d8f4f1;
     }
 
     Button#stop {
-        background: #6a2a2a;
-        border: round #8c3a3a;
-        color: #f6d6d6;
+        background: #3a1212;
+        border: round #6b2b2b;
+        color: #f2d7d7;
     }
 
     #status {
         margin-left: 1;
-        color: #9aa6b2;
-        background: #0f1623;
+        color: #c7c7c7;
+        background: #0f0f0f;
         padding: 0 1;
-        border: round #2e3a4f;
+        border: round #2b2b2b;
+    }
+
+    #elapsed {
+        margin-left: 1;
+        color: #c7c7c7;
+        background: #0f0f0f;
+        padding: 0 1;
+        border: round #2b2b2b;
     }
 
     ProgressBar {
-        background: #0f1522;
-        color: #f3c57b;
+        background: #0f0f0f;
+        color: #5eead4;
     }
 
     .segment-row {
@@ -268,33 +292,46 @@ class SecNlpTuiApp(App):
     }
 
     .segment-detail {
-        color: #8f9aaa;
+        color: #b0b0b0;
         width: 1fr;
     }
 
     .segment-row.state-running {
-        background: #1b2534;
-        color: #f3c57b;
+        background: #1a1a1a;
+        color: #5eead4;
     }
 
     .segment-row.state-done {
-        color: #8ad9b8;
+        color: #86efac;
     }
 
     .segment-row.state-error {
-        color: #f0a0a0;
-        background: #331b1b;
+        color: #fca5a5;
+        background: #2a0f0f;
     }
 
     .segment-panel {
         width: 1fr;
+        height: 1fr;
+    }
+
+    .segment-list {
+        height: 1fr;
+    }
+
+    .segment-status {
+        margin-top: 1;
+        padding: 0 1;
+        color: #f5f5f5;
+        background: #141414;
+        border: round #2b2b2b;
     }
 
     .market-panel {
         width: 46;
         min-width: 34;
-        background: #131d2a;
-        border: round #344965;
+        background: #141414;
+        border: round #2b2b2b;
     }
 
     .market-controls {
@@ -304,36 +341,36 @@ class SecNlpTuiApp(App):
 
     .market-label {
         width: 7;
-        color: #9aa6b2;
+        color: #c7c7c7;
     }
 
     #market-summary {
-        color: #d6deea;
+        color: #f5f5f5;
         margin-bottom: 1;
     }
 
     #market-chart {
-        background: #0c131f;
-        border: round #2f3c50;
-        color: #7dd3fc;
+        background: #0b0b0b;
+        border: round #2b2b2b;
+        color: #5eead4;
         padding: 1 1;
         height: 7;
     }
 
     #market-detail {
-        color: #9aa6b2;
+        color: #c7c7c7;
         margin-top: 1;
     }
 
     #market-context {
-        color: #8b93a1;
+        color: #b0b0b0;
         margin-top: 1;
     }
 
     #market-stats {
-        color: #cbd5e1;
-        background: #0f1623;
-        border: round #2f3c50;
+        color: #f5f5f5;
+        background: #0f0f0f;
+        border: round #2b2b2b;
         padding: 0 1;
         margin-top: 1;
     }
@@ -349,23 +386,23 @@ class SecNlpTuiApp(App):
 
     #results-list {
         width: 36;
-        background: #0f1522;
-        border: round #2f3c50;
+        background: #0f0f0f;
+        border: round #2b2b2b;
         height: 12;
         margin-right: 1;
     }
 
     #results-view {
         height: 12;
-        background: #0c131f;
-        border: round #2f3c50;
-        color: #e8e3d9;
+        background: #0b0b0b;
+        border: round #2b2b2b;
+        color: #f5f5f5;
         padding: 1;
     }
 
     #log-panel {
-        background: #0b111b;
-        border: round #2f3c50;
+        background: #0b0b0b;
+        border: round #2b2b2b;
         padding: 1;
         height: 1fr;
         min-height: 8;
@@ -376,7 +413,7 @@ class SecNlpTuiApp(App):
     }
 
     TabbedContent {
-        background: #0a0f14;
+        background: #000000;
         height: 1fr;
     }
 
@@ -386,20 +423,20 @@ class SecNlpTuiApp(App):
     }
 
     TabBar {
-        background: #0f1623;
-        border: round #2f3c50;
+        background: #0b0b0b;
+        border: round #2b2b2b;
     }
 
     Tab {
-        background: #111c2b;
-        color: #9aa6b2;
+        background: #121212;
+        color: #c7c7c7;
         text-style: bold;
     }
 
     Tab.-active,
     Tab.--active {
-        background: #1f2a3a;
-        color: #f3c57b;
+        background: #1a1a1a;
+        color: #5eead4;
     }
 
     .market-full {
@@ -412,9 +449,9 @@ class SecNlpTuiApp(App):
 
     #results-view-full {
         height: 1fr;
-        background: #0c131f;
-        border: round #2f3c50;
-        color: #e8e3d9;
+        background: #0b0b0b;
+        border: round #2b2b2b;
+        color: #f5f5f5;
         padding: 1;
     }
 
@@ -441,8 +478,8 @@ class SecNlpTuiApp(App):
     }
 
     #config-panel {
-        height: 1fr;
-        min-height: 14;
+        height: 2fr;
+        min-height: 18;
     }
 
     """
@@ -463,6 +500,8 @@ class SecNlpTuiApp(App):
         self._run_task: asyncio.Task | None = None
         self._active_process: Process | None = None
         self._output_paths: list[Path] = []
+        self._run_start: float | None = None
+        self._elapsed_timer: Timer | None = None
 
     def compose(self) -> ComposeResult:
         yield Header(show_clock=True)
@@ -488,6 +527,7 @@ class SecNlpTuiApp(App):
                                     "Stop", id="stop-btn", disabled=True
                                 )
                                 yield Static("Idle", id="status")
+                                yield Static("Elapsed 00:00", id="elapsed")
                             with Horizontal(id="status-row"):
                                 yield SegmentPanel()
                             yield RichLog(
@@ -612,6 +652,7 @@ class SecNlpTuiApp(App):
 
         self._set_status("Running")
         self._set_running(True)
+        self._start_elapsed()
 
         self._run_task = asyncio.create_task(self._run_cli(command_args))
 
@@ -624,6 +665,7 @@ class SecNlpTuiApp(App):
         if self._run_task is not None and not self._run_task.done():
             self._run_task.cancel()
         self._set_status("Stopping")
+        self._stop_elapsed(final=True)
 
     async def _run_cli(self, args: list[ConfigScalar]) -> None:
         async def on_start(process: Process) -> None:
@@ -631,7 +673,10 @@ class SecNlpTuiApp(App):
 
         async def on_line(line: ConfigScalar) -> None:
             log_panel = self.query_one("#log-panel", RichLog)
-            log_panel.write(str(line))
+            display_line = self._sanitize_log_line(
+                self._sanitize_progress_line(line)
+            )
+            log_panel.write(str(display_line))
             self._capture_output_path(line)
             matcher = self._segment_matcher
             if matcher is None:
@@ -640,7 +685,10 @@ class SecNlpTuiApp(App):
             if match_index is None:
                 return
             segment_panel = self.query_one(SegmentPanel)
-            segment_panel.advance_to(match_index, line)
+            detail = self._sanitize_log_line(
+                self._sanitize_segment_detail(line)
+            )
+            segment_panel.advance_to(match_index, detail)
 
         async def on_exit(returncode: int) -> None:
             self._active_process = None
@@ -653,6 +701,7 @@ class SecNlpTuiApp(App):
             )
             self._set_status(status)
             self._set_running(False)
+            self._stop_elapsed(final=True)
 
         try:
             await run_cli(
@@ -666,6 +715,7 @@ class SecNlpTuiApp(App):
             segment_panel = self.query_one(SegmentPanel)
             segment_panel.finish(False)
             self._set_running(False)
+            self._stop_elapsed(final=True)
             raise
         except Exception as exc:
             log_panel = self.query_one("#log-panel", RichLog)
@@ -674,6 +724,7 @@ class SecNlpTuiApp(App):
             segment_panel.finish(False)
             self._set_status("Failed")
             self._set_running(False)
+            self._stop_elapsed(final=True)
 
     def _set_status(self, message: ConfigScalar) -> None:
         status = self.query_one("#status", Static)
@@ -684,6 +735,40 @@ class SecNlpTuiApp(App):
         stop_button = self.query_one("#stop-btn", Button)
         run_button.disabled = running
         stop_button.disabled = not running
+
+    def _start_elapsed(self) -> None:
+        self._run_start = time.monotonic()
+        self._set_elapsed(0.0)
+        if self._elapsed_timer is None:
+            self._elapsed_timer = self.set_interval(1.0, self._tick_elapsed)
+
+    def _stop_elapsed(self, *, final: bool) -> None:
+        if final and self._run_start is not None:
+            elapsed = time.monotonic() - self._run_start
+            self._set_elapsed(elapsed)
+        self._run_start = None
+        if self._elapsed_timer is not None:
+            self._elapsed_timer.stop()
+            self._elapsed_timer = None
+
+    def _tick_elapsed(self) -> None:
+        if self._run_start is None:
+            return
+        elapsed = time.monotonic() - self._run_start
+        self._set_elapsed(elapsed)
+
+    def _set_elapsed(self, seconds: float) -> None:
+        elapsed = self._format_elapsed(seconds)
+        label = self.query_one("#elapsed", Static)
+        label.update(f"Elapsed {elapsed}")
+
+    def _format_elapsed(self, seconds: float) -> str:
+        total = int(seconds)
+        mins, secs = divmod(total, 60)
+        hours, mins = divmod(mins, 60)
+        if hours:
+            return f"{hours:d}:{mins:02d}:{secs:02d}"
+        return f"{mins:02d}:{secs:02d}"
 
     def _requires_symbols(self, form_spec: FormSpec) -> bool:
         return any(field.key == "symbols" for field in form_spec.fields)
@@ -720,6 +805,38 @@ class SecNlpTuiApp(App):
             if path.suffix.lower() in (".yaml", ".yml")
         ]
         results_panel.set_paths(yaml_paths)
+
+    def _sanitize_segment_detail(
+        self, detail: ConfigScalar
+    ) -> ConfigScalar | None:
+        if not isinstance(detail, str):
+            return detail
+        elapsed = self._elapsed_since_start()
+        if elapsed is None:
+            return detail
+        return _PROGRESS_RE.sub(f"[elapsed {elapsed}]", detail)
+
+    def _sanitize_progress_line(
+        self, detail: ConfigScalar
+    ) -> ConfigScalar | None:
+        if not isinstance(detail, str):
+            return detail
+        elapsed = self._elapsed_since_start()
+        if elapsed is None:
+            return detail
+        return _PROGRESS_RE.sub(f"[elapsed {elapsed}]", detail)
+
+    def _sanitize_log_line(
+        self, detail: ConfigScalar | None
+    ) -> ConfigScalar | None:
+        if not isinstance(detail, str):
+            return detail
+        return detail.encode("ascii", "ignore").decode()
+
+    def _elapsed_since_start(self) -> ConfigScalar | None:
+        if self._run_start is None:
+            return None
+        return self._format_elapsed(time.monotonic() - self._run_start)
 
 
 def main() -> None:
