@@ -30,6 +30,7 @@ from sec_nlp.tui.widgets import (
     FormView,
     MarketPanel,
     ResultsPanel,
+    SectionModeChanged,
     SegmentPanel,
 )
 from sec_nlp.types import ConfigScalar
@@ -207,6 +208,18 @@ class SecNlpTuiApp(App):
         margin-top: 0;
     }
 
+    .section-active {
+        height: 1fr;
+    }
+
+    .section-active .section-content {
+        height: 1fr;
+    }
+
+    .section-hidden {
+        display: none;
+    }
+
     Button {
         border: round #3a4a63;
         background: #1c2533;
@@ -354,8 +367,8 @@ class SecNlpTuiApp(App):
         background: #0b111b;
         border: round #2f3c50;
         padding: 1;
-        height: 2fr;
-        min-height: 10;
+        height: 1fr;
+        min-height: 8;
     }
 
     #results-filter {
@@ -407,6 +420,16 @@ class SecNlpTuiApp(App):
 
     #run {
         height: 1fr;
+        layout: vertical;
+        overflow: hidden;
+    }
+
+    #run-bottom {
+        height: 1fr;
+    }
+
+    #run.section-mode #run-bottom {
+        display: none;
     }
 
     #market {
@@ -418,9 +441,10 @@ class SecNlpTuiApp(App):
     }
 
     #config-panel {
-        height: 2fr;
-        min-height: 16;
+        height: 1fr;
+        min-height: 14;
     }
+
     """
 
     BINDINGS = [
@@ -457,15 +481,18 @@ class SecNlpTuiApp(App):
                         form_view = FormView()
                         form_view.id = "config-panel"
                         yield form_view
-                        with Horizontal(id="actions"):
-                            yield Button("Run", id="run-btn")
-                            yield Button("Stop", id="stop-btn", disabled=True)
-                            yield Static("Idle", id="status")
-                        with Horizontal(id="status-row"):
-                            yield SegmentPanel()
-                        yield RichLog(
-                            id="log-panel", wrap=True, highlight=False
-                        )
+                        with Vertical(id="run-bottom"):
+                            with Horizontal(id="actions"):
+                                yield Button("Run", id="run-btn")
+                                yield Button(
+                                    "Stop", id="stop-btn", disabled=True
+                                )
+                                yield Static("Idle", id="status")
+                            with Horizontal(id="status-row"):
+                                yield SegmentPanel()
+                            yield RichLog(
+                                id="log-panel", wrap=True, highlight=False
+                            )
                     with TabPane("Market", id="market"):
                         yield MarketPanel(classes="market-full")
                     with TabPane("Results", id="results"):
@@ -502,6 +529,13 @@ class SecNlpTuiApp(App):
             self._start_run()
         elif event.button.id == "stop-btn":
             self._stop_run()
+
+    def on_section_mode_changed(self, event: SectionModeChanged) -> None:
+        run_pane = self.query_one("#run", TabPane)
+        if event.active:
+            run_pane.add_class("section-mode")
+        else:
+            run_pane.remove_class("section-mode")
 
     def action_switch_tab(self, tab_id: str) -> None:
         tabs = self.query_one(TabbedContent)

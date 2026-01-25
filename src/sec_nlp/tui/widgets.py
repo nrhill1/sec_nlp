@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
 
 from rich.syntax import Syntax
 from textual.containers import Horizontal, Vertical, VerticalScroll
+from textual.message import Message
 from textual.widgets import (
     Button,
     Checkbox,
@@ -46,6 +48,14 @@ from sec_nlp.tui.specs import SegmentSpec
 from sec_nlp.types import ConfigScalar
 
 type _FieldWidget = Input | Checkbox | Select
+type SectionToggleHandler = Callable[[ConfigScalar, bool], None]
+
+
+class SectionModeChanged(Message):
+    def __init__(self, active: bool) -> None:
+        super().__init__()
+        self.active = active
+
 
 _STATE_ICONS: dict[ConfigScalar, ConfigScalar] = {
     "pending": "[ ]",
@@ -209,12 +219,14 @@ class CollapsibleSection(Vertical):
         self,
         section_spec: SectionSpec,
         rows: list[FieldRow],
+        on_toggle: SectionToggleHandler | None = None,
         classes: ConfigScalar = "collapsible-section",
     ) -> None:
         classes_text = None if classes is None else str(classes)
         super().__init__(classes=classes_text)
         self._spec = section_spec
         self._collapsed = section_spec.collapsed
+        self._on_toggle = on_toggle
         icon = "▶" if self._collapsed else "▼"
         self._header = Button(
             f"{icon} {section_spec.label}",
@@ -241,10 +253,17 @@ class CollapsibleSection(Vertical):
             self.toggle()
 
     def toggle(self) -> None:
-        self._collapsed = not self._collapsed
+        self.set_collapsed(not self._collapsed)
+
+    def set_collapsed(self, collapsed: bool, *, notify: bool = True) -> None:
+        if collapsed == self._collapsed:
+            return
+        self._collapsed = collapsed
         icon = "▶" if self._collapsed else "▼"
         self._header.label = f"{icon} {self._spec.label}"
         self._apply_collapsed()
+        if self._on_toggle is not None and notify:
+            self._on_toggle(self._spec.key, self._collapsed)
 
     def _apply_collapsed(self) -> None:
         content = self._content
@@ -254,6 +273,7 @@ class CollapsibleSection(Vertical):
             content.set_styles("display: none;")
         else:
             content.set_styles("display: block;")
+        self.refresh(layout=True)
 
     @property
     def content(self) -> Vertical:
@@ -265,6 +285,10 @@ class CollapsibleSection(Vertical):
 
 
 class FormView(VerticalScroll):
+    can_focus = True
+    can_focus_children = True
+    show_vertical_scrollbar = True
+
     def __init__(self) -> None:
         super().__init__(classes="panel")
         self._form_spec: FormSpec | None = None
@@ -272,11 +296,20 @@ class FormView(VerticalScroll):
         self._extra_args: Input | None = None
         self._sections: dict[ConfigScalar, CollapsibleSection] = {}
         self._pending_form_spec: FormSpec | None = None
+        self._root_rows: list[FieldRow] = []
+        self._extra_row: FieldRow | None = None
+        self._active_section_key: ConfigScalar | None = None
+        self._section_mode_active = False
+        self._section_field_keys: dict[ConfigScalar, list[ConfigScalar]] = {}
 
     def set_form(self, form_spec: FormSpec) -> None:
         self._form_spec = form_spec
         self._fields = {}
         self._sections = {}
+        self._root_rows = []
+        self._extra_row = None
+        self._active_section_key = None
+        self._section_field_keys = {}
         self.remove_children()
         self.mount(Label("Configuration", classes="panel-title"))
 
@@ -288,6 +321,9 @@ class FormView(VerticalScroll):
                 if field.section not in section_fields:
                     section_fields[field.section] = []
                 section_fields[field.section].append(field)
+                if field.section not in self._section_field_keys:
+                    self._section_field_keys[field.section] = []
+                self._section_field_keys[field.section].append(field.key)
             else:
                 root_fields.append(field)
 
@@ -304,6 +340,7 @@ class FormView(VerticalScroll):
         for field in root_fields:
             row = self._build_field_row(field)
             self.mount(row)
+            self._root_rows.append(row)
 
         extra_input = Input(
             placeholder=str(form_spec.extra_args_placeholder),
@@ -316,6 +353,8 @@ class FormView(VerticalScroll):
         )
         self.mount(extra_row)
         self._extra_args = extra_input
+        self._extra_row = extra_row
+        self._set_active_section(None)
 
     def _build_section(
         self, section_spec: SectionSpec, fields: list[FieldSpec]
@@ -324,7 +363,9 @@ class FormView(VerticalScroll):
         rows: list[FieldRow] = [
             self._build_field_row(field) for field in fields
         ]
-        return CollapsibleSection(section_spec, rows)
+        return CollapsibleSection(
+            section_spec, rows, on_toggle=self._handle_section_toggle
+        )
 
     def _build_field_row(self, field: FieldSpec) -> FieldRow:
         """Build a row containing a label and widget for a field."""
@@ -333,11 +374,73 @@ class FormView(VerticalScroll):
         return FieldRow(field.label, widget, field.help)
 
     def focus_first(self) -> None:
+        active = self._active_section_key
+        if active is not None:
+            self._focus_section_first(active)
+            return
         for widget in self._fields.values():
             widget.focus()
             return
         if self._extra_args is not None:
             self._extra_args.focus()
+
+    def _focus_section_first(self, key: ConfigScalar) -> None:
+        field_keys = self._section_field_keys.get(key)
+        if field_keys is None:
+            return
+        for field_key in field_keys:
+            widget = self._fields.get(field_key)
+            if widget is not None:
+                widget.focus()
+                return
+
+    def _handle_section_toggle(
+        self, key: ConfigScalar, collapsed: bool
+    ) -> None:
+        if collapsed:
+            if self._active_section_key == key:
+                self._set_active_section(None)
+            return
+        self._set_active_section(key)
+
+    def _set_active_section(self, key: ConfigScalar | None) -> None:
+        was_active = self._section_mode_active
+        self._active_section_key = key
+        self._apply_section_visibility()
+        self._section_mode_active = key is not None
+        if was_active != self._section_mode_active:
+            self.post_message(SectionModeChanged(self._section_mode_active))
+        if key is None:
+            self.call_after_refresh(self.focus_first)
+        else:
+            self.call_after_refresh(lambda: self._focus_section_first(key))
+
+    def _apply_section_visibility(self) -> None:
+        active = self._active_section_key
+        if active is None:
+            for section in self._sections.values():
+                section.remove_class("section-active")
+                section.remove_class("section-hidden")
+            for row in self._root_rows:
+                row.set_styles("display: block;")
+            if self._extra_row is not None:
+                self._extra_row.set_styles("display: block;")
+            self.refresh(layout=True)
+            return
+
+        for key, section in self._sections.items():
+            if key == active:
+                section.remove_class("section-hidden")
+                section.add_class("section-active")
+                section.set_collapsed(False, notify=False)
+            else:
+                section.remove_class("section-active")
+                section.add_class("section-hidden")
+        for row in self._root_rows:
+            row.set_styles("display: none;")
+        if self._extra_row is not None:
+            self._extra_row.set_styles("display: none;")
+        self.refresh(layout=True)
 
     def focus_field(self, key: ConfigScalar) -> None:
         widget = self._fields.get(key)

@@ -1,6 +1,8 @@
+from collections.abc import Callable
 from pathlib import Path
 
 from textual.containers import Horizontal, Vertical, VerticalScroll
+from textual.message import Message
 from textual.widgets import Checkbox, Input, Select, Static
 
 from sec_nlp.tui.interfaces import FormSpec, SectionSpec
@@ -9,6 +11,7 @@ from sec_nlp.tui.specs import SegmentSpec
 from sec_nlp.types import ConfigScalar
 
 type _FieldWidget = Input | Checkbox | Select
+type SectionToggleHandler = Callable[[ConfigScalar, bool], None]
 
 class Spinner(Static):
     def __init__(self) -> None: ...
@@ -32,6 +35,10 @@ class SegmentPanel(Vertical):
     def finish(self, success: bool) -> None: ...
     def reset(self) -> None: ...
 
+class SectionModeChanged(Message):
+    active: bool
+    def __init__(self, active: bool) -> None: ...
+
 class FieldRow(Horizontal):
     def __init__(
         self,
@@ -45,9 +52,13 @@ class CollapsibleSection(Vertical):
         self,
         section_spec: SectionSpec,
         rows: list[FieldRow],
+        on_toggle: SectionToggleHandler | None = ...,
         classes: ConfigScalar = ...,
     ) -> None: ...
     def toggle(self) -> None: ...
+    def set_collapsed(
+        self, collapsed: bool, *, notify: bool = True
+    ) -> None: ...
     @property
     def content(self) -> Vertical: ...
 
