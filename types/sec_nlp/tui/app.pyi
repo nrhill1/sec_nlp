@@ -1,0 +1,6 @@
+from textual.app import App
+
+class SecNlpTuiApp(App):
+    def __init__(self) -> None: ...
+
+def main() -> None: ...
