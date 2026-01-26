@@ -17,6 +17,8 @@ export RUSTC_WRAPPER ?= $(SCCACHE)
 PYTHON_DIR := $(ROOT_DIR)/src
 RUST_DIR := $(ROOT_DIR)/crates/market
 MARKET_MANIFEST := $(RUST_DIR)/Cargo.toml
+SEC_GREP_DIR := $(ROOT_DIR)/crates/sec_grep
+SEC_GREP_MANIFEST := $(SEC_GREP_DIR)/Cargo.toml
 
 # Maturin
 MATURIN_FLAGS ?=
@@ -59,7 +61,8 @@ help:
 	@echo ""
 	@echo "Language-Specific:"
 	@echo "  py-<target>            Run Python target (e.g., py-lint, py-test)"
-	@echo "  rs-<target>            Run Rust target (e.g., rs-dev)"
+	@echo "  rs-m-<target>          Run Rust target for market (e.g., rs-m-dev)"
+	@echo "  rs-sg-<target>         Run Rust target for sec_grep (e.g., rs-sg-dev)"
 	@echo "  rs-clean               Clean Rust build artifacts"
 	@echo "  rs-clean-all           Clean Rust artifacts + sccache"
 	@echo "  rs-clean-sccache       Clear sccache cache"
@@ -70,6 +73,7 @@ help:
 	@echo "For detailed help on each subsystem, run:"
 	@echo "  make -C src help       # Python commands"
 	@echo "  make -C crates/market help  # Market (Rust) commands"
+	@echo "  make -C crates/sec_grep help  # sec_grep (Rust) commands"
 	@echo ""
 	@echo "CI/CD:"
 	@echo "  ci                     Full CI pipeline"
@@ -141,9 +145,13 @@ py-%: ready
 # Rust Targets (delegate to crates/market/Makefile)
 # =========================================================================
 
-.PHONY: rs-%
-rs-%:
+.PHONY: rs-m-%
+rs-m-%:
 	@$(MAKE) -C $(RUST_DIR) $*
+
+.PHONY: rs-sg-%
+rs-sg-%:
+	@$(MAKE) -C $(SEC_GREP_DIR) $*
 
 # =========================================================================
 # Maturin Targets

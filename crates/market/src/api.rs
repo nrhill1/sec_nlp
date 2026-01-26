@@ -36,8 +36,7 @@ pub fn parse_date(value: &str) -> PyResult<OffsetDateTime> {
         ));
     }
 
-    let month =
-        Month::try_from(month).map_err(|_| PyValueError::new_err("month must be 1-12"))?;
+    let month = Month::try_from(month).map_err(|_| PyValueError::new_err("month must be 1-12"))?;
     let date = Date::from_calendar_date(year, month, day)
         .map_err(|_| PyValueError::new_err("invalid date"))?;
     Ok(date.midnight().assume_utc())

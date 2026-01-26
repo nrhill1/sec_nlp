@@ -28,3 +28,31 @@ repos:
     files: '^(src/|tests/).*\.py$'
     language: system
     pass_filenames: false
+
+  - id: rs-m-fmt
+    name: Rust Format (market)
+    entry: make rs-m-fmt
+    files: '^crates/market/'
+    language: system
+    pass_filenames: false
+
+  - id: rs-m-clippy
+    name: Rust Clippy (market)
+    entry: make rs-m-clippy
+    files: '^crates/market/'
+    language: system
+    pass_filenames: false
+
+  - id: rs-sg-fmt
+    name: Rust Format (sec_grep)
+    entry: make rs-sg-fmt
+    files: '^crates/sec_grep/'
+    language: system
+    pass_filenames: false
+
+  - id: rs-sg-clippy
+    name: Rust Clippy (sec_grep)
+    entry: make rs-sg-clippy
+    files: '^crates/sec_grep/'
+    language: system
+    pass_filenames: false

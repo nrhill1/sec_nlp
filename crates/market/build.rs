@@ -4,13 +4,8 @@ fn main() {
     // Determine which python to use
     let python_exe = if let Ok(exe) = std::env::var("PYTHON_SYS_EXECUTABLE") {
         exe
-    } else if let Ok(output) = Command::new("which")
-        .arg("python3")
-        .output()
-    {
-        String::from_utf8_lossy(&output.stdout)
-            .trim()
-            .to_string()
+    } else if let Ok(output) = Command::new("which").arg("python3").output() {
+        String::from_utf8_lossy(&output.stdout).trim().to_string()
     } else {
         "python3".to_string()
     };

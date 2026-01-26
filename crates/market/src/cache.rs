@@ -30,6 +30,7 @@ impl PriceCache {
     }
 
     /// Create with custom TTL.
+    #[cfg(test)]
     pub fn with_ttl(ttl_secs: u64) -> Self {
         Self {
             entries: Mutex::new(HashMap::new()),
@@ -83,11 +84,13 @@ impl PriceCache {
     }
 
     /// Get number of cached entries.
+    #[cfg(test)]
     pub fn len(&self) -> usize {
         self.entries.lock().map(|e| e.len()).unwrap_or(0)
     }
 
     /// Check if cache is empty.
+    #[cfg(test)]
     pub fn is_empty(&self) -> bool {
         self.len() == 0
     }
