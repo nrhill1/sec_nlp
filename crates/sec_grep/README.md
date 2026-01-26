@@ -15,3 +15,7 @@ response = client.search("warranty accrual", forms=["10-K"], limit=5)
 
 # response is a dict with keys: query, total, hits, start, limit
 hits = client.search_all("warranty accrual", forms=["10-K"], max_results=25)
+
+## Smoke check
+
+SEC_GREP_USER_AGENT="SEC NLP Tool (me@example.com)" make -C crates/sec_grep smoke

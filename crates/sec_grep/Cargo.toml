@@ -6,7 +6,7 @@ publish = false
 
 [lib]
 name = "sec_grep"
-crate-type = ["cdylib"]
+crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 pyo3 = { version = "0.23", features = ["extension-module"] }

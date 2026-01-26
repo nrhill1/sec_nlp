@@ -34,6 +34,7 @@ help:
 	@echo ""
 	@echo "Testing:"
 	@echo "  test           Run cargo test"
+	@echo "  smoke          Run EFTS smoke check (requires SEC_GREP_USER_AGENT)"
 	@echo ""
 	@echo "Cleanup:"
 	@echo "  clean          Remove Rust build artifacts"
@@ -68,6 +69,10 @@ clippy:
 test:
 	@PYTHON_SYS_EXECUTABLE=$(PYTHON_SYS_EXECUTABLE) \
 	cargo test --manifest-path $(CARGO_MANIFEST)
+
+.PHONY: smoke
+smoke:
+	@cargo run --manifest-path $(CARGO_MANIFEST) --example efts_smoke
 
 # =========================================================================
 # Cleanup

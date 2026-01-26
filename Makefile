@@ -207,7 +207,8 @@ verify-py: ready
 
 .PHONY: verify-rs
 verify-rs: ready
-	@$(MAKE) market-test
+	@$(MAKE) rs-m-test
+	@$(MAKE) rs-sg-test
 
 .PHONY: verify-all
 verify-all: ready

@@ -8,6 +8,7 @@ use pyo3::types::{PyDict, PyList};
 use pyo3::IntoPyObjectExt;
 use regex::Regex;
 use reqwest::blocking::Client;
+use reqwest::Url;
 use serde::Serialize;
 use serde_json::{Map, Value};
 use std::sync::Mutex;
@@ -19,6 +20,7 @@ const DEFAULT_TIMEOUT_SECS: f64 = 30.0;
 const DEFAULT_MAX_RETRIES: usize = 3;
 const DEFAULT_RETRY_DELAY_SECS: f64 = 1.0;
 const DEFAULT_RATE_LIMIT_SECS: f64 = 0.1;
+const SEC_HOST_SUFFIX: &str = "sec.gov";
 
 const INSIDER_FORMS: [&str; 6] = ["3", "3/A", "4", "4/A", "5", "5/A"];
 const COMPANY_KEYWORDS: [&str; 24] = [
@@ -89,7 +91,7 @@ impl SearchResponse {
 }
 
 #[derive(Debug)]
-struct EftsError {
+pub struct EftsError {
     status: u16,
     message: String,
     detail: Option<String>,
@@ -173,6 +175,7 @@ impl EftsClient {
         }
         let user_agent = user_agent.unwrap_or_else(|| DEFAULT_USER_AGENT.to_string());
         let base_url = base_url.unwrap_or_else(|| EFTS_BASE_URL.to_string());
+        validate_base_url_py(&base_url)?;
         Ok(Self {
             base_url,
             user_agent,
@@ -383,6 +386,70 @@ fn create_efts_client(email: String, company_name: String, timeout: f64) -> PyRe
         DEFAULT_RATE_LIMIT_SECS,
         None,
     )
+}
+
+fn validate_base_url(base_url: &str) -> Result<(), EftsError> {
+    let url = Url::parse(base_url)
+        .map_err(|err| EftsError::new(0, format!("base_url is invalid: {}", err), None, false))?;
+    if url.scheme() != "https" {
+        return Err(EftsError::new(0, "base_url must use https", None, false));
+    }
+    let host = url
+        .host_str()
+        .ok_or_else(|| EftsError::new(0, "base_url must include a host", None, false))?;
+    let host_lower = host.to_ascii_lowercase();
+    if host_lower == SEC_HOST_SUFFIX || host_lower.ends_with(".sec.gov") {
+        Ok(())
+    } else {
+        Err(EftsError::new(
+            0,
+            "base_url must use a sec.gov host",
+            None,
+            false,
+        ))
+    }
+}
+
+fn validate_base_url_py(base_url: &str) -> PyResult<()> {
+    if let Err(err) = validate_base_url(base_url) {
+        return Err(PyValueError::new_err(err.message));
+    }
+    Ok(())
+}
+
+pub fn search_raw(query: &str, user_agent: &str, limit: u32) -> Result<Value, EftsError> {
+    if query.trim().is_empty() {
+        return Err(EftsError::new(0, "query must be non-empty", None, false));
+    }
+    let user_agent = user_agent.trim();
+    if user_agent.is_empty() {
+        return Err(EftsError::new(
+            0,
+            "user_agent must be non-empty",
+            None,
+            false,
+        ));
+    }
+    let base_url = EFTS_BASE_URL;
+    validate_base_url(base_url)?;
+    let client = EftsClient {
+        base_url: base_url.to_string(),
+        user_agent: user_agent.to_string(),
+        timeout_seconds: DEFAULT_TIMEOUT_SECS,
+        max_retries: DEFAULT_MAX_RETRIES,
+        retry_delay_seconds: DEFAULT_RETRY_DELAY_SECS,
+        rate_limit_delay_seconds: DEFAULT_RATE_LIMIT_SECS,
+    };
+    let response =
+        client.execute_search(query, &[], &[], &[], None, None, limit, 0, "score", "desc")?;
+    serde_json::to_value(response).map_err(|err| {
+        EftsError::new(
+            0,
+            format!("Failed to serialize response: {}", err),
+            None,
+            false,
+        )
+    })
 }
 
 fn build_client(timeout_seconds: f64) -> Result<Client, EftsError> {
@@ -927,6 +994,16 @@ fn json_to_py(py: Python<'_>, value: &Value) -> PyResult<PyObject> {
     }
 }
 
+#[doc(hidden)]
+pub mod test_support {
+    use super::parse_response;
+    use serde_json::{to_value, Value};
+
+    pub fn parse_response_value(data: &Value, query: &str) -> Result<Value, serde_json::Error> {
+        to_value(parse_response(data, query))
+    }
+}
+
 #[pymodule]
 fn sec_grep(_py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<EftsClient>()?;
@@ -1038,5 +1115,17 @@ mod tests {
         let hit = parse_hit(&raw);
 
         assert_eq!(hit.company_name, "MP Materials Corp");
+    }
+
+    #[test]
+    fn validate_base_url_allows_sec_domains() {
+        assert!(validate_base_url("https://efts.sec.gov/LATEST/search-index").is_ok());
+        assert!(validate_base_url("https://www.sec.gov/Archives/edgar/data").is_ok());
+    }
+
+    #[test]
+    fn validate_base_url_rejects_non_sec_domains() {
+        assert!(validate_base_url("https://example.com").is_err());
+        assert!(validate_base_url("http://efts.sec.gov/LATEST/search-index").is_err());
     }
 }
