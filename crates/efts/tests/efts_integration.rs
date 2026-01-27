@@ -15,7 +15,7 @@ fn load_fixture(name: &str) -> Value {
 #[test]
 fn fixture_parses_hits() {
     let data = load_fixture("efts_sample.json");
-    let response = sec_grep::test_support::parse_response_value(&data, "warranty accrual")
+    let response = efts::test_support::parse_response_value(&data, "warranty accrual")
         .expect("parse response");
 
     let total = response.get("total").and_then(Value::as_u64).unwrap_or(0);

@@ -1005,7 +1005,7 @@ pub mod test_support {
 }
 
 #[pymodule]
-fn sec_grep(_py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
+fn efts(_py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<EftsClient>()?;
     m.add_function(wrap_pyfunction!(create_efts_client, m)?)?;
     Ok(())

@@ -5,18 +5,25 @@ The EFTS API allows searching the full text of SEC filings.
 Endpoint: https://efts.sec.gov/LATEST/search-index
 
 Rate limits: SEC requests no more than 10 requests per second.
+
+Set SEC_NLP_EFTS_BACKEND=rust to use the efts Rust extension when
+available.
 """
 
 from __future__ import annotations
 
 import asyncio
 import json
+import os
 import re
 import urllib.error
 import urllib.parse
 import urllib.request
 from collections.abc import Sequence
 from datetime import date
+from functools import lru_cache
+from importlib import import_module
+from types import ModuleType
 from typing import Final
 
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr
@@ -68,6 +75,26 @@ _COMPANY_KEYWORDS = (
     " SYSTEMS",
     " ENTERPRISES",
 )
+
+_EFTS_RUST_BACKEND_ENV = "SEC_NLP_EFTS_BACKEND"
+
+
+def _rust_backend_enabled() -> bool:
+    # Opt-in via SEC_NLP_EFTS_BACKEND=rust.
+    value = os.getenv(_EFTS_RUST_BACKEND_ENV)
+    if value is None:
+        return False
+    normalized = value.strip().lower()
+    return normalized in {"1", "true", "yes", "rust", "on"}
+
+
+@lru_cache(maxsize=1)
+def _load_efts_module() -> ModuleType | None:
+    try:
+        return import_module("efts")
+    except Exception as exc:  # pragma: no cover - depends on extension install
+        logger.debug("efts import failed: %s", exc)
+        return None
 
 
 class EFTSClientConfig(BaseModel):
@@ -246,6 +273,10 @@ class EFTSClient(BaseModel):
         self, params: EFTSSearchParams
     ) -> EFTSSearchResponse:
         """Execute search with rate limiting and retries."""
+        rust_response = await self._try_rust_search(params)
+        if rust_response is not None:
+            return rust_response
+
         await self._rate_limit()
 
         api_params = params.to_api_params()
@@ -300,6 +331,33 @@ class EFTSClient(BaseModel):
         if last_error:
             raise last_error
         raise EFTSAPIError(status_code=0, message="Unknown error after retries")
+
+    async def _try_rust_search(
+        self,
+        params: EFTSSearchParams,
+    ) -> EFTSSearchResponse | None:
+        if not _rust_backend_enabled():
+            return None
+
+        module = _load_efts_module()
+        if module is None:
+            raise EFTSAPIError(
+                status_code=0,
+                message="efts extension is not available; "
+                "build it with `make rs-sg-dev`.",
+            )
+
+        try:
+            return await asyncio.to_thread(
+                _rust_execute_search,
+                module,
+                self.config,
+                params,
+            )
+        except EFTSAPIError:
+            raise
+        except Exception as exc:
+            raise _rust_error_from_exception(exc) from exc
 
     async def _rate_limit(self) -> None:
         """Enforce rate limiting between requests."""
@@ -423,6 +481,63 @@ class EFTSClient(BaseModel):
 
 
 # -- Helper functions for type-safe JSON parsing --
+
+
+def _rust_error_from_exception(exc: Exception) -> EFTSAPIError:
+    message = str(exc)
+    match = re.search(r"EFTS API Error \((\d+)\):\s*(.+)", message)
+    if match:
+        status_code = int(match.group(1))
+        text = match.group(2)
+        detail = None
+        if "; " in text:
+            text, detail = text.split("; ", 1)
+        return EFTSAPIError(
+            status_code=status_code,
+            message=text,
+            detail=detail,
+        )
+    return EFTSAPIError(status_code=0, message=message)
+
+
+def _rust_execute_search(
+    module: ModuleType,
+    config: EFTSClientConfig,
+    params: EFTSSearchParams,
+) -> EFTSSearchResponse:
+    forms = params.forms if params.forms else None
+    ciks = params.ciks if params.ciks else None
+    tickers = params.tickers if params.tickers else None
+    start_date = params.start_date.isoformat() if params.start_date else None
+    end_date = params.end_date.isoformat() if params.end_date else None
+
+    client = module.EFTSClient(
+        user_agent=config.user_agent,
+        timeout=config.timeout,
+        max_retries=config.max_retries,
+        retry_delay=config.retry_delay,
+        rate_limit_delay=config.rate_limit_delay,
+        base_url=config.base_url,
+    )
+    response = client.search(
+        params.query,
+        forms=forms,
+        ciks=ciks,
+        tickers=tickers,
+        start_date=start_date,
+        end_date=end_date,
+        limit=params.limit,
+        start=params.start,
+        sort_field=params.sort_field.value,
+        sort_order=params.sort_order.value,
+    )
+    normalized = as_json_dict(response)
+    if normalized is None:
+        raise EFTSAPIError(
+            status_code=0,
+            message="Rust EFTS response was not JSON",
+        )
+    return EFTSSearchResponse.model_validate(normalized)
 
 
 def _get_dict(data: JsonDict, key: str) -> JsonDict:

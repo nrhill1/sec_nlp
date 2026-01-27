@@ -1,14 +1,14 @@
-# sec_grep
+# efts
 
 Python extension module (pyo3) for SEC EDGAR Full-Text Search (EFTS).
 
 ## Build (maturin)
 
-maturin develop -m crates/sec_grep/Cargo.toml
+maturin develop -m crates/efts/Cargo.toml
 
 ## Usage
 
-from sec_grep import EFTSClient
+from efts import EFTSClient
 
 client = EFTSClient(user_agent="SEC NLP Tool (me@example.com)")
 response = client.search("warranty accrual", forms=["10-K"], limit=5)
@@ -18,4 +18,4 @@ hits = client.search_all("warranty accrual", forms=["10-K"], max_results=25)
 
 ## Smoke check
 
-SEC_GREP_USER_AGENT="SEC NLP Tool (me@example.com)" make -C crates/sec_grep smoke
+EFTS_USER_AGENT="SEC NLP Tool (me@example.com)" make -C crates/efts smoke

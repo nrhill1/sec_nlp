@@ -3,20 +3,20 @@ use std::env;
 use serde_json::Value;
 
 fn main() {
-    let user_agent = match env::var("SEC_GREP_USER_AGENT") {
+    let user_agent = match env::var("EFTS_USER_AGENT") {
         Ok(value) if !value.trim().is_empty() => value,
         _ => {
-            eprintln!("SEC_GREP_USER_AGENT must be set and include a contact email.");
+            eprintln!("EFTS_USER_AGENT must be set and include a contact email.");
             std::process::exit(2);
         }
     };
-    let query = env::var("SEC_GREP_QUERY").unwrap_or_else(|_| "warranty accrual".to_string());
-    let limit = env::var("SEC_GREP_LIMIT")
+    let query = env::var("EFTS_QUERY").unwrap_or_else(|_| "warranty accrual".to_string());
+    let limit = env::var("EFTS_LIMIT")
         .ok()
         .and_then(|value| value.parse::<u32>().ok())
         .unwrap_or(5);
 
-    let response = match sec_grep::search_raw(&query, &user_agent, limit) {
+    let response = match efts::search_raw(&query, &user_agent, limit) {
         Ok(value) => value,
         Err(err) => {
             eprintln!("EFTS request failed: {}", err);

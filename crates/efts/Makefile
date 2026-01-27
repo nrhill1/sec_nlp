@@ -24,7 +24,7 @@ RUSTFLAGS_PROD ?=
 
 .PHONY: help
 help:
-	@echo "sec_grep (Rust + pyo3) Commands"
+	@echo "efts (Rust + pyo3) Commands"
 	@echo ""
 	@echo "Development:"
 	@echo "  dev            Build and install into current Python environment"
@@ -34,7 +34,7 @@ help:
 	@echo ""
 	@echo "Testing:"
 	@echo "  test           Run cargo test"
-	@echo "  smoke          Run EFTS smoke check (requires SEC_GREP_USER_AGENT)"
+	@echo "  smoke          Run EFTS smoke check (requires EFTS_USER_AGENT)"
 	@echo ""
 	@echo "Cleanup:"
 	@echo "  clean          Remove Rust build artifacts"
