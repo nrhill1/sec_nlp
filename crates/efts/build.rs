@@ -1,6 +1,9 @@
 use std::process::Command;
 
 fn main() {
+    println!("cargo:rerun-if-env-changed=PYTHON_SYS_EXECUTABLE");
+    println!("cargo:rerun-if-env-changed=PYO3_PYTHON");
+
     // Determine which python to use
     let python_exe = if let Ok(exe) = std::env::var("PYTHON_SYS_EXECUTABLE") {
         exe
