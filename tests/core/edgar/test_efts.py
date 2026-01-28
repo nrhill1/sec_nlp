@@ -226,6 +226,9 @@ class TestEFTSClient:
         assert response.total == 1
         assert response.hits[0].company_name == "Test Co"
         rust_client_class.assert_called_once()
+        _, kwargs = rust_client_class.call_args
+        assert kwargs.get("allowed_hosts") == ["sec.gov"]
+        assert kwargs.get("base_url") == config.base_url
         rust_client_instance.search.assert_called_once()
 
 

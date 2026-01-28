@@ -67,6 +67,16 @@ mod tests {
     }
 
     #[test]
+    fn validate_base_url_allows_sec_subdomains() {
+        let allowed = vec!["sec.gov".to_string()];
+        assert!(validate_base_url_with_allowlist(
+            "https://subdomain.sec.gov/path",
+            &allowed
+        )
+        .is_ok());
+    }
+
+    #[test]
     fn validate_base_url_rejects_non_sec_domains() {
         assert!(validate_base_url("https://example.com").is_err());
         assert!(validate_base_url("http://efts.sec.gov/LATEST/search-index").is_err());
