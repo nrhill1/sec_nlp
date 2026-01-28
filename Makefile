@@ -69,6 +69,7 @@ help:
 	@echo "  maturin-dev            Build + install Rust extension via maturin"
 	@echo "  maturin-build          Build release wheels via maturin"
 	@echo "  maturin-sdist          Build a source distribution via maturin"
+	@echo "  build-ext              Build + install Rust extensions (market + efts)"
 	@echo ""
 	@echo "For detailed help on each subsystem, run:"
 	@echo "  make -C src help       # Python commands"
@@ -169,6 +170,14 @@ maturin-build:
 maturin-sdist:
 	@maturin sdist -m $(MARKET_MANIFEST) $(MATURIN_SDIST_FLAGS)
 
+.PHONY: build-ext
+build-ext: ready
+	@echo "==> Building Rust extensions..."
+	@RUSTFLAGS="$(RUSTFLAGS_DEV)" maturin develop -m $(MARKET_MANIFEST) $(MATURIN_FLAGS)
+	@RUSTFLAGS="$(RUSTFLAGS_DEV)" maturin develop -m $(EFTS_MANIFEST) $(MATURIN_FLAGS)
+	@echo "✓ Rust extensions built"
+	@echo ""
+
 # =========================================================================
 # Combined Commands
 # =========================================================================
@@ -184,6 +193,7 @@ test: ready
 	@echo "║                    Running Tests                               ║"
 	@echo "╚════════════════════════════════════════════════════════════════╝"
 	@echo ""
+	@$(MAKE) build-ext
 	@$(MAKE) py-test
 	@echo ""
 	@echo "✓ All tests passed!"
@@ -201,6 +211,7 @@ lint: ready
 
 .PHONY: verify-py
 verify-py: ready
+	@$(MAKE) build-ext
 	@$(MAKE) py-lint
 	@$(MAKE) py-types
 	@$(MAKE) py-test
@@ -234,6 +245,7 @@ validate: ready
 	@echo "║                  Full Validation Pipeline                      ║"
 	@echo "╚════════════════════════════════════════════════════════════════╝"
 	@echo ""
+	@$(MAKE) build-ext
 	@$(MAKE) py-check-imports
 	@$(MAKE) types
 	@$(MAKE) test

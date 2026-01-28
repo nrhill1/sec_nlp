@@ -176,6 +176,9 @@ make test
 make lint
 ```
 
+### Rust extensions
+`make build-ext` builds the Rust extensions (market + EFTS) for local development. EFTS uses the Rust extension by default now, so ensure the extension is built before running Python tests or CLI commands that hit EFTS.
+
 ### Type stubs
 `make stubs` regenerates Python stub files for the package and places them under `types/`. Three manual stubs are maintained for the new market integration—`types/market/__init__.pyi`, `types/sec_nlp/core/market.pyi`, and `types/sec_nlp/cli/commands/market.pyi`—so remember to preserve those files if you run stubgen (they document the Rust extension and CLI command explicitly).
 

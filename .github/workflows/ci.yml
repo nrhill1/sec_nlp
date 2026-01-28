@@ -226,6 +226,15 @@ jobs:
       - name: Build extension
         run: make build-ext
 
+      - name: Run Rust tests
+        run: make rs-sg-test
+
+      - name: Run EFTS Python tests
+        run: |
+          uv run pytest -v \
+            tests/core/edgar/test_efts.py::TestEFTSClient::test_rust_backend_uses_extension \
+            tests/pipelines/presets/test_analyze_efts_search.py::test_efts_search_uses_rust_client
+
       - name: Run integration tests
         run: uv run pytest -v tests/integration
 
