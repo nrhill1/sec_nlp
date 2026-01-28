@@ -92,20 +92,7 @@ class EFTSSearchRunner(BaseModel):
             return start_date, end_date
 
         # Use pipeline date range if configured
-        start_date_val = None
-        end_date_val = None
-        cfg_start = getattr(self.config, "start_date", None)
-        cfg_end = getattr(self.config, "end_date", None)
-        if isinstance(cfg_start, str):
-            start_date_val = date.fromisoformat(cfg_start)
-        elif isinstance(cfg_start, date):
-            start_date_val = cfg_start
-        if isinstance(cfg_end, str):
-            end_date_val = date.fromisoformat(cfg_end)
-        elif isinstance(cfg_end, date):
-            end_date_val = cfg_end
-
-        return start_date_val, end_date_val
+        return self.config.start_date, self.config.end_date
 
     def _get_form_types(self) -> list[str]:
         """Get form types to search."""
@@ -125,13 +112,7 @@ class EFTSSearchRunner(BaseModel):
 
     def _get_tickers(self) -> list[str]:
         """Get tickers to filter EFTS results."""
-        cleaned: list[str] = []
-        for symbol in self.config.symbols:
-            if isinstance(symbol, str):
-                normalized = symbol.strip().upper()
-                if normalized and normalized not in cleaned:
-                    cleaned.append(normalized)
-        return cleaned
+        return [s.strip().upper() for s in self.config.symbols if s.strip()]
 
     @staticmethod
     def _filter_hits_by_ticker(
@@ -365,11 +346,4 @@ def run_efts_search(
         local_accessions=local_accessions or set(),
     )
 
-    loop = asyncio.new_event_loop()
-    try:
-        asyncio.set_event_loop(loop)
-        return loop.run_until_complete(runner.search_queries(queries))
-    finally:
-        asyncio.set_event_loop(None)
-        if not loop.is_closed():
-            loop.close()
+    return asyncio.run(runner.search_queries(queries))

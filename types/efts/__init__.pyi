@@ -19,7 +19,6 @@ class EFTSClient:
         retry_delay: float = ...,
         rate_limit_delay: float = ...,
         base_url: str | None = ...,
-        allowed_hosts: Sequence[str] | None = ...,
     ) -> None: ...
     def search(
         self,

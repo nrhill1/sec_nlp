@@ -30,7 +30,7 @@ pub(crate) fn parse_response(data: &Value, query: &str) -> SearchResponse {
     SearchResponse {
         query: query.to_string(),
         total,
-        hits,
+        hits_vec: hits,
         start,
         limit,
     }

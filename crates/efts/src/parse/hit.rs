@@ -30,7 +30,7 @@ pub(crate) fn parse_hit(raw: &Value) -> SearchHit {
         company_name,
         tickers,
         form_type,
-        filed_date,
+        filed_date_str: filed_date,
         file_number,
         film_number,
         snippet,

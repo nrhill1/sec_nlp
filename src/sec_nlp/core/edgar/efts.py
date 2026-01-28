@@ -23,7 +23,6 @@ from typing import Final
 from pydantic import BaseModel, ConfigDict, Field
 
 from sec_nlp.core.infra.logger import logger
-from sec_nlp.core.types import as_json_dict
 
 from .efts_models import (
     EFTSError,
@@ -286,9 +285,8 @@ def _rust_execute_search(
         retry_delay=config.retry_delay,
         rate_limit_delay=config.rate_limit_delay,
         base_url=config.base_url,
-        allowed_hosts=["sec.gov"],
     )
-    response = client.search(
+    rust_response = client.search(
         params.query,
         forms=forms,
         ciks=ciks,
@@ -300,13 +298,30 @@ def _rust_execute_search(
         sort_field=params.sort_field.value,
         sort_order=params.sort_order.value,
     )
-    normalized = as_json_dict(response)
-    if normalized is None:
-        raise EFTSAPIError(
-            status_code=0,
-            message="Rust EFTS response was not JSON",
+    # Convert Rust EFTSHit objects to Pydantic EFTSHit models
+    hits = [
+        EFTSHit(
+            accession_number=hit.accession_number,
+            cik=hit.cik,
+            company_name=hit.company_name,
+            tickers=list(hit.tickers),
+            form_type=hit.form_type,
+            filed_date=hit.filed_date,
+            file_number=hit.file_number,
+            film_number=hit.film_number,
+            snippet=hit.snippet,
+            score=hit.score,
+            filing_url=hit.filing_url,
         )
-    return EFTSSearchResponse.model_validate(normalized)
+        for hit in rust_response.hits
+    ]
+    return EFTSSearchResponse(
+        query=rust_response.query,
+        total=rust_response.total,
+        hits=hits,
+        start=rust_response.start,
+        limit=rust_response.limit,
+    )
 
 
 class EFTSAPIError(Exception):

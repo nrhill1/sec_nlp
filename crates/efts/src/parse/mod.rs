@@ -50,10 +50,10 @@ mod tests {
         let response = parse_response(&sample, "warranty accrual");
 
         assert_eq!(response.total, 42);
-        assert_eq!(response.hits.len(), 2);
-        assert_eq!(response.hits[0].company_name, "Apple Inc.");
-        assert_eq!(response.hits[0].form_type, "10-K");
-        assert_eq!(response.hits[0].score, 15.5);
+        assert_eq!(response.hits_vec.len(), 2);
+        assert_eq!(response.hits_vec[0].company_name, "Apple Inc.");
+        assert_eq!(response.hits_vec[0].form_type, "10-K");
+        assert_eq!(response.hits_vec[0].score, 15.5);
     }
 
     #[test]
@@ -66,7 +66,7 @@ mod tests {
         let response = parse_response(&sample, "nope");
 
         assert_eq!(response.total, 0);
-        assert!(response.hits.is_empty());
+        assert!(response.hits_vec.is_empty());
     }
 
     #[test]

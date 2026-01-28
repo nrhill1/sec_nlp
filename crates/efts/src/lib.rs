@@ -17,12 +17,23 @@ use crate::constants::{
     DEFAULT_MAX_RETRIES, DEFAULT_RATE_LIMIT_SECS, DEFAULT_RETRY_DELAY_SECS,
     DEFAULT_TIMEOUT_SECS, EFTS_BASE_URL,
 };
-use crate::error::EftsError;
+use crate::error::{EftsApiError, EftsError};
+use crate::models::{SearchHit, SearchResponse};
 use crate::python::create_efts_client;
 
 #[pymodule]
-fn efts(_py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
+fn efts(py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
+    // Client class
     m.add_class::<EftsClient>()?;
+
+    // Response model classes
+    m.add_class::<SearchHit>()?;
+    m.add_class::<SearchResponse>()?;
+
+    // Exception class
+    m.add("EFTSAPIError", py.get_type::<EftsApiError>())?;
+
+    // Factory function
     m.add_function(wrap_pyfunction!(create_efts_client, m)?)?;
     Ok(())
 }
@@ -31,15 +42,6 @@ pub fn search_raw(
     query: &str,
     user_agent: &str,
     limit: u32,
-) -> Result<serde_json::Value, EftsError> {
-    search_raw_with_allowlist(query, user_agent, limit, None)
-}
-
-pub fn search_raw_with_allowlist(
-    query: &str,
-    user_agent: &str,
-    limit: u32,
-    allowed_hosts: Option<Vec<String>>,
 ) -> Result<serde_json::Value, EftsError> {
     if query.trim().is_empty() {
         return Err(EftsError::new(
@@ -66,7 +68,6 @@ pub fn search_raw_with_allowlist(
         DEFAULT_RETRY_DELAY_SECS,
         DEFAULT_RATE_LIMIT_SECS,
         Some(base_url.to_string()),
-        allowed_hosts,
     )?;
     let response = client.execute_search(
         query,

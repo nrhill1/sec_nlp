@@ -1,17 +1,8 @@
 use reqwest::Url;
 
-use crate::constants::SEC_HOST_SUFFIX;
 use crate::error::EftsError;
 
 pub(crate) fn validate_base_url(base_url: &str) -> Result<(), EftsError> {
-    let allowed_hosts = vec![SEC_HOST_SUFFIX.to_string()];
-    validate_base_url_with_allowlist(base_url, &allowed_hosts)
-}
-
-pub(crate) fn validate_base_url_with_allowlist(
-    base_url: &str,
-    allowed_hosts: &[String],
-) -> Result<(), EftsError> {
     let url = Url::parse(base_url).map_err(|err| {
         EftsError::new(
             0,
@@ -28,18 +19,8 @@ pub(crate) fn validate_base_url_with_allowlist(
     })?;
     let host_lower = host.to_ascii_lowercase();
     let mut allowlisted = false;
-    for allowed in allowed_hosts {
-        let trimmed = allowed.trim().trim_start_matches('.');
-        if trimmed.is_empty() {
-            continue;
-        }
-        let allowed_lower = trimmed.to_ascii_lowercase();
-        if host_lower == allowed_lower
-            || host_lower.ends_with(&format!(".{}", allowed_lower))
-        {
-            allowlisted = true;
-            break;
-        }
+    if host_lower == "sec.gov" || host_lower.ends_with(".sec.gov") {
+        allowlisted = true;
     }
     if allowlisted {
         Ok(())
@@ -55,7 +36,7 @@ pub(crate) fn validate_base_url_with_allowlist(
 
 #[cfg(test)]
 mod tests {
-    use super::{validate_base_url, validate_base_url_with_allowlist};
+    use super::validate_base_url;
 
     #[test]
     fn validate_base_url_allows_sec_domains() {
@@ -68,12 +49,9 @@ mod tests {
 
     #[test]
     fn validate_base_url_allows_sec_subdomains() {
-        let allowed = vec!["sec.gov".to_string()];
-        assert!(validate_base_url_with_allowlist(
-            "https://subdomain.sec.gov/path",
-            &allowed
-        )
-        .is_ok());
+        assert!(
+            validate_base_url("https://subdomain.sec.gov/path").is_ok()
+        );
     }
 
     #[test]
@@ -82,18 +60,4 @@ mod tests {
         assert!(validate_base_url("http://efts.sec.gov/LATEST/search-index").is_err());
     }
 
-    #[test]
-    fn validate_base_url_uses_custom_allowlist() {
-        let allowed = vec!["example.com".to_string()];
-        assert!(validate_base_url_with_allowlist(
-            "https://api.example.com/path",
-            &allowed
-        )
-        .is_ok());
-        assert!(validate_base_url_with_allowlist(
-            "https://efts.sec.gov/LATEST/search-index",
-            &allowed
-        )
-        .is_err());
-    }
 }

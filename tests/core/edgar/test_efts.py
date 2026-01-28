@@ -186,28 +186,30 @@ class TestEFTSClient:
         """Ensure the Rust backend path is used."""
         from sec_nlp.core.edgar import efts as efts_module
 
+        # Create mock hit object with attribute access
+        mock_hit = Mock()
+        mock_hit.accession_number = "0001234567-24-000001"
+        mock_hit.cik = "0001234567"
+        mock_hit.company_name = "Test Co"
+        mock_hit.tickers = ["TST"]
+        mock_hit.form_type = "10-K"
+        mock_hit.filed_date = date(2024, 1, 15)
+        mock_hit.file_number = None
+        mock_hit.film_number = None
+        mock_hit.snippet = "test"
+        mock_hit.score = 1.0
+        mock_hit.filing_url = None
+
+        # Create mock response object with attribute access
+        mock_response = Mock()
+        mock_response.query = "warranty"
+        mock_response.total = 1
+        mock_response.hits = [mock_hit]
+        mock_response.start = 0
+        mock_response.limit = 1
+
         rust_client_instance = Mock()
-        rust_client_instance.search.return_value = {
-            "query": "warranty",
-            "total": 1,
-            "hits": [
-                {
-                    "accession_number": "0001234567-24-000001",
-                    "cik": "0001234567",
-                    "company_name": "Test Co",
-                    "tickers": ["TST"],
-                    "form_type": "10-K",
-                    "filed_date": "2024-01-15",
-                    "file_number": None,
-                    "film_number": None,
-                    "snippet": "test",
-                    "score": 1.0,
-                    "filing_url": None,
-                }
-            ],
-            "start": 0,
-            "limit": 1,
-        }
+        rust_client_instance.search.return_value = mock_response
         rust_client_class = Mock(return_value=rust_client_instance)
         rust_module = Mock()
         rust_module.EFTSClient = rust_client_class
@@ -227,7 +229,6 @@ class TestEFTSClient:
         assert response.hits[0].company_name == "Test Co"
         rust_client_class.assert_called_once()
         _, kwargs = rust_client_class.call_args
-        assert kwargs.get("allowed_hosts") == ["sec.gov"]
         assert kwargs.get("base_url") == config.base_url
         rust_client_instance.search.assert_called_once()
 

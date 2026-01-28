@@ -43,7 +43,6 @@ def test_efts_allowlist_rejects_non_sec_hosts() -> None:
         efts.EFTSClient(
             user_agent="SEC NLP Tool (test@example.com)",
             base_url="https://example.com",
-            allowed_hosts=["sec.gov"],
         )
 
 
@@ -57,7 +56,6 @@ def test_efts_secgov_query_returns_hits(socket_enabled: None) -> None:
 
     client = efts.EFTSClient(
         user_agent="SEC NLP Tool (test@example.com)",
-        allowed_hosts=["sec.gov"],
     )
     result: JsonDict = client.search("warranty", limit=1)
     assert "hits" in result
