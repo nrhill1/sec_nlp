@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import asyncio
-import json
 from datetime import date
 from unittest.mock import Mock
 
@@ -23,43 +22,6 @@ from sec_nlp.core.edgar.efts_models import (
     EFTSSortField,
     EFTSSortOrder,
 )
-
-# Sample EFTS API response for mocking
-SAMPLE_EFTS_RESPONSE = {
-    "query": {"from": 0, "size": 10, "q": "warranty accrual"},
-    "hits": {
-        "total": {"value": 42},
-        "hits": [
-            {
-                "_score": 15.5,
-                "_source": {
-                    "adsh": "0001234567-24-000001",
-                    "cik": "1234567",
-                    "display_names": ["Apple Inc."],
-                    "form": "10-K",
-                    "file_date": "2024-01-15",
-                },
-                "highlight": {"text": ["warranty <em>accrual</em> provisions"]},
-            },
-            {
-                "_score": 12.3,
-                "_source": {
-                    "adsh": "0009876543-24-000002",
-                    "cik": "9876543",
-                    "display_names": ["Microsoft Corporation"],
-                    "form": "10-Q",
-                    "file_date": "2024-02-20",
-                },
-                "highlight": {"text": ["product <em>warranty</em> reserves"]},
-            },
-        ],
-    },
-}
-
-EMPTY_EFTS_RESPONSE = {
-    "query": {"from": 0, "size": 10, "q": "nonexistent term"},
-    "hits": {"total": {"value": 0}, "hits": []},
-}
 
 
 class TestEFTSSearchParams:
@@ -218,100 +180,10 @@ class TestEFTSClientConfig:
 class TestEFTSClient:
     """Tests for EFTSClient - uses sync mocking to avoid network calls."""
 
-    def test_parse_response(self) -> None:
-        """Test response parsing without network."""
-        config = EFTSClientConfig(
-            user_agent="Test (test@example.com)",
-            rate_limit_delay=0,
-        )
-        client = EFTSClient(config=config)
-
-        response = client._parse_response(
-            SAMPLE_EFTS_RESPONSE, "warranty accrual"
-        )
-
-        assert response.total == 42
-        assert len(response.hits) == 2
-        assert response.hits[0].company_name == "Apple Inc."
-        assert response.hits[0].form_type == "10-K"
-        assert response.hits[0].score == 15.5
-
-    def test_parse_empty_response(self) -> None:
-        """Test parsing empty results."""
-        config = EFTSClientConfig(
-            user_agent="Test (test@example.com)",
-        )
-        client = EFTSClient(config=config)
-
-        response = client._parse_response(EMPTY_EFTS_RESPONSE, "test")
-
-        assert response.total == 0
-        assert len(response.hits) == 0
-
-    def test_parse_hit(self) -> None:
-        """Test individual hit parsing."""
-        config = EFTSClientConfig(user_agent="Test")
-        client = EFTSClient(config=config)
-
-        raw_hit = {
-            "_score": 15.5,
-            "_source": {
-                "adsh": "0001234567-24-000001",
-                "cik": "1234567",
-                "display_names": ["Apple Inc."],
-                "form": "10-K",
-                "file_date": "2024-01-15",
-            },
-            "highlight": {"text": ["warranty <em>accrual</em>"]},
-        }
-
-        hit = client._parse_hit(raw_hit)
-
-        assert hit.accession_number == "0001234567-24-000001"
-        assert hit.company_name == "Apple Inc."
-        assert hit.form_type == "10-K"
-        assert hit.score == 15.5
-        assert "warranty" in hit.snippet
-
-    def test_parse_hit_prefers_issuer_for_insider_forms(self) -> None:
-        """Prefer issuer name for Form 3/4 hits when available."""
-        config = EFTSClientConfig(user_agent="Test")
-        client = EFTSClient(config=config)
-
-        raw_hit = {
-            "_score": 12.1,
-            "_source": {
-                "adsh": "0001801368-24-000123",
-                "cik": "0002006182",
-                "company": "MP Materials Corp",
-                "display_names": [
-                    "Dhillon Mannik S. (CIK 0002006182)",
-                    "MP Materials Corp (MP)",
-                ],
-                "form": "4",
-                "file_date": "2024-01-15",
-            },
-        }
-
-        hit = client._parse_hit(raw_hit)
-
-        assert hit.company_name == "MP Materials Corp"
-
-    def test_build_url(self) -> None:
-        """Test URL building."""
-        config = EFTSClientConfig(user_agent="Test")
-        client = EFTSClient(config=config)
-
-        url = client._build_url({"q": "test", "size": 10})
-
-        assert "q=test" in url
-        assert "size=10" in url
-        assert url.startswith("https://efts.sec.gov")
-
     def test_rust_backend_uses_extension(
         self, monkeypatch: pytest.MonkeyPatch, socket_enabled: None
     ) -> None:
-        """Ensure the Rust backend path is used when enabled."""
+        """Ensure the Rust backend path is used."""
         from sec_nlp.core.edgar import efts as efts_module
 
         rust_client_instance = Mock()
@@ -340,7 +212,6 @@ class TestEFTSClient:
         rust_module = Mock()
         rust_module.EFTSClient = rust_client_class
 
-        monkeypatch.setenv("SEC_NLP_EFTS_BACKEND", "rust")
         monkeypatch.setattr(
             efts_module, "_load_efts_module", lambda: rust_module
         )
