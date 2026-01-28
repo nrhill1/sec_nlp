@@ -2,13 +2,13 @@ use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use std::time::Duration;
 
-use crate::constants::{DEFAULT_USER_AGENT, EFTS_BASE_URL};
+use crate::constants::{DEFAULT_USER_AGENT, EFTS_BASE_URL, SEC_HOST_SUFFIX};
 use crate::error::EftsError;
 use crate::http::{build_client, build_params, enforce_rate_limit, make_request};
 use crate::models::{SearchHit, SearchResponse};
 use crate::parse::parse_response;
 use crate::python::json_to_py;
-use crate::validate::validate_base_url;
+use crate::validate::validate_base_url_with_allowlist;
 
 #[pyclass(name = "EFTSClient")]
 pub struct EftsClient {
@@ -18,6 +18,7 @@ pub struct EftsClient {
     max_retries: usize,
     retry_delay_seconds: f64,
     rate_limit_delay_seconds: f64,
+    allowed_hosts: Vec<String>,
 }
 
 impl EftsClient {
@@ -28,6 +29,7 @@ impl EftsClient {
         retry_delay: f64,
         rate_limit_delay: f64,
         base_url: Option<String>,
+        allowed_hosts: Option<Vec<String>>,
     ) -> Result<Self, EftsError> {
         if timeout <= 0.0 {
             return Err(EftsError::new(
@@ -56,7 +58,11 @@ impl EftsClient {
         let user_agent =
             user_agent.unwrap_or_else(|| DEFAULT_USER_AGENT.to_string());
         let base_url = base_url.unwrap_or_else(|| EFTS_BASE_URL.to_string());
-        validate_base_url(&base_url)?;
+        let allowed_hosts = match allowed_hosts {
+            Some(hosts) if !hosts.is_empty() => hosts,
+            _ => vec![SEC_HOST_SUFFIX.to_string()],
+        };
+        validate_base_url_with_allowlist(&base_url, &allowed_hosts)?;
         Ok(Self {
             base_url,
             user_agent,
@@ -64,6 +70,7 @@ impl EftsClient {
             max_retries,
             retry_delay_seconds: retry_delay,
             rate_limit_delay_seconds: rate_limit_delay,
+            allowed_hosts,
         })
     }
 
@@ -180,7 +187,8 @@ impl EftsClient {
             max_retries=3,
             retry_delay=1.0,
             rate_limit_delay=0.1,
-            base_url=None
+            base_url=None,
+            allowed_hosts=None
         )
     )]
     pub fn new(
@@ -190,6 +198,7 @@ impl EftsClient {
         retry_delay: f64,
         rate_limit_delay: f64,
         base_url: Option<String>,
+        allowed_hosts: Option<Vec<String>>,
     ) -> PyResult<Self> {
         Self::new_internal(
             user_agent,
@@ -198,6 +207,7 @@ impl EftsClient {
             retry_delay,
             rate_limit_delay,
             base_url,
+            allowed_hosts,
         )
         .map_err(|err| PyValueError::new_err(err.message))
     }
@@ -333,5 +343,10 @@ impl EftsClient {
     #[getter]
     fn rate_limit_delay(&self) -> f64 {
         self.rate_limit_delay_seconds
+    }
+
+    #[getter]
+    fn allowed_hosts(&self) -> Vec<String> {
+        self.allowed_hosts.clone()
     }
 }

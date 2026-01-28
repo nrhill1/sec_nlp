@@ -23,6 +23,7 @@ pub fn create_efts_client(
         DEFAULT_RETRY_DELAY_SECS,
         DEFAULT_RATE_LIMIT_SECS,
         None,
+        None,
     )
 }
 

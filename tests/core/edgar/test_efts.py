@@ -6,7 +6,7 @@ from __future__ import annotations
 import asyncio
 import json
 from datetime import date
-from unittest.mock import MagicMock, patch
+from unittest.mock import Mock
 
 import pytest
 
@@ -307,6 +307,55 @@ class TestEFTSClient:
         assert "q=test" in url
         assert "size=10" in url
         assert url.startswith("https://efts.sec.gov")
+
+    def test_rust_backend_uses_extension(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Ensure the Rust backend path is used when enabled."""
+        from sec_nlp.core.edgar import efts as efts_module
+
+        rust_client_instance = Mock()
+        rust_client_instance.search.return_value = {
+            "query": "warranty",
+            "total": 1,
+            "hits": [
+                {
+                    "accession_number": "0001234567-24-000001",
+                    "cik": "0001234567",
+                    "company_name": "Test Co",
+                    "tickers": ["TST"],
+                    "form_type": "10-K",
+                    "filed_date": "2024-01-15",
+                    "file_number": None,
+                    "film_number": None,
+                    "snippet": "test",
+                    "score": 1.0,
+                    "filing_url": None,
+                }
+            ],
+            "start": 0,
+            "limit": 1,
+        }
+        rust_client_class = Mock(return_value=rust_client_instance)
+        rust_module = Mock()
+        rust_module.EFTSClient = rust_client_class
+
+        monkeypatch.setenv("SEC_NLP_EFTS_BACKEND", "rust")
+        monkeypatch.setattr(
+            efts_module, "_load_efts_module", lambda: rust_module
+        )
+
+        config = EFTSClientConfig(
+            user_agent="Test (test@example.com)",
+            rate_limit_delay=0,
+        )
+        client = EFTSClient(config=config)
+        response = asyncio.run(client.search("warranty", limit=1))
+
+        assert response.total == 1
+        assert response.hits[0].company_name == "Test Co"
+        rust_client_class.assert_called_once()
+        rust_client_instance.search.assert_called_once()
 
 
 class TestCreateEFTSClient:

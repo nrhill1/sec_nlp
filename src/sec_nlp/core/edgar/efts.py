@@ -518,6 +518,7 @@ def _rust_execute_search(
         retry_delay=config.retry_delay,
         rate_limit_delay=config.rate_limit_delay,
         base_url=config.base_url,
+        allowed_hosts=["sec.gov"],
     )
     response = client.search(
         params.query,
@@ -612,7 +613,12 @@ def _extract_snippet(raw: JsonDict) -> str:
     highlight_dict: JsonDict = dict(raw_highlight)
     snippets = highlight_dict.get("text")
     if isinstance(snippets, list) and snippets:
-        return " ... ".join(str(s) for s in snippets[:3])
+        parts: list[str] = []
+        for item in snippets:
+            parts.append(str(item))
+            if len(parts) >= 3:
+                break
+        return " ... ".join(parts)
     return ""
 
 

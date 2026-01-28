@@ -13,6 +13,7 @@ ifneq ("$(wildcard $(REPO_ROOT)/.env)","")
 	export
 endif
 PYTHON_SYS_EXECUTABLE ?= $(shell python3 -c 'import sys; print(sys.executable)')
+PYO3_PYTHON ?= $(PYTHON_SYS_EXECUTABLE)
 MATURIN_FLAGS ?=
 MATURIN_BUILD_FLAGS ?= --release --uv
 RUSTFLAGS_DEV ?=
@@ -68,6 +69,7 @@ clippy:
 .PHONY: test
 test:
 	@PYTHON_SYS_EXECUTABLE=$(PYTHON_SYS_EXECUTABLE) \
+	PYO3_PYTHON=$(PYO3_PYTHON) \
 	cargo test --manifest-path $(CARGO_MANIFEST)
 
 .PHONY: smoke

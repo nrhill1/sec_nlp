@@ -19,7 +19,6 @@ use crate::constants::{
 };
 use crate::error::EftsError;
 use crate::python::create_efts_client;
-use crate::validate::validate_base_url;
 
 #[pymodule]
 fn efts(_py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
@@ -32,6 +31,15 @@ pub fn search_raw(
     query: &str,
     user_agent: &str,
     limit: u32,
+) -> Result<serde_json::Value, EftsError> {
+    search_raw_with_allowlist(query, user_agent, limit, None)
+}
+
+pub fn search_raw_with_allowlist(
+    query: &str,
+    user_agent: &str,
+    limit: u32,
+    allowed_hosts: Option<Vec<String>>,
 ) -> Result<serde_json::Value, EftsError> {
     if query.trim().is_empty() {
         return Err(EftsError::new(
@@ -51,7 +59,6 @@ pub fn search_raw(
         ));
     }
     let base_url = EFTS_BASE_URL;
-    validate_base_url(base_url)?;
     let client = EftsClient::new_internal(
         Some(user_agent.to_string()),
         DEFAULT_TIMEOUT_SECS,
@@ -59,6 +66,7 @@ pub fn search_raw(
         DEFAULT_RETRY_DELAY_SECS,
         DEFAULT_RATE_LIMIT_SECS,
         Some(base_url.to_string()),
+        allowed_hosts,
     )?;
     let response = client.execute_search(
         query,

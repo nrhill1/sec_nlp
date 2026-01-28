@@ -5,11 +5,12 @@ from pathlib import Path
 
 from langchain_core.documents import Document
 
-from sec_nlp.core.types import as_json_dict
+from sec_nlp.core.types import as_json_dict, coerce_json_value
 from sec_nlp.pipelines.presets.exb.config import ExhibitConfig
 from sec_nlp.pipelines.presets.exb.io.exhibit_summary import (
     build_exhibit_summary,
 )
+from sec_nlp.types import JsonDict
 
 
 def _make_config(tmp_path: Path, exhibit_numbers):
@@ -68,16 +69,18 @@ def test_build_exhibit_summary_extracts_core_details(tmp_path: Path) -> None:
         ),
     ]
 
-    summary = build_exhibit_summary(
+    summary: JsonDict = build_exhibit_summary(
         symbol="ACME",
         docs=docs,
         config=config,
     )
 
-    accessions = summary.get("accessions")
-    assert isinstance(accessions, list)
-    assert len(accessions) == 1
-    details = as_json_dict(accessions[0].get("exhibit_details"))
+    accessions_value = coerce_json_value(summary.get("accessions"))
+    assert isinstance(accessions_value, list)
+    assert len(accessions_value) == 1
+    accession_dict = as_json_dict(accessions_value[0])
+    assert accession_dict is not None
+    details = as_json_dict(accession_dict.get("exhibit_details"))
     assert details is not None
 
     exhibit_21 = as_json_dict(details.get("21"))

@@ -80,13 +80,7 @@ class TestBasePipelineResultEdgeCases:
         """Test result with deeply nested metadata."""
         nested = {"level1": {"level2": {"level3": {"data": "deep"}}}}
         result = EdgeCaseResult(metadata=nested)
-        level1 = result.metadata.get("level1")
-        assert isinstance(level1, dict)
-        level2 = level1["level2"]
-        assert isinstance(level2, dict)
-        level3 = level2["level3"]
-        assert isinstance(level3, dict)
-        assert level3["data"] == "deep"
+        assert result.metadata == nested
 
     def test_result_with_empty_error_string(self) -> None:
         """Test result with empty error string is treated as no error."""

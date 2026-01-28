@@ -9,6 +9,7 @@ from xml.etree import ElementTree
 from langchain_core.documents import Document
 
 from sec_nlp.core.infra.logger import logger
+from sec_nlp.core.types import as_json_dict
 from sec_nlp.types import JsonDict, JsonValue
 
 
@@ -263,19 +264,22 @@ def _parse_document_metadata(root: ElementTree.Element) -> JsonDict:
     if reporting_owners:
         doc_meta["reporting_owners"] = reporting_owners
         primary = reporting_owners[0]
-        if isinstance(primary, dict):
-            primary_name = primary.get("owner_name")
-            primary_cik = primary.get("owner_cik")
+        primary_dict = as_json_dict(primary)
+        if primary_dict is not None:
+            primary_name = primary_dict.get("owner_name")
+            primary_cik = primary_dict.get("owner_cik")
             if primary_name is not None:
                 doc_meta["reporting_owner_name"] = primary_name
             if primary_cik is not None:
                 doc_meta["reporting_owner_cik"] = primary_cik
-            primary_roles = primary.get("relationship_roles")
+            primary_roles = primary_dict.get("relationship_roles")
             if primary_roles is not None:
                 doc_meta["relationship_to_issuer"] = primary_roles
-            officer_title = primary.get("relationship", {}).get("officer_title")
-            if officer_title is not None:
-                doc_meta["officer_title"] = officer_title
+            relationship = as_json_dict(primary_dict.get("relationship"))
+            if relationship is not None:
+                officer_title = relationship.get("officer_title")
+                if officer_title is not None:
+                    doc_meta["officer_title"] = officer_title
 
     return doc_meta
 
