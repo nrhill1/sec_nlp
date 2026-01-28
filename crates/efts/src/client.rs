@@ -1,10 +1,12 @@
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
+use pyo3::types::PyAny;
 use std::time::Duration;
 
 use crate::constants::{DEFAULT_USER_AGENT, EFTS_BASE_URL};
 use crate::error::EftsError;
 use crate::http::{build_client, build_params, enforce_rate_limit, make_request};
+use crate::http_async::{build_async_client, enforce_rate_limit_async, make_request_async};
 use crate::models::{SearchHit, SearchResponse};
 use crate::parse::parse_response;
 use crate::validate::validate_base_url;
@@ -106,6 +108,60 @@ impl EftsClient {
                             std::thread::sleep(Duration::from_secs_f64(
                                 delay_seconds,
                             ));
+                        }
+                        delay_seconds *= 2.0;
+                        continue;
+                    }
+                    return Err(err);
+                }
+            }
+        }
+        Err(EftsError::new(
+            0,
+            "Unknown error after retries",
+            None,
+            false,
+        ))
+    }
+
+    /// Async version of execute_search.
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) async fn execute_search_async(
+        &self,
+        query: &str,
+        forms: &[String],
+        ciks: &[String],
+        tickers: &[String],
+        start_date: Option<&str>,
+        end_date: Option<&str>,
+        limit: u32,
+        start: u32,
+        sort_field: &str,
+        sort_order: &str,
+    ) -> Result<SearchResponse, EftsError> {
+        let limit = limit.clamp(1, 100);
+        let params = build_params(
+            query,
+            forms,
+            ciks,
+            tickers,
+            start_date,
+            end_date,
+            limit,
+            start,
+            sort_field,
+            sort_order,
+        );
+        let client = build_async_client(self.timeout_seconds)?;
+        let mut delay_seconds = self.retry_delay_seconds;
+        for attempt in 0..=self.max_retries {
+            enforce_rate_limit_async(self.rate_limit_delay_seconds).await;
+            match make_request_async(&client, &self.base_url, &params, &self.user_agent).await {
+                Ok(data) => return Ok(parse_response(&data, query)),
+                Err(err) => {
+                    if attempt < self.max_retries && err.retryable {
+                        if delay_seconds > 0.0 {
+                            tokio::time::sleep(Duration::from_secs_f64(delay_seconds)).await;
                         }
                         delay_seconds *= 2.0;
                         continue;
@@ -252,6 +308,86 @@ impl EftsClient {
             .map_err(|err| err.to_py_err())?;
         // Return native PyO3 class directly - no JSON serialization!
         Py::new(py, response)
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    #[pyo3(
+        signature = (
+            query,
+            forms=None,
+            ciks=None,
+            tickers=None,
+            start_date=None,
+            end_date=None,
+            limit=10,
+            start=0,
+            sort_field="score".to_string(),
+            sort_order="desc".to_string()
+        )
+    )]
+    /// Execute an async search and return a Python awaitable.
+    ///
+    /// This is the async version of `search()`. It returns a coroutine that
+    /// can be awaited in Python async code.
+    ///
+    /// Example:
+    ///     response = await client.search_async("warranty", limit=10)
+    fn search_async<'py>(
+        &self,
+        py: Python<'py>,
+        query: String,
+        forms: Option<Vec<String>>,
+        ciks: Option<Vec<String>>,
+        tickers: Option<Vec<String>>,
+        start_date: Option<String>,
+        end_date: Option<String>,
+        limit: u32,
+        start: u32,
+        sort_field: String,
+        sort_order: String,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        let forms = forms.unwrap_or_default();
+        let ciks = ciks.unwrap_or_default();
+        let tickers = tickers.unwrap_or_default();
+
+        // Clone self fields needed for the async closure
+        let base_url = self.base_url.clone();
+        let user_agent = self.user_agent.clone();
+        let timeout_seconds = self.timeout_seconds;
+        let max_retries = self.max_retries;
+        let retry_delay_seconds = self.retry_delay_seconds;
+        let rate_limit_delay_seconds = self.rate_limit_delay_seconds;
+
+        pyo3_async_runtimes::tokio::future_into_py(py, async move {
+            // Recreate a temporary client struct for the async search
+            let client = EftsClient {
+                base_url,
+                user_agent,
+                timeout_seconds,
+                max_retries,
+                retry_delay_seconds,
+                rate_limit_delay_seconds,
+            };
+
+            let response = client
+                .execute_search_async(
+                    &query,
+                    &forms,
+                    &ciks,
+                    &tickers,
+                    start_date.as_deref(),
+                    end_date.as_deref(),
+                    limit,
+                    start,
+                    &sort_field,
+                    &sort_order,
+                )
+                .await
+                .map_err(|err| err.to_py_err())?;
+
+            // Return native PyO3 class
+            Python::with_gil(|py| Py::new(py, response))
+        })
     }
 
     #[pyo3(

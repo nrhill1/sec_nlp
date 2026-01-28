@@ -3,7 +3,7 @@
 
 import asyncio
 from datetime import date
-from unittest.mock import Mock
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 
@@ -70,7 +70,8 @@ def test_efts_search_uses_rust_client(
     mock_response.limit = 1
 
     rust_client_instance = Mock()
-    rust_client_instance.search.return_value = mock_response
+    # Use AsyncMock for the async method
+    rust_client_instance.search_async = AsyncMock(return_value=mock_response)
     rust_client_class = Mock(return_value=rust_client_instance)
     rust_module = Mock()
     rust_module.EFTSClient = rust_client_class
@@ -89,4 +90,4 @@ def test_efts_search_uses_rust_client(
     assert results
     assert results[0].hits
     rust_client_class.assert_called_once()
-    rust_client_instance.search.assert_called_once()
+    rust_client_instance.search_async.assert_called_once()

@@ -4,6 +4,7 @@ mod client;
 mod constants;
 mod error;
 mod http;
+mod http_async;
 mod models;
 mod parse;
 mod python;

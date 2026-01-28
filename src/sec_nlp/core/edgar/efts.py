@@ -11,7 +11,6 @@ EFTS searches are executed via the Rust extension.
 
 from __future__ import annotations
 
-import asyncio
 import re
 from collections.abc import Sequence
 from datetime import date
@@ -235,8 +234,7 @@ class EFTSClient(BaseModel):
             )
 
         try:
-            return await asyncio.to_thread(
-                _rust_execute_search,
+            return await _rust_execute_search_async(
                 module,
                 self.config,
                 params,
@@ -267,11 +265,48 @@ def _rust_error_from_exception(exc: Exception) -> EFTSAPIError:
     return EFTSAPIError(status_code=0, message=message)
 
 
+async def _rust_execute_search_async(
+    module: ModuleType,
+    config: EFTSClientConfig,
+    params: EFTSSearchParams,
+) -> EFTSSearchResponse:
+    """Execute search using native Rust async method."""
+    forms = params.forms if params.forms else None
+    ciks = params.ciks if params.ciks else None
+    tickers = params.tickers if params.tickers else None
+    start_date = params.start_date.isoformat() if params.start_date else None
+    end_date = params.end_date.isoformat() if params.end_date else None
+
+    client = module.EFTSClient(
+        user_agent=config.user_agent,
+        timeout=config.timeout,
+        max_retries=config.max_retries,
+        retry_delay=config.retry_delay,
+        rate_limit_delay=config.rate_limit_delay,
+        base_url=config.base_url,
+    )
+    # Use native async method - returns awaitable
+    rust_response = await client.search_async(
+        params.query,
+        forms=forms,
+        ciks=ciks,
+        tickers=tickers,
+        start_date=start_date,
+        end_date=end_date,
+        limit=params.limit,
+        start=params.start,
+        sort_field=params.sort_field.value,
+        sort_order=params.sort_order.value,
+    )
+    return _convert_rust_response(rust_response)
+
+
 def _rust_execute_search(
     module: ModuleType,
     config: EFTSClientConfig,
     params: EFTSSearchParams,
 ) -> EFTSSearchResponse:
+    """Execute search using blocking Rust method (for sync callers)."""
     forms = params.forms if params.forms else None
     ciks = params.ciks if params.ciks else None
     tickers = params.tickers if params.tickers else None
@@ -298,6 +333,11 @@ def _rust_execute_search(
         sort_field=params.sort_field.value,
         sort_order=params.sort_order.value,
     )
+    return _convert_rust_response(rust_response)
+
+
+def _convert_rust_response(rust_response: object) -> EFTSSearchResponse:
+    """Convert Rust EFTSSearchResponse to Pydantic model."""
     # Convert Rust EFTSHit objects to Pydantic EFTSHit models
     hits = [
         EFTSHit(
@@ -313,14 +353,14 @@ def _rust_execute_search(
             score=hit.score,
             filing_url=hit.filing_url,
         )
-        for hit in rust_response.hits
+        for hit in rust_response.hits  # type: ignore[attr-defined]
     ]
     return EFTSSearchResponse(
-        query=rust_response.query,
-        total=rust_response.total,
+        query=rust_response.query,  # type: ignore[attr-defined]
+        total=rust_response.total,  # type: ignore[attr-defined]
         hits=hits,
-        start=rust_response.start,
-        limit=rust_response.limit,
+        start=rust_response.start,  # type: ignore[attr-defined]
+        limit=rust_response.limit,  # type: ignore[attr-defined]
     )
 
 
