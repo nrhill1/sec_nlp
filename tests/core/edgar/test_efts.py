@@ -309,7 +309,7 @@ class TestEFTSClient:
         assert url.startswith("https://efts.sec.gov")
 
     def test_rust_backend_uses_extension(
-        self, monkeypatch: pytest.MonkeyPatch
+        self, monkeypatch: pytest.MonkeyPatch, socket_enabled: None
     ) -> None:
         """Ensure the Rust backend path is used when enabled."""
         from sec_nlp.core.edgar import efts as efts_module

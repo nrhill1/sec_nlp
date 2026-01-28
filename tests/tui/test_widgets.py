@@ -227,9 +227,10 @@ def test_form_view_collects_values() -> None:
     assert form_spec is not None
 
     async def run_test() -> None:
-        async with app.run_test():
+        async with app.run_test() as pilot:
             view = app.query_one(FormView)
             view.set_form(form_spec)
+            await pilot.pause()
             symbols = view._fields["symbols"]
             assert isinstance(symbols, Input)
             symbols.value = "AAPL MSFT"
