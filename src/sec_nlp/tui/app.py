@@ -218,7 +218,6 @@ class SecNlpTuiApp(App):
 
     .section-switcher {
         margin-bottom: 1;
-        layer: above;
     }
 
     .field-label {
@@ -303,7 +302,6 @@ class SecNlpTuiApp(App):
     /* ─── Collapsible Sections ────────────────────────────────────────────── */
     .collapsible-section {
         margin-bottom: 1;
-        overflow: visible;
     }
 
     .section-header {
@@ -331,7 +329,6 @@ class SecNlpTuiApp(App):
     .section-content {
         padding-left: 1;
         margin-top: 0;
-        overflow: visible;
     }
 
     .section-hidden {
@@ -759,7 +756,6 @@ class SecNlpTuiApp(App):
     #config-panel {
         height: 2fr;
         min-height: 16;
-        overflow: visible;
     }
 
     /* ─── Scrollbars ──────────────────────────────────────────────────────── */
