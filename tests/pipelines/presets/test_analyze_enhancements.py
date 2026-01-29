@@ -1,13 +1,32 @@
 # tests/pipelines/presets/test_analyze_enhancements.py
 """Tests for analysis enhancement summaries."""
 
-from sec_nlp.core.types import coerce_json_dict
+from sec_nlp.core.types import as_json_dict, coerce_json_value
 from sec_nlp.pipelines.presets.analyze.io.enhancements import (
     build_executive_comp_summary,
     build_peer_comparison,
     build_symbol_summary,
 )
 from sec_nlp.pipelines.types import AnalysisResultDict, MetadataRecord
+from sec_nlp.types import JsonDict, JsonValue
+
+
+def _as_json_list(value: JsonValue | None) -> list[JsonValue] | None:
+    if value is None:
+        return None
+    coerced = coerce_json_value(value)
+    if not isinstance(coerced, list):
+        return None
+    return list(coerced)
+
+
+def _as_json_dict(value: JsonValue | None) -> JsonDict | None:
+    if value is None:
+        return None
+    coerced = coerce_json_value(value)
+    if coerced is None:
+        return None
+    return as_json_dict(coerced)
 
 
 def test_build_symbol_summary_tracks_trends_and_comparisons() -> None:
@@ -36,7 +55,7 @@ def test_build_symbol_summary_tracks_trends_and_comparisons() -> None:
     results: list[AnalysisResultDict] = [result_one, result_two]
     fallback_meta: MetadataRecord = {}
 
-    summary = build_symbol_summary(
+    summary: JsonDict = build_symbol_summary(
         symbol="ACME",
         run_id=123,
         analysis_results=results,
@@ -57,16 +76,14 @@ def test_build_symbol_summary_tracks_trends_and_comparisons() -> None:
         accessions.append(accession)
     assert accessions == ["0001", "0002"]
 
-    comparisons = summary.get("filing_comparisons")
-    assert isinstance(comparisons, list)
+    comparisons = _as_json_list(summary.get("filing_comparisons"))
+    assert comparisons is not None
     assert len(comparisons) == 1
-    comparison = comparisons[0]
-    comparison_dict = (
-        coerce_json_dict(comparison) if isinstance(comparison, dict) else None
-    )
+    comparison_dict = _as_json_dict(comparisons[0])
     assert comparison_dict is not None
     tags_added = comparison_dict.get("tags_added")
     tags_removed = comparison_dict.get("tags_removed")
+    assert comparison_dict.get("missing_key") is None
     assert isinstance(tags_added, list)
     assert isinstance(tags_removed, list)
     added_values = [tag for tag in tags_added if isinstance(tag, str)]
@@ -74,26 +91,18 @@ def test_build_symbol_summary_tracks_trends_and_comparisons() -> None:
     assert "liquidity" in added_values
     assert "pricing" in removed_values
 
-    rollup = summary.get("entity_rollup")
-    rollup_dict = coerce_json_dict(rollup) if isinstance(rollup, dict) else None
+    rollup_dict = _as_json_dict(summary.get("entity_rollup"))
     assert rollup_dict is not None
-    company_rollup = rollup_dict.get("company")
-    company_dict = (
-        coerce_json_dict(company_rollup)
-        if isinstance(company_rollup, dict)
-        else None
-    )
+    company_dict = _as_json_dict(rollup_dict.get("company"))
     assert company_dict is not None
     assert company_dict.get("unique") == 1
-    top_values = company_dict.get("top")
-    assert isinstance(top_values, list)
+    top_values = _as_json_list(company_dict.get("top"))
+    assert top_values is not None
     assert top_values
-    top_entry = top_values[0]
-    top_dict = (
-        coerce_json_dict(top_entry) if isinstance(top_entry, dict) else None
-    )
-    assert top_dict is not None
-    assert top_dict.get("count") == 2
+    top_entry_dict = _as_json_dict(top_values[0])
+    assert top_entry_dict is not None
+    assert top_entry_dict.get("count") == 2
+    assert top_entry_dict.get("missing_key") is None
 
 
 def test_build_peer_comparison_ranks_net_sentiment() -> None:
@@ -110,18 +119,19 @@ def test_build_peer_comparison_ranks_net_sentiment() -> None:
         },
     }
 
-    summary = build_peer_comparison(profiles)
+    summary: JsonDict = build_peer_comparison(profiles)
 
     symbols = summary.get("symbols")
     common_tags = summary.get("common_tags")
-    sentiment_rank = summary.get("sentiment_rank")
+    sentiment_rank_value = _as_json_list(summary.get("sentiment_rank"))
     assert symbols == ["AAA", "BBB"]
     assert common_tags == ["pricing"]
-    assert isinstance(sentiment_rank, list)
-    assert sentiment_rank
-    first_rank = sentiment_rank[0]
-    assert isinstance(first_rank, dict)
-    assert first_rank.get("symbol") == "AAA"
+    assert sentiment_rank_value is not None
+    assert sentiment_rank_value
+    first_rank_dict = _as_json_dict(sentiment_rank_value[0])
+    assert first_rank_dict is not None
+    assert first_rank_dict.get("symbol") == "AAA"
+    assert first_rank_dict.get("missing_key") is None
 
 
 def test_build_executive_comp_summary_tracks_peer_deltas_and_yoy() -> None:
@@ -177,7 +187,7 @@ def test_build_executive_comp_summary_tracks_peer_deltas_and_yoy() -> None:
     }
     results = [result_one, result_two]
 
-    summary = build_executive_comp_summary(
+    summary: JsonDict = build_executive_comp_summary(
         symbol="ACME",
         run_id=101,
         analysis_results=results,
@@ -189,31 +199,25 @@ def test_build_executive_comp_summary_tracks_peer_deltas_and_yoy() -> None:
     assert isinstance(filings, list)
     assert len(filings) == 2
 
-    yoy_changes = summary.get("yoy_changes")
-    assert isinstance(yoy_changes, list)
-    assert yoy_changes
-    first_change = yoy_changes[0]
-    change_dict = (
-        coerce_json_dict(first_change)
-        if isinstance(first_change, dict)
-        else None
-    )
-    assert change_dict is not None
-    assert change_dict.get("name") == "Jane Doe"
-    delta = change_dict.get("delta")
+    yoy_changes_value = _as_json_list(summary.get("yoy_changes"))
+    assert yoy_changes_value is not None
+    assert yoy_changes_value
+    first_change_dict = _as_json_dict(yoy_changes_value[0])
+    assert first_change_dict is not None
+    assert first_change_dict.get("name") == "Jane Doe"
+    delta = first_change_dict.get("delta")
+    assert first_change_dict.get("missing_key") is None
     assert isinstance(delta, float)
     assert abs(delta - 500000.0) < 0.01
 
-    peer_deltas = summary.get("peer_deltas")
-    assert isinstance(peer_deltas, list)
-    assert peer_deltas
-    first_delta = peer_deltas[0]
-    delta_dict = (
-        coerce_json_dict(first_delta) if isinstance(first_delta, dict) else None
-    )
-    assert delta_dict is not None
-    added = delta_dict.get("added")
-    removed = delta_dict.get("removed")
+    peer_deltas_value = _as_json_list(summary.get("peer_deltas"))
+    assert peer_deltas_value is not None
+    assert peer_deltas_value
+    first_delta_dict = _as_json_dict(peer_deltas_value[0])
+    assert first_delta_dict is not None
+    added = first_delta_dict.get("added")
+    removed = first_delta_dict.get("removed")
+    assert first_delta_dict.get("missing_key") is None
     assert isinstance(added, list)
     assert isinstance(removed, list)
     added_values = [item for item in added if isinstance(item, str)]

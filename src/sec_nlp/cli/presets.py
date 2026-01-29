@@ -1,10 +1,12 @@
 # src/sec_nlp/cli/presets.py
 """Preset configurations for the analyze pipeline."""
 
+from collections.abc import Mapping
 from enum import Enum
+from typing import TypeGuard
 
 from sec_nlp.prompts import ANALYZE_PROMPT_PATH
-from sec_nlp.types import ConfigData
+from sec_nlp.types import ConfigData, ConfigObject, ConfigValue
 
 
 class AnalyzePreset(str, Enum):
@@ -183,6 +185,12 @@ PRESET_CONFIGS: dict[AnalyzePreset, ConfigData] = {
 }
 
 
+def _is_config_object(value: ConfigValue) -> TypeGuard[ConfigObject]:
+    if not isinstance(value, Mapping):
+        return False
+    return all(isinstance(key, str) for key in value)
+
+
 def get_preset_config(preset: AnalyzePreset) -> ConfigData:
     """Get configuration overrides for a preset.
 
@@ -212,15 +220,14 @@ def apply_preset_to_config(
     # Deep merge preset config into base config
     result = config_dict.copy()
     for key, value in preset_config.items():
-        if (
-            isinstance(value, dict)
-            and key in result
-            and isinstance(result[key], dict)
-        ):
-            # Merge nested dicts
-            result[key] = {**result[key], **value}
-        else:
-            result[key] = value
+        if key in result and _is_config_object(value):
+            existing = result[key]
+            if _is_config_object(existing):
+                # Merge nested dicts
+                merged: dict[str, ConfigValue] = {**existing, **value}
+                result[key] = merged
+                continue
+        result[key] = value
 
     return result
 

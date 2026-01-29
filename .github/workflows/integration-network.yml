@@ -1,0 +1,57 @@
+name: Integration (SEC.gov)
+
+on:
+  schedule:
+    - cron: "0 6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  RUSTFLAGS: -C target-cpu=native
+  CARGO_INCREMENTAL: "1"
+  CARGO_TARGET_DIR: /tmp/sec-nlp/target
+  RUSTC_WRAPPER: sccache
+  SCCACHE_CACHE_SIZE: 10G
+  SCCACHE_DIR: /tmp/sccache
+  SCCACHE_GHA_ENABLED: "true"
+  UV_NO_BUILD_ISOLATION: "1"
+  UV_LINK_MODE: copy
+  SEC_NLP_NETWORK_TESTS: "1"
+
+jobs:
+  integration_network:
+    name: "Integration (SEC.gov) — ubuntu-latest / py3.13"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Setup sccache
+        uses: mozilla-actions/sccache@v0.0.4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: ${{ env.RUST_CRATE }} -> target
+          target-dir: ${{ env.CARGO_TARGET_DIR }}
+          cache-all-crates: true
+
+      - name: Setup environment
+        run: make sync
+
+      - name: Build extension
+        run: make build-ext
+
+      - name: Run SEC.gov integration test
+        run: uv run pytest -v tests/integration -m "network"

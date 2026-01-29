@@ -1,0 +1,102 @@
+SHELL := /bin/bash
+.DEFAULT_GOAL := help
+
+# =========================================================================
+# Variables
+# =========================================================================
+
+ROOT_DIR := $(shell dirname $(realpath $(firstword $(MAKEFILE_LIST))))
+REPO_ROOT := $(shell cd $(ROOT_DIR)/../.. && pwd)
+CARGO_MANIFEST := $(ROOT_DIR)/Cargo.toml
+ifneq ("$(wildcard $(REPO_ROOT)/.env)","")
+	include $(REPO_ROOT)/.env
+	export
+endif
+PYTHON_SYS_EXECUTABLE ?= $(shell python3 -c 'import sys; print(sys.executable)')
+PYO3_PYTHON ?= $(PYTHON_SYS_EXECUTABLE)
+MATURIN_FLAGS ?=
+MATURIN_BUILD_FLAGS ?= --release --uv
+RUSTFLAGS_DEV ?=
+RUSTFLAGS_PROD ?=
+
+# =========================================================================
+# Help
+# =========================================================================
+
+.PHONY: help
+help:
+	@echo "efts (Rust + pyo3) Commands"
+	@echo ""
+	@echo "Development:"
+	@echo "  dev            Build and install into current Python environment"
+	@echo "  build          Build wheels (release by default)"
+	@echo "  fmt            Format Rust code"
+	@echo "  clippy         Lint with clippy"
+	@echo ""
+	@echo "Testing:"
+	@echo "  test           Run cargo test"
+	@echo "  smoke          Run EFTS smoke check (requires EFTS_USER_AGENT)"
+	@echo ""
+	@echo "Cleanup:"
+	@echo "  clean          Remove Rust build artifacts"
+	@echo "  clean-all      Remove Rust artifacts + maturin outputs + sccache"
+	@echo "  clean-sccache  Clear sccache cache (if installed)"
+
+# =========================================================================
+# Development
+# =========================================================================
+
+.PHONY: dev
+dev:
+	@cd $(REPO_ROOT) && RUSTFLAGS="$(RUSTFLAGS_DEV)" maturin develop -m $(CARGO_MANIFEST) $(MATURIN_FLAGS)
+
+.PHONY: build
+build:
+	@cd $(REPO_ROOT) && RUSTFLAGS="$(RUSTFLAGS_PROD)" maturin build -m $(CARGO_MANIFEST) $(MATURIN_BUILD_FLAGS)
+
+.PHONY: fmt
+fmt:
+	@cargo fmt --manifest-path $(CARGO_MANIFEST)
+
+.PHONY: clippy
+clippy:
+	@cargo clippy --manifest-path $(CARGO_MANIFEST) --all-targets --all-features -- -D warnings
+
+# =========================================================================
+# Testing
+# =========================================================================
+
+.PHONY: test
+test:
+	@PYTHON_SYS_EXECUTABLE=$(PYTHON_SYS_EXECUTABLE) \
+	PYO3_PYTHON=$(PYO3_PYTHON) \
+	cargo test --manifest-path $(CARGO_MANIFEST)
+
+.PHONY: smoke
+smoke:
+	@cargo run --manifest-path $(CARGO_MANIFEST) --example efts_smoke
+
+# =========================================================================
+# Cleanup
+# =========================================================================
+
+.PHONY: clean
+clean:
+	@cargo clean --manifest-path $(CARGO_MANIFEST)
+
+.PHONY: clean-sccache
+clean-sccache:
+	@if command -v sccache >/dev/null 2>&1; then \
+		echo "==> Clearing sccache..."; \
+		sccache --stop-server >/dev/null 2>&1 || true; \
+		sccache --clear || true; \
+	else \
+		echo "sccache not installed; skipping"; \
+	fi
+
+.PHONY: clean-all
+clean-all: clean
+	@echo "==> Removing maturin build artifacts..."
+	@rm -rf $(REPO_ROOT)/target/wheels $(REPO_ROOT)/target/sdist $(REPO_ROOT)/dist $(REPO_ROOT)/.maturin
+	@$(MAKE) clean-sccache
+	@echo "✓ Rust artifacts cleaned"

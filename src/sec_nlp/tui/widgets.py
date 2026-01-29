@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Callable
+from datetime import date
 from pathlib import Path
 
 from rich.syntax import Syntax
@@ -58,15 +60,15 @@ class SectionModeChanged(Message):
 
 
 _STATE_ICONS: dict[ConfigScalar, ConfigScalar] = {
-    "pending": "[ ]",
-    "running": "[~]",
-    "done": "[x]",
-    "error": "[!]",
+    "pending": "○",
+    "running": "◉",
+    "done": "✓",
+    "error": "⚠",
 }
 
 
 class Spinner(Static):
-    _frames = ("-", "\\", "|", "/")
+    _frames = ("⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏")
 
     def __init__(self) -> None:
         super().__init__("")
@@ -919,3 +921,227 @@ class ResultsPanel(Vertical):
             self._viewer.update(syntax)
         except Exception:
             self._viewer.update(text)
+
+
+class EFTSPanel(Vertical):
+    """Interactive EDGAR Full-Text Search panel."""
+
+    DEFAULT_CSS = """
+    EFTSPanel {
+        height: 1fr;
+        padding: 1 2;
+    }
+
+    #efts-search-row {
+        height: auto;
+        margin-bottom: 1;
+    }
+
+    #efts-query {
+        width: 1fr;
+    }
+
+    #efts-form-types {
+        width: 24;
+        margin-left: 1;
+    }
+
+    #efts-search-btn {
+        margin-left: 1;
+    }
+
+    #efts-options-row {
+        height: auto;
+        margin-bottom: 1;
+    }
+
+    #efts-status {
+        height: auto;
+        margin-bottom: 1;
+        color: #a1a1aa;
+    }
+
+    #efts-results-container {
+        height: 1fr;
+    }
+
+    #efts-results-list {
+        width: 50;
+        height: 1fr;
+        background: #0a0a0b;
+        border: solid #27272a;
+    }
+
+    #efts-detail {
+        height: 1fr;
+        background: #0a0a0b;
+        border: solid #27272a;
+        padding: 1;
+        margin-left: 1;
+        overflow-y: auto;
+    }
+
+    .efts-result-item {
+        padding: 0 1;
+    }
+
+    .efts-result-item:hover {
+        background: #18181b;
+    }
+
+    .efts-result-item:focus {
+        background: #1f1f23;
+        color: #22d3ee;
+    }
+    """
+
+    def __init__(self, classes: ConfigScalar = "panel") -> None:
+        classes_text = None if classes is None else str(classes)
+        super().__init__(classes=classes_text)
+        self._query_input = Input(
+            placeholder="Search query (e.g., cybersecurity, breach, risk factor)",
+            id="efts-query",
+        )
+        self._form_types_input = Input(
+            placeholder="10-K,10-Q,8-K",
+            value="10-K,10-Q",
+            id="efts-form-types",
+        )
+        self._search_btn = Button(
+            "Search", id="efts-search-btn", variant="primary"
+        )
+        self._exact_match = Checkbox(
+            label="Exact", value=False, id="efts-exact"
+        )
+        self._status = Static(
+            "Enter a search query and press Search or Enter", id="efts-status"
+        )
+        self._results_list = ListView(id="efts-results-list")
+        self._detail_view = Static("", id="efts-detail")
+        self._results: list[dict[str, str | int | date | None]] = []
+        self._search_task: asyncio.Task[None] | None = None
+        self._spinner = Spinner()
+
+    def compose(self):
+        yield Label("EFTS — EDGAR Full-Text Search", classes="panel-title")
+        with Horizontal(id="efts-search-row"):
+            yield self._query_input
+            yield self._form_types_input
+            yield self._search_btn
+            yield self._spinner
+        with Horizontal(id="efts-options-row"):
+            yield self._exact_match
+        yield self._status
+        with Horizontal(id="efts-results-container"):
+            yield self._results_list
+            yield VerticalScroll(self._detail_view, id="efts-detail-scroll")
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id == "efts-search-btn":
+            self._run_search()
+
+    def on_input_submitted(self, event: Input.Submitted) -> None:
+        if event.input.id == "efts-query":
+            self._run_search()
+
+    def _run_search(self) -> None:
+        query = self._query_input.value.strip()
+        if not query:
+            self._status.update("Please enter a search query")
+            return
+
+        if self._search_task is not None and not self._search_task.done():
+            self._search_task.cancel()
+
+        self._search_task = asyncio.create_task(self._execute_search(query))
+
+    async def _execute_search(self, query: str) -> None:
+        from sec_nlp.core.edgar.efts import EFTSClient
+
+        self._spinner.start()
+        self._status.update(f"Searching for '{query}'...")
+        self._results_list.remove_children()
+        self._detail_view.update("")
+        self._results = []
+
+        form_types_raw = self._form_types_input.value.strip()
+        form_types: list[str] | None = None
+        if form_types_raw:
+            form_types = [
+                ft.strip() for ft in form_types_raw.split(",") if ft.strip()
+            ]
+
+        try:
+            client = EFTSClient()
+            response = await client.search(
+                query,
+                forms=form_types,
+            )
+
+            hits = response.hits
+            total = response.total
+            self._results = [
+                {
+                    "cik": hit.cik,
+                    "company": hit.company_name,
+                    "form": hit.form_type,
+                    "filed": hit.filed_date,
+                    "accession": hit.accession_number,
+                    "url": hit.filing_url,
+                }
+                for hit in hits
+            ]
+
+            self._spinner.stop()
+            self._status.update(
+                f"Found {total:,} results (showing {len(hits)})"
+            )
+
+            if self._results:
+                for idx, result in enumerate(self._results):
+                    company = str(result.get("company", "Unknown"))[:40]
+                    form = result.get("form", "")
+                    filed = result.get("filed", "")
+                    label_text = f"{company} | {form} | {filed}"
+                    item = ListItem(
+                        Label(label_text),
+                        id=f"efts-hit-{idx}",
+                        classes="efts-result-item",
+                    )
+                    self._results_list.mount(item)
+                self._results_list.index = 0
+                self._show_result(0)
+            else:
+                self._detail_view.update("No results found.")
+
+        except Exception as exc:
+            self._spinner.stop()
+            self._status.update(f"Search failed: {exc}")
+            self._detail_view.update(f"Error: {exc}")
+
+    def on_list_view_selected(self, event: ListView.Selected) -> None:
+        if event.item is None or event.item.id is None:
+            return
+        item_id = str(event.item.id)
+        if not item_id.startswith("efts-hit-"):
+            return
+        try:
+            idx = int(item_id.removeprefix("efts-hit-"))
+        except ValueError:
+            return
+        self._show_result(idx)
+
+    def _show_result(self, idx: int) -> None:
+        if idx < 0 or idx >= len(self._results):
+            return
+        result = self._results[idx]
+        lines = [
+            f"Company:   {result.get('company', 'N/A')}",
+            f"CIK:       {result.get('cik', 'N/A')}",
+            f"Form:      {result.get('form', 'N/A')}",
+            f"Filed:     {result.get('filed', 'N/A')}",
+            f"Accession: {result.get('accession', 'N/A')}",
+            "",
+            f"URL: {result.get('url', 'N/A')}",
+        ]
+        self._detail_view.update("\n".join(lines))

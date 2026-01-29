@@ -7,6 +7,7 @@ import re
 import time
 from asyncio.subprocess import Process
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from textual.app import App, ComposeResult
 from textual.containers import Horizontal, Vertical
@@ -24,18 +25,13 @@ from textual.widgets import (
     TabPane,
 )
 
-from sec_nlp.tui.interfaces import FormSpec, build_cli_args, get_form_spec
-from sec_nlp.tui.market import load_market_snapshot
-from sec_nlp.tui.runner import run_cli
-from sec_nlp.tui.specs import find_pipeline_spec, get_pipeline_specs
-from sec_nlp.tui.widgets import (
-    FormView,
-    MarketPanel,
-    ResultsPanel,
-    SectionModeChanged,
-    SegmentPanel,
-)
 from sec_nlp.types import ConfigScalar
+
+if TYPE_CHECKING:
+    from sec_nlp.tui.interfaces import FormSpec
+    from sec_nlp.tui.widgets import (
+        SectionModeChanged,
+    )
 
 _OUTPUT_PATH_RE = re.compile(r"(?P<path>[^\s]+\.(?:json|ya?ml))")
 _PROGRESS_RE = re.compile(r"\[[^]]*<[^]]*\]")
@@ -83,71 +79,121 @@ class SegmentMatcher:
 
 class SecNlpTuiApp(App):
     CSS = """
+    /* ═══════════════════════════════════════════════════════════════════════
+       SEC NLP TUI - Modern Dark Theme
+       A sleek, professional interface for SEC filing analysis
+       ═══════════════════════════════════════════════════════════════════════ */
+
+    /* ─── Base Colors ─────────────────────────────────────────────────────── */
+    $surface: #0a0a0b;
+    $surface-raised: #111113;
+    $surface-elevated: #18181b;
+    $surface-overlay: #1f1f23;
+
+    $border-subtle: #27272a;
+    $border-default: #3f3f46;
+    $border-emphasis: #52525b;
+
+    $text-primary: #fafafa;
+    $text-secondary: #a1a1aa;
+    $text-muted: #71717a;
+
+    $accent-primary: #22d3ee;
+    $accent-secondary: #06b6d4;
+    $accent-glow: #0891b2;
+
+    $success: #4ade80;
+    $success-muted: #166534;
+    $warning: #fbbf24;
+    $error: #f87171;
+    $error-muted: #7f1d1d;
+
+    /* ─── Global Styles ───────────────────────────────────────────────────── */
     Screen {
-        background: #000000;
-        color: #f5f5f5;
+        background: $surface;
+        color: $text-primary;
     }
 
-    Header, Footer {
-        background: #000000;
-        color: #f5f5f5;
+    Header {
+        background: $surface;
+        color: $accent-primary;
+        text-style: bold;
+        border-bottom: solid $border-subtle;
     }
 
+    Footer {
+        background: $surface-raised;
+        color: $text-secondary;
+        border-top: solid $border-subtle;
+    }
+
+    /* ─── Layout ──────────────────────────────────────────────────────────── */
     #layout {
         height: 1fr;
     }
 
     #sidebar {
-        width: 30;
-        background: #0b0b0b;
-        border: round #2b2b2b;
+        width: 32;
+        background: $surface-raised;
+        border-right: solid $border-subtle;
         padding: 1 1;
     }
 
     #main {
         padding: 1 2;
         height: 1fr;
-        background: #000000;
-        color: #f5f5f5;
+        background: $surface;
+        color: $text-primary;
     }
 
+    /* ─── Panels ──────────────────────────────────────────────────────────── */
     .panel {
-        background: #141414;
-        border: round #2b2b2b;
+        background: $surface-raised;
+        border: solid $border-subtle;
         padding: 1 2;
         margin: 0 0 1 0;
-        color: #f5f5f5;
+        color: $text-primary;
     }
 
     .panel-title {
-        color: #f5f5f5;
+        color: $accent-primary;
         text-style: bold;
         margin-bottom: 1;
     }
 
+    /* ─── Pipeline List ───────────────────────────────────────────────────── */
     #pipeline-list {
         height: 1fr;
         margin-top: 1;
-        background: #111111;
-        border: round #2b2b2b;
+        background: $surface;
+        border: solid $border-subtle;
     }
 
     ListView > ListItem {
-        padding: 0 1;
+        padding: 0 2;
+        color: $text-secondary;
+    }
+
+    ListView > ListItem:hover {
+        background: $surface-elevated;
+        color: $text-primary;
     }
 
     ListView > ListItem.--highlight,
     ListView > ListItem.-highlight,
     ListView > ListItem:focus {
-        background: #1a1a1a;
-        color: #5eead4;
+        background: $surface-overlay;
+        color: $accent-primary;
+        text-style: bold;
     }
 
     #pipeline-desc {
-        color: #c7c7c7;
+        color: $text-muted;
         margin-top: 1;
+        padding: 0 1;
     }
 
+    /* ─── Actions Bar ─────────────────────────────────────────────────────── */
     #actions {
         height: auto;
         margin-top: 1;
@@ -159,6 +205,7 @@ class SecNlpTuiApp(App):
         margin-bottom: 1;
     }
 
+    /* ─── Form Styling ────────────────────────────────────────────────────── */
     .form-row {
         height: auto;
         margin-bottom: 1;
@@ -170,55 +217,73 @@ class SecNlpTuiApp(App):
 
     .field-label {
         width: 18;
-        color: #c7c7c7;
+        color: $text-secondary;
     }
 
-    Input, Select, Checkbox {
-        background: #0f0f0f;
-        border: round #2b2b2b;
-        color: #f5f5f5;
+    /* ─── Input Controls ──────────────────────────────────────────────────── */
+    Input, Select {
+        background: $surface;
+        border: solid $border-subtle;
+        color: $text-primary;
     }
 
-    Button, Input, Select, Checkbox, Tab, .section-header, ListView > ListItem {
-        transition: background 0.2 linear 0, color 0.2 linear 0, border 0.2 linear 0;
+    Input:hover, Select:hover {
+        border: solid $border-default;
     }
 
-    .segment-row, #status, .segment-status {
-        transition: background 0.2 linear 0, color 0.2 linear 0, border 0.2 linear 0;
-    }
-
-    Input:focus, Select:focus, Checkbox:focus {
-        border: round #5eead4;
-        color: #f5f5f5;
+    Input:focus, Select:focus {
+        border: solid $accent-primary;
+        color: $text-primary;
     }
 
     Checkbox {
+        background: transparent;
+        color: $text-secondary;
         padding: 0 1;
     }
 
+    Checkbox:focus {
+        color: $accent-primary;
+    }
+
+    Checkbox.-on {
+        color: $success;
+    }
+
+    /* ─── Transitions ─────────────────────────────────────────────────────── */
+    Button, Input, Select, Checkbox, Tab, .section-header, ListView > ListItem {
+        transition: background 150ms linear, color 150ms linear, border 150ms linear;
+    }
+
+    .segment-row, #status, .segment-status {
+        transition: background 150ms linear, color 150ms linear, border 150ms linear;
+    }
+
+    /* ─── Collapsible Sections ────────────────────────────────────────────── */
     .collapsible-section {
         margin-bottom: 1;
     }
 
     .section-header {
-        background: #1a1a1a;
-        color: #f5f5f5;
+        background: $surface-elevated;
+        color: $text-secondary;
         padding: 0 1;
         text-style: bold;
     }
 
     .section-header:hover {
-        background: #1a1a1a;
+        background: $surface-overlay;
+        color: $text-primary;
     }
 
     Button.section-header {
-        border: round #2b2b2b;
+        border: solid $border-subtle;
         content-align: left middle;
         width: 1fr;
     }
 
     Button.section-header:focus {
-        border: round #5eead4;
+        border: solid $accent-primary;
     }
 
     .section-content {
@@ -231,83 +296,150 @@ class SecNlpTuiApp(App):
     }
 
     .section-active .section-header {
-        background: #0f3d3a;
-        border: round #1f6f69;
-        color: #d8f4f1;
+        background: $accent-glow;
+        border: solid $accent-secondary;
+        color: $text-primary;
     }
 
+    /* ─── Buttons ─────────────────────────────────────────────────────────── */
     Button {
-        border: round #2b2b2b;
-        background: #1a1a1a;
-        color: #f5f5f5;
+        border: solid $border-subtle;
+        background: $surface-elevated;
+        color: $text-secondary;
         text-style: bold;
         margin-right: 1;
+        min-width: 10;
+    }
+
+    Button:hover {
+        background: $surface-overlay;
+        color: $text-primary;
+        border: solid $border-default;
     }
 
     Button:focus {
-        border: round #5eead4;
+        border: solid $accent-primary;
+        color: $accent-primary;
     }
 
-    Button#run {
-        background: #0f3d3a;
-        border: round #1f6f69;
-        color: #d8f4f1;
+    Button#run-btn {
+        background: #064e3b;
+        border: solid #047857;
+        color: $success;
     }
 
-    Button#stop {
-        background: #3a1212;
-        border: round #6b2b2b;
-        color: #f2d7d7;
+    Button#run-btn:hover {
+        background: #065f46;
+        color: #86efac;
     }
 
+    Button#run-btn:focus {
+        border: solid $success;
+    }
+
+    Button#stop-btn {
+        background: #7f1d1d;
+        border: solid #991b1b;
+        color: $error;
+    }
+
+    Button#stop-btn:hover {
+        background: #991b1b;
+        color: #fecaca;
+    }
+
+    Button#stop-btn:focus {
+        border: solid $error;
+    }
+
+    Button:disabled {
+        background: $surface;
+        border: solid $border-subtle;
+        color: $text-muted;
+        text-style: italic;
+    }
+
+    /* ─── Status Display ──────────────────────────────────────────────────── */
     #status {
-        margin-left: 1;
-        color: #c7c7c7;
-        background: #0f0f0f;
-        padding: 0 1;
-        border: round #2b2b2b;
+        margin-left: 2;
+        color: $text-secondary;
+        background: $surface;
+        padding: 0 2;
+        border: solid $border-subtle;
+        min-width: 16;
     }
 
     #elapsed {
         margin-left: 1;
-        color: #c7c7c7;
-        background: #0f0f0f;
-        padding: 0 1;
-        border: round #2b2b2b;
-    }
-
-    ProgressBar {
-        background: #0f0f0f;
-        color: #5eead4;
-    }
-
-    .segment-row {
-        height: auto;
-        padding: 0 1;
-    }
-
-    .segment-label {
-        width: 18;
+        color: $accent-primary;
+        background: $surface;
+        padding: 0 2;
+        border: solid $border-subtle;
         text-style: bold;
     }
 
+    /* ─── Progress Bar ────────────────────────────────────────────────────── */
+    ProgressBar {
+        background: $surface;
+        color: $accent-primary;
+        padding: 0 1;
+    }
+
+    ProgressBar > .bar--bar {
+        color: $accent-secondary;
+    }
+
+    ProgressBar > .bar--complete {
+        color: $success;
+    }
+
+    /* ─── Segment Panel ───────────────────────────────────────────────────── */
+    .segment-row {
+        height: auto;
+        padding: 0 1;
+        margin: 0 0;
+    }
+
+    .segment-label {
+        width: 20;
+        text-style: bold;
+        color: $text-secondary;
+    }
+
     .segment-detail {
-        color: #b0b0b0;
+        color: $text-muted;
         width: 1fr;
     }
 
+    .segment-row.state-pending {
+        color: $text-muted;
+    }
+
     .segment-row.state-running {
-        background: #1a1a1a;
-        color: #5eead4;
+        background: $surface-overlay;
+        color: $accent-primary;
+    }
+
+    .segment-row.state-running .segment-label {
+        color: $accent-primary;
+        text-style: bold;
     }
 
     .segment-row.state-done {
-        color: #86efac;
+        color: $success;
+    }
+
+    .segment-row.state-done .segment-label {
+        color: $success;
     }
 
     .segment-row.state-error {
-        color: #fca5a5;
-        background: #2a0f0f;
+        color: $error;
+        background: $error-muted;
+    }
+
+    .segment-row.state-error .segment-label {
+        color: $error;
     }
 
     .segment-panel {
@@ -317,21 +449,24 @@ class SecNlpTuiApp(App):
 
     .segment-list {
         height: 1fr;
+        background: $surface;
+        border: solid $border-subtle;
     }
 
     .segment-status {
         margin-top: 1;
-        padding: 0 1;
-        color: #f5f5f5;
-        background: #141414;
-        border: round #2b2b2b;
+        padding: 1 2;
+        color: $text-secondary;
+        background: $surface-elevated;
+        border: solid $border-subtle;
     }
 
+    /* ─── Market Panel ────────────────────────────────────────────────────── */
     .market-panel {
-        width: 46;
-        min-width: 34;
-        background: #141414;
-        border: round #2b2b2b;
+        width: 48;
+        min-width: 36;
+        background: $surface-raised;
+        border: solid $border-subtle;
     }
 
     .market-controls {
@@ -340,41 +475,43 @@ class SecNlpTuiApp(App):
     }
 
     .market-label {
-        width: 7;
-        color: #c7c7c7;
+        width: 8;
+        color: $text-muted;
     }
 
     #market-summary {
-        color: #f5f5f5;
+        color: $text-primary;
         margin-bottom: 1;
+        text-style: bold;
     }
 
     #market-chart {
-        background: #0b0b0b;
-        border: round #2b2b2b;
-        color: #5eead4;
+        background: $surface;
+        border: solid $border-subtle;
+        color: $accent-primary;
         padding: 1 1;
-        height: 7;
+        height: 8;
     }
 
     #market-detail {
-        color: #c7c7c7;
+        color: $text-secondary;
         margin-top: 1;
     }
 
     #market-context {
-        color: #b0b0b0;
+        color: $text-muted;
         margin-top: 1;
     }
 
     #market-stats {
-        color: #f5f5f5;
-        background: #0f0f0f;
-        border: round #2b2b2b;
-        padding: 0 1;
+        color: $text-primary;
+        background: $surface;
+        border: solid $border-subtle;
+        padding: 1 1;
         margin-top: 1;
     }
 
+    /* ─── Results Panel ───────────────────────────────────────────────────── */
     .results-panel {
         width: 1fr;
     }
@@ -385,35 +522,37 @@ class SecNlpTuiApp(App):
     }
 
     #results-list {
-        width: 36;
-        background: #0f0f0f;
-        border: round #2b2b2b;
-        height: 12;
+        width: 38;
+        background: $surface;
+        border: solid $border-subtle;
+        height: 14;
         margin-right: 1;
     }
 
     #results-view {
-        height: 12;
-        background: #0b0b0b;
-        border: round #2b2b2b;
-        color: #f5f5f5;
+        height: 14;
+        background: $surface;
+        border: solid $border-subtle;
+        color: $text-primary;
         padding: 1;
     }
 
     #log-panel {
-        background: #0b0b0b;
-        border: round #2b2b2b;
+        background: $surface;
+        border: solid $border-subtle;
         padding: 1;
         height: 1fr;
-        min-height: 8;
+        min-height: 10;
+        color: $text-secondary;
     }
 
     #results-filter {
         margin-bottom: 1;
     }
 
+    /* ─── Tabs ────────────────────────────────────────────────────────────── */
     TabbedContent {
-        background: #000000;
+        background: $surface;
         height: 1fr;
     }
 
@@ -422,23 +561,65 @@ class SecNlpTuiApp(App):
         height: 1fr;
     }
 
-    TabBar {
-        background: #0b0b0b;
-        border: round #2b2b2b;
+    ContentSwitcher {
+        background: $surface;
+    }
+
+    Tabs {
+        background: $surface-raised;
+        border-bottom: solid $border-subtle;
+        height: 3;
     }
 
     Tab {
-        background: #121212;
-        color: #c7c7c7;
+        background: $surface-raised;
+        color: #fafafa;
         text-style: bold;
+        padding: 0 3;
+        height: 3;
+        content-align: center middle;
+    }
+
+    Tab > Label {
+        color: #fafafa;
+    }
+
+    Tab:hover {
+        color: $accent-primary;
+        background: $surface-elevated;
+    }
+
+    Tab:hover > Label {
+        color: $accent-primary;
     }
 
     Tab.-active,
     Tab.--active {
-        background: #1a1a1a;
-        color: #5eead4;
+        background: $surface-elevated;
+        color: $accent-primary;
+        border-bottom: tall $accent-primary;
+        text-style: bold;
     }
 
+    Tab.-active > Label,
+    Tab.--active > Label {
+        color: $accent-primary;
+    }
+
+    Tab:focus {
+        text-style: bold reverse;
+    }
+
+    Underline {
+        background: $border-subtle;
+    }
+
+    Underline > .underline--bar {
+        background: $accent-primary;
+        color: $accent-primary;
+    }
+
+    /* ─── Full-size Variants ──────────────────────────────────────────────── */
     .market-full {
         height: 1fr;
     }
@@ -449,12 +630,13 @@ class SecNlpTuiApp(App):
 
     #results-view-full {
         height: 1fr;
-        background: #0b0b0b;
-        border: round #2b2b2b;
-        color: #f5f5f5;
+        background: $surface;
+        border: solid $border-subtle;
+        color: $text-primary;
         padding: 1;
     }
 
+    /* ─── Run Tab Layout ──────────────────────────────────────────────────── */
     #run {
         height: 1fr;
         layout: vertical;
@@ -482,6 +664,27 @@ class SecNlpTuiApp(App):
         min-height: 18;
     }
 
+    /* ─── Scrollbars ──────────────────────────────────────────────────────── */
+    Scrollbar {
+        background: $surface;
+    }
+
+    ScrollbarGripper {
+        background: $border-default;
+    }
+
+    ScrollbarGripper:hover {
+        background: $border-emphasis;
+    }
+
+    /* ─── Tooltip ─────────────────────────────────────────────────────────── */
+    Tooltip {
+        background: $surface-overlay;
+        color: $text-primary;
+        border: solid $border-default;
+        padding: 0 1;
+    }
+
     """
 
     BINDINGS = [
@@ -491,6 +694,7 @@ class SecNlpTuiApp(App):
         ("1", "switch_tab('run')", "Run tab"),
         ("2", "switch_tab('market')", "Market tab"),
         ("3", "switch_tab('results')", "Results tab"),
+        ("4", "switch_tab('efts')", "EFTS tab"),
     ]
 
     def __init__(self) -> None:
@@ -504,6 +708,16 @@ class SecNlpTuiApp(App):
         self._elapsed_timer: Timer | None = None
 
     def compose(self) -> ComposeResult:
+        # Lazy imports for faster initial load
+        from sec_nlp.tui.specs import get_pipeline_specs
+        from sec_nlp.tui.widgets import (
+            EFTSPanel,
+            FormView,
+            MarketPanel,
+            ResultsPanel,
+            SegmentPanel,
+        )
+
         yield Header(show_clock=True)
         with Horizontal(id="layout"):
             with Vertical(id="sidebar"):
@@ -537,9 +751,13 @@ class SecNlpTuiApp(App):
                         yield MarketPanel(classes="market-full")
                     with TabPane("Results", id="results"):
                         yield ResultsPanel(classes="results-full")
+                    with TabPane("EFTS", id="efts"):
+                        yield EFTSPanel()
         yield Footer()
 
     def on_mount(self) -> None:
+        from sec_nlp.tui.specs import get_pipeline_specs
+
         pipeline_list = self.query_one("#pipeline-list", ListView)
         pipeline_list.index = 0
         specs = get_pipeline_specs()
@@ -547,6 +765,8 @@ class SecNlpTuiApp(App):
             self._select_pipeline(specs[0].key)
 
     def on_list_view_selected(self, event: ListView.Selected) -> None:
+        from sec_nlp.tui.specs import get_pipeline_specs
+
         if event.item is None:
             return
         item_id = event.item.id
@@ -582,6 +802,14 @@ class SecNlpTuiApp(App):
         tabs.active = tab_id
 
     def _select_pipeline(self, key: ConfigScalar) -> None:
+        from sec_nlp.tui.interfaces import get_form_spec
+        from sec_nlp.tui.specs import find_pipeline_spec
+        from sec_nlp.tui.widgets import (
+            FormView,
+            MarketPanel,
+            SegmentPanel,
+        )
+
         spec = find_pipeline_spec(str(key))
         if spec is None:
             return
@@ -607,6 +835,10 @@ class SecNlpTuiApp(App):
         desc.update(str(spec.description))
 
     def _start_run(self) -> None:
+        from sec_nlp.tui.interfaces import build_cli_args, get_form_spec
+        from sec_nlp.tui.specs import find_pipeline_spec
+        from sec_nlp.tui.widgets import FormView, MarketPanel, SegmentPanel
+
         if self._run_task is not None and not self._run_task.done():
             return
         if self._pipeline_key is None:
@@ -668,6 +900,9 @@ class SecNlpTuiApp(App):
         self._stop_elapsed(final=True)
 
     async def _run_cli(self, args: list[ConfigScalar]) -> None:
+        from sec_nlp.tui.runner import run_cli
+        from sec_nlp.tui.widgets import SegmentPanel
+
         async def on_start(process: Process) -> None:
             self._active_process = process
 
@@ -793,11 +1028,16 @@ class SecNlpTuiApp(App):
                 self._output_paths.append(path)
 
     def _refresh_market_panel(self) -> None:
+        from sec_nlp.tui.market import load_market_snapshot
+        from sec_nlp.tui.widgets import MarketPanel
+
         market_panel = self.query_one(MarketPanel)
         snapshot = load_market_snapshot(self._output_paths)
         market_panel.set_snapshot(snapshot)
 
     def _refresh_results_panel(self) -> None:
+        from sec_nlp.tui.widgets import ResultsPanel
+
         results_panel = self.query_one(ResultsPanel)
         yaml_paths = [
             path

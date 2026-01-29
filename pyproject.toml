@@ -47,6 +47,7 @@ check-imports = "scripts.build.check_imports:main"
 cache-keys = [
   {file = "pyproject.toml"},
   {file = "crates/market/Cargo.toml"},
+  {file = "crates/efts/Cargo.toml"},
   {file = "**/*.rs"},
 ]
 

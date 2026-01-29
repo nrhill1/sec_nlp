@@ -1,34 +1,59 @@
 # src/sec_nlp/core/edgar/__init__.py
 """EDGAR/SEC-specific domain helpers."""
 
-from .efts import (
-    EFTSAPIError,
-    EFTSClient,
-    EFTSClientConfig,
-    create_efts_client,
+from __future__ import annotations
+
+import warnings
+
+# Suppress the runpy warning when running this module as __main__
+# This occurs when using: python -m sec_nlp.core.edgar.efts
+warnings.filterwarnings(
+    "ignore",
+    category=RuntimeWarning,
+    message=r"'sec_nlp\.core\.edgar\.efts' found in sys\.modules.*",
 )
-from .efts_models import (
-    EFTSError,
-    EFTSHit,
-    EFTSSearchParams,
-    EFTSSearchResponse,
-    EFTSSortField,
-    EFTSSortOrder,
-)
-from .filing_mode import FilingMode
-from .holdings_parser import HoldingsParser, parse_holdings_documents
-from .insider_parser import InsiderParser, parse_insider_documents
-from .relationship_resolver import (
-    RelationshipResolver,
-    build_related_filings_map,
-    serialize_relationship_graph,
-)
-from .relationships import (
-    FilingIdentifier,
-    FilingRelation,
-    FilingRelationshipGraph,
-    FilingRelationType,
-)
+
+
+def __getattr__(name: str) -> object:
+    """Lazy load EFTS modules to avoid import issues when running as __main__."""
+    efts_exports = {
+        "EFTSAPIError": "efts",
+        "EFTSClient": "efts",
+        "EFTSClientConfig": "efts",
+        "create_efts_client": "efts",
+        "EFTSError": "efts_models",
+        "EFTSHit": "efts_models",
+        "EFTSSearchParams": "efts_models",
+        "EFTSSearchResponse": "efts_models",
+        "EFTSSortField": "efts_models",
+        "EFTSSortOrder": "efts_models",
+    }
+
+    other_exports = {
+        "FilingMode": "filing_mode",
+        "HoldingsParser": "holdings_parser",
+        "parse_holdings_documents": "holdings_parser",
+        "InsiderParser": "insider_parser",
+        "parse_insider_documents": "insider_parser",
+        "RelationshipResolver": "relationship_resolver",
+        "build_related_filings_map": "relationship_resolver",
+        "serialize_relationship_graph": "relationship_resolver",
+        "FilingIdentifier": "relationships",
+        "FilingRelation": "relationships",
+        "FilingRelationshipGraph": "relationships",
+        "FilingRelationType": "relationships",
+    }
+
+    all_exports = {**efts_exports, **other_exports}
+    if name not in all_exports:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+    module_name = all_exports[name]
+    from importlib import import_module
+
+    module = import_module(f".{module_name}", __name__)
+    return getattr(module, name)
+
 
 __all__ = (
     "create_efts_client",
@@ -54,3 +79,6 @@ __all__ = (
     "parse_insider_documents",
     "serialize_relationship_graph",
 )
+
+# Enable lazy loading via __getattr__
+__lazy__ = True

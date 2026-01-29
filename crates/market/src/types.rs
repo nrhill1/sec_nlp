@@ -1,7 +1,7 @@
 // crates/market/src/types.rs
 //! Type definitions for market data.
 
-use pyo3::exceptions::{PyRuntimeError, PyValueError};
+use pyo3::exceptions::PyRuntimeError;
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
 
@@ -59,34 +59,6 @@ pub struct CachedQuotes {
     pub cached_at: std::time::Instant,
 }
 
-/// Market error types.
-#[derive(Debug)]
-pub enum MarketError {
-    /// Invalid input parameter.
-    InvalidInput(String),
-    /// API/network error.
-    ApiError(String),
-    /// No data available.
-    NoData(String),
-}
-
-impl MarketError {
-    /// Convert to PyErr.
-    pub fn into_py_err(self) -> PyErr {
-        match self {
-            MarketError::InvalidInput(msg) => PyValueError::new_err(msg),
-            MarketError::ApiError(msg) => PyRuntimeError::new_err(msg),
-            MarketError::NoData(msg) => PyRuntimeError::new_err(msg),
-        }
-    }
-}
-
-impl<E: std::fmt::Display> From<E> for MarketError {
-    fn from(err: E) -> Self {
-        MarketError::ApiError(err.to_string())
-    }
-}
-
 /// Helper to convert any error to PyErr.
 pub fn to_py_err<E: std::fmt::Display>(err: E) -> PyErr {
     PyRuntimeError::new_err(err.to_string())
@@ -110,14 +82,5 @@ mod tests {
         let quote = MarketQuote::from_yahoo(yahoo_quote);
         assert_eq!(quote.timestamp, 1234567890);
         assert_eq!(quote.close, 105.0);
-    }
-
-    #[test]
-    fn market_error_variants() {
-        let err = MarketError::InvalidInput("bad input".to_string());
-        assert!(matches!(err, MarketError::InvalidInput(_)));
-
-        let err = MarketError::ApiError("network failed".to_string());
-        assert!(matches!(err, MarketError::ApiError(_)));
     }
 }

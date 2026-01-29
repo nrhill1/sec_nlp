@@ -17,6 +17,8 @@ export RUSTC_WRAPPER ?= $(SCCACHE)
 PYTHON_DIR := $(ROOT_DIR)/src
 RUST_DIR := $(ROOT_DIR)/crates/market
 MARKET_MANIFEST := $(RUST_DIR)/Cargo.toml
+EFTS_DIR := $(ROOT_DIR)/crates/efts
+EFTS_MANIFEST := $(EFTS_DIR)/Cargo.toml
 
 # Maturin
 MATURIN_FLAGS ?=
@@ -59,17 +61,20 @@ help:
 	@echo ""
 	@echo "Language-Specific:"
 	@echo "  py-<target>            Run Python target (e.g., py-lint, py-test)"
-	@echo "  rs-<target>            Run Rust target (e.g., rs-dev)"
+	@echo "  rs-m-<target>          Run Rust target for market (e.g., rs-m-dev)"
+	@echo "  rs-sg-<target>         Run Rust target for efts (e.g., rs-sg-dev)"
 	@echo "  rs-clean               Clean Rust build artifacts"
 	@echo "  rs-clean-all           Clean Rust artifacts + sccache"
 	@echo "  rs-clean-sccache       Clear sccache cache"
 	@echo "  maturin-dev            Build + install Rust extension via maturin"
 	@echo "  maturin-build          Build release wheels via maturin"
 	@echo "  maturin-sdist          Build a source distribution via maturin"
+	@echo "  build-ext              Build + install Rust extensions (market + efts)"
 	@echo ""
 	@echo "For detailed help on each subsystem, run:"
 	@echo "  make -C src help       # Python commands"
 	@echo "  make -C crates/market help  # Market (Rust) commands"
+	@echo "  make -C crates/efts help  # efts (Rust) commands"
 	@echo ""
 	@echo "CI/CD:"
 	@echo "  ci                     Full CI pipeline"
@@ -141,9 +146,13 @@ py-%: ready
 # Rust Targets (delegate to crates/market/Makefile)
 # =========================================================================
 
-.PHONY: rs-%
-rs-%:
+.PHONY: rs-m-%
+rs-m-%:
 	@$(MAKE) -C $(RUST_DIR) $*
+
+.PHONY: rs-sg-%
+rs-sg-%:
+	@$(MAKE) -C $(EFTS_DIR) $*
 
 # =========================================================================
 # Maturin Targets
@@ -161,6 +170,14 @@ maturin-build:
 maturin-sdist:
 	@maturin sdist -m $(MARKET_MANIFEST) $(MATURIN_SDIST_FLAGS)
 
+.PHONY: build-ext
+build-ext: ready
+	@echo "==> Building Rust extensions..."
+	@RUSTFLAGS="$(RUSTFLAGS_DEV)" maturin develop -m $(MARKET_MANIFEST) $(MATURIN_FLAGS)
+	@RUSTFLAGS="$(RUSTFLAGS_DEV)" maturin develop -m $(EFTS_MANIFEST) $(MATURIN_FLAGS)
+	@echo "✓ Rust extensions built"
+	@echo ""
+
 # =========================================================================
 # Combined Commands
 # =========================================================================
@@ -176,6 +193,7 @@ test: ready
 	@echo "║                    Running Tests                               ║"
 	@echo "╚════════════════════════════════════════════════════════════════╝"
 	@echo ""
+	@$(MAKE) build-ext
 	@$(MAKE) py-test
 	@echo ""
 	@echo "✓ All tests passed!"
@@ -193,13 +211,15 @@ lint: ready
 
 .PHONY: verify-py
 verify-py: ready
+	@$(MAKE) build-ext
 	@$(MAKE) py-lint
 	@$(MAKE) py-types
 	@$(MAKE) py-test
 
 .PHONY: verify-rs
 verify-rs: ready
-	@$(MAKE) market-test
+	@$(MAKE) rs-m-test
+	@$(MAKE) rs-sg-test
 
 .PHONY: verify-all
 verify-all: ready
@@ -225,6 +245,7 @@ validate: ready
 	@echo "║                  Full Validation Pipeline                      ║"
 	@echo "╚════════════════════════════════════════════════════════════════╝"
 	@echo ""
+	@$(MAKE) build-ext
 	@$(MAKE) py-check-imports
 	@$(MAKE) types
 	@$(MAKE) test

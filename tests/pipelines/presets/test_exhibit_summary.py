@@ -5,11 +5,30 @@ from pathlib import Path
 
 from langchain_core.documents import Document
 
-from sec_nlp.core.types import as_json_dict
+from sec_nlp.core.types import as_json_dict, coerce_json_value
 from sec_nlp.pipelines.presets.exb.config import ExhibitConfig
 from sec_nlp.pipelines.presets.exb.io.exhibit_summary import (
     build_exhibit_summary,
 )
+from sec_nlp.types import JsonDict, JsonValue
+
+
+def _as_json_list(value: JsonValue | None) -> list[JsonValue] | None:
+    if value is None:
+        return None
+    coerced = coerce_json_value(value)
+    if not isinstance(coerced, list):
+        return None
+    return list(coerced)
+
+
+def _as_json_dict(value: JsonValue | None) -> JsonDict | None:
+    if value is None:
+        return None
+    coerced = coerce_json_value(value)
+    if coerced is None:
+        return None
+    return as_json_dict(coerced)
 
 
 def _make_config(tmp_path: Path, exhibit_numbers):
@@ -68,26 +87,30 @@ def test_build_exhibit_summary_extracts_core_details(tmp_path: Path) -> None:
         ),
     ]
 
-    summary = build_exhibit_summary(
+    summary: JsonDict = build_exhibit_summary(
         symbol="ACME",
         docs=docs,
         config=config,
     )
 
-    accessions = summary.get("accessions")
-    assert isinstance(accessions, list)
+    accessions = _as_json_list(summary.get("accessions"))
+    assert accessions is not None
     assert len(accessions) == 1
-    details = as_json_dict(accessions[0].get("exhibit_details"))
+    accession_entry = _as_json_dict(accessions[0])
+    assert accession_entry is not None
+    details = _as_json_dict(accession_entry.get("exhibit_details"))
     assert details is not None
+    assert details.get("missing_key") is None
 
-    exhibit_21 = as_json_dict(details.get("21"))
+    exhibit_21 = _as_json_dict(details.get("21"))
     assert exhibit_21 is not None
     assert exhibit_21.get("subsidiary_count") == 2
-    subsidiaries = exhibit_21.get("subsidiaries")
-    assert isinstance(subsidiaries, list)
+    assert exhibit_21.get("missing_key") is None
+    subsidiaries = _as_json_list(exhibit_21.get("subsidiaries"))
+    assert subsidiaries is not None
     found_acme = False
     for item in subsidiaries:
-        item_dict = as_json_dict(item)
+        item_dict = _as_json_dict(item)
         if item_dict is None:
             continue
         if item_dict.get("name") == "Acme LLC":
@@ -95,8 +118,9 @@ def test_build_exhibit_summary_extracts_core_details(tmp_path: Path) -> None:
             break
     assert found_acme
 
-    exhibit_23 = as_json_dict(details.get("23"))
+    exhibit_23 = _as_json_dict(details.get("23"))
     assert exhibit_23 is not None
+    assert exhibit_23.get("missing_key") is None
     auditor_name = exhibit_23.get("auditor_name")
     auditor_text = auditor_name if isinstance(auditor_name, str) else ""
     assert "Deloitte" in auditor_text
@@ -104,15 +128,16 @@ def test_build_exhibit_summary_extracts_core_details(tmp_path: Path) -> None:
     consent_text = consent_date if isinstance(consent_date, str) else ""
     assert "March 1, 2023" in consent_text
 
-    exhibit_10 = as_json_dict(details.get("10"))
+    exhibit_10 = _as_json_dict(details.get("10"))
     assert exhibit_10 is not None
-    counterparties = exhibit_10.get("counterparties")
-    assert isinstance(counterparties, list)
+    counterparties = _as_json_list(exhibit_10.get("counterparties"))
+    assert counterparties is not None
+    assert exhibit_10.get("missing_key") is None
     assert any(
         isinstance(item, str) and "Acme" in item for item in counterparties
     )
-    obligations = exhibit_10.get("key_obligations")
-    assert isinstance(obligations, list)
+    obligations = _as_json_list(exhibit_10.get("key_obligations"))
+    assert obligations is not None
     assert any(
         isinstance(item, str) and "shall deliver" in item
         for item in obligations
