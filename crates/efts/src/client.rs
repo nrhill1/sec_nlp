@@ -223,6 +223,56 @@ impl EftsClient {
         }
         Ok(all_hits)
     }
+
+    /// Async version of execute_search_all.
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) async fn execute_search_all_async(
+        &self,
+        query: &str,
+        forms: &[String],
+        ciks: &[String],
+        tickers: &[String],
+        start_date: Option<&str>,
+        end_date: Option<&str>,
+        max_results: u32,
+        sort_field: &str,
+        sort_order: &str,
+    ) -> Result<Vec<SearchHit>, EftsError> {
+        if max_results == 0 {
+            return Ok(Vec::new());
+        }
+        let mut all_hits: Vec<SearchHit> = Vec::new();
+        let mut offset = 0;
+        let page_size = std::cmp::min(100, max_results);
+        while (all_hits.len() as u32) < max_results {
+            let remaining = max_results - (all_hits.len() as u32);
+            let fetch_size = std::cmp::min(page_size, remaining);
+            let response = self
+                .execute_search_async(
+                    query,
+                    forms,
+                    ciks,
+                    tickers,
+                    start_date,
+                    end_date,
+                    fetch_size,
+                    offset,
+                    sort_field,
+                    sort_order,
+                )
+                .await?;
+            let hit_count = response.hits_vec.len();
+            let has_more =
+                (response.start as u64) + (response.hits_vec.len() as u64) < response.total;
+            let next_offset = response.start + (response.hits_vec.len() as u32);
+            all_hits.extend(response.hits_vec);
+            if hit_count == 0 || !has_more {
+                break;
+            }
+            offset = next_offset;
+        }
+        Ok(all_hits)
+    }
 }
 
 #[pymethods]
@@ -440,6 +490,85 @@ impl EftsClient {
         hits.into_iter()
             .map(|hit| Py::new(py, hit))
             .collect()
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    #[pyo3(
+        signature = (
+            query,
+            forms=None,
+            ciks=None,
+            tickers=None,
+            start_date=None,
+            end_date=None,
+            max_results=100,
+            sort_field="score".to_string(),
+            sort_order="desc".to_string()
+        )
+    )]
+    /// Async version of search_all - fetch all results up to max_results.
+    ///
+    /// Returns a Python awaitable that resolves to a list of EFTSHit.
+    ///
+    /// Example:
+    ///     hits = await client.search_all_async("warranty", max_results=200)
+    fn search_all_async<'py>(
+        &self,
+        py: Python<'py>,
+        query: String,
+        forms: Option<Vec<String>>,
+        ciks: Option<Vec<String>>,
+        tickers: Option<Vec<String>>,
+        start_date: Option<String>,
+        end_date: Option<String>,
+        max_results: u32,
+        sort_field: String,
+        sort_order: String,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        let forms = forms.unwrap_or_default();
+        let ciks = ciks.unwrap_or_default();
+        let tickers = tickers.unwrap_or_default();
+
+        // Clone self fields needed for the async closure
+        let base_url = self.base_url.clone();
+        let user_agent = self.user_agent.clone();
+        let timeout_seconds = self.timeout_seconds;
+        let max_retries = self.max_retries;
+        let retry_delay_seconds = self.retry_delay_seconds;
+        let rate_limit_delay_seconds = self.rate_limit_delay_seconds;
+
+        pyo3_async_runtimes::tokio::future_into_py(py, async move {
+            let client = EftsClient {
+                base_url,
+                user_agent,
+                timeout_seconds,
+                max_retries,
+                retry_delay_seconds,
+                rate_limit_delay_seconds,
+            };
+
+            let hits = client
+                .execute_search_all_async(
+                    &query,
+                    &forms,
+                    &ciks,
+                    &tickers,
+                    start_date.as_deref(),
+                    end_date.as_deref(),
+                    max_results,
+                    &sort_field,
+                    &sort_order,
+                )
+                .await
+                .map_err(|err| err.to_py_err())?;
+
+            // Return native PyO3 list of EFTSHit
+            Python::with_gil(|py| {
+                hits.into_iter()
+                    .map(|hit| Py::new(py, hit))
+                    .collect::<PyResult<Vec<Py<SearchHit>>>>()
+            })
+        })
     }
 
     #[getter]

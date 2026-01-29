@@ -171,6 +171,8 @@ class EFTSClient(BaseModel):
     ) -> list[EFTSHit]:
         """Fetch all results up to max_results, handling pagination.
 
+        Uses the Rust async search_all implementation for efficient pagination.
+
         Args:
             query: Search query string
             forms: Optional form types to filter
@@ -185,35 +187,32 @@ class EFTSClient(BaseModel):
         Returns:
             List of all EFTSHit results up to max_results
         """
-        all_hits: list[EFTSHit] = []
-        offset = 0
-        page_size = min(100, max_results)
-
-        while len(all_hits) < max_results:
-            remaining = max_results - len(all_hits)
-            fetch_size = min(page_size, remaining)
-
-            response = await self.search(
-                query,
-                forms=forms,
-                ciks=ciks,
-                tickers=tickers,
-                start_date=start_date,
-                end_date=end_date,
-                limit=fetch_size,
-                start=offset,
-                sort_field=sort_field,
-                sort_order=sort_order,
+        module = _load_efts_module()
+        if module is None:
+            raise EFTSAPIError(
+                status_code=0,
+                message="efts extension is not available; "
+                "build it with `make rs-sg-dev`.",
             )
 
-            all_hits.extend(response.hits)
-
-            if not response.has_more or not response.hits:
-                break
-
-            offset = response.next_offset
-
-        return all_hits[:max_results]
+        try:
+            return await _rust_execute_search_all_async(
+                module,
+                self.config,
+                query,
+                forms,
+                ciks,
+                tickers,
+                start_date,
+                end_date,
+                max_results,
+                sort_field,
+                sort_order,
+            )
+        except EFTSAPIError:
+            raise
+        except Exception as exc:
+            raise _rust_error_from_exception(exc) from exc
 
     async def _execute_search(
         self, params: EFTSSearchParams
@@ -362,6 +361,66 @@ def _convert_rust_response(rust_response: object) -> EFTSSearchResponse:
         start=rust_response.start,  # type: ignore[attr-defined]
         limit=rust_response.limit,  # type: ignore[attr-defined]
     )
+
+
+def _convert_rust_hit(hit: object) -> EFTSHit:
+    """Convert a single Rust EFTSHit to Pydantic model."""
+    return EFTSHit(
+        accession_number=hit.accession_number,  # type: ignore[attr-defined]
+        cik=hit.cik,  # type: ignore[attr-defined]
+        company_name=hit.company_name,  # type: ignore[attr-defined]
+        tickers=list(hit.tickers),  # type: ignore[attr-defined]
+        form_type=hit.form_type,  # type: ignore[attr-defined]
+        filed_date=hit.filed_date,  # type: ignore[attr-defined]
+        file_number=hit.file_number,  # type: ignore[attr-defined]
+        film_number=hit.film_number,  # type: ignore[attr-defined]
+        snippet=hit.snippet,  # type: ignore[attr-defined]
+        score=hit.score,  # type: ignore[attr-defined]
+        filing_url=hit.filing_url,  # type: ignore[attr-defined]
+    )
+
+
+async def _rust_execute_search_all_async(
+    module: ModuleType,
+    config: EFTSClientConfig,
+    query: str,
+    forms: Sequence[str] | None,
+    ciks: Sequence[str] | None,
+    tickers: Sequence[str] | None,
+    start_date: date | None,
+    end_date: date | None,
+    max_results: int,
+    sort_field: EFTSSortField,
+    sort_order: EFTSSortOrder,
+) -> list[EFTSHit]:
+    """Execute search_all using native Rust async method."""
+    forms_list = list(forms) if forms else None
+    ciks_list = list(ciks) if ciks else None
+    tickers_list = list(tickers) if tickers else None
+    start_date_str = start_date.isoformat() if start_date else None
+    end_date_str = end_date.isoformat() if end_date else None
+
+    client = module.EFTSClient(
+        user_agent=config.user_agent,
+        timeout=config.timeout,
+        max_retries=config.max_retries,
+        retry_delay=config.retry_delay,
+        rate_limit_delay=config.rate_limit_delay,
+        base_url=config.base_url,
+    )
+    # Use native async method - returns awaitable
+    rust_hits = await client.search_all_async(
+        query,
+        forms=forms_list,
+        ciks=ciks_list,
+        tickers=tickers_list,
+        start_date=start_date_str,
+        end_date=end_date_str,
+        max_results=max_results,
+        sort_field=sort_field.value,
+        sort_order=sort_order.value,
+    )
+    return [_convert_rust_hit(hit) for hit in rust_hits]
 
 
 class EFTSAPIError(Exception):

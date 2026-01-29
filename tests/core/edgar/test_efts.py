@@ -235,6 +235,55 @@ class TestEFTSClient:
         assert kwargs.get("base_url") == config.base_url
         rust_client_instance.search_async.assert_called_once()
 
+    def test_search_all_uses_rust_async(
+        self, monkeypatch: pytest.MonkeyPatch, socket_enabled: None
+    ) -> None:
+        """Ensure search_all uses the Rust search_all_async method."""
+        from sec_nlp.core.edgar import efts as efts_module
+
+        # Create mock hit objects
+        mock_hits = []
+        for i in range(3):
+            mock_hit = Mock()
+            mock_hit.accession_number = f"0001234567-24-00000{i + 1}"
+            mock_hit.cik = "0001234567"
+            mock_hit.company_name = f"Test Co {i + 1}"
+            mock_hit.tickers = ["TST"]
+            mock_hit.form_type = "10-K"
+            mock_hit.filed_date = date(2024, 1, 15 + i)
+            mock_hit.file_number = None
+            mock_hit.film_number = None
+            mock_hit.snippet = "test"
+            mock_hit.score = 1.0 - (i * 0.1)
+            mock_hit.filing_url = None
+            mock_hits.append(mock_hit)
+
+        rust_client_instance = Mock()
+        rust_client_instance.search_all_async = AsyncMock(
+            return_value=mock_hits
+        )
+        rust_client_class = Mock(return_value=rust_client_instance)
+        rust_module = Mock()
+        rust_module.EFTSClient = rust_client_class
+
+        monkeypatch.setattr(
+            efts_module, "_load_efts_module", lambda: rust_module
+        )
+
+        config = EFTSClientConfig(
+            user_agent="Test (test@example.com)",
+            rate_limit_delay=0,
+        )
+        client = EFTSClient(config=config)
+        hits = asyncio.run(client.search_all("warranty", max_results=10))
+
+        assert len(hits) == 3
+        assert hits[0].company_name == "Test Co 1"
+        assert hits[2].company_name == "Test Co 3"
+        rust_client_instance.search_all_async.assert_called_once()
+        call_kwargs = rust_client_instance.search_all_async.call_args.kwargs
+        assert call_kwargs.get("max_results") == 10
+
 
 class TestCreateEFTSClient:
     """Tests for create_efts_client factory function."""
