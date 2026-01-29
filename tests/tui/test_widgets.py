@@ -262,13 +262,16 @@ def test_form_view_sections_toggle() -> None:
             view = app.query_one(FormView)
             view.set_form(form_spec)
             await pilot.pause()
-            sections = view._sections
-            assert sections
-            core_section = sections.get("core")
-            assert core_section is not None
-            initial = core_section._collapsed
-            core_section.toggle()
-            assert core_section._collapsed is not initial
+            # New list-based navigation uses _section_containers
+            containers = view._section_containers
+            assert containers
+            # Should have __overview__ plus any sections
+            assert "__overview__" in containers
+            # Check that selecting a section shows it
+            if view._section_keys and len(view._section_keys) > 1:
+                second_key = view._section_keys[1]
+                view._set_active_section(second_key)
+                assert view._active_section_key == second_key
 
     asyncio.run(run_test())
 

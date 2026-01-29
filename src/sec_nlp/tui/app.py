@@ -216,13 +216,19 @@ class SecNlpTuiApp(App):
         margin-bottom: 1;
     }
 
-    .section-switcher {
-        margin-bottom: 1;
+    .field-label {
+        width: 16;
+        color: $text-muted;
     }
 
-    .field-label {
-        width: 18;
-        color: $text-muted;
+    .section-pane {
+        padding: 0 1;
+    }
+
+    .section-title {
+        color: $text-secondary;
+        text-style: bold;
+        margin-bottom: 1;
     }
 
     /* ─── Input Controls ──────────────────────────────────────────────────── */
@@ -299,47 +305,6 @@ class SecNlpTuiApp(App):
         transition: background 100ms linear, color 100ms linear, border 100ms linear;
     }
 
-    /* ─── Collapsible Sections ────────────────────────────────────────────── */
-    .collapsible-section {
-        margin-bottom: 1;
-    }
-
-    .section-header {
-        background: $surface-elevated;
-        color: $text-muted;
-        padding: 0 1;
-        text-style: none;
-    }
-
-    .section-header:hover {
-        background: $surface-overlay;
-        color: $text-secondary;
-    }
-
-    Button.section-header {
-        border: solid $border-subtle;
-        content-align: left middle;
-        width: 1fr;
-    }
-
-    Button.section-header:focus {
-        border: solid $accent-secondary;
-    }
-
-    .section-content {
-        padding-left: 1;
-        margin-top: 0;
-    }
-
-    .section-hidden {
-        display: none;
-    }
-
-    .section-active .section-header {
-        background: $accent-glow;
-        border: solid $accent-secondary;
-        color: $text-primary;
-    }
 
     /* ─── Buttons ─────────────────────────────────────────────────────────── */
     Button {

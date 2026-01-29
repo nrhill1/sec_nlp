@@ -316,38 +316,95 @@ class CollapsibleSection(Vertical):
         return self._content
 
 
-class FormView(VerticalScroll):
+class FormView(Horizontal):
+    """Form view with sidebar section navigation.
+
+    Uses a ListView on the left for section selection, and shows
+    the selected section's fields on the right.
+    """
+
     can_focus = True
     can_focus_children = True
-    show_vertical_scrollbar = True
+
+    DEFAULT_CSS = """
+    FormView {
+        height: 1fr;
+    }
+
+    #section-nav {
+        width: 22;
+        height: 1fr;
+        background: #09090b;
+        border: none;
+        margin-right: 1;
+    }
+
+    #section-nav > ListItem {
+        padding: 0 1;
+        height: 2;
+        color: #6b7280;
+    }
+
+    #section-nav > ListItem:hover {
+        background: #161619;
+        color: #9ca3af;
+    }
+
+    #section-nav > ListItem.-active {
+        background: #1c1c20;
+        color: #60a5fa;
+    }
+
+    #section-nav > ListItem.--highlight,
+    #section-nav > ListItem:focus {
+        background: #1c1c20;
+        color: #60a5fa;
+    }
+
+    #section-content {
+        width: 1fr;
+        height: 1fr;
+    }
+    """
 
     def __init__(self) -> None:
         super().__init__(classes="panel")
         self._form_spec: FormSpec | None = None
         self._fields: dict[ConfigScalar, _FieldWidget] = {}
         self._extra_args: Input | None = None
-        self._sections: dict[ConfigScalar, CollapsibleSection] = {}
+        self._section_containers: dict[ConfigScalar, Vertical] = {}
         self._pending_form_spec: FormSpec | None = None
-        self._root_rows: list[FieldRow] = []
+        self._root_container: Vertical | None = None
         self._extra_row: FieldRow | None = None
         self._active_section_key: ConfigScalar | None = None
         self._section_mode_active = False
         self._section_field_keys: dict[ConfigScalar, list[ConfigScalar]] = {}
-        self._section_select: Select | None = None
-        self._section_row: FieldRow | None = None
+        self._section_nav: ListView | None = None
+        self._section_keys: list[ConfigScalar] = []
+        self._content_area: VerticalScroll | None = None
+
+    def compose(self):
+        # Will be populated by set_form
+        self._section_nav = ListView(id="section-nav")
+        self._content_area = VerticalScroll(id="section-content")
+        yield self._section_nav
+        yield self._content_area
 
     def set_form(self, form_spec: FormSpec) -> None:
         self._form_spec = form_spec
         self._fields = {}
-        self._sections = {}
-        self._root_rows = []
+        self._section_containers = {}
+        self._root_container = None
         self._extra_row = None
         self._active_section_key = None
         self._section_field_keys = {}
-        self._section_select = None
-        self._section_row = None
-        self.remove_children()
-        self.mount(Label("Configuration", classes="panel-title"))
+        self._section_keys = []
+
+        # Clear existing content
+        if self._section_nav is not None:
+            self._section_nav.clear()
+        if self._content_area is not None:
+            self._content_area.remove_children()
 
         # Group fields by section
         section_fields: dict[ConfigScalar, list[FieldSpec]] = {}
@@ -363,61 +420,90 @@ class FormView(VerticalScroll):
             else:
                 root_fields.append(field)
 
-        # Build sections with their fields inline
+        # Build navigation items
+        nav_items: list[ListItem] = []
+        # Add "Overview" for root fields
+        nav_items.append(ListItem(Label("Overview"), id="nav-__overview__"))
+        self._section_keys.append("__overview__")
+
+        # Add section items
         if form_spec.sections:
-            section_row = self._build_section_switcher(form_spec.sections)
-            self.mount(section_row)
-            self._section_row = section_row
             for section_spec in form_spec.sections:
-                section_widget = self._build_section(
-                    section_spec, section_fields.get(section_spec.key, [])
+                nav_items.append(
+                    ListItem(
+                        Label(str(section_spec.label)),
+                        id=f"nav-{section_spec.key}",
+                    )
                 )
-                self.mount(section_widget)
-                self._sections[section_spec.key] = section_widget
+                self._section_keys.append(section_spec.key)
 
-        # Add root fields (not in any section)
-        for field in root_fields:
-            row = self._build_field_row(field)
-            self.mount(row)
-            self._root_rows.append(row)
+        # Mount nav items
+        if self._section_nav is not None:
+            for item in nav_items:
+                self._section_nav.mount(item)
 
-        extra_input = Input(
-            placeholder=str(form_spec.extra_args_placeholder),
-            id="extra-args",
-        )
-        extra_row = FieldRow(
-            form_spec.extra_args_label,
-            extra_input,
-            "Additional CLI arguments",
-        )
-        self.mount(extra_row)
-        self._extra_args = extra_input
-        self._extra_row = extra_row
-        self._set_active_section(None)
-        self.scroll_home(animate=False, immediate=True)
+        # Build content containers - collect children first, then mount
+        if self._content_area is not None:
+            # Overview container (root fields + extra args)
+            overview_children: list[FieldRow] = []
+            for field in root_fields:
+                row = self._build_field_row(field)
+                overview_children.append(row)
+            # Extra args at end of overview
+            extra_input = Input(
+                placeholder=str(form_spec.extra_args_placeholder),
+                id="extra-args",
+            )
+            extra_row = FieldRow(
+                form_spec.extra_args_label,
+                extra_input,
+                "Additional CLI arguments",
+            )
+            overview_children.append(extra_row)
+            self._extra_args = extra_input
+            self._extra_row = extra_row
 
-    def _build_section(
-        self, section_spec: SectionSpec, fields: list[FieldSpec]
-    ) -> CollapsibleSection:
-        """Build a collapsible section with fields pre-populated."""
-        rows: list[FieldRow] = [
-            self._build_field_row(field) for field in fields
-        ]
-        return CollapsibleSection(
-            section_spec, rows, on_toggle=self._handle_section_toggle
-        )
+            overview = Vertical(
+                *overview_children,
+                id="content-__overview__",
+                classes="section-pane",
+            )
+            self._content_area.mount(overview)
+            self._root_container = overview
+            self._section_containers["__overview__"] = overview
 
-    def _build_section_switcher(
-        self, sections: tuple[SectionSpec, ...]
-    ) -> FieldRow:
-        options: list[tuple[str, str]] = [("All sections", "__all__")]
-        for section in sections:
-            options.append((str(section.label), str(section.key)))
-        select = Select(options, value="__all__", allow_blank=False)
-        self._section_select = select
-        row = FieldRow("Section", select, "Choose a section to focus")
-        row.add_class("section-switcher")
-        return row
+            # Section containers
+            if form_spec.sections:
+                for section_spec in form_spec.sections:
+                    section_children: list[Label | FieldRow] = [
+                        Label(str(section_spec.label), classes="section-title")
+                    ]
+                    for field in section_fields.get(section_spec.key, []):
+                        row = self._build_field_row(field)
+                        section_children.append(row)
+                    container = Vertical(
+                        *section_children,
+                        id=f"content-{section_spec.key}",
+                        classes="section-pane",
+                    )
+                    self._content_area.mount(container)
+                    self._section_containers[section_spec.key] = container
+
+        # Show overview by default
+        self._set_active_section("__overview__")
+        if self._section_nav is not None:
+            self._section_nav.index = 0
+
+    def on_list_view_selected(self, event: ListView.Selected) -> None:
+        if event.list_view is not self._section_nav:
+            return
+        if event.item is None or event.item.id is None:
+            return
+        # Extract section key from item id (nav-{key})
+        item_id = str(event.item.id)
+        if item_id.startswith("nav-"):
+            key = item_id[4:]  # Remove "nav-" prefix
+            self._set_active_section(key)
 
     def _build_field_row(self, field: FieldSpec) -> FieldRow:
         """Build a row containing a label and widget for a field."""
@@ -427,30 +513,14 @@ class FormView(VerticalScroll):
 
     def focus_first(self) -> None:
         active = self._active_section_key
-        if active is not None:
+        if active is not None and active != "__overview__":
             self._focus_section_first(active)
-            return
-        if self._section_select is not None:
-            self._section_select.focus()
             return
         for widget in self._fields.values():
             widget.focus()
             return
         if self._extra_args is not None:
             self._extra_args.focus()
-
-    def on_select_changed(self, event: Select.Changed) -> None:
-        if self._section_select is None:
-            return
-        if event.select is not self._section_select:
-            return
-        value = event.value
-        if value is None or value == "__all__":
-            self._set_active_section(None)
-            return
-        if not isinstance(value, (str, int, float, Path)):
-            return
-        self._set_active_section(value)
 
     def _focus_section_first(self, key: ConfigScalar) -> None:
         field_keys = self._section_field_keys.get(key)
@@ -462,65 +532,26 @@ class FormView(VerticalScroll):
                 widget.focus()
                 return
 
-    def _handle_section_toggle(
-        self, key: ConfigScalar, collapsed: bool
-    ) -> None:
-        if collapsed:
-            if self._active_section_key == key:
-                self._set_active_section(None)
-            return
-        self._set_active_section(key)
-
     def _set_active_section(self, key: ConfigScalar | None) -> None:
+        if key is None:
+            key = "__overview__"
         was_active = self._section_mode_active
         self._active_section_key = key
         self._apply_section_visibility()
-        self._section_mode_active = key is not None
+        self._section_mode_active = key != "__overview__"
         if was_active != self._section_mode_active:
             self.post_message(SectionModeChanged(self._section_mode_active))
-        self._sync_section_select()
-        if key is None:
-            self.call_after_refresh(self.focus_first)
-        else:
-            self.call_after_refresh(lambda: self._focus_section_first(key))
-
-    def _sync_section_select(self) -> None:
-        if self._section_select is None:
-            return
-        desired = (
-            "__all__"
-            if self._active_section_key is None
-            else str(self._active_section_key)
-        )
-        current = self._section_select.value
-        if current != desired:
-            self._section_select.value = desired
 
     def _apply_section_visibility(self) -> None:
         active = self._active_section_key
         if active is None:
-            for section in self._sections.values():
-                section.remove_class("section-active")
-                section.remove_class("section-hidden")
-            for row in self._root_rows:
-                row.set_styles("display: block;")
-            if self._extra_row is not None:
-                self._extra_row.set_styles("display: block;")
-            self.refresh(layout=True)
-            return
+            active = "__overview__"
 
-        for key, section in self._sections.items():
+        for key, container in self._section_containers.items():
             if key == active:
-                section.remove_class("section-hidden")
-                section.add_class("section-active")
-                section.set_collapsed(False, notify=False)
+                container.set_styles("display: block;")
             else:
-                section.remove_class("section-active")
-                section.add_class("section-hidden")
-        for row in self._root_rows:
-            row.set_styles("display: none;")
-        if self._extra_row is not None:
-            self._extra_row.set_styles("display: none;")
+                container.set_styles("display: none;")
         self.refresh(layout=True)
 
     def focus_field(self, key: ConfigScalar) -> None:
