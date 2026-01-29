@@ -80,33 +80,33 @@ class SegmentMatcher:
 class SecNlpTuiApp(App):
     CSS = """
     /* ═══════════════════════════════════════════════════════════════════════
-       SEC NLP TUI - Modern Dark Theme
-       A sleek, professional interface for SEC filing analysis
+       SEC NLP TUI - Clean Minimal Theme
+       A modern, refined interface for SEC filing analysis
        ═══════════════════════════════════════════════════════════════════════ */
 
     /* ─── Base Colors ─────────────────────────────────────────────────────── */
-    $surface: #0a0a0b;
-    $surface-raised: #111113;
-    $surface-elevated: #18181b;
-    $surface-overlay: #1f1f23;
+    $surface: #09090b;
+    $surface-raised: #0f0f12;
+    $surface-elevated: #161619;
+    $surface-overlay: #1c1c20;
 
-    $border-subtle: #27272a;
-    $border-default: #3f3f46;
-    $border-emphasis: #52525b;
+    $border-subtle: #1e1e22;
+    $border-default: #2a2a30;
+    $border-emphasis: #3a3a42;
 
-    $text-primary: #fafafa;
-    $text-secondary: #a1a1aa;
-    $text-muted: #71717a;
+    $text-primary: #e4e4e7;
+    $text-secondary: #9ca3af;
+    $text-muted: #6b7280;
 
-    $accent-primary: #22d3ee;
-    $accent-secondary: #06b6d4;
-    $accent-glow: #0891b2;
+    $accent-primary: #60a5fa;
+    $accent-secondary: #3b82f6;
+    $accent-glow: #2563eb;
 
-    $success: #4ade80;
-    $success-muted: #166534;
+    $success: #34d399;
+    $success-muted: #064e3b;
     $warning: #fbbf24;
-    $error: #f87171;
-    $error-muted: #7f1d1d;
+    $error: #fb7185;
+    $error-muted: #4c0519;
 
     /* ─── Global Styles ───────────────────────────────────────────────────── */
     Screen {
@@ -115,16 +115,18 @@ class SecNlpTuiApp(App):
     }
 
     Header {
-        background: $surface;
-        color: $accent-primary;
+        background: $surface-raised;
+        color: $text-primary;
         text-style: bold;
-        border-bottom: solid $border-subtle;
+        height: 1;
+        border-bottom: none;
     }
 
     Footer {
         background: $surface-raised;
-        color: $text-secondary;
-        border-top: solid $border-subtle;
+        color: $text-muted;
+        height: 1;
+        border-top: none;
     }
 
     /* ─── Layout ──────────────────────────────────────────────────────────── */
@@ -133,14 +135,14 @@ class SecNlpTuiApp(App):
     }
 
     #sidebar {
-        width: 32;
+        width: 28;
         background: $surface-raised;
-        border-right: solid $border-subtle;
         padding: 1 1;
+        border-right: none;
     }
 
     #main {
-        padding: 1 2;
+        padding: 0 1;
         height: 1fr;
         background: $surface;
         color: $text-primary;
@@ -149,14 +151,14 @@ class SecNlpTuiApp(App):
     /* ─── Panels ──────────────────────────────────────────────────────────── */
     .panel {
         background: $surface-raised;
-        border: solid $border-subtle;
+        border: none;
         padding: 1 2;
-        margin: 0 0 1 0;
+        margin: 0;
         color: $text-primary;
     }
 
     .panel-title {
-        color: $accent-primary;
+        color: $text-secondary;
         text-style: bold;
         margin-bottom: 1;
     }
@@ -164,19 +166,21 @@ class SecNlpTuiApp(App):
     /* ─── Pipeline List ───────────────────────────────────────────────────── */
     #pipeline-list {
         height: 1fr;
-        margin-top: 1;
+        margin-top: 0;
         background: $surface;
-        border: solid $border-subtle;
+        border: none;
+        scrollbar-size: 1 1;
     }
 
     ListView > ListItem {
-        padding: 0 2;
-        color: $text-secondary;
+        padding: 0 1;
+        color: $text-muted;
+        height: 2;
     }
 
     ListView > ListItem:hover {
         background: $surface-elevated;
-        color: $text-primary;
+        color: $text-secondary;
     }
 
     ListView > ListItem.--highlight,
@@ -184,25 +188,26 @@ class SecNlpTuiApp(App):
     ListView > ListItem:focus {
         background: $surface-overlay;
         color: $accent-primary;
-        text-style: bold;
+        text-style: none;
     }
 
     #pipeline-desc {
         color: $text-muted;
         margin-top: 1;
-        padding: 0 1;
+        padding: 0;
     }
 
     /* ─── Actions Bar ─────────────────────────────────────────────────────── */
     #actions {
         height: auto;
-        margin-top: 1;
+        margin-top: 0;
         margin-bottom: 1;
+        padding: 0 1;
     }
 
     #status-row {
         height: 1fr;
-        margin-bottom: 1;
+        margin-bottom: 0;
     }
 
     /* ─── Form Styling ────────────────────────────────────────────────────── */
@@ -217,7 +222,7 @@ class SecNlpTuiApp(App):
 
     .field-label {
         width: 18;
-        color: $text-secondary;
+        color: $text-muted;
     }
 
     /* ─── Input Controls ──────────────────────────────────────────────────── */
@@ -225,20 +230,23 @@ class SecNlpTuiApp(App):
         background: $surface;
         border: solid $border-subtle;
         color: $text-primary;
+        height: 3;
     }
 
     Input:hover, Select:hover {
         border: solid $border-default;
+        background: $surface-elevated;
     }
 
     Input:focus, Select:focus {
-        border: solid $accent-primary;
+        border: solid $accent-secondary;
+        background: $surface-elevated;
         color: $text-primary;
     }
 
     Checkbox {
         background: transparent;
-        color: $text-secondary;
+        color: $text-muted;
         padding: 0 1;
     }
 
@@ -252,11 +260,11 @@ class SecNlpTuiApp(App):
 
     /* ─── Transitions ─────────────────────────────────────────────────────── */
     Button, Input, Select, Checkbox, Tab, .section-header, ListView > ListItem {
-        transition: background 150ms linear, color 150ms linear, border 150ms linear;
+        transition: background 100ms linear, color 100ms linear, border 100ms linear;
     }
 
     .segment-row, #status, .segment-status {
-        transition: background 150ms linear, color 150ms linear, border 150ms linear;
+        transition: background 100ms linear, color 100ms linear, border 100ms linear;
     }
 
     /* ─── Collapsible Sections ────────────────────────────────────────────── */
@@ -266,14 +274,14 @@ class SecNlpTuiApp(App):
 
     .section-header {
         background: $surface-elevated;
-        color: $text-secondary;
+        color: $text-muted;
         padding: 0 1;
-        text-style: bold;
+        text-style: none;
     }
 
     .section-header:hover {
         background: $surface-overlay;
-        color: $text-primary;
+        color: $text-secondary;
     }
 
     Button.section-header {
@@ -283,7 +291,7 @@ class SecNlpTuiApp(App):
     }
 
     Button.section-header:focus {
-        border: solid $accent-primary;
+        border: solid $accent-secondary;
     }
 
     .section-content {
@@ -305,32 +313,33 @@ class SecNlpTuiApp(App):
     Button {
         border: solid $border-subtle;
         background: $surface-elevated;
-        color: $text-secondary;
-        text-style: bold;
+        color: $text-muted;
+        text-style: none;
         margin-right: 1;
-        min-width: 10;
+        min-width: 8;
+        height: 3;
     }
 
     Button:hover {
         background: $surface-overlay;
-        color: $text-primary;
+        color: $text-secondary;
         border: solid $border-default;
     }
 
     Button:focus {
-        border: solid $accent-primary;
+        border: solid $accent-secondary;
         color: $accent-primary;
     }
 
     Button#run-btn {
-        background: #064e3b;
-        border: solid #047857;
+        background: $success-muted;
+        border: solid #065f46;
         color: $success;
     }
 
     Button#run-btn:hover {
         background: #065f46;
-        color: #86efac;
+        color: #6ee7b7;
     }
 
     Button#run-btn:focus {
@@ -338,14 +347,14 @@ class SecNlpTuiApp(App):
     }
 
     Button#stop-btn {
-        background: #7f1d1d;
-        border: solid #991b1b;
+        background: $error-muted;
+        border: solid #881337;
         color: $error;
     }
 
     Button#stop-btn:hover {
-        background: #991b1b;
-        color: #fecaca;
+        background: #881337;
+        color: #fda4af;
     }
 
     Button#stop-btn:focus {
@@ -354,35 +363,36 @@ class SecNlpTuiApp(App):
 
     Button:disabled {
         background: $surface;
-        border: solid $border-subtle;
+        border: none;
         color: $text-muted;
-        text-style: italic;
+        text-style: none;
     }
 
     /* ─── Status Display ──────────────────────────────────────────────────── */
     #status {
-        margin-left: 2;
-        color: $text-secondary;
-        background: $surface;
-        padding: 0 2;
-        border: solid $border-subtle;
-        min-width: 16;
+        margin-left: 1;
+        color: $text-muted;
+        background: transparent;
+        padding: 0 1;
+        border: none;
+        min-width: 12;
     }
 
     #elapsed {
         margin-left: 1;
-        color: $accent-primary;
-        background: $surface;
-        padding: 0 2;
-        border: solid $border-subtle;
-        text-style: bold;
+        color: $text-secondary;
+        background: transparent;
+        padding: 0 1;
+        border: none;
+        text-style: none;
     }
 
     /* ─── Progress Bar ────────────────────────────────────────────────────── */
     ProgressBar {
-        background: $surface;
-        color: $accent-primary;
-        padding: 0 1;
+        background: $surface-elevated;
+        color: $accent-secondary;
+        padding: 0;
+        height: 1;
     }
 
     ProgressBar > .bar--bar {
@@ -397,13 +407,13 @@ class SecNlpTuiApp(App):
     .segment-row {
         height: auto;
         padding: 0 1;
-        margin: 0 0;
+        margin: 0;
     }
 
     .segment-label {
         width: 20;
-        text-style: bold;
-        color: $text-secondary;
+        text-style: none;
+        color: $text-muted;
     }
 
     .segment-detail {
@@ -416,13 +426,13 @@ class SecNlpTuiApp(App):
     }
 
     .segment-row.state-running {
-        background: $surface-overlay;
+        background: $surface-elevated;
         color: $accent-primary;
     }
 
     .segment-row.state-running .segment-label {
         color: $accent-primary;
-        text-style: bold;
+        text-style: none;
     }
 
     .segment-row.state-done {
@@ -445,20 +455,23 @@ class SecNlpTuiApp(App):
     .segment-panel {
         width: 1fr;
         height: 1fr;
+        border: none;
+        background: $surface-raised;
     }
 
     .segment-list {
         height: 1fr;
         background: $surface;
-        border: solid $border-subtle;
+        border: none;
+        scrollbar-size: 1 1;
     }
 
     .segment-status {
         margin-top: 1;
-        padding: 1 2;
-        color: $text-secondary;
-        background: $surface-elevated;
-        border: solid $border-subtle;
+        padding: 0 1;
+        color: $text-muted;
+        background: transparent;
+        border: none;
     }
 
     /* ─── Market Panel ────────────────────────────────────────────────────── */
@@ -466,8 +479,13 @@ class SecNlpTuiApp(App):
         width: 1fr;
         min-width: 40;
         background: $surface-raised;
-        border: solid $border-subtle;
+        border: none;
         padding: 1 2;
+    }
+
+    .market-fetch-row {
+        height: auto;
+        margin-bottom: 1;
     }
 
     .market-controls {
@@ -476,19 +494,47 @@ class SecNlpTuiApp(App):
     }
 
     .market-label {
-        width: 8;
+        width: 6;
         color: $text-muted;
+        padding: 1 0;
+    }
+
+    #market-ticker {
+        width: 12;
+        margin-right: 1;
+    }
+
+    #market-days {
+        width: 8;
+        margin-right: 1;
+    }
+
+    #market-fetch-btn {
+        min-width: 6;
+        background: $accent-glow;
+        border: solid $accent-secondary;
+        color: $text-primary;
+    }
+
+    #market-fetch-btn:hover {
+        background: $accent-secondary;
+    }
+
+    #market-fetch-status {
+        margin-left: 1;
+        color: $text-muted;
+        padding: 1 0;
     }
 
     #market-summary {
-        color: $text-primary;
+        color: $text-secondary;
         margin-bottom: 1;
-        text-style: bold;
+        text-style: none;
     }
 
     #market-chart {
         background: $surface;
-        border: solid $border-subtle;
+        border: none;
         color: $accent-primary;
         padding: 0 1;
         height: 12;
@@ -496,7 +542,7 @@ class SecNlpTuiApp(App):
     }
 
     #market-detail {
-        color: $text-secondary;
+        color: $text-muted;
         margin-top: 1;
     }
 
@@ -506,16 +552,17 @@ class SecNlpTuiApp(App):
     }
 
     #market-stats {
-        color: $text-primary;
-        background: $surface;
-        border: solid $border-subtle;
-        padding: 1 1;
+        color: $text-secondary;
+        background: transparent;
+        border: none;
+        padding: 0 1;
         margin-top: 1;
     }
 
     /* ─── Results Panel ───────────────────────────────────────────────────── */
     .results-panel {
         width: 1fr;
+        border: none;
     }
 
     .results-row {
@@ -526,7 +573,7 @@ class SecNlpTuiApp(App):
     #results-list {
         width: 38;
         background: $surface;
-        border: solid $border-subtle;
+        border: none;
         height: 14;
         margin-right: 1;
     }
@@ -534,18 +581,19 @@ class SecNlpTuiApp(App):
     #results-view {
         height: 14;
         background: $surface;
-        border: solid $border-subtle;
+        border: none;
         color: $text-primary;
         padding: 1;
     }
 
     #log-panel {
         background: $surface;
-        border: solid $border-subtle;
+        border: none;
         padding: 1;
         height: 1fr;
-        min-height: 10;
-        color: $text-secondary;
+        min-height: 8;
+        color: $text-muted;
+        scrollbar-size: 1 1;
     }
 
     #results-filter {
@@ -559,7 +607,7 @@ class SecNlpTuiApp(App):
     }
 
     TabPane {
-        padding: 1 2;
+        padding: 1 1;
         height: 1fr;
     }
 
@@ -569,38 +617,40 @@ class SecNlpTuiApp(App):
 
     Tabs {
         background: $surface-raised;
-        border-bottom: solid $border-subtle;
+        border-bottom: none;
         height: 3;
+        width: auto;
     }
 
     Tab {
-        background: $surface-raised;
-        color: #fafafa;
-        text-style: bold;
-        padding: 0 3;
+        background: transparent;
+        color: $text-muted;
+        text-style: none;
+        padding: 0 2;
         height: 3;
         content-align: center middle;
+        margin: 0;
     }
 
     Tab > Label {
-        color: #fafafa;
+        color: $text-muted;
     }
 
     Tab:hover {
-        color: $accent-primary;
-        background: $surface-elevated;
+        color: $text-secondary;
+        background: transparent;
     }
 
     Tab:hover > Label {
-        color: $accent-primary;
+        color: $text-secondary;
     }
 
     Tab.-active,
     Tab.--active {
-        background: $surface-elevated;
+        background: transparent;
         color: $accent-primary;
-        border-bottom: tall $accent-primary;
-        text-style: bold;
+        border-bottom: solid $accent-primary;
+        text-style: none;
     }
 
     Tab.-active > Label,
@@ -609,7 +659,12 @@ class SecNlpTuiApp(App):
     }
 
     Tab:focus {
-        text-style: bold reverse;
+        text-style: none;
+        color: $accent-primary;
+    }
+
+    Tab:focus > Label {
+        color: $accent-primary;
     }
 
     Underline {
@@ -633,9 +688,15 @@ class SecNlpTuiApp(App):
     #results-view-full {
         height: 1fr;
         background: $surface;
-        border: solid $border-subtle;
+        border: none;
         color: $text-primary;
         padding: 1;
+    }
+
+    #results-view-scroll {
+        height: 1fr;
+        border: none;
+        scrollbar-size: 1 1;
     }
 
     /* ─── Run Tab Layout ──────────────────────────────────────────────────── */
@@ -663,27 +724,42 @@ class SecNlpTuiApp(App):
 
     #config-panel {
         height: 2fr;
-        min-height: 18;
+        min-height: 16;
     }
 
     /* ─── Scrollbars ──────────────────────────────────────────────────────── */
     Scrollbar {
-        background: $surface;
+        background: transparent;
+        width: 1;
     }
 
     ScrollbarGripper {
-        background: $border-default;
+        background: $border-subtle;
     }
 
     ScrollbarGripper:hover {
-        background: $border-emphasis;
+        background: $border-default;
+    }
+
+    /* ─── Tree ────────────────────────────────────────────────────────────── */
+    Tree {
+        scrollbar-size: 1 1;
+    }
+
+    Tree > .tree--guides {
+        color: $border-subtle;
+    }
+
+    Tree > .tree--cursor {
+        background: $surface-elevated;
+        color: $accent-primary;
     }
 
     /* ─── Tooltip ─────────────────────────────────────────────────────────── */
     Tooltip {
         background: $surface-overlay;
         color: $text-primary;
-        border: solid $border-default;
+        border: solid $border-subtle;
         padding: 0 1;
     }
 

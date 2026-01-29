@@ -60,4 +60,6 @@ def test_build_market_chart_lines_returns_rows() -> None:
         normalize=True,
     )
     assert len(lines) == 3
-    assert any("#" in str(line) for line in lines)
+    # Uses Unicode block characters now (█ or ▄)
+    all_text = "".join(str(line) for line in lines)
+    assert "█" in all_text or "▄" in all_text

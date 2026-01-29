@@ -42,6 +42,7 @@ from sec_nlp.tui.market import (
     MARKET_STYLE_CANDLE,
     MARKET_STYLE_LINE,
     MARKET_STYLE_POINTS,
+    MarketQuotePoint,
     MarketSnapshot,
     build_market_chart_lines,
     build_sparkline,
@@ -628,6 +629,18 @@ class MarketPanel(Vertical):
             (str(label), str(key))
             for key, label in _MARKET_DISPLAY_LABELS.items()
         ]
+        # Direct fetch controls
+        self._ticker_input = Input(
+            placeholder="AAPL",
+            id="market-ticker",
+        )
+        self._days_input = Input(
+            placeholder="30",
+            value="30",
+            id="market-days",
+        )
+        self._fetch_button = Button("Fetch", id="market-fetch-btn")
+        self._fetch_status = Static("", id="market-fetch-status")
         self._metric_select = Select(
             metric_options,
             value=str(MARKET_METRIC_CLOSE),
@@ -663,11 +676,19 @@ class MarketPanel(Vertical):
         self._context_label = Static("", id="market-context")
         self._snapshot: MarketSnapshot | None = None
         self._message: ConfigScalar | None = (
-            "Run analyze with market enabled to populate this view."
+            "Enter a ticker and click Fetch, or run analyze with market enabled."
         )
+        self._fetching = False
 
     def compose(self):
-        yield Label("Market", classes="panel-title")
+        yield Label("Market Data", classes="panel-title")
+        with Horizontal(classes="market-fetch-row"):
+            yield Label("Ticker", classes="market-label")
+            yield self._ticker_input
+            yield Label("Days", classes="market-label")
+            yield self._days_input
+            yield self._fetch_button
+            yield self._fetch_status
         with Horizontal(classes="market-controls"):
             yield Label("Metric", classes="market-label")
             yield self._metric_select
@@ -682,6 +703,10 @@ class MarketPanel(Vertical):
         yield self._detail
         yield self._stats
         yield self._context_label
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button is self._fetch_button:
+            self._start_fetch()
 
     def on_select_changed(self, event: Select.Changed) -> None:
         if event.select in (
@@ -709,6 +734,94 @@ class MarketPanel(Vertical):
 
     def reset(self) -> None:
         self._snapshot = None
+        self._render_snapshot()
+
+    def _start_fetch(self) -> None:
+        if self._fetching:
+            return
+        ticker = self._ticker_input.value.strip().upper()
+        if not ticker:
+            self._fetch_status.update("Enter a ticker")
+            return
+        days_text = self._days_input.value.strip()
+        try:
+            days = int(days_text) if days_text else 30
+        except ValueError:
+            days = 30
+        if days < 1:
+            days = 1
+        if days > 365:
+            days = 365
+        self._fetching = True
+        self._fetch_button.disabled = True
+        self._fetch_status.update("Fetching...")
+        asyncio.create_task(self._do_fetch(ticker, days))
+
+    async def _do_fetch(self, ticker: str, days: int) -> None:
+        from datetime import (
+            datetime as dt,
+            timedelta,
+        )
+
+        from sec_nlp.core.market import (
+            MarketExtensionError,
+            create_market_retriever,
+        )
+
+        end_date = date.today()
+        start_date = end_date - timedelta(days=days)
+        retriever = create_market_retriever()
+        try:
+            raw_quotes = await asyncio.to_thread(
+                retriever.retrieve_range, ticker, (start_date, end_date)
+            )
+        except MarketExtensionError as exc:
+            self._fetch_status.update(f"Error: {exc}")
+            self._fetching = False
+            self._fetch_button.disabled = False
+            return
+        except Exception as exc:
+            self._fetch_status.update(f"Error: {exc}")
+            self._fetching = False
+            self._fetch_button.disabled = False
+            return
+
+        if not raw_quotes:
+            self._fetch_status.update("No data found")
+            self._fetching = False
+            self._fetch_button.disabled = False
+            return
+
+        # Convert to MarketQuotePoint
+        quotes: list[MarketQuotePoint] = []
+        for q in raw_quotes:
+            quotes.append(
+                MarketQuotePoint(
+                    start=dt.fromtimestamp(q.timestamp).date().isoformat(),
+                    end=dt.fromtimestamp(q.timestamp).date().isoformat(),
+                    open_value=q.open_price,
+                    high_value=q.high,
+                    low_value=q.low,
+                    close_value=q.close,
+                    adjclose_value=q.adjclose,
+                    volume_value=float(q.volume),
+                )
+            )
+
+        snapshot = MarketSnapshot(
+            symbol=ticker,
+            ticker=ticker,
+            filing_date=None,
+            window_start=start_date.isoformat(),
+            window_end=end_date.isoformat(),
+            granularity="daily",
+            quotes=tuple(quotes),
+            correlation=None,
+        )
+        self._snapshot = snapshot
+        self._fetch_status.update(f"Loaded {len(quotes)} quotes")
+        self._fetching = False
+        self._fetch_button.disabled = False
         self._render_snapshot()
 
     def _render_snapshot(self) -> None:
@@ -875,24 +988,25 @@ class ResultsPanel(Vertical):
     #results-tree {
         width: 42;
         height: 1fr;
-        background: #0a0a0b;
-        border: solid #27272a;
+        background: #09090b;
+        border: none;
         margin-right: 1;
+        scrollbar-size: 1 1;
     }
 
     #results-tree > .tree--guides {
-        color: #3f3f46;
+        color: #1e1e22;
     }
 
     #results-tree > .tree--cursor {
-        background: #1f1f23;
-        color: #22d3ee;
+        background: #161619;
+        color: #60a5fa;
     }
 
     #results-view-full {
         height: 1fr;
-        background: #0a0a0b;
-        border: solid #27272a;
+        background: #09090b;
+        border: none;
         padding: 1;
         overflow-y: auto;
     }
