@@ -16,7 +16,9 @@ pub struct SearchHit {
     pub tickers: Vec<String>,
     #[pyo3(get)]
     pub form_type: String,
-    /// Filed date as ISO string (YYYY-MM-DD)
+    /// Filed date as ISO string (YYYY-MM-DD).
+    /// Serializes as "filed_date" for JSON output.
+    #[serde(rename = "filed_date")]
     pub filed_date_str: String,
     #[pyo3(get)]
     pub file_number: Option<String>,
@@ -85,7 +87,9 @@ pub struct SearchResponse {
     pub start: u32,
     #[pyo3(get)]
     pub limit: u32,
-    /// Hits stored internally; exposed via getter that returns list
+    /// Hits stored internally; exposed via getter that returns list.
+    /// Serializes as "hits" for JSON output.
+    #[serde(rename = "hits")]
     pub hits_vec: Vec<SearchHit>,
 }
 
