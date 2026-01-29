@@ -18,7 +18,8 @@ from sec_nlp.pipelines.presets.analyze.steps.search.efts_search import (
 )
 
 
-def test_filter_hits_by_ticker_keeps_all_hits() -> None:
+def test_filter_hits_by_ticker_filters_to_matching_tickers() -> None:
+    """Ticker filter should only keep hits with matching tickers."""
     hits = [
         EFTSHit(
             accession_number="0000000000-24-000001",
@@ -34,12 +35,66 @@ def test_filter_hits_by_ticker_keeps_all_hits() -> None:
             company_name="Beta Inc",
             form_type="10-Q",
             filed_date=date(2024, 2, 1),
+            tickers=["BETA"],
+        ),
+        EFTSHit(
+            accession_number="0000000000-24-000003",
+            cik="0000000000",
+            company_name="Gamma Inc",
+            form_type="10-K",
+            filed_date=date(2024, 3, 1),
+            tickers=[],  # No ticker
         ),
     ]
 
-    filtered = EFTSSearchRunner._filter_hits_by_ticker(hits, ["ZZZZ"])
+    # Filter for ALPHA only
+    filtered = EFTSSearchRunner._filter_hits_by_ticker(hits, ["ALPHA"])
+    assert len(filtered) == 1
+    assert filtered[0].tickers == ["ALPHA"]
 
+    # Filter for BETA only
+    filtered = EFTSSearchRunner._filter_hits_by_ticker(hits, ["BETA"])
+    assert len(filtered) == 1
+    assert filtered[0].tickers == ["BETA"]
+
+    # Filter for non-existent ticker returns empty
+    filtered = EFTSSearchRunner._filter_hits_by_ticker(hits, ["ZZZZ"])
+    assert len(filtered) == 0
+
+
+def test_filter_hits_by_ticker_empty_filter_keeps_all() -> None:
+    """Empty ticker filter should keep all hits."""
+    hits = [
+        EFTSHit(
+            accession_number="0000000000-24-000001",
+            cik="0000000000",
+            company_name="Alpha Inc",
+            form_type="10-K",
+            filed_date=date(2024, 1, 1),
+            tickers=["ALPHA"],
+        ),
+    ]
+
+    filtered = EFTSSearchRunner._filter_hits_by_ticker(hits, [])
     assert filtered == hits
+
+
+def test_filter_hits_by_ticker_case_insensitive() -> None:
+    """Ticker filter should be case-insensitive."""
+    hits = [
+        EFTSHit(
+            accession_number="0000000000-24-000001",
+            cik="0000000000",
+            company_name="Apple Inc",
+            form_type="10-K",
+            filed_date=date(2024, 1, 1),
+            tickers=["AAPL"],
+        ),
+    ]
+
+    # Lowercase filter should match uppercase ticker
+    filtered = EFTSSearchRunner._filter_hits_by_ticker(hits, ["aapl"])
+    assert len(filtered) == 1
 
 
 def test_efts_hit_uses_actual_ticker_not_search_symbol() -> None:

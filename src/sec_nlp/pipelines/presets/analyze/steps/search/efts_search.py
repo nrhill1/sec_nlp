@@ -119,8 +119,28 @@ class EFTSSearchRunner(BaseModel):
         hits: list[EFTSHit],
         tickers: list[str],
     ) -> list[EFTSHit]:
-        _ = tickers
-        return hits
+        """Filter EFTS hits to only include filings from specified tickers.
+
+        Args:
+            hits: List of EFTS search hits
+            tickers: List of ticker symbols to keep (case-insensitive)
+
+        Returns:
+            Filtered list containing only hits matching the specified tickers
+        """
+        if not tickers:
+            return hits
+
+        ticker_set = {t.upper() for t in tickers}
+
+        filtered: list[EFTSHit] = []
+        for hit in hits:
+            # Check if any of the hit's tickers match our filter
+            hit_tickers = {t.upper() for t in hit.tickers if t}
+            if hit_tickers & ticker_set:
+                filtered.append(hit)
+
+        return filtered
 
     async def search_queries(
         self, queries: list[str]
