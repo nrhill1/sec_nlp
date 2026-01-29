@@ -463,10 +463,11 @@ class SecNlpTuiApp(App):
 
     /* ─── Market Panel ────────────────────────────────────────────────────── */
     .market-panel {
-        width: 48;
-        min-width: 36;
+        width: 1fr;
+        min-width: 40;
         background: $surface-raised;
         border: solid $border-subtle;
+        padding: 1 2;
     }
 
     .market-controls {
@@ -489,8 +490,9 @@ class SecNlpTuiApp(App):
         background: $surface;
         border: solid $border-subtle;
         color: $accent-primary;
-        padding: 1 1;
-        height: 8;
+        padding: 0 1;
+        height: 12;
+        min-height: 10;
     }
 
     #market-detail {

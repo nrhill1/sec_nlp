@@ -743,25 +743,52 @@ class MarketPanel(Vertical):
         sma_series = compute_sma(series, window=5) if show_sma else None
         # Pass quotes for candlestick rendering
         quotes = list(self._snapshot.quotes) if self._snapshot else None
+        chart_width = self._chart_width()
+        chart_height = 8  # Rows for the chart
         chart_lines = build_market_chart_lines(
             series,
-            width=self._chart_width(),
-            height=8,
+            width=chart_width,
+            height=chart_height,
             style=style_key,
             normalize=normalize,
             overlay=sma_series,
             quotes=quotes,
         )
-        self._chart.update(
-            "\n".join(str(line) for line in chart_lines)
-            if chart_lines
-            else "(no chart data)"
-        )
+
+        # Build chart display with axis labels
+        if chart_lines and series:
+            min_val = min(series)
+            max_val = max(series)
+            # Add price axis labels on the left
+            labeled_lines: list[str] = []
+            for i, line in enumerate(chart_lines):
+                if i == 0:
+                    price_label = f"{self._format_number(max_val):>8} │"
+                elif i == len(chart_lines) - 1:
+                    price_label = f"{self._format_number(min_val):>8} │"
+                elif i == len(chart_lines) // 2:
+                    mid_val = (max_val + min_val) / 2
+                    price_label = f"{self._format_number(mid_val):>8} │"
+                else:
+                    price_label = "         │"
+                labeled_lines.append(f"{price_label}{line}")
+            # Add bottom axis line
+            labeled_lines.append("         └" + "─" * min(chart_width, 60))
+            chart_text = "\n".join(labeled_lines)
+        else:
+            chart_text = "(no chart data)"
+
+        self._chart.update(chart_text)
         detail = self._build_detail(label, series)
         self._detail.update(str(detail))
-        # stats
+
+        # Stats display
         stats_lines = format_stats_lines(series)
-        self._stats.update("\n".join(str(line) for line in stats_lines))
+        if stats_lines:
+            self._stats.update("\n".join(str(line) for line in stats_lines))
+        else:
+            self._stats.update("(no stats)")
+
         context = self._snapshot.correlation
         self._context_label.update(str(context) if context else "")
 
@@ -825,9 +852,15 @@ class MarketPanel(Vertical):
         return default
 
     def _chart_width(self) -> int:
-        width = self.size.width - 4
-        if width < 10:
-            return 10
+        """Calculate available width for chart rendering."""
+        # Account for padding (2 chars each side) and border (1 char each side)
+        width = self.size.width - 6
+        # Ensure minimum width for readable charts
+        if width < 20:
+            return 20
+        # Cap at reasonable max to prevent overly wide charts
+        if width > 120:
+            return 120
         return width
 
 
