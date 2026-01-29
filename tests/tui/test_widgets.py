@@ -276,6 +276,82 @@ def test_form_view_sections_toggle() -> None:
     asyncio.run(run_test())
 
 
+def test_form_view_switch_forms_no_duplicate_ids() -> None:
+    """Switching forms should not cause duplicate ID errors.
+
+    This guards against a regression where ListView.clear() doesn't immediately
+    remove widget IDs, causing DuplicateIds exception when mounting new items.
+    """
+    app = FormApp()
+    analyze_spec = get_form_spec("analyze")
+    assert analyze_spec is not None
+
+    async def run_test() -> None:
+        async with app.run_test() as pilot:
+            view = app.query_one(FormView)
+            # Set initial form
+            view.set_form(analyze_spec)
+            await pilot.pause()
+
+            # Verify nav has overview item
+            assert view._section_nav is not None
+            nav_ids_before = {child.id for child in view._section_nav.children}
+            assert "nav-__overview__" in nav_ids_before
+
+            # Switch to same form again - this should NOT raise DuplicateIds
+            view.set_form(analyze_spec)
+            await pilot.pause()
+
+            # Verify nav still has overview item (replaced, not duplicated)
+            nav_ids_after = {child.id for child in view._section_nav.children}
+            assert "nav-__overview__" in nav_ids_after
+
+            # Count should be same, not doubled
+            assert len(nav_ids_after) == len(nav_ids_before)
+
+    asyncio.run(run_test())
+
+
+def test_form_view_switch_different_forms() -> None:
+    """Switching between different form specs should work without errors."""
+    app = FormApp()
+    analyze_spec = get_form_spec("analyze")
+    exb_spec = get_form_spec("exb")
+    assert analyze_spec is not None
+    assert exb_spec is not None
+
+    async def run_test() -> None:
+        async with app.run_test() as pilot:
+            view = app.query_one(FormView)
+
+            # Set analyze form
+            view.set_form(analyze_spec)
+            await pilot.pause()
+            assert view._form_spec is analyze_spec
+
+            # Switch to exhibit form
+            view.set_form(exb_spec)
+            await pilot.pause()
+            assert view._form_spec is exb_spec
+
+            # Switch back to analyze
+            view.set_form(analyze_spec)
+            await pilot.pause()
+            assert view._form_spec is analyze_spec
+
+            # All switches should complete without DuplicateIds error
+            assert view._section_nav is not None
+            # Verify we have exactly one overview nav item
+            overview_items = [
+                c
+                for c in view._section_nav.children
+                if c.id == "nav-__overview__"
+            ]
+            assert len(overview_items) == 1
+
+    asyncio.run(run_test())
+
+
 def test_market_panel_display_select() -> None:
     app = MarketApp()
 

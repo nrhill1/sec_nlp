@@ -8,6 +8,7 @@ from datetime import date
 from pathlib import Path
 
 from rich.syntax import Syntax
+from textual.app import ComposeResult
 from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.message import Message
 from textual.widgets import (
@@ -331,7 +332,7 @@ class FormView(Horizontal):
         height: 1fr;
     }
 
-    #section-nav {
+    FormView > .section-nav {
         width: 22;
         height: 1fr;
         background: #09090b;
@@ -339,33 +340,36 @@ class FormView(Horizontal):
         margin-right: 1;
     }
 
-    #section-nav > ListItem {
+    FormView > .section-nav > ListItem {
         padding: 0 1;
         height: 2;
         color: #6b7280;
     }
 
-    #section-nav > ListItem:hover {
+    FormView > .section-nav > ListItem:hover {
         background: #161619;
         color: #9ca3af;
     }
 
-    #section-nav > ListItem.-active {
+    FormView > .section-nav > ListItem.-active {
         background: #1c1c20;
         color: #60a5fa;
     }
 
-    #section-nav > ListItem.--highlight,
-    #section-nav > ListItem:focus {
+    FormView > .section-nav > ListItem.--highlight,
+    FormView > .section-nav > ListItem:focus {
         background: #1c1c20;
         color: #60a5fa;
     }
 
-    #section-content {
+    FormView > .section-content {
         width: 1fr;
         height: 1fr;
     }
     """
+
+    # Class-level counter for unique widget IDs across form switches
+    _form_counter: int = 0
 
     def __init__(self) -> None:
         super().__init__(classes="panel")
@@ -382,11 +386,14 @@ class FormView(Horizontal):
         self._section_nav: ListView | None = None
         self._section_keys: list[ConfigScalar] = []
         self._content_area: VerticalScroll | None = None
+        self._id_suffix: int = 0
 
-    def compose(self):
+    def compose(self) -> ComposeResult:
         # Will be populated by set_form
-        self._section_nav = ListView(id="section-nav")
-        self._content_area = VerticalScroll(id="section-content")
+        self._section_nav = ListView(id="section-nav-0", classes="section-nav")
+        self._content_area = VerticalScroll(
+            id="section-content-0", classes="section-content"
+        )
         yield self._section_nav
         yield self._content_area
 
@@ -400,11 +407,28 @@ class FormView(Horizontal):
         self._section_field_keys = {}
         self._section_keys = []
 
-        # Clear existing content
+        # Replace the entire ListView and VerticalScroll containers to avoid
+        # duplicate ID issues. Widget.remove() is async, so we can't reliably
+        # clear and re-populate. Instead, we remove the old containers entirely
+        # and mount fresh ones with unique IDs using an incrementing suffix.
         if self._section_nav is not None:
-            self._section_nav.clear()
+            self._section_nav.remove()
         if self._content_area is not None:
-            self._content_area.remove_children()
+            self._content_area.remove()
+
+        # Increment suffix to ensure unique IDs
+        self._id_suffix += 1
+        suffix = self._id_suffix
+
+        # Create fresh containers with unique IDs and mount them to self
+        self._section_nav = ListView(
+            id=f"section-nav-{suffix}", classes="section-nav"
+        )
+        self._content_area = VerticalScroll(
+            id=f"section-content-{suffix}", classes="section-content"
+        )
+        self.mount(self._section_nav)
+        self.mount(self._content_area)
 
         # Group fields by section
         section_fields: dict[ConfigScalar, list[FieldSpec]] = {}

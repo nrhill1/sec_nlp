@@ -831,34 +831,34 @@ class SecNlpTuiApp(App):
     }
 
     /* ─── Section Navigation (FormView sidebar) ──────────────────────────── */
-    #section-nav {
+    .section-nav {
         width: 20;
         background: $bg-surface;
         border-right: solid $border-faint;
         padding: 0;
     }
 
-    #section-nav > ListItem {
+    .section-nav > ListItem {
         padding: 0 2;
         color: $text-muted;
         height: 2;
         background: transparent;
     }
 
-    #section-nav > ListItem:hover {
+    .section-nav > ListItem:hover {
         background: $bg-elevated;
         color: $text-secondary;
     }
 
-    #section-nav > ListItem.--highlight,
-    #section-nav > ListItem.-highlight,
-    #section-nav > ListItem:focus {
+    .section-nav > ListItem.--highlight,
+    .section-nav > ListItem.-highlight,
+    .section-nav > ListItem:focus {
         background: $bg-hover;
         color: $accent-violet;
         text-style: none;
     }
 
-    #section-content {
+    .section-content {
         padding: 0 1;
         background: transparent;
     }
