@@ -361,6 +361,30 @@ class AnalyzeConfig(BasePipelineSettings):
 
     @model_validator(mode="before")
     @classmethod
+    def _apply_llm_defaults(
+        cls, values: dict[str, JsonValue]
+    ) -> dict[str, JsonValue]:
+        """Merge partial LLM config with defaults to preserve prompt_file.
+
+        When CLI passes --llm.model-name, it creates a partial dict that
+        overrides the entire default_factory. This validator ensures the
+        default prompt_file is preserved unless explicitly overridden.
+        """
+        raw_llm = values.get("llm")
+        if isinstance(raw_llm, dict):
+            # Merge with defaults - prompt_file should come from ANALYZE_PROMPT_PATH
+            # unless the mode validator sets a different one later
+            llm_values = coerce_json_dict(raw_llm) or {}
+            if "prompt_file" not in llm_values:
+                llm_values["prompt_file"] = str(ANALYZE_PROMPT_PATH)
+            values["llm"] = llm_values
+        elif raw_llm is None:
+            # Ensure default is applied
+            values["llm"] = {"prompt_file": str(ANALYZE_PROMPT_PATH)}
+        return values
+
+    @model_validator(mode="before")
+    @classmethod
     def _apply_market_flags(
         cls, values: dict[str, JsonValue]
     ) -> dict[str, JsonValue]:
