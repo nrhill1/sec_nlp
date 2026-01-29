@@ -129,3 +129,90 @@ impl SearchResponse {
         self.hits_vec.len()
     }
 }
+
+/// Result from a single query in a batch search.
+#[pyclass(name = "EFTSBatchResult", frozen, module = "efts")]
+#[derive(Debug, Clone, Serialize)]
+pub struct BatchSearchResult {
+    #[pyo3(get)]
+    pub query: String,
+    /// Hits from this query. Serializes as "hits".
+    #[serde(rename = "hits")]
+    pub hits_vec: Vec<SearchHit>,
+    #[pyo3(get)]
+    pub total: u64,
+    /// Error message if this query failed.
+    #[pyo3(get)]
+    pub error: Option<String>,
+}
+
+#[pymethods]
+ impl BatchSearchResult {
+    /// Return hits as a list of EFTSHit objects.
+    #[getter]
+    fn hits(&self, py: Python<'_>) -> PyResult<Vec<Py<SearchHit>>> {
+        self.hits_vec
+            .iter()
+            .map(|hit| Py::new(py, hit.clone()))
+            .collect()
+    }
+
+    /// Check if this query succeeded.
+    #[getter]
+    fn success(&self) -> bool {
+        self.error.is_none()
+    }
+
+    fn __repr__(&self) -> String {
+        if let Some(ref err) = self.error {
+            format!("EFTSBatchResult(query={}, error={})", self.query, err)
+        } else {
+            format!(
+                "EFTSBatchResult(query={}, hits={}, total={})",
+                self.query,
+                self.hits_vec.len(),
+                self.total
+            )
+        }
+    }
+
+    fn __len__(&self) -> usize {
+        self.hits_vec.len()
+    }
+}
+
+/// Progress information during paginated search.
+#[pyclass(name = "EFTSProgress", frozen, module = "efts")]
+#[derive(Debug, Clone)]
+pub struct ProgressInfo {
+    #[pyo3(get)]
+    pub current_page: u32,
+    #[pyo3(get)]
+    pub total_pages: u32,
+    #[pyo3(get)]
+    pub hits_fetched: u32,
+    #[pyo3(get)]
+    pub total_hits: u64,
+    #[pyo3(get)]
+    pub query: String,
+}
+
+#[pymethods]
+impl ProgressInfo {
+    /// Progress as a fraction (0.0 to 1.0).
+    #[getter]
+    fn progress(&self) -> f64 {
+        if self.total_pages == 0 {
+            1.0
+        } else {
+            (self.current_page as f64) / (self.total_pages as f64)
+        }
+    }
+
+    fn __repr__(&self) -> String {
+        format!(
+            "EFTSProgress(page={}/{}, hits={}/{})",
+            self.current_page, self.total_pages, self.hits_fetched, self.total_hits
+        )
+    }
+}

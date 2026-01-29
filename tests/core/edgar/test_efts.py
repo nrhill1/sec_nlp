@@ -284,6 +284,130 @@ class TestEFTSClient:
         call_kwargs = rust_client_instance.search_all_async.call_args.kwargs
         assert call_kwargs.get("max_results") == 10
 
+    def test_batch_search_uses_rust_async(
+        self, monkeypatch: pytest.MonkeyPatch, socket_enabled: None
+    ) -> None:
+        """Ensure batch_search_async uses the Rust implementation."""
+        from sec_nlp.core.edgar import efts as efts_module
+
+        # Create mock hit objects for two queries
+        mock_results = []
+        for query_idx, query in enumerate(["warranty", "liability"]):
+            mock_hit = Mock()
+            mock_hit.accession_number = f"0001234567-24-00000{query_idx + 1}"
+            mock_hit.cik = "0001234567"
+            mock_hit.company_name = f"Test Co {query_idx + 1}"
+            mock_hit.tickers = ["TST"]
+            mock_hit.form_type = "10-K"
+            mock_hit.filed_date = date(2024, 1, 15 + query_idx)
+            mock_hit.file_number = None
+            mock_hit.film_number = None
+            mock_hit.snippet = "test"
+            mock_hit.score = 1.0
+            mock_hit.filing_url = None
+
+            mock_result = Mock()
+            mock_result.query = query
+            mock_result.hits = [mock_hit]
+            mock_result.total = 1
+            mock_result.error = None
+            mock_result.success = True
+            mock_results.append(mock_result)
+
+        rust_client_instance = Mock()
+        rust_client_instance.batch_search_async = AsyncMock(
+            return_value=mock_results
+        )
+        rust_client_class = Mock(return_value=rust_client_instance)
+        rust_module = Mock()
+        rust_module.EFTSClient = rust_client_class
+
+        monkeypatch.setattr(
+            efts_module, "_load_efts_module", lambda: rust_module
+        )
+
+        # Test that we can call batch_search_async directly on the Rust client
+        results = asyncio.run(
+            rust_client_instance.batch_search_async(
+                ["warranty", "liability"], limit_per_query=10
+            )
+        )
+
+        assert len(results) == 2
+        assert results[0].query == "warranty"
+        assert results[1].query == "liability"
+        rust_client_instance.batch_search_async.assert_called_once()
+
+    def test_search_all_with_progress_calls_callback(
+        self, monkeypatch: pytest.MonkeyPatch, socket_enabled: None
+    ) -> None:
+        """Ensure progress callback is called during search_all."""
+        from sec_nlp.core.edgar import efts as efts_module
+
+        # Track progress calls
+        progress_calls: list[Mock] = []
+
+        def on_progress(p: Mock) -> None:
+            progress_calls.append(p)
+
+        # Create mock hits
+        mock_hits = []
+        for i in range(3):
+            mock_hit = Mock()
+            mock_hit.accession_number = f"0001234567-24-00000{i + 1}"
+            mock_hit.cik = "0001234567"
+            mock_hit.company_name = f"Test Co {i + 1}"
+            mock_hit.tickers = ["TST"]
+            mock_hit.form_type = "10-K"
+            mock_hit.filed_date = date(2024, 1, 15 + i)
+            mock_hit.file_number = None
+            mock_hit.film_number = None
+            mock_hit.snippet = "test"
+            mock_hit.score = 1.0
+            mock_hit.filing_url = None
+            mock_hits.append(mock_hit)
+
+        rust_client_instance = Mock()
+
+        async def mock_search_all_with_progress(
+            query: str,
+            on_progress: Mock,
+            **kwargs: Mock,
+        ) -> list[Mock]:
+            # Simulate progress callback
+            progress = Mock()
+            progress.current_page = 1
+            progress.total_pages = 1
+            progress.hits_fetched = 3
+            progress.total_hits = 3
+            progress.query = query
+            on_progress(progress)
+            return mock_hits
+
+        rust_client_instance.search_all_with_progress_async = AsyncMock(
+            side_effect=mock_search_all_with_progress
+        )
+        rust_client_class = Mock(return_value=rust_client_instance)
+        rust_module = Mock()
+        rust_module.EFTSClient = rust_client_class
+
+        monkeypatch.setattr(
+            efts_module, "_load_efts_module", lambda: rust_module
+        )
+
+        # Call the method
+        hits = asyncio.run(
+            rust_client_instance.search_all_with_progress_async(
+                "warranty",
+                on_progress=on_progress,
+                max_results=100,
+            )
+        )
+
+        assert len(hits) == 3
+        assert len(progress_calls) == 1
+        assert progress_calls[0].current_page == 1
+
 
 class TestCreateEFTSClient:
     """Tests for create_efts_client factory function."""

@@ -19,7 +19,7 @@ use crate::constants::{
     DEFAULT_TIMEOUT_SECS, EFTS_BASE_URL,
 };
 use crate::error::{EftsApiError, EftsError};
-use crate::models::{SearchHit, SearchResponse};
+use crate::models::{BatchSearchResult, ProgressInfo, SearchHit, SearchResponse};
 use crate::python::create_efts_client;
 
 #[pymodule]
@@ -30,6 +30,8 @@ fn efts(py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
     // Response model classes
     m.add_class::<SearchHit>()?;
     m.add_class::<SearchResponse>()?;
+    m.add_class::<BatchSearchResult>()?;
+    m.add_class::<ProgressInfo>()?;
 
     // Exception class
     m.add("EFTSAPIError", py.get_type::<EftsApiError>())?;
