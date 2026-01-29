@@ -218,6 +218,7 @@ class SecNlpTuiApp(App):
 
     .section-switcher {
         margin-bottom: 1;
+        layer: above;
     }
 
     .field-label {
@@ -241,6 +242,38 @@ class SecNlpTuiApp(App):
     Input:focus, Select:focus {
         border: solid $accent-secondary;
         background: $surface-elevated;
+        color: $text-primary;
+    }
+
+    /* Select dropdown overlay */
+    SelectOverlay {
+        background: $surface-overlay;
+        border: solid $border-default;
+    }
+
+    SelectOverlay > SelectCurrent {
+        background: $surface-elevated;
+        color: $accent-primary;
+    }
+
+    OptionList {
+        background: $surface-overlay;
+        border: none;
+        scrollbar-size: 1 1;
+    }
+
+    OptionList > .option-list--option {
+        padding: 0 1;
+        color: $text-secondary;
+    }
+
+    OptionList > .option-list--option-hover {
+        background: $surface-elevated;
+        color: $text-primary;
+    }
+
+    OptionList > .option-list--option-highlighted {
+        background: $accent-glow;
         color: $text-primary;
     }
 
@@ -270,6 +303,7 @@ class SecNlpTuiApp(App):
     /* ─── Collapsible Sections ────────────────────────────────────────────── */
     .collapsible-section {
         margin-bottom: 1;
+        overflow: visible;
     }
 
     .section-header {
@@ -297,6 +331,7 @@ class SecNlpTuiApp(App):
     .section-content {
         padding-left: 1;
         margin-top: 0;
+        overflow: visible;
     }
 
     .section-hidden {
@@ -703,7 +738,6 @@ class SecNlpTuiApp(App):
     #run {
         height: 1fr;
         layout: vertical;
-        overflow: hidden;
     }
 
     #run-bottom {
@@ -725,6 +759,7 @@ class SecNlpTuiApp(App):
     #config-panel {
         height: 2fr;
         min-height: 16;
+        overflow: visible;
     }
 
     /* ─── Scrollbars ──────────────────────────────────────────────────────── */
