@@ -165,7 +165,7 @@ def test_results_panel_accepts_classes_kwarg() -> None:
 
 
 def test_results_panel_set_paths() -> None:
-    """ResultsPanel.set_paths() should populate the list."""
+    """ResultsPanel.set_paths() should populate the tree."""
     app = ResultsApp()
 
     async def run_test() -> None:
@@ -178,13 +178,14 @@ def test_results_panel_set_paths() -> None:
                 path2.write_text("key: value2\n")
                 panel.set_paths([path1, path2])
                 assert len(panel._all_paths) == 2
-                assert len(panel._filtered_paths) == 2
+                # Tree-based implementation uses _path_to_node dict
+                assert len(panel._path_to_node) == 2
 
     asyncio.run(run_test())
 
 
 def test_results_panel_filter() -> None:
-    """ResultsPanel filter should narrow the list."""
+    """ResultsPanel filter should narrow the tree."""
     app = ResultsApp()
 
     async def run_test() -> None:
@@ -198,11 +199,14 @@ def test_results_panel_filter() -> None:
                 path2.write_text("b: 2\n")
                 path3.write_text("c: 3\n")
                 panel.set_paths([path1, path2, path3])
-                assert len(panel._filtered_paths) == 3
+                assert len(panel._path_to_node) == 3
+                # Simulate filter input change - rebuilds tree
                 panel._filter_input.value = "alpha"
-                panel._apply_filter()
-                assert len(panel._filtered_paths) == 1
-                assert panel._filtered_paths[0].name == "alpha.yaml"
+                panel._rebuild_tree()
+                assert len(panel._path_to_node) == 1
+                # Check that the filtered path is alpha.yaml
+                filtered_paths = list(panel._path_to_node.values())
+                assert filtered_paths[0].name == "alpha.yaml"
 
     asyncio.run(run_test())
 
@@ -216,7 +220,7 @@ def test_results_panel_empty_paths() -> None:
             panel = app.query_one(ResultsPanel)
             panel.set_paths([])
             assert panel._all_paths == []
-            assert panel._filtered_paths == []
+            assert len(panel._path_to_node) == 0
 
     asyncio.run(run_test())
 

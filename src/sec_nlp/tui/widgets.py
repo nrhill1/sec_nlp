@@ -20,6 +20,7 @@ from textual.widgets import (
     ProgressBar,
     Select,
     Static,
+    Tree,
 )
 
 from sec_nlp.tui.interfaces import (
@@ -38,6 +39,8 @@ from sec_nlp.tui.market import (
     MARKET_METRIC_RETURNS,
     MARKET_METRIC_VOLUME,
     MARKET_STYLE_BARS,
+    MARKET_STYLE_CANDLE,
+    MARKET_STYLE_LINE,
     MARKET_STYLE_POINTS,
     MarketSnapshot,
     build_market_chart_lines,
@@ -594,6 +597,8 @@ _MARKET_METRIC_LABELS: dict[ConfigScalar, ConfigScalar] = {
 _MARKET_STYLE_LABELS: dict[ConfigScalar, ConfigScalar] = {
     MARKET_STYLE_BARS: "Bars",
     MARKET_STYLE_POINTS: "Points",
+    MARKET_STYLE_CANDLE: "Candle",
+    MARKET_STYLE_LINE: "Line",
 }
 
 MARKET_DISPLAY_FULL = "full"
@@ -736,13 +741,16 @@ class MarketPanel(Vertical):
 
         # Optionally overlay SMA
         sma_series = compute_sma(series, window=5) if show_sma else None
+        # Pass quotes for candlestick rendering
+        quotes = list(self._snapshot.quotes) if self._snapshot else None
         chart_lines = build_market_chart_lines(
             series,
             width=self._chart_width(),
-            height=6,
+            height=8,
             style=style_key,
             normalize=normalize,
             overlay=sma_series,
+            quotes=quotes,
         )
         self._chart.update(
             "\n".join(str(line) for line in chart_lines)
@@ -824,28 +832,62 @@ class MarketPanel(Vertical):
 
 
 class ResultsPanel(Vertical):
+    """Results panel with tree view for hierarchical file browsing."""
+
+    DEFAULT_CSS = """
+    ResultsPanel {
+        height: 1fr;
+    }
+
+    #results-tree {
+        width: 42;
+        height: 1fr;
+        background: #0a0a0b;
+        border: solid #27272a;
+        margin-right: 1;
+    }
+
+    #results-tree > .tree--guides {
+        color: #3f3f46;
+    }
+
+    #results-tree > .tree--cursor {
+        background: #1f1f23;
+        color: #22d3ee;
+    }
+
+    #results-view-full {
+        height: 1fr;
+        background: #0a0a0b;
+        border: solid #27272a;
+        padding: 1;
+        overflow-y: auto;
+    }
+    """
+
     def __init__(self, classes: ConfigScalar = "panel results-panel") -> None:
         classes_text = None if classes is None else str(classes)
         super().__init__(classes=classes_text)
         self._filter_input = Input(
             placeholder="Filter files...", id="results-filter"
         )
-        self._list = ListView(id="results-list")
-        self._viewer = Static("", id="results-view")
+        self._tree: Tree[Path] = Tree("Results", id="results-tree")
+        self._tree.show_root = True
+        self._tree.guide_depth = 2
+        self._viewer = Static("", id="results-view-full")
         self._all_paths: list[Path] = []
-        self._filtered_paths: list[Path] = []
-        self._filter_generation = 0
+        self._path_to_node: dict[str, Path] = {}
 
     def compose(self):
         yield Label("Results", classes="panel-title")
         yield self._filter_input
         with Horizontal(classes="results-row"):
-            yield self._list
-            yield self._viewer
+            yield self._tree
+            yield VerticalScroll(self._viewer, id="results-view-scroll")
 
     def on_input_changed(self, event: Input.Changed) -> None:
         if event.input is self._filter_input:
-            self._apply_filter()
+            self._rebuild_tree()
 
     def set_paths(self, paths: list[Path]) -> None:
         # de-duplicate and keep newest first
@@ -863,53 +905,111 @@ class ResultsPanel(Vertical):
             unique.append(p)
         self._all_paths = unique
         self._filter_input.value = ""
-        self._apply_filter()
+        self._rebuild_tree()
 
-    def _apply_filter(self) -> None:
+    def _rebuild_tree(self) -> None:
+        """Build tree structure from paths, grouped by symbol/pipeline/run."""
         query = self._filter_input.value.strip().lower()
         if query:
-            self._filtered_paths = [
-                p for p in self._all_paths if query in p.name.lower()
-            ]
+            filtered = [p for p in self._all_paths if query in str(p).lower()]
         else:
-            self._filtered_paths = list(self._all_paths)
-        # Increment generation to ensure unique IDs across filter operations
-        self._filter_generation += 1
-        gen = self._filter_generation
-        # Remove existing children before adding new ones
-        self._list.remove_children()
-        if self._filtered_paths:
-            items = [
-                ListItem(Label(p.name), id=f"result-{gen}-{idx}")
-                for idx, p in enumerate(self._filtered_paths)
-            ]
-            for item in items:
-                self._list.mount(item)
-            self._list.index = 0
-            self._load_index(0)
-        else:
-            self._viewer.update("(no YAML results)")
+            filtered = list(self._all_paths)
 
-    def on_list_view_selected(self, event: ListView.Selected) -> None:
-        if event.item is None or event.item.id is None:
+        self._tree.clear()
+        self._path_to_node = {}
+
+        if not filtered:
+            self._viewer.update("(no results)")
             return
-        item_id = str(event.item.id)
-        if not item_id.startswith("result-"):
-            return
-        # ID format: result-{generation}-{index}
-        parts = item_id.removeprefix("result-").split("-", 1)
-        if len(parts) != 2:
-            return
+
+        # Group paths into hierarchy: symbol -> pipeline -> run_id -> files
+        # Expected structure: outputs/<SYMBOL>/<pipeline>/<run_id>/<accession>/file.yaml
+        hierarchy: dict[
+            str, dict[str, dict[str, list[Path]]]
+        ] = {}  # symbol -> pipeline -> run -> files
+
+        for path in filtered:
+            parts = path.parts
+            # Try to find 'outputs' in path and extract hierarchy
+            symbol, pipeline, run_id = self._extract_hierarchy(parts)
+            if symbol not in hierarchy:
+                hierarchy[symbol] = {}
+            if pipeline not in hierarchy[symbol]:
+                hierarchy[symbol][pipeline] = {}
+            if run_id not in hierarchy[symbol][pipeline]:
+                hierarchy[symbol][pipeline][run_id] = []
+            hierarchy[symbol][pipeline][run_id].append(path)
+
+        # Build tree nodes
+        root = self._tree.root
+        root.expand()
+
+        for symbol in sorted(hierarchy.keys()):
+            symbol_node = root.add(f"📁 {symbol}", expand=True)
+            for pipeline in sorted(hierarchy[symbol].keys()):
+                pipeline_label = self._pipeline_icon(pipeline) + f" {pipeline}"
+                pipeline_node = symbol_node.add(pipeline_label, expand=True)
+                for run_id in sorted(
+                    hierarchy[symbol][pipeline].keys(), reverse=True
+                ):
+                    run_files = hierarchy[symbol][pipeline][run_id]
+                    if len(run_files) == 1:
+                        # Single file - add as leaf directly
+                        path = run_files[0]
+                        file_label = f"📄 {run_id}/{path.name}"
+                        pipeline_node.add_leaf(file_label, data=path)
+                        self._path_to_node[str(path)] = path
+                    else:
+                        # Multiple files - add run as folder
+                        run_node = pipeline_node.add(
+                            f"📂 {run_id}", expand=False
+                        )
+                        for path in run_files:
+                            run_node.add_leaf(f"📄 {path.name}", data=path)
+                            self._path_to_node[str(path)] = path
+
+        # Select first file if available
+        if filtered:
+            self._load_path(filtered[0])
+
+    def _extract_hierarchy(
+        self, parts: tuple[str, ...]
+    ) -> tuple[str, str, str]:
+        """Extract symbol, pipeline, run_id from path parts."""
+        # Look for 'outputs' directory and extract structure after it
         try:
-            idx = int(parts[1])
+            outputs_idx = list(parts).index("outputs")
+            if len(parts) > outputs_idx + 3:
+                symbol = parts[outputs_idx + 1]
+                pipeline = parts[outputs_idx + 2]
+                run_id = parts[outputs_idx + 3]
+                return symbol, pipeline, run_id
         except ValueError:
-            return
-        self._load_index(idx)
+            pass
+        # Fallback: use parent directories
+        if len(parts) >= 4:
+            return parts[-4], parts[-3], parts[-2]
+        if len(parts) >= 3:
+            return "unknown", parts[-3], parts[-2]
+        if len(parts) >= 2:
+            return "unknown", "unknown", parts[-2]
+        return "unknown", "unknown", "unknown"
 
-    def _load_index(self, idx: int) -> None:
-        if idx < 0 or idx >= len(self._filtered_paths):
-            return
-        path = self._filtered_paths[idx]
+    def _pipeline_icon(self, pipeline: str) -> str:
+        icons = {
+            "analyze": "🔍",
+            "exhibit": "📋",
+            "warranty": "⚙️",
+            "search": "🔎",
+        }
+        return icons.get(pipeline.lower(), "📁")
+
+    def on_tree_node_selected(self, event: Tree.NodeSelected[Path]) -> None:
+        node = event.node
+        if node.data is not None:
+            self._load_path(node.data)
+
+    def _load_path(self, path: Path) -> None:
         try:
             text = path.read_text(encoding="utf-8")
         except OSError:
@@ -953,6 +1053,20 @@ class EFTSPanel(Vertical):
     #efts-options-row {
         height: auto;
         margin-bottom: 1;
+    }
+
+    #efts-progress-row {
+        height: auto;
+        margin-bottom: 1;
+    }
+
+    #efts-progress {
+        width: 1fr;
+    }
+
+    #efts-max-results {
+        width: 12;
+        margin-left: 1;
     }
 
     #efts-status {
@@ -1013,12 +1127,20 @@ class EFTSPanel(Vertical):
         self._exact_match = Checkbox(
             label="Exact", value=False, id="efts-exact"
         )
+        self._max_results_input = Input(
+            placeholder="100",
+            value="100",
+            id="efts-max-results",
+        )
+        self._progress = ProgressBar(
+            total=100, show_percentage=True, id="efts-progress"
+        )
         self._status = Static(
             "Enter a search query and press Search or Enter", id="efts-status"
         )
         self._results_list = ListView(id="efts-results-list")
         self._detail_view = Static("", id="efts-detail")
-        self._results: list[dict[str, str | int | date | None]] = []
+        self._results: list[dict[str, str | int | float | date | None]] = []
         self._search_task: asyncio.Task[None] | None = None
         self._spinner = Spinner()
 
@@ -1031,6 +1153,10 @@ class EFTSPanel(Vertical):
             yield self._spinner
         with Horizontal(id="efts-options-row"):
             yield self._exact_match
+            yield Label("Max results:", classes="market-label")
+            yield self._max_results_input
+        with Horizontal(id="efts-progress-row"):
+            yield self._progress
         yield self._status
         with Horizontal(id="efts-results-container"):
             yield self._results_list
@@ -1063,6 +1189,7 @@ class EFTSPanel(Vertical):
         self._results_list.remove_children()
         self._detail_view.update("")
         self._results = []
+        self._progress.update(total=100, progress=0)
 
         form_types_raw = self._form_types_input.value.strip()
         form_types: list[str] | None = None
@@ -1071,15 +1198,39 @@ class EFTSPanel(Vertical):
                 ft.strip() for ft in form_types_raw.split(",") if ft.strip()
             ]
 
+        # Parse max results
+        try:
+            max_results = int(self._max_results_input.value.strip())
+            max_results = max(1, min(max_results, 1000))
+        except ValueError:
+            max_results = 100
+
         try:
             client = EFTSClient()
-            response = await client.search(
-                query,
-                forms=form_types,
-            )
 
-            hits = response.hits
-            total = response.total
+            # Use search_all for pagination with larger result sets
+            if max_results > 100:
+                self._status.update(
+                    f"Fetching up to {max_results} results for '{query}'..."
+                )
+                hits = await client.search_all(
+                    query,
+                    forms=form_types,
+                    max_results=max_results,
+                )
+                total = len(hits)
+                # Update progress to complete
+                self._progress.update(total=100, progress=100)
+            else:
+                response = await client.search(
+                    query,
+                    forms=form_types,
+                    limit=max_results,
+                )
+                hits = response.hits
+                total = response.total
+                self._progress.update(total=100, progress=100)
+
             self._results = [
                 {
                     "cik": hit.cik,
@@ -1088,6 +1239,8 @@ class EFTSPanel(Vertical):
                     "filed": hit.filed_date,
                     "accession": hit.accession_number,
                     "url": hit.filing_url,
+                    "snippet": hit.snippet,
+                    "score": hit.score,
                 }
                 for hit in hits
             ]
@@ -1135,13 +1288,24 @@ class EFTSPanel(Vertical):
         if idx < 0 or idx >= len(self._results):
             return
         result = self._results[idx]
+        score = result.get("score", 0)
+        score_display = (
+            f"{score:.2f}" if isinstance(score, float) else str(score)
+        )
         lines = [
             f"Company:   {result.get('company', 'N/A')}",
             f"CIK:       {result.get('cik', 'N/A')}",
             f"Form:      {result.get('form', 'N/A')}",
             f"Filed:     {result.get('filed', 'N/A')}",
             f"Accession: {result.get('accession', 'N/A')}",
+            f"Score:     {score_display}",
             "",
             f"URL: {result.get('url', 'N/A')}",
         ]
+        snippet = result.get("snippet", "")
+        if snippet:
+            lines.append("")
+            lines.append("─" * 40)
+            lines.append("Snippet:")
+            lines.append(str(snippet))
         self._detail_view.update("\n".join(lines))

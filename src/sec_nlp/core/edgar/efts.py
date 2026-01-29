@@ -24,6 +24,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from sec_nlp.core.infra.logger import logger
 
 from .efts_models import (
+    EFTSBatchResult,
     EFTSError,
     EFTSHit,
     EFTSSearchParams,
@@ -214,6 +215,65 @@ class EFTSClient(BaseModel):
         except Exception as exc:
             raise _rust_error_from_exception(exc) from exc
 
+    async def batch_search(
+        self,
+        queries: Sequence[str],
+        *,
+        forms: Sequence[str] | None = None,
+        ciks: Sequence[str] | None = None,
+        tickers: Sequence[str] | None = None,
+        start_date: date | None = None,
+        end_date: date | None = None,
+        limit_per_query: int = 10,
+        sort_field: EFTSSortField = EFTSSortField.relevance,
+        sort_order: EFTSSortOrder = EFTSSortOrder.desc,
+    ) -> list[EFTSBatchResult]:
+        """Execute multiple search queries in a single batch.
+
+        Uses the Rust async batch search for efficient parallel execution
+        with rate limiting between queries.
+
+        Args:
+            queries: List of search query strings
+            forms: Optional form types to filter
+            ciks: Optional CIK numbers to filter
+            tickers: Optional ticker symbols to filter
+            start_date: Optional start date for filing date range
+            end_date: Optional end date for filing date range
+            limit_per_query: Maximum results per query (1-100)
+            sort_field: Field to sort by
+            sort_order: Sort direction
+
+        Returns:
+            List of EFTSBatchResult, one per query in the same order
+        """
+        module = _load_efts_module()
+        if module is None:
+            raise EFTSAPIError(
+                status_code=0,
+                message="efts extension is not available; "
+                "build it with `make build-ext`.",
+            )
+
+        try:
+            return await _rust_execute_batch_search_async(
+                module,
+                self.config,
+                queries,
+                forms,
+                ciks,
+                tickers,
+                start_date,
+                end_date,
+                limit_per_query,
+                sort_field,
+                sort_order,
+            )
+        except EFTSAPIError:
+            raise
+        except Exception as exc:
+            raise _rust_error_from_exception(exc) from exc
+
     async def _execute_search(
         self, params: EFTSSearchParams
     ) -> EFTSSearchResponse:
@@ -377,6 +437,60 @@ def _convert_rust_hit(hit: object) -> EFTSHit:
         snippet=hit.snippet,  # type: ignore[attr-defined]
         score=hit.score,  # type: ignore[attr-defined]
         filing_url=hit.filing_url,  # type: ignore[attr-defined]
+    )
+
+
+async def _rust_execute_batch_search_async(
+    module: ModuleType,
+    config: EFTSClientConfig,
+    queries: Sequence[str],
+    forms: Sequence[str] | None,
+    ciks: Sequence[str] | None,
+    tickers: Sequence[str] | None,
+    start_date: date | None,
+    end_date: date | None,
+    limit_per_query: int,
+    sort_field: EFTSSortField,
+    sort_order: EFTSSortOrder,
+) -> list[EFTSBatchResult]:
+    """Execute batch search using native Rust async method."""
+    forms_list = list(forms) if forms else None
+    ciks_list = list(ciks) if ciks else None
+    tickers_list = list(tickers) if tickers else None
+    start_date_str = start_date.isoformat() if start_date else None
+    end_date_str = end_date.isoformat() if end_date else None
+
+    client = module.EFTSClient(
+        user_agent=config.user_agent,
+        timeout=config.timeout,
+        max_retries=config.max_retries,
+        retry_delay=config.retry_delay,
+        rate_limit_delay=config.rate_limit_delay,
+        base_url=config.base_url,
+    )
+    # Use native async batch method - returns awaitable
+    rust_results = await client.batch_search_async(
+        list(queries),
+        forms=forms_list,
+        ciks=ciks_list,
+        tickers=tickers_list,
+        start_date=start_date_str,
+        end_date=end_date_str,
+        limit_per_query=limit_per_query,
+        sort_field=sort_field.value,
+        sort_order=sort_order.value,
+    )
+    return [_convert_rust_batch_result(result) for result in rust_results]
+
+
+def _convert_rust_batch_result(rust_result: object) -> EFTSBatchResult:
+    """Convert Rust EFTSBatchResult to Pydantic model."""
+    hits = [_convert_rust_hit(hit) for hit in rust_result.hits]  # type: ignore[attr-defined]
+    return EFTSBatchResult(
+        query=rust_result.query,  # type: ignore[attr-defined]
+        hits=hits,
+        total=rust_result.total,  # type: ignore[attr-defined]
+        error=rust_result.error,  # type: ignore[attr-defined]
     )
 
 
