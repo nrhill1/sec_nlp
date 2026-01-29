@@ -67,31 +67,16 @@ def count_topics(
     """
     if not content:
         return {}, 0
-
-    # Use Rust backend when available
-    if EFTS_AVAILABLE and topics:
-        result = rust_score_document(content, topics)
-        return result.keyword_counts, result.total_hits
-
-    # Fallback to Python KeywordMatcher
-    if matcher:
-        return matcher.count(content)
-
     if not topics:
         return {}, 0
 
-    counts: dict[str, int] = {}
-    lower_content = content.lower()
-    for topic in topics:
-        if not isinstance(topic, str):
-            continue
-        t = topic.lower().strip()
-        if not t:
-            continue
-        counts[t] = lower_content.count(t)
+    if not EFTS_AVAILABLE:
+        raise RuntimeError(
+            "Topic scoring requires the EFTS Rust extension; Python fallback is disabled."
+        )
 
-    total_hits = sum(counts.values())
-    return counts, total_hits
+    result = rust_score_document(content, topics)
+    return result.keyword_counts, result.total_hits
 
 
 def score_documents(
@@ -121,54 +106,22 @@ def score_documents(
     if not docs or not cleaned:
         return docs if docs else []
 
-    # Use Rust-based ranking for better performance
-    if EFTS_AVAILABLE:
-        result = rust_rank_documents(
-            docs,
-            cleaned,
-            min_hits=min_hits,
-            top_n=None,  # Return all matching docs
-            prioritize=prioritize,
+    if not EFTS_AVAILABLE:
+        raise RuntimeError(
+            "Topic scoring requires the EFTS Rust extension; Python fallback is disabled."
         )
-        logger.info(
-            "Topic scoring (Rust): kept %d/%d chunks (min_hits=%d)",
-            len(result),
-            len(docs),
-            min_hits,
-        )
-        return result
 
-    # Fallback to Python implementation
-    if matcher is None:
-        matcher = build_topic_matcher(cleaned)
-
-    scored_docs: list[tuple[Document, int]] = []
-    for doc in docs:
-        counts, total_hits = count_topics(
-            doc.page_content,
-            topics=cleaned,
-            matcher=matcher,
-        )
-        doc.metadata = {
-            **(doc.metadata or {}),
-            "topic_hits": [k for k, v in counts.items() if v > 0],
-            "topic_hits_detail": counts,
-            "topic_score": total_hits,
-        }
-        if total_hits < min_hits:
-            continue
-        scored_docs.append((doc, total_hits))
-
-    if scored_docs:
-        if prioritize:
-            scored_docs.sort(key=lambda t: t[1], reverse=True)
-        filtered = [doc for doc, _ in scored_docs]
-        logger.info(
-            "Topic scoring (Python): kept %d/%d chunks (min_hits=%d)",
-            len(filtered),
-            len(docs),
-            min_hits,
-        )
-        return filtered
-
-    return []
+    result = rust_rank_documents(
+        docs,
+        cleaned,
+        min_hits=min_hits,
+        top_n=None,  # Return all matching docs
+        prioritize=prioritize,
+    )
+    logger.info(
+        "Topic scoring (Rust): kept %d/%d chunks (min_hits=%d)",
+        len(result),
+        len(docs),
+        min_hits,
+    )
+    return result

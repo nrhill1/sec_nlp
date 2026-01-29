@@ -174,7 +174,7 @@ def test_efts_search_uses_rust_client(
     mock_hit.accession_number = "0001234567-24-000001"
     mock_hit.cik = "0001234567"
     mock_hit.company_name = "Test Co"
-    mock_hit.tickers = ["TST"]
+    mock_hit.tickers = ["AAPL"]
     mock_hit.form_type = "10-K"
     mock_hit.filed_date = date(2024, 1, 15)
     mock_hit.file_number = None
@@ -183,17 +183,18 @@ def test_efts_search_uses_rust_client(
     mock_hit.score = 1.0
     mock_hit.filing_url = None
 
-    # Create mock response object with attribute access
-    mock_response = Mock()
-    mock_response.query = "warranty"
-    mock_response.total = 1
-    mock_response.hits = [mock_hit]
-    mock_response.start = 0
-    mock_response.limit = 1
+    # Create mock batch result object with attribute access
+    mock_batch_result = Mock()
+    mock_batch_result.query = "warranty"
+    mock_batch_result.total = 1
+    mock_batch_result.hits = [mock_hit]
+    mock_batch_result.error = None
 
     rust_client_instance = Mock()
     # Use AsyncMock for the async method
-    rust_client_instance.search_async = AsyncMock(return_value=mock_response)
+    rust_client_instance.batch_search_async = AsyncMock(
+        return_value=[mock_batch_result]
+    )
     rust_client_class = Mock(return_value=rust_client_instance)
     rust_module = Mock()
     rust_module.EFTSClient = rust_client_class
@@ -212,4 +213,4 @@ def test_efts_search_uses_rust_client(
     assert results
     assert results[0].hits
     rust_client_class.assert_called_once()
-    rust_client_instance.search_async.assert_called_once()
+    rust_client_instance.batch_search_async.assert_called_once()

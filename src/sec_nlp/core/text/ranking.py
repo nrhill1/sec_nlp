@@ -2,8 +2,7 @@
 """Unified document ranking and keyword extraction module.
 
 Provides a high-level API for keyword extraction and document ranking
-using Rust-based algorithms (YAKE, RAKE, TextRank, TF-IDF) with fallback
-to Python implementations.
+using Rust-based algorithms (YAKE, RAKE, TextRank, TF-IDF).
 """
 
 from __future__ import annotations
@@ -15,8 +14,6 @@ from typing import TYPE_CHECKING
 from langchain_core.documents import Document
 from pydantic import ConfigDict
 from pydantic.dataclasses import dataclass
-
-from sec_nlp.core.infra.logger import logger
 
 if TYPE_CHECKING:
     from efts import (
@@ -78,6 +75,13 @@ def _check_efts_available() -> bool:
 EFTS_AVAILABLE = _check_efts_available()
 
 
+def _require_efts(feature: str) -> None:
+    if not EFTS_AVAILABLE:
+        raise RuntimeError(
+            f"{feature} requires the EFTS Rust extension; Python fallback is disabled."
+        )
+
+
 class KeywordExtractor:
     """Unified keyword extraction using Rust backends.
 
@@ -123,11 +127,7 @@ class KeywordExtractor:
             RustYakeExtractor | RustRakeExtractor | RustTextRankExtractor | None
         ) = None
 
-        if not EFTS_AVAILABLE:
-            logger.warning(
-                "EFTS Rust extension not available; keyword extraction disabled"
-            )
-            return
+        _require_efts("Keyword extraction")
 
         self._init_extractor()
 
@@ -206,7 +206,8 @@ class DocumentRanker:
         self.algorithm = algorithm
         self._documents: list[str] = []
 
-        if algorithm == RankingAlgorithm.TFIDF and EFTS_AVAILABLE:
+        if algorithm == RankingAlgorithm.TFIDF:
+            _require_efts("TF-IDF ranking")
             import efts
 
             self._tfidf: efts.TfIdfRanker | None = None
@@ -284,52 +285,18 @@ class DocumentRanker:
         if not self._documents or not keywords:
             return []
 
-        if EFTS_AVAILABLE:
-            import efts
+        _require_efts("Keyword ranking")
+        import efts
 
-            results: list[RustDocumentScore] = efts.rank_documents_by_keywords(
-                self._documents,
-                list(keywords),
-                case_insensitive,
-                min_hits,
-            )
-            return [
-                RankedDocument(index=r.index, score=r.score)
-                for r in results[:top_n]
-            ]
-
-        # Fallback to Python implementation
-        return self._rank_by_keywords_python(
-            keywords,
-            top_n=top_n,
-            min_hits=min_hits,
-            case_insensitive=case_insensitive,
+        results: list[RustDocumentScore] = efts.rank_documents_by_keywords(
+            self._documents,
+            list(keywords),
+            case_insensitive,
+            min_hits,
         )
-
-    def _rank_by_keywords_python(
-        self,
-        keywords: Sequence[str],
-        *,
-        top_n: int,
-        min_hits: int,
-        case_insensitive: bool,
-    ) -> list[RankedDocument]:
-        """Python fallback for keyword ranking."""
-        scores: list[tuple[int, float]] = []
-
-        for idx, doc in enumerate(self._documents):
-            haystack = doc.lower() if case_insensitive else doc
-            total = 0
-            for kw in keywords:
-                needle = kw.lower() if case_insensitive else kw
-                total += haystack.count(needle)
-            if total >= min_hits:
-                scores.append((idx, float(total)))
-
-        scores.sort(key=lambda x: x[1], reverse=True)
         return [
-            RankedDocument(index=idx, score=score)
-            for idx, score in scores[:top_n]
+            RankedDocument(index=r.index, score=r.score)
+            for r in results[:top_n]
         ]
 
 
@@ -352,30 +319,12 @@ def score_document(
     if not text or not keywords:
         return TopicScore(total_hits=0, keyword_counts={}, normalized_score=0.0)
 
-    if EFTS_AVAILABLE:
-        import efts
+    _require_efts("Keyword scoring")
+    import efts
 
-        total, counts = efts.score_document_keywords(
-            text, list(keywords), case_insensitive
-        )
-        normalized = total / len(text) * 1000 if text else 0.0
-        return TopicScore(
-            total_hits=total,
-            keyword_counts=counts,
-            normalized_score=normalized,
-        )
-
-    # Python fallback
-    haystack = text.lower() if case_insensitive else text
-    counts: dict[str, int] = {}
-    total = 0
-    for kw in keywords:
-        needle = kw.lower() if case_insensitive else kw
-        count = haystack.count(needle)
-        if count > 0:
-            counts[kw] = count
-            total += count
-
+    total, counts = efts.score_document_keywords(
+        text, list(keywords), case_insensitive
+    )
     normalized = total / len(text) * 1000 if text else 0.0
     return TopicScore(
         total_hits=total,
@@ -411,57 +360,36 @@ def rank_documents(
 
     texts = [d.page_content or "" for d in documents]
 
-    if EFTS_AVAILABLE:
-        import efts
+    _require_efts("Keyword ranking")
+    import efts
 
-        scores: list[RustDocumentScore] = efts.rank_documents_by_keywords(
-            texts, list(keywords), True, min_hits
-        )
-
-        # Build index -> score map
-        score_map: dict[int, float] = {s.index: s.score for s in scores}
-
-        # Filter and annotate documents
-        result: list[tuple[Document, float]] = []
-        for idx, doc in enumerate(documents):
-            score = score_map.get(idx, 0.0)
-            if score >= min_hits:
-                # Score the document to get detailed counts
-                topic_score = score_document(doc.page_content or "", keywords)
-                doc.metadata = {
-                    **(doc.metadata or {}),
-                    "topic_score": int(score),
-                    "topic_hits": list(topic_score.keyword_counts.keys()),
-                    "topic_hits_detail": topic_score.keyword_counts,
-                }
-                result.append((doc, score))
-
-        if prioritize:
-            result.sort(key=lambda x: x[1], reverse=True)
-
-        ranked_docs = [d for d, _ in result]
-        if top_n is not None:
-            ranked_docs = ranked_docs[:top_n]
-
-        return ranked_docs
-
-    # Python fallback using DocumentRanker
-    ranker = DocumentRanker(algorithm=RankingAlgorithm.KEYWORD_MATCH)
-    ranker.add_documents(texts)
-    ranked = ranker.rank_by_keywords(
-        keywords, min_hits=min_hits, top_n=top_n or 10000
+    scores: list[RustDocumentScore] = efts.rank_documents_by_keywords(
+        texts, list(keywords), True, min_hits
     )
 
-    result_docs: list[Document] = []
-    for r in ranked:
-        doc = documents[r.index]
-        topic_score = score_document(doc.page_content or "", keywords)
-        doc.metadata = {
-            **(doc.metadata or {}),
-            "topic_score": int(r.score),
-            "topic_hits": list(topic_score.keyword_counts.keys()),
-            "topic_hits_detail": topic_score.keyword_counts,
-        }
-        result_docs.append(doc)
+    # Build index -> score map
+    score_map: dict[int, float] = {s.index: s.score for s in scores}
 
-    return result_docs
+    # Filter and annotate documents
+    result: list[tuple[Document, float]] = []
+    for idx, doc in enumerate(documents):
+        score = score_map.get(idx, 0.0)
+        if score >= min_hits:
+            # Score the document to get detailed counts
+            topic_score = score_document(doc.page_content or "", keywords)
+            doc.metadata = {
+                **(doc.metadata or {}),
+                "topic_score": int(score),
+                "topic_hits": list(topic_score.keyword_counts.keys()),
+                "topic_hits_detail": topic_score.keyword_counts,
+            }
+            result.append((doc, score))
+
+    if prioritize:
+        result.sort(key=lambda x: x[1], reverse=True)
+
+    ranked_docs = [d for d, _ in result]
+    if top_n is not None:
+        ranked_docs = ranked_docs[:top_n]
+
+    return ranked_docs
