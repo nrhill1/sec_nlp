@@ -7,6 +7,7 @@ import re
 import time
 from asyncio.subprocess import Process
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from textual.app import App, ComposeResult
 from textual.containers import Horizontal, Vertical
@@ -24,18 +25,13 @@ from textual.widgets import (
     TabPane,
 )
 
-from sec_nlp.tui.interfaces import FormSpec, build_cli_args, get_form_spec
-from sec_nlp.tui.market import load_market_snapshot
-from sec_nlp.tui.runner import run_cli
-from sec_nlp.tui.specs import find_pipeline_spec, get_pipeline_specs
-from sec_nlp.tui.widgets import (
-    FormView,
-    MarketPanel,
-    ResultsPanel,
-    SectionModeChanged,
-    SegmentPanel,
-)
 from sec_nlp.types import ConfigScalar
+
+if TYPE_CHECKING:
+    from sec_nlp.tui.interfaces import FormSpec
+    from sec_nlp.tui.widgets import (
+        SectionModeChanged,
+    )
 
 _OUTPUT_PATH_RE = re.compile(r"(?P<path>[^\s]+\.(?:json|ya?ml))")
 _PROGRESS_RE = re.compile(r"\[[^]]*<[^]]*\]")
@@ -572,18 +568,29 @@ class SecNlpTuiApp(App):
     Tabs {
         background: $surface-raised;
         border-bottom: solid $border-subtle;
+        height: 3;
     }
 
     Tab {
-        background: transparent;
-        color: $text-muted;
+        background: $surface-raised;
+        color: #fafafa;
         text-style: bold;
-        padding: 1 3;
+        padding: 0 3;
+        height: 3;
+        content-align: center middle;
+    }
+
+    Tab > Label {
+        color: #fafafa;
     }
 
     Tab:hover {
-        color: $text-secondary;
+        color: $accent-primary;
         background: $surface-elevated;
+    }
+
+    Tab:hover > Label {
+        color: $accent-primary;
     }
 
     Tab.-active,
@@ -591,6 +598,12 @@ class SecNlpTuiApp(App):
         background: $surface-elevated;
         color: $accent-primary;
         border-bottom: tall $accent-primary;
+        text-style: bold;
+    }
+
+    Tab.-active > Label,
+    Tab.--active > Label {
+        color: $accent-primary;
     }
 
     Tab:focus {
@@ -681,6 +694,7 @@ class SecNlpTuiApp(App):
         ("1", "switch_tab('run')", "Run tab"),
         ("2", "switch_tab('market')", "Market tab"),
         ("3", "switch_tab('results')", "Results tab"),
+        ("4", "switch_tab('efts')", "EFTS tab"),
     ]
 
     def __init__(self) -> None:
@@ -694,6 +708,16 @@ class SecNlpTuiApp(App):
         self._elapsed_timer: Timer | None = None
 
     def compose(self) -> ComposeResult:
+        # Lazy imports for faster initial load
+        from sec_nlp.tui.specs import get_pipeline_specs
+        from sec_nlp.tui.widgets import (
+            EFTSPanel,
+            FormView,
+            MarketPanel,
+            ResultsPanel,
+            SegmentPanel,
+        )
+
         yield Header(show_clock=True)
         with Horizontal(id="layout"):
             with Vertical(id="sidebar"):
@@ -727,9 +751,13 @@ class SecNlpTuiApp(App):
                         yield MarketPanel(classes="market-full")
                     with TabPane("Results", id="results"):
                         yield ResultsPanel(classes="results-full")
+                    with TabPane("EFTS", id="efts"):
+                        yield EFTSPanel()
         yield Footer()
 
     def on_mount(self) -> None:
+        from sec_nlp.tui.specs import get_pipeline_specs
+
         pipeline_list = self.query_one("#pipeline-list", ListView)
         pipeline_list.index = 0
         specs = get_pipeline_specs()
@@ -737,6 +765,8 @@ class SecNlpTuiApp(App):
             self._select_pipeline(specs[0].key)
 
     def on_list_view_selected(self, event: ListView.Selected) -> None:
+        from sec_nlp.tui.specs import get_pipeline_specs
+
         if event.item is None:
             return
         item_id = event.item.id
@@ -772,6 +802,14 @@ class SecNlpTuiApp(App):
         tabs.active = tab_id
 
     def _select_pipeline(self, key: ConfigScalar) -> None:
+        from sec_nlp.tui.interfaces import get_form_spec
+        from sec_nlp.tui.specs import find_pipeline_spec
+        from sec_nlp.tui.widgets import (
+            FormView,
+            MarketPanel,
+            SegmentPanel,
+        )
+
         spec = find_pipeline_spec(str(key))
         if spec is None:
             return
@@ -797,6 +835,10 @@ class SecNlpTuiApp(App):
         desc.update(str(spec.description))
 
     def _start_run(self) -> None:
+        from sec_nlp.tui.interfaces import build_cli_args, get_form_spec
+        from sec_nlp.tui.specs import find_pipeline_spec
+        from sec_nlp.tui.widgets import FormView, MarketPanel, SegmentPanel
+
         if self._run_task is not None and not self._run_task.done():
             return
         if self._pipeline_key is None:
@@ -858,6 +900,9 @@ class SecNlpTuiApp(App):
         self._stop_elapsed(final=True)
 
     async def _run_cli(self, args: list[ConfigScalar]) -> None:
+        from sec_nlp.tui.runner import run_cli
+        from sec_nlp.tui.widgets import SegmentPanel
+
         async def on_start(process: Process) -> None:
             self._active_process = process
 
@@ -983,11 +1028,16 @@ class SecNlpTuiApp(App):
                 self._output_paths.append(path)
 
     def _refresh_market_panel(self) -> None:
+        from sec_nlp.tui.market import load_market_snapshot
+        from sec_nlp.tui.widgets import MarketPanel
+
         market_panel = self.query_one(MarketPanel)
         snapshot = load_market_snapshot(self._output_paths)
         market_panel.set_snapshot(snapshot)
 
     def _refresh_results_panel(self) -> None:
+        from sec_nlp.tui.widgets import ResultsPanel
+
         results_panel = self.query_one(ResultsPanel)
         yaml_paths = [
             path

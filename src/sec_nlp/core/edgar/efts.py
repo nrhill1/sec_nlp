@@ -467,3 +467,18 @@ def create_efts_client(
         timeout=timeout,
     )
     return EFTSClient(config=config)
+
+
+if __name__ == "__main__":
+    """Entry point when running as: python -m sec_nlp.core.edgar.efts"""
+    import sys
+
+    # Inject 'efts' as a subcommand into sys.argv for the CLI framework
+    if len(sys.argv) > 1:
+        sys.argv.insert(1, "efts")
+    else:
+        sys.argv = ["sec-nlp", "efts"]
+
+    from sec_nlp.cli.__main__ import main
+
+    sys.exit(main())
