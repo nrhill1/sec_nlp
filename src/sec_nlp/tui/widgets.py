@@ -58,15 +58,15 @@ class SectionModeChanged(Message):
 
 
 _STATE_ICONS: dict[ConfigScalar, ConfigScalar] = {
-    "pending": "[ ]",
-    "running": "[~]",
-    "done": "[x]",
-    "error": "[!]",
+    "pending": "○",
+    "running": "◉",
+    "done": "✓",
+    "error": "⚠",
 }
 
 
 class Spinner(Static):
-    _frames = ("-", "\\", "|", "/")
+    _frames = ("⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏")
 
     def __init__(self) -> None:
         super().__init__("")

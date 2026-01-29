@@ -83,71 +83,121 @@ class SegmentMatcher:
 
 class SecNlpTuiApp(App):
     CSS = """
+    /* ═══════════════════════════════════════════════════════════════════════
+       SEC NLP TUI - Modern Dark Theme
+       A sleek, professional interface for SEC filing analysis
+       ═══════════════════════════════════════════════════════════════════════ */
+
+    /* ─── Base Colors ─────────────────────────────────────────────────────── */
+    $surface: #0a0a0b;
+    $surface-raised: #111113;
+    $surface-elevated: #18181b;
+    $surface-overlay: #1f1f23;
+
+    $border-subtle: #27272a;
+    $border-default: #3f3f46;
+    $border-emphasis: #52525b;
+
+    $text-primary: #fafafa;
+    $text-secondary: #a1a1aa;
+    $text-muted: #71717a;
+
+    $accent-primary: #22d3ee;
+    $accent-secondary: #06b6d4;
+    $accent-glow: #0891b2;
+
+    $success: #4ade80;
+    $success-muted: #166534;
+    $warning: #fbbf24;
+    $error: #f87171;
+    $error-muted: #7f1d1d;
+
+    /* ─── Global Styles ───────────────────────────────────────────────────── */
     Screen {
-        background: #000000;
-        color: #f5f5f5;
+        background: $surface;
+        color: $text-primary;
     }
 
-    Header, Footer {
-        background: #000000;
-        color: #f5f5f5;
+    Header {
+        background: $surface;
+        color: $accent-primary;
+        text-style: bold;
+        border-bottom: solid $border-subtle;
     }
 
+    Footer {
+        background: $surface-raised;
+        color: $text-secondary;
+        border-top: solid $border-subtle;
+    }
+
+    /* ─── Layout ──────────────────────────────────────────────────────────── */
     #layout {
         height: 1fr;
     }
 
     #sidebar {
-        width: 30;
-        background: #0b0b0b;
-        border: round #2b2b2b;
+        width: 32;
+        background: $surface-raised;
+        border-right: solid $border-subtle;
         padding: 1 1;
     }
 
     #main {
         padding: 1 2;
         height: 1fr;
-        background: #000000;
-        color: #f5f5f5;
+        background: $surface;
+        color: $text-primary;
     }
 
+    /* ─── Panels ──────────────────────────────────────────────────────────── */
     .panel {
-        background: #141414;
-        border: round #2b2b2b;
+        background: $surface-raised;
+        border: solid $border-subtle;
         padding: 1 2;
         margin: 0 0 1 0;
-        color: #f5f5f5;
+        color: $text-primary;
     }
 
     .panel-title {
-        color: #f5f5f5;
+        color: $accent-primary;
         text-style: bold;
         margin-bottom: 1;
     }
 
+    /* ─── Pipeline List ───────────────────────────────────────────────────── */
     #pipeline-list {
         height: 1fr;
         margin-top: 1;
-        background: #111111;
-        border: round #2b2b2b;
+        background: $surface;
+        border: solid $border-subtle;
     }
 
     ListView > ListItem {
-        padding: 0 1;
+        padding: 0 2;
+        color: $text-secondary;
+    }
+
+    ListView > ListItem:hover {
+        background: $surface-elevated;
+        color: $text-primary;
     }
 
     ListView > ListItem.--highlight,
     ListView > ListItem.-highlight,
     ListView > ListItem:focus {
-        background: #1a1a1a;
-        color: #5eead4;
+        background: $surface-overlay;
+        color: $accent-primary;
+        text-style: bold;
     }
 
     #pipeline-desc {
-        color: #c7c7c7;
+        color: $text-muted;
         margin-top: 1;
+        padding: 0 1;
     }
 
+    /* ─── Actions Bar ─────────────────────────────────────────────────────── */
     #actions {
         height: auto;
         margin-top: 1;
@@ -159,6 +209,7 @@ class SecNlpTuiApp(App):
         margin-bottom: 1;
     }
 
+    /* ─── Form Styling ────────────────────────────────────────────────────── */
     .form-row {
         height: auto;
         margin-bottom: 1;
@@ -170,55 +221,73 @@ class SecNlpTuiApp(App):
 
     .field-label {
         width: 18;
-        color: #c7c7c7;
+        color: $text-secondary;
     }
 
-    Input, Select, Checkbox {
-        background: #0f0f0f;
-        border: round #2b2b2b;
-        color: #f5f5f5;
+    /* ─── Input Controls ──────────────────────────────────────────────────── */
+    Input, Select {
+        background: $surface;
+        border: solid $border-subtle;
+        color: $text-primary;
     }
 
-    Button, Input, Select, Checkbox, Tab, .section-header, ListView > ListItem {
-        transition: background 0.2 linear 0, color 0.2 linear 0, border 0.2 linear 0;
+    Input:hover, Select:hover {
+        border: solid $border-default;
     }
 
-    .segment-row, #status, .segment-status {
-        transition: background 0.2 linear 0, color 0.2 linear 0, border 0.2 linear 0;
-    }
-
-    Input:focus, Select:focus, Checkbox:focus {
-        border: round #5eead4;
-        color: #f5f5f5;
+    Input:focus, Select:focus {
+        border: solid $accent-primary;
+        color: $text-primary;
     }
 
     Checkbox {
+        background: transparent;
+        color: $text-secondary;
         padding: 0 1;
     }
 
+    Checkbox:focus {
+        color: $accent-primary;
+    }
+
+    Checkbox.-on {
+        color: $success;
+    }
+
+    /* ─── Transitions ─────────────────────────────────────────────────────── */
+    Button, Input, Select, Checkbox, Tab, .section-header, ListView > ListItem {
+        transition: background 150ms linear, color 150ms linear, border 150ms linear;
+    }
+
+    .segment-row, #status, .segment-status {
+        transition: background 150ms linear, color 150ms linear, border 150ms linear;
+    }
+
+    /* ─── Collapsible Sections ────────────────────────────────────────────── */
     .collapsible-section {
         margin-bottom: 1;
     }
 
     .section-header {
-        background: #1a1a1a;
-        color: #f5f5f5;
+        background: $surface-elevated;
+        color: $text-secondary;
         padding: 0 1;
         text-style: bold;
     }
 
     .section-header:hover {
-        background: #1a1a1a;
+        background: $surface-overlay;
+        color: $text-primary;
     }
 
     Button.section-header {
-        border: round #2b2b2b;
+        border: solid $border-subtle;
         content-align: left middle;
         width: 1fr;
     }
 
     Button.section-header:focus {
-        border: round #5eead4;
+        border: solid $accent-primary;
     }
 
     .section-content {
@@ -231,83 +300,150 @@ class SecNlpTuiApp(App):
     }
 
     .section-active .section-header {
-        background: #0f3d3a;
-        border: round #1f6f69;
-        color: #d8f4f1;
+        background: $accent-glow;
+        border: solid $accent-secondary;
+        color: $text-primary;
     }
 
+    /* ─── Buttons ─────────────────────────────────────────────────────────── */
     Button {
-        border: round #2b2b2b;
-        background: #1a1a1a;
-        color: #f5f5f5;
+        border: solid $border-subtle;
+        background: $surface-elevated;
+        color: $text-secondary;
         text-style: bold;
         margin-right: 1;
+        min-width: 10;
+    }
+
+    Button:hover {
+        background: $surface-overlay;
+        color: $text-primary;
+        border: solid $border-default;
     }
 
     Button:focus {
-        border: round #5eead4;
+        border: solid $accent-primary;
+        color: $accent-primary;
     }
 
-    Button#run {
-        background: #0f3d3a;
-        border: round #1f6f69;
-        color: #d8f4f1;
+    Button#run-btn {
+        background: #064e3b;
+        border: solid #047857;
+        color: $success;
     }
 
-    Button#stop {
-        background: #3a1212;
-        border: round #6b2b2b;
-        color: #f2d7d7;
+    Button#run-btn:hover {
+        background: #065f46;
+        color: #86efac;
     }
 
+    Button#run-btn:focus {
+        border: solid $success;
+    }
+
+    Button#stop-btn {
+        background: #7f1d1d;
+        border: solid #991b1b;
+        color: $error;
+    }
+
+    Button#stop-btn:hover {
+        background: #991b1b;
+        color: #fecaca;
+    }
+
+    Button#stop-btn:focus {
+        border: solid $error;
+    }
+
+    Button:disabled {
+        background: $surface;
+        border: solid $border-subtle;
+        color: $text-muted;
+        text-style: italic;
+    }
+
+    /* ─── Status Display ──────────────────────────────────────────────────── */
     #status {
-        margin-left: 1;
-        color: #c7c7c7;
-        background: #0f0f0f;
-        padding: 0 1;
-        border: round #2b2b2b;
+        margin-left: 2;
+        color: $text-secondary;
+        background: $surface;
+        padding: 0 2;
+        border: solid $border-subtle;
+        min-width: 16;
     }
 
     #elapsed {
         margin-left: 1;
-        color: #c7c7c7;
-        background: #0f0f0f;
-        padding: 0 1;
-        border: round #2b2b2b;
-    }
-
-    ProgressBar {
-        background: #0f0f0f;
-        color: #5eead4;
-    }
-
-    .segment-row {
-        height: auto;
-        padding: 0 1;
-    }
-
-    .segment-label {
-        width: 18;
+        color: $accent-primary;
+        background: $surface;
+        padding: 0 2;
+        border: solid $border-subtle;
         text-style: bold;
     }
 
+    /* ─── Progress Bar ────────────────────────────────────────────────────── */
+    ProgressBar {
+        background: $surface;
+        color: $accent-primary;
+        padding: 0 1;
+    }
+
+    ProgressBar > .bar--bar {
+        color: $accent-secondary;
+    }
+
+    ProgressBar > .bar--complete {
+        color: $success;
+    }
+
+    /* ─── Segment Panel ───────────────────────────────────────────────────── */
+    .segment-row {
+        height: auto;
+        padding: 0 1;
+        margin: 0 0;
+    }
+
+    .segment-label {
+        width: 20;
+        text-style: bold;
+        color: $text-secondary;
+    }
+
     .segment-detail {
-        color: #b0b0b0;
+        color: $text-muted;
         width: 1fr;
     }
 
+    .segment-row.state-pending {
+        color: $text-muted;
+    }
+
     .segment-row.state-running {
-        background: #1a1a1a;
-        color: #5eead4;
+        background: $surface-overlay;
+        color: $accent-primary;
+    }
+
+    .segment-row.state-running .segment-label {
+        color: $accent-primary;
+        text-style: bold;
     }
 
     .segment-row.state-done {
-        color: #86efac;
+        color: $success;
+    }
+
+    .segment-row.state-done .segment-label {
+        color: $success;
     }
 
     .segment-row.state-error {
-        color: #fca5a5;
-        background: #2a0f0f;
+        color: $error;
+        background: $error-muted;
+    }
+
+    .segment-row.state-error .segment-label {
+        color: $error;
     }
 
     .segment-panel {
@@ -317,21 +453,24 @@ class SecNlpTuiApp(App):
 
     .segment-list {
         height: 1fr;
+        background: $surface;
+        border: solid $border-subtle;
     }
 
     .segment-status {
         margin-top: 1;
-        padding: 0 1;
-        color: #f5f5f5;
-        background: #141414;
-        border: round #2b2b2b;
+        padding: 1 2;
+        color: $text-secondary;
+        background: $surface-elevated;
+        border: solid $border-subtle;
     }
 
+    /* ─── Market Panel ────────────────────────────────────────────────────── */
     .market-panel {
-        width: 46;
-        min-width: 34;
-        background: #141414;
-        border: round #2b2b2b;
+        width: 48;
+        min-width: 36;
+        background: $surface-raised;
+        border: solid $border-subtle;
     }
 
     .market-controls {
@@ -340,41 +479,43 @@ class SecNlpTuiApp(App):
     }
 
     .market-label {
-        width: 7;
-        color: #c7c7c7;
+        width: 8;
+        color: $text-muted;
     }
 
     #market-summary {
-        color: #f5f5f5;
+        color: $text-primary;
         margin-bottom: 1;
+        text-style: bold;
     }
 
     #market-chart {
-        background: #0b0b0b;
-        border: round #2b2b2b;
-        color: #5eead4;
+        background: $surface;
+        border: solid $border-subtle;
+        color: $accent-primary;
         padding: 1 1;
-        height: 7;
+        height: 8;
     }
 
     #market-detail {
-        color: #c7c7c7;
+        color: $text-secondary;
         margin-top: 1;
     }
 
     #market-context {
-        color: #b0b0b0;
+        color: $text-muted;
         margin-top: 1;
     }
 
     #market-stats {
-        color: #f5f5f5;
-        background: #0f0f0f;
-        border: round #2b2b2b;
-        padding: 0 1;
+        color: $text-primary;
+        background: $surface;
+        border: solid $border-subtle;
+        padding: 1 1;
         margin-top: 1;
     }
 
+    /* ─── Results Panel ───────────────────────────────────────────────────── */
     .results-panel {
         width: 1fr;
     }
@@ -385,35 +526,37 @@ class SecNlpTuiApp(App):
     }
 
     #results-list {
-        width: 36;
-        background: #0f0f0f;
-        border: round #2b2b2b;
-        height: 12;
+        width: 38;
+        background: $surface;
+        border: solid $border-subtle;
+        height: 14;
         margin-right: 1;
     }
 
     #results-view {
-        height: 12;
-        background: #0b0b0b;
-        border: round #2b2b2b;
-        color: #f5f5f5;
+        height: 14;
+        background: $surface;
+        border: solid $border-subtle;
+        color: $text-primary;
         padding: 1;
     }
 
     #log-panel {
-        background: #0b0b0b;
-        border: round #2b2b2b;
+        background: $surface;
+        border: solid $border-subtle;
         padding: 1;
         height: 1fr;
-        min-height: 8;
+        min-height: 10;
+        color: $text-secondary;
     }
 
     #results-filter {
         margin-bottom: 1;
     }
 
+    /* ─── Tabs ────────────────────────────────────────────────────────────── */
     TabbedContent {
-        background: #000000;
+        background: $surface;
         height: 1fr;
     }
 
@@ -422,23 +565,48 @@ class SecNlpTuiApp(App):
         height: 1fr;
     }
 
-    TabBar {
-        background: #0b0b0b;
-        border: round #2b2b2b;
+    ContentSwitcher {
+        background: $surface;
+    }
+
+    Tabs {
+        background: $surface-raised;
+        border-bottom: solid $border-subtle;
     }
 
     Tab {
-        background: #121212;
-        color: #c7c7c7;
+        background: transparent;
+        color: $text-muted;
         text-style: bold;
+        padding: 1 3;
+    }
+
+    Tab:hover {
+        color: $text-secondary;
+        background: $surface-elevated;
     }
 
     Tab.-active,
     Tab.--active {
-        background: #1a1a1a;
-        color: #5eead4;
+        background: $surface-elevated;
+        color: $accent-primary;
+        border-bottom: tall $accent-primary;
     }
 
+    Tab:focus {
+        text-style: bold reverse;
+    }
+
+    Underline {
+        background: $border-subtle;
+    }
+
+    Underline > .underline--bar {
+        background: $accent-primary;
+        color: $accent-primary;
+    }
+
+    /* ─── Full-size Variants ──────────────────────────────────────────────── */
     .market-full {
         height: 1fr;
     }
@@ -449,12 +617,13 @@ class SecNlpTuiApp(App):
 
     #results-view-full {
         height: 1fr;
-        background: #0b0b0b;
-        border: round #2b2b2b;
-        color: #f5f5f5;
+        background: $surface;
+        border: solid $border-subtle;
+        color: $text-primary;
         padding: 1;
     }
 
+    /* ─── Run Tab Layout ──────────────────────────────────────────────────── */
     #run {
         height: 1fr;
         layout: vertical;
@@ -480,6 +649,27 @@ class SecNlpTuiApp(App):
     #config-panel {
         height: 2fr;
         min-height: 18;
+    }
+
+    /* ─── Scrollbars ──────────────────────────────────────────────────────── */
+    Scrollbar {
+        background: $surface;
+    }
+
+    ScrollbarGripper {
+        background: $border-default;
+    }
+
+    ScrollbarGripper:hover {
+        background: $border-emphasis;
+    }
+
+    /* ─── Tooltip ─────────────────────────────────────────────────────────── */
+    Tooltip {
+        background: $surface-overlay;
+        color: $text-primary;
+        border: solid $border-default;
+        padding: 0 1;
     }
 
     """
