@@ -80,341 +80,406 @@ class SegmentMatcher:
 class SecNlpTuiApp(App):
     CSS = """
     /* ═══════════════════════════════════════════════════════════════════════
-       SEC NLP TUI - Clean Minimal Theme
-       A modern, refined interface for SEC filing analysis
+       SEC NLP TUI - Glass Morphism Dark Theme
+       A stunning, modern interface inspired by contemporary UI design
        ═══════════════════════════════════════════════════════════════════════ */
 
-    /* ─── Base Colors ─────────────────────────────────────────────────────── */
-    $surface: #09090b;
-    $surface-raised: #0f0f12;
-    $surface-elevated: #161619;
-    $surface-overlay: #1c1c20;
+    /* ─── Color System ────────────────────────────────────────────────────── */
+    /* Deep, rich backgrounds with subtle purple undertones */
+    $bg-base: #08080c;
+    $bg-surface: #0c0c12;
+    $bg-elevated: #12121a;
+    $bg-card: #16161f;
+    $bg-hover: #1a1a26;
+    $bg-active: #1e1e2e;
 
-    $border-subtle: #1e1e22;
-    $border-default: #2a2a30;
-    $border-emphasis: #3a3a42;
+    /* Refined border palette */
+    $border-faint: #1a1a24;
+    $border-subtle: #242432;
+    $border-medium: #2e2e40;
+    $border-strong: #3a3a50;
 
-    $text-primary: #e4e4e7;
-    $text-secondary: #9ca3af;
-    $text-muted: #6b7280;
+    /* Typography colors with warm undertones */
+    $text-bright: #f0f0f5;
+    $text-primary: #d4d4dc;
+    $text-secondary: #9898a8;
+    $text-muted: #686878;
+    $text-faint: #484858;
 
-    $accent-primary: #60a5fa;
-    $accent-secondary: #3b82f6;
-    $accent-glow: #2563eb;
+    /* Vibrant accent spectrum */
+    $accent-cyan: #22d3ee;
+    $accent-blue: #3b82f6;
+    $accent-indigo: #6366f1;
+    $accent-violet: #8b5cf6;
+    $accent-purple: #a855f7;
 
-    $success: #34d399;
-    $success-muted: #064e3b;
-    $warning: #fbbf24;
-    $error: #fb7185;
-    $error-muted: #4c0519;
+    /* Semantic colors */
+    $success-bright: #34d399;
+    $success-base: #10b981;
+    $success-dim: #064e3b;
+    $warning-bright: #fbbf24;
+    $warning-base: #f59e0b;
+    $error-bright: #fb7185;
+    $error-base: #ef4444;
+    $error-dim: #450a0a;
 
-    /* ─── Global Styles ───────────────────────────────────────────────────── */
+    /* ─── Global Foundation ───────────────────────────────────────────────── */
     Screen {
-        background: $surface;
+        background: $bg-base;
         color: $text-primary;
     }
 
+    /* ─── Header - Floating Glass Bar ─────────────────────────────────────── */
     Header {
-        background: $surface-raised;
-        color: $text-primary;
+        background: $bg-surface;
+        color: $accent-cyan;
         text-style: bold;
         height: 1;
-        border-bottom: none;
+        border-bottom: solid $border-faint;
     }
 
+    /* ─── Footer - Subtle Command Palette ─────────────────────────────────── */
     Footer {
-        background: $surface-raised;
+        background: $bg-surface;
         color: $text-muted;
         height: 1;
-        border-top: none;
+        border-top: solid $border-faint;
     }
 
-    /* ─── Layout ──────────────────────────────────────────────────────────── */
+    FooterKey > .footer-key--key {
+        background: $bg-elevated;
+        color: $accent-cyan;
+    }
+
+    FooterKey > .footer-key--description {
+        color: $text-secondary;
+    }
+
+    /* ─── Layout Structure ────────────────────────────────────────────────── */
     #layout {
         height: 1fr;
     }
 
     #sidebar {
-        width: 28;
-        background: $surface-raised;
-        padding: 1 1;
-        border-right: none;
+        width: 26;
+        background: $bg-surface;
+        padding: 1 0;
+        border-right: solid $border-faint;
     }
 
     #main {
-        padding: 0 1;
+        padding: 0;
         height: 1fr;
-        background: $surface;
-        color: $text-primary;
+        background: $bg-base;
     }
 
-    /* ─── Panels ──────────────────────────────────────────────────────────── */
+    /* ─── Glass Panels ────────────────────────────────────────────────────── */
     .panel {
-        background: $surface-raised;
-        border: none;
-        padding: 1 2;
+        background: $bg-surface;
+        border: solid $border-faint;
+        padding: 1 1;
         margin: 0;
         color: $text-primary;
     }
 
     .panel-title {
-        color: $text-secondary;
+        color: $accent-cyan;
         text-style: bold;
         margin-bottom: 1;
+        padding: 0 1;
     }
 
-    /* ─── Pipeline List ───────────────────────────────────────────────────── */
+    /* ─── Pipeline Navigation ─────────────────────────────────────────────── */
     #pipeline-list {
         height: 1fr;
-        margin-top: 0;
-        background: $surface;
+        margin: 0;
+        background: transparent;
         border: none;
         scrollbar-size: 1 1;
     }
 
-    ListView > ListItem {
-        padding: 0 1;
+    #pipeline-list > ListItem {
+        padding: 0 2;
         color: $text-muted;
-        height: 2;
+        height: 3;
+        background: transparent;
     }
 
-    ListView > ListItem:hover {
-        background: $surface-elevated;
+    #pipeline-list > ListItem:hover {
+        background: $bg-elevated;
         color: $text-secondary;
     }
 
-    ListView > ListItem.--highlight,
-    ListView > ListItem.-highlight,
-    ListView > ListItem:focus {
-        background: $surface-overlay;
-        color: $accent-primary;
+    #pipeline-list > ListItem.--highlight,
+    #pipeline-list > ListItem.-highlight,
+    #pipeline-list > ListItem:focus {
+        background: $bg-hover;
+        color: $accent-cyan;
         text-style: none;
     }
 
     #pipeline-desc {
-        color: $text-muted;
+        color: $text-faint;
         margin-top: 1;
-        padding: 0;
+        padding: 0 2;
     }
 
-    /* ─── Actions Bar ─────────────────────────────────────────────────────── */
+    /* ─── Action Buttons Bar ──────────────────────────────────────────────── */
     #actions {
         height: auto;
-        margin-top: 0;
-        margin-bottom: 1;
+        margin: 0;
         padding: 0 1;
+        background: $bg-surface;
+        border-bottom: solid $border-faint;
     }
 
     #status-row {
         height: 1fr;
-        margin-bottom: 0;
+        margin: 0;
     }
 
-    /* ─── Form Styling ────────────────────────────────────────────────────── */
+    /* ─── Form Layout ─────────────────────────────────────────────────────── */
     .form-row {
         height: auto;
         margin-bottom: 1;
     }
 
     .field-label {
-        width: 16;
+        width: 14;
         color: $text-muted;
+        padding: 1 0;
     }
 
     .section-pane {
-        padding: 0 1;
+        padding: 1 1;
+        background: transparent;
     }
 
     .section-title {
-        color: $text-secondary;
+        color: $accent-violet;
         text-style: bold;
         margin-bottom: 1;
+        padding-bottom: 1;
+        border-bottom: solid $border-faint;
     }
 
-    /* ─── Input Controls ──────────────────────────────────────────────────── */
-    Input, Select {
-        background: $surface;
+    /* ─── Input Fields - Glass Style ──────────────────────────────────────── */
+    Input {
+        background: $bg-elevated;
+        border: solid $border-subtle;
+        color: $text-primary;
+        height: 3;
+        padding: 0 1;
+    }
+
+    Input:hover {
+        border: solid $border-medium;
+        background: $bg-card;
+    }
+
+    Input:focus {
+        border: solid $accent-blue;
+        background: $bg-card;
+        color: $text-bright;
+    }
+
+    Input.-valid {
+        border: solid $success-base;
+    }
+
+    /* ─── Select Dropdowns ────────────────────────────────────────────────── */
+    Select {
+        background: $bg-elevated;
         border: solid $border-subtle;
         color: $text-primary;
         height: 3;
     }
 
-    Input:hover, Select:hover {
-        border: solid $border-default;
-        background: $surface-elevated;
+    Select:hover {
+        border: solid $border-medium;
+        background: $bg-card;
     }
 
-    Input:focus, Select:focus {
-        border: solid $accent-secondary;
-        background: $surface-elevated;
-        color: $text-primary;
+    Select:focus {
+        border: solid $accent-blue;
+        background: $bg-card;
     }
 
-    /* Select dropdown overlay */
     SelectOverlay {
-        background: $surface-overlay;
-        border: solid $border-default;
+        background: $bg-card;
+        border: solid $border-medium;
     }
 
-    SelectOverlay > SelectCurrent {
-        background: $surface-elevated;
-        color: $accent-primary;
+    SelectCurrent {
+        background: $bg-hover;
+        color: $accent-cyan;
     }
 
     OptionList {
-        background: $surface-overlay;
+        background: $bg-card;
         border: none;
         scrollbar-size: 1 1;
+        padding: 0;
     }
 
     OptionList > .option-list--option {
-        padding: 0 1;
+        padding: 0 2;
         color: $text-secondary;
+        background: transparent;
     }
 
     OptionList > .option-list--option-hover {
-        background: $surface-elevated;
-        color: $text-primary;
+        background: $bg-hover;
+        color: $text-bright;
     }
 
     OptionList > .option-list--option-highlighted {
-        background: $accent-glow;
-        color: $text-primary;
+        background: $accent-indigo;
+        color: $text-bright;
     }
 
+    /* ─── Checkboxes - Modern Toggle Style ────────────────────────────────── */
     Checkbox {
         background: transparent;
         color: $text-muted;
         padding: 0 1;
     }
 
+    Checkbox:hover {
+        color: $text-secondary;
+    }
+
     Checkbox:focus {
-        color: $accent-primary;
+        color: $accent-cyan;
     }
 
     Checkbox.-on {
-        color: $success;
+        color: $success-bright;
     }
 
-    /* ─── Transitions ─────────────────────────────────────────────────────── */
-    Button, Input, Select, Checkbox, Tab, .section-header, ListView > ListItem {
-        transition: background 100ms linear, color 100ms linear, border 100ms linear;
+    /* ─── Smooth Transitions ──────────────────────────────────────────────── */
+    Button, Input, Select, Checkbox, Tab, ListView > ListItem {
+        transition: background 80ms linear, color 80ms linear, border 80ms linear;
     }
 
-    .segment-row, #status, .segment-status {
-        transition: background 100ms linear, color 100ms linear, border 100ms linear;
+    .segment-row, Static {
+        transition: background 80ms linear, color 80ms linear;
     }
 
 
-    /* ─── Buttons ─────────────────────────────────────────────────────────── */
+    /* ─── Buttons - Pill Style ────────────────────────────────────────────── */
     Button {
         border: solid $border-subtle;
-        background: $surface-elevated;
+        background: $bg-elevated;
         color: $text-muted;
         text-style: none;
         margin-right: 1;
-        min-width: 8;
+        min-width: 10;
         height: 3;
     }
 
     Button:hover {
-        background: $surface-overlay;
+        background: $bg-card;
         color: $text-secondary;
-        border: solid $border-default;
+        border: solid $border-medium;
     }
 
     Button:focus {
-        border: solid $accent-secondary;
-        color: $accent-primary;
+        border: solid $accent-blue;
+        color: $accent-cyan;
     }
 
+    /* Primary action - vibrant gradient effect */
     Button#run-btn {
-        background: $success-muted;
-        border: solid #065f46;
-        color: $success;
+        background: $success-dim;
+        border: solid $success-base;
+        color: $success-bright;
     }
 
     Button#run-btn:hover {
-        background: #065f46;
-        color: #6ee7b7;
+        background: $success-base;
+        color: $text-bright;
+        border: solid $success-bright;
     }
 
     Button#run-btn:focus {
-        border: solid $success;
+        border: solid $success-bright;
     }
 
+    /* Destructive action */
     Button#stop-btn {
-        background: $error-muted;
-        border: solid #881337;
-        color: $error;
+        background: $error-dim;
+        border: solid $error-base;
+        color: $error-bright;
     }
 
     Button#stop-btn:hover {
-        background: #881337;
-        color: #fda4af;
+        background: $error-base;
+        color: $text-bright;
+        border: solid $error-bright;
     }
 
     Button#stop-btn:focus {
-        border: solid $error;
+        border: solid $error-bright;
     }
 
     Button:disabled {
-        background: $surface;
-        border: none;
-        color: $text-muted;
+        background: $bg-base;
+        border: solid $border-faint;
+        color: $text-faint;
         text-style: none;
     }
 
-    /* ─── Status Display ──────────────────────────────────────────────────── */
+    /* ─── Status Badges ──────────────────────────────────────────────────── */
     #status {
         margin-left: 1;
         color: $text-muted;
-        background: transparent;
-        padding: 0 1;
-        border: none;
-        min-width: 12;
+        background: $bg-elevated;
+        padding: 0 2;
+        border: solid $border-faint;
+        min-width: 14;
     }
 
     #elapsed {
         margin-left: 1;
-        color: $text-secondary;
+        color: $accent-cyan;
         background: transparent;
-        padding: 0 1;
+        padding: 0 2;
         border: none;
         text-style: none;
     }
 
-    /* ─── Progress Bar ────────────────────────────────────────────────────── */
+    /* ─── Progress Bar - Modern Track ────────────────────────────────────── */
     ProgressBar {
-        background: $surface-elevated;
-        color: $accent-secondary;
+        background: $bg-elevated;
+        color: $accent-indigo;
         padding: 0;
         height: 1;
     }
 
     ProgressBar > .bar--bar {
-        color: $accent-secondary;
+        color: $accent-indigo;
     }
 
     ProgressBar > .bar--complete {
-        color: $success;
+        color: $success-bright;
     }
 
-    /* ─── Segment Panel ───────────────────────────────────────────────────── */
+    /* ─── Segment Panel - Card Layout ────────────────────────────────────── */
     .segment-row {
         height: auto;
-        padding: 0 1;
+        padding: 0 2;
         margin: 0;
     }
 
     .segment-label {
-        width: 20;
+        width: 22;
         text-style: none;
         color: $text-muted;
     }
 
     .segment-detail {
-        color: $text-muted;
+        color: $text-faint;
         width: 1fr;
     }
 
@@ -423,60 +488,60 @@ class SecNlpTuiApp(App):
     }
 
     .segment-row.state-running {
-        background: $surface-elevated;
-        color: $accent-primary;
+        background: $bg-hover;
+        color: $accent-cyan;
     }
 
     .segment-row.state-running .segment-label {
-        color: $accent-primary;
-        text-style: none;
+        color: $accent-cyan;
+        text-style: bold;
     }
 
     .segment-row.state-done {
-        color: $success;
+        color: $success-bright;
     }
 
     .segment-row.state-done .segment-label {
-        color: $success;
+        color: $success-bright;
     }
 
     .segment-row.state-error {
-        color: $error;
-        background: $error-muted;
+        color: $error-bright;
+        background: $error-dim;
     }
 
     .segment-row.state-error .segment-label {
-        color: $error;
+        color: $error-bright;
     }
 
     .segment-panel {
         width: 1fr;
         height: 1fr;
-        border: none;
-        background: $surface-raised;
+        border: solid $border-faint;
+        background: $bg-surface;
     }
 
     .segment-list {
         height: 1fr;
-        background: $surface;
+        background: transparent;
         border: none;
         scrollbar-size: 1 1;
     }
 
     .segment-status {
         margin-top: 1;
-        padding: 0 1;
+        padding: 0 2;
         color: $text-muted;
         background: transparent;
         border: none;
     }
 
-    /* ─── Market Panel ────────────────────────────────────────────────────── */
+    /* ─── Market Panel - Glass Card ──────────────────────────────────────── */
     .market-panel {
         width: 1fr;
         min-width: 40;
-        background: $surface-raised;
-        border: none;
+        background: $bg-surface;
+        border: solid $border-faint;
         padding: 1 2;
     }
 
@@ -491,30 +556,31 @@ class SecNlpTuiApp(App):
     }
 
     .market-label {
-        width: 6;
+        width: 8;
         color: $text-muted;
         padding: 1 0;
     }
 
     #market-ticker {
-        width: 12;
+        width: 14;
         margin-right: 1;
     }
 
     #market-days {
-        width: 8;
+        width: 10;
         margin-right: 1;
     }
 
     #market-fetch-btn {
-        min-width: 6;
-        background: $accent-glow;
-        border: solid $accent-secondary;
-        color: $text-primary;
+        min-width: 8;
+        background: $accent-indigo;
+        border: solid $accent-blue;
+        color: $text-bright;
     }
 
     #market-fetch-btn:hover {
-        background: $accent-secondary;
+        background: $accent-blue;
+        border: solid $accent-cyan;
     }
 
     #market-fetch-status {
@@ -524,22 +590,22 @@ class SecNlpTuiApp(App):
     }
 
     #market-summary {
-        color: $text-secondary;
+        color: $accent-cyan;
         margin-bottom: 1;
-        text-style: none;
+        text-style: bold;
     }
 
     #market-chart {
-        background: $surface;
-        border: none;
-        color: $accent-primary;
+        background: $bg-elevated;
+        border: solid $border-faint;
+        color: $accent-cyan;
         padding: 0 1;
         height: 12;
         min-height: 10;
     }
 
     #market-detail {
-        color: $text-muted;
+        color: $text-secondary;
         margin-top: 1;
     }
 
@@ -550,16 +616,17 @@ class SecNlpTuiApp(App):
 
     #market-stats {
         color: $text-secondary;
-        background: transparent;
-        border: none;
-        padding: 0 1;
+        background: $bg-elevated;
+        border: solid $border-faint;
+        padding: 1 2;
         margin-top: 1;
     }
 
-    /* ─── Results Panel ───────────────────────────────────────────────────── */
+    /* ─── Results Panel - Glass Card ─────────────────────────────────────── */
     .results-panel {
         width: 1fr;
-        border: none;
+        border: solid $border-faint;
+        background: $bg-surface;
     }
 
     .results-row {
@@ -569,23 +636,23 @@ class SecNlpTuiApp(App):
 
     #results-list {
         width: 38;
-        background: $surface;
-        border: none;
+        background: $bg-elevated;
+        border: solid $border-faint;
         height: 14;
         margin-right: 1;
     }
 
     #results-view {
         height: 14;
-        background: $surface;
-        border: none;
+        background: $bg-elevated;
+        border: solid $border-faint;
         color: $text-primary;
         padding: 1;
     }
 
     #log-panel {
-        background: $surface;
-        border: none;
+        background: $bg-surface;
+        border: solid $border-faint;
         padding: 1;
         height: 1fr;
         min-height: 8;
@@ -597,24 +664,25 @@ class SecNlpTuiApp(App):
         margin-bottom: 1;
     }
 
-    /* ─── Tabs ────────────────────────────────────────────────────────────── */
+    /* ─── Tabs - Floating Style ─────────────────────────────────────────── */
     TabbedContent {
-        background: $surface;
+        background: $bg-base;
         height: 1fr;
     }
 
     TabPane {
         padding: 1 1;
         height: 1fr;
+        background: $bg-base;
     }
 
     ContentSwitcher {
-        background: $surface;
+        background: $bg-base;
     }
 
     Tabs {
-        background: $surface-raised;
-        border-bottom: none;
+        background: $bg-surface;
+        border-bottom: solid $border-faint;
         height: 3;
         width: auto;
     }
@@ -623,7 +691,7 @@ class SecNlpTuiApp(App):
         background: transparent;
         color: $text-muted;
         text-style: none;
-        padding: 0 2;
+        padding: 0 3;
         height: 3;
         content-align: center middle;
         margin: 0;
@@ -635,7 +703,7 @@ class SecNlpTuiApp(App):
 
     Tab:hover {
         color: $text-secondary;
-        background: transparent;
+        background: $bg-elevated;
     }
 
     Tab:hover > Label {
@@ -644,24 +712,24 @@ class SecNlpTuiApp(App):
 
     Tab.-active,
     Tab.--active {
-        background: transparent;
-        color: $accent-primary;
-        border-bottom: solid $accent-primary;
+        background: $bg-base;
+        color: $accent-cyan;
+        border-bottom: solid $accent-cyan;
         text-style: none;
     }
 
     Tab.-active > Label,
     Tab.--active > Label {
-        color: $accent-primary;
+        color: $accent-cyan;
     }
 
     Tab:focus {
         text-style: none;
-        color: $accent-primary;
+        color: $accent-cyan;
     }
 
     Tab:focus > Label {
-        color: $accent-primary;
+        color: $accent-cyan;
     }
 
     Underline {
@@ -669,8 +737,8 @@ class SecNlpTuiApp(App):
     }
 
     Underline > .underline--bar {
-        background: $accent-primary;
-        color: $accent-primary;
+        background: $accent-cyan;
+        color: $accent-cyan;
     }
 
     /* ─── Full-size Variants ──────────────────────────────────────────────── */
@@ -684,8 +752,8 @@ class SecNlpTuiApp(App):
 
     #results-view-full {
         height: 1fr;
-        background: $surface;
-        border: none;
+        background: $bg-elevated;
+        border: solid $border-faint;
         color: $text-primary;
         padding: 1;
     }
@@ -721,9 +789,11 @@ class SecNlpTuiApp(App):
     #config-panel {
         height: 2fr;
         min-height: 16;
+        border: solid $border-faint;
+        background: $bg-surface;
     }
 
-    /* ─── Scrollbars ──────────────────────────────────────────────────────── */
+    /* ─── Scrollbars - Minimal ───────────────────────────────────────────── */
     Scrollbar {
         background: transparent;
         width: 1;
@@ -734,12 +804,13 @@ class SecNlpTuiApp(App):
     }
 
     ScrollbarGripper:hover {
-        background: $border-default;
+        background: $border-medium;
     }
 
-    /* ─── Tree ────────────────────────────────────────────────────────────── */
+    /* ─── Tree - File Browser Style ──────────────────────────────────────── */
     Tree {
         scrollbar-size: 1 1;
+        background: $bg-elevated;
     }
 
     Tree > .tree--guides {
@@ -747,16 +818,91 @@ class SecNlpTuiApp(App):
     }
 
     Tree > .tree--cursor {
-        background: $surface-elevated;
-        color: $accent-primary;
+        background: $bg-hover;
+        color: $accent-cyan;
     }
 
-    /* ─── Tooltip ─────────────────────────────────────────────────────────── */
+    /* ─── Tooltip - Floating Card ────────────────────────────────────────── */
     Tooltip {
-        background: $surface-overlay;
-        color: $text-primary;
-        border: solid $border-subtle;
+        background: $bg-card;
+        color: $text-bright;
+        border: solid $border-medium;
+        padding: 0 2;
+    }
+
+    /* ─── Section Navigation (FormView sidebar) ──────────────────────────── */
+    #section-nav {
+        width: 20;
+        background: $bg-surface;
+        border-right: solid $border-faint;
+        padding: 0;
+    }
+
+    #section-nav > ListItem {
+        padding: 0 2;
+        color: $text-muted;
+        height: 2;
+        background: transparent;
+    }
+
+    #section-nav > ListItem:hover {
+        background: $bg-elevated;
+        color: $text-secondary;
+    }
+
+    #section-nav > ListItem.--highlight,
+    #section-nav > ListItem.-highlight,
+    #section-nav > ListItem:focus {
+        background: $bg-hover;
+        color: $accent-violet;
+        text-style: none;
+    }
+
+    #section-content {
         padding: 0 1;
+        background: transparent;
+    }
+
+    /* ─── EFTS Panel ──────────────────────────────────────────────────────── */
+    .efts-panel {
+        background: $bg-surface;
+        border: solid $border-faint;
+        padding: 1 2;
+    }
+
+    .efts-panel Input {
+        background: $bg-elevated;
+    }
+
+    .efts-panel Button {
+        background: $accent-indigo;
+        border: solid $accent-blue;
+        color: $text-bright;
+    }
+
+    .efts-panel Button:hover {
+        background: $accent-blue;
+    }
+
+    /* ─── DataTable - Modern Grid ────────────────────────────────────────── */
+    DataTable {
+        background: $bg-elevated;
+        scrollbar-size: 1 1;
+    }
+
+    DataTable > .datatable--header {
+        background: $bg-card;
+        color: $accent-cyan;
+        text-style: bold;
+    }
+
+    DataTable > .datatable--cursor {
+        background: $bg-hover;
+        color: $text-bright;
+    }
+
+    DataTable > .datatable--hover {
+        background: $bg-hover;
     }
 
     """
