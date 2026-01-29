@@ -119,13 +119,36 @@ class EFTSSearchRunner(BaseModel):
         hits: list[EFTSHit],
         tickers: list[str],
     ) -> list[EFTSHit]:
-        _ = tickers
-        return hits
+        """Filter EFTS hits to only include filings from specified tickers.
+
+        Args:
+            hits: List of EFTS search hits
+            tickers: List of ticker symbols to keep (case-insensitive)
+
+        Returns:
+            Filtered list containing only hits matching the specified tickers
+        """
+        if not tickers:
+            return hits
+
+        ticker_set = {t.upper() for t in tickers}
+
+        filtered: list[EFTSHit] = []
+        for hit in hits:
+            # Check if any of the hit's tickers match our filter
+            hit_tickers = {t.upper() for t in hit.tickers if t}
+            if hit_tickers & ticker_set:
+                filtered.append(hit)
+
+        return filtered
 
     async def search_queries(
         self, queries: list[str]
     ) -> list[EFTSSearchResult]:
-        """Execute EFTS searches for all queries.
+        """Execute EFTS searches for all queries using batch search.
+
+        Uses the Rust batch_search_async for efficient parallel execution
+        with built-in rate limiting.
 
         Args:
             queries: List of search queries
@@ -148,108 +171,81 @@ class EFTSSearchRunner(BaseModel):
         form_types = self._get_form_types()
         tickers = self._get_tickers()
 
-        results: list[EFTSSearchResult] = []
+        logger.info(
+            "EFTS batch search: %d queries (forms=%s, tickers=%s)",
+            len(queries),
+            form_types,
+            tickers,
+        )
 
-        for query in queries:
-            try:
-                result = await self._search_single_query(
-                    client=client,
-                    query=query,
-                    forms=form_types,
-                    tickers=tickers,
-                    start_date=start_date,
-                    end_date=end_date,
-                    limit=efts_config.limit,
-                    score_threshold=efts_config.score_threshold,
-                )
-                scoped_hits = self._filter_hits_by_ticker(
-                    result.hits,
-                    tickers,
-                )
-                if len(scoped_hits) != len(result.hits):
-                    logger.info(
-                        "EFTS ticker scope '%s': kept %d/%d hits",
-                        query,
-                        len(scoped_hits),
-                        len(result.hits),
-                    )
-                scoped_new_accessions = [
-                    hit.accession_number
-                    for hit in scoped_hits
-                    if hit.accession_number not in self.local_accessions
-                ]
-                results.append(
-                    EFTSSearchResult(
-                        query=query,
-                        hits=scoped_hits,
-                        total=len(scoped_hits),
-                        new_accessions=scoped_new_accessions,
-                    )
-                )
-            except EFTSAPIError as e:
-                logger.error("EFTS search failed for query '%s': %s", query, e)
-                results.append(EFTSSearchResult(query=query))
-            except Exception as e:
+        try:
+            batch_results = await client.batch_search(
+                queries,
+                forms=form_types,
+                tickers=tickers if tickers else None,
+                start_date=start_date,
+                end_date=end_date,
+                limit_per_query=efts_config.limit,
+            )
+        except EFTSAPIError as e:
+            logger.error("EFTS batch search failed: %s", e)
+            return [EFTSSearchResult(query=q) for q in queries]
+        except Exception as e:
+            logger.error("Unexpected error in EFTS batch search: %s", e)
+            return [EFTSSearchResult(query=q) for q in queries]
+
+        results: list[EFTSSearchResult] = []
+        for batch_result in batch_results:
+            if batch_result.error:
                 logger.error(
-                    "Unexpected error in EFTS search for query '%s': %s",
-                    query,
-                    e,
+                    "EFTS search failed for query '%s': %s",
+                    batch_result.query,
+                    batch_result.error,
                 )
-                results.append(EFTSSearchResult(query=query))
+                results.append(EFTSSearchResult(query=batch_result.query))
+                continue
+
+            # Filter by score threshold
+            hits = batch_result.hits
+            if efts_config.score_threshold > 0:
+                hits = [
+                    h for h in hits if h.score >= efts_config.score_threshold
+                ]
+
+            # Filter by ticker scope
+            scoped_hits = self._filter_hits_by_ticker(hits, tickers)
+            if len(scoped_hits) != len(hits):
+                logger.info(
+                    "EFTS ticker scope '%s': kept %d/%d hits",
+                    batch_result.query,
+                    len(scoped_hits),
+                    len(hits),
+                )
+
+            # Identify new accessions
+            scoped_new_accessions = [
+                hit.accession_number
+                for hit in scoped_hits
+                if hit.accession_number not in self.local_accessions
+            ]
+
+            logger.info(
+                "EFTS search '%s': %d hits, %d new accessions",
+                batch_result.query,
+                len(scoped_hits),
+                len(scoped_new_accessions),
+            )
+
+            results.append(
+                EFTSSearchResult(
+                    query=batch_result.query,
+                    hits=scoped_hits,
+                    total=batch_result.total,
+                    new_accessions=scoped_new_accessions,
+                )
+            )
 
         return results
-
-    async def _search_single_query(
-        self,
-        *,
-        client: EFTSClient,
-        query: str,
-        forms: list[str],
-        tickers: list[str],
-        start_date: date | None,
-        end_date: date | None,
-        limit: int,
-        score_threshold: float,
-    ) -> EFTSSearchResult:
-        """Execute a single EFTS search."""
-        logger.info(
-            "EFTS search: '%s' (forms=%s, tickers=%s)", query, forms, tickers
-        )
-
-        response = await client.search(
-            query,
-            forms=forms,
-            tickers=tickers if tickers else None,
-            start_date=start_date,
-            end_date=end_date,
-            limit=limit,
-        )
-
-        # Filter by score threshold if configured
-        hits = response.hits
-        if score_threshold > 0:
-            hits = [h for h in hits if h.score >= score_threshold]
-
-        # Identify new accessions not in local storage
-        new_accessions = [
-            h.accession_number
-            for h in hits
-            if h.accession_number not in self.local_accessions
-        ]
-
-        logger.info(
-            "EFTS search '%s': %d hits, %d new accessions",
-            query,
-            len(hits),
-            len(new_accessions),
-        )
-
-        return EFTSSearchResult(
-            query=query,
-            hits=hits,
-            total=response.total,
-            new_accessions=new_accessions,
-        )
 
     def get_accessions_to_download(
         self, results: list[EFTSSearchResult]

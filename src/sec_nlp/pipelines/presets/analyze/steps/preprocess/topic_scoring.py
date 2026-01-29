@@ -1,5 +1,10 @@
 # src/sec_nlp/pipelines/presets/analyze/steps/preprocess/topic_scoring.py
-"""Topic scoring utilities for analyze chunks."""
+"""Topic scoring utilities for analyze chunks.
+
+This module provides utilities for scoring documents based on topic/keyword
+matching. It uses the Rust-based ranking module when available for better
+performance, with fallback to Python implementations.
+"""
 
 from __future__ import annotations
 
@@ -9,6 +14,11 @@ from langchain_core.documents import Document
 
 from sec_nlp.core.infra.logger import logger
 from sec_nlp.core.text.keyword import KeywordMatcher
+from sec_nlp.core.text.ranking import (
+    EFTS_AVAILABLE,
+    rank_documents as rust_rank_documents,
+    score_document as rust_score_document,
+)
 
 
 def normalize_topics(topics: Iterable[str] | None) -> list[str]:
@@ -26,7 +36,11 @@ def normalize_topics(topics: Iterable[str] | None) -> list[str]:
 def build_topic_matcher(
     topics: Iterable[str] | None,
 ) -> KeywordMatcher | None:
-    """Create a reusable keyword matcher for topic scoring."""
+    """Create a reusable keyword matcher for topic scoring.
+
+    Note: When the Rust EFTS extension is available, this matcher is only
+    used as a fallback. The Rust-based scoring functions are preferred.
+    """
     cleaned = normalize_topics(topics)
     if not cleaned:
         return None
@@ -39,9 +53,27 @@ def count_topics(
     topics: list[str],
     matcher: KeywordMatcher | None,
 ) -> tuple[dict[str, int], int]:
-    """Count topic occurrences using matcher if available."""
+    """Count topic occurrences in content.
+
+    Uses Rust backend when available for better performance.
+
+    Args:
+        content: Text content to search.
+        topics: List of topic keywords.
+        matcher: Optional KeywordMatcher (fallback if Rust unavailable).
+
+    Returns:
+        Tuple of (keyword_counts, total_hits).
+    """
     if not content:
         return {}, 0
+
+    # Use Rust backend when available
+    if EFTS_AVAILABLE and topics:
+        result = rust_score_document(content, topics)
+        return result.keyword_counts, result.total_hits
+
+    # Fallback to Python KeywordMatcher
     if matcher:
         return matcher.count(content)
 
@@ -70,11 +102,43 @@ def score_documents(
     min_hits: int = 0,
     prioritize: bool = True,
 ) -> list[Document]:
-    """Attach topic hit metadata and filter docs by hit count."""
+    """Attach topic hit metadata and filter docs by hit count.
+
+    Uses Rust-based ranking when available for better performance on large
+    document sets.
+
+    Args:
+        docs: List of documents to score.
+        topics: Topic keywords to search for.
+        matcher: Optional KeywordMatcher (fallback if Rust unavailable).
+        min_hits: Minimum hits required to include a document.
+        prioritize: Whether to sort by score (descending).
+
+    Returns:
+        Filtered and optionally sorted list of documents with metadata.
+    """
     cleaned = normalize_topics(topics)
     if not docs or not cleaned:
-        return docs
+        return docs if docs else []
 
+    # Use Rust-based ranking for better performance
+    if EFTS_AVAILABLE:
+        result = rust_rank_documents(
+            docs,
+            cleaned,
+            min_hits=min_hits,
+            top_n=None,  # Return all matching docs
+            prioritize=prioritize,
+        )
+        logger.info(
+            "Topic scoring (Rust): kept %d/%d chunks (min_hits=%d)",
+            len(result),
+            len(docs),
+            min_hits,
+        )
+        return result
+
+    # Fallback to Python implementation
     if matcher is None:
         matcher = build_topic_matcher(cleaned)
 
@@ -100,9 +164,9 @@ def score_documents(
             scored_docs.sort(key=lambda t: t[1], reverse=True)
         filtered = [doc for doc, _ in scored_docs]
         logger.info(
-            "Topic scoring: kept %d/%d chunks (min_hits=%d)",
+            "Topic scoring (Python): kept %d/%d chunks (min_hits=%d)",
             len(filtered),
-            len(scored_docs),
+            len(docs),
             min_hits,
         )
         return filtered

@@ -217,6 +217,37 @@ class EFTSSearchResponse(BaseModel):
         return self.start + len(self.hits)
 
 
+class EFTSBatchResult(BaseModel):
+    """Result from a single query in a batch search."""
+
+    model_config = ConfigDict(
+        frozen=True,
+        extra="ignore",
+    )
+
+    query: str = Field(
+        description="The search query that was executed",
+    )
+    hits: list[EFTSHit] = Field(
+        default_factory=list,
+        description="List of search result hits",
+    )
+    total: int = Field(
+        default=0,
+        ge=0,
+        description="Total number of matching results",
+    )
+    error: str | None = Field(
+        default=None,
+        description="Error message if this query failed",
+    )
+
+    @property
+    def success(self) -> bool:
+        """Check if this query succeeded."""
+        return self.error is None
+
+
 class EFTSError(BaseModel):
     """Error response from EFTS API."""
 

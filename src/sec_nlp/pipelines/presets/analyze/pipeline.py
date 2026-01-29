@@ -642,10 +642,15 @@ class AnalyzePipeline(BasePipeline):
                         for ticker in hit.tickers
                         if isinstance(ticker, str) and ticker
                     ]
+                    # Use the actual hit's ticker, not the search context symbol
+                    # EFTS returns filings from all companies matching the query
+                    hit_symbol = hit.ticker or (
+                        tickers[0] if tickers else symbol
+                    )
                     metadata: dict[str, MetadataValue] = {
                         "source": "efts",
                         "search_source": "efts",
-                        "symbol": symbol.upper(),
+                        "symbol": str(hit_symbol).upper(),
                         "accession_number": accession,
                         "cik": hit.cik,
                         "company_name": hit.company_name,

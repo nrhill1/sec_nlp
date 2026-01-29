@@ -1,4 +1,9 @@
 //! Python extension module for SEC EDGAR Full-Text Search (EFTS).
+//!
+//! This module provides:
+//! - EFTS client for searching SEC EDGAR filings
+//! - Keyword extraction algorithms (YAKE, RAKE, TextRank, TF-IDF)
+//! - Document ranking utilities
 
 mod client;
 mod constants;
@@ -8,6 +13,7 @@ mod http_async;
 mod models;
 mod parse;
 mod python;
+mod ranking;
 pub mod test_support;
 mod validate;
 
@@ -21,6 +27,10 @@ use crate::constants::{
 use crate::error::{EftsApiError, EftsError};
 use crate::models::{BatchSearchResult, ProgressInfo, SearchHit, SearchResponse};
 use crate::python::create_efts_client;
+use crate::ranking::{
+    DocumentScore, KeywordResult, RakeExtractor, TextRankExtractor, TfIdfRanker,
+    YakeExtractor, rank_documents_by_keywords, score_document_keywords,
+};
 
 #[pymodule]
 fn efts(py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
@@ -33,11 +43,21 @@ fn efts(py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<BatchSearchResult>()?;
     m.add_class::<ProgressInfo>()?;
 
+    // Keyword extraction classes
+    m.add_class::<YakeExtractor>()?;
+    m.add_class::<RakeExtractor>()?;
+    m.add_class::<TextRankExtractor>()?;
+    m.add_class::<TfIdfRanker>()?;
+    m.add_class::<KeywordResult>()?;
+    m.add_class::<DocumentScore>()?;
+
     // Exception class
     m.add("EFTSAPIError", py.get_type::<EftsApiError>())?;
 
-    // Factory function
+    // Factory functions
     m.add_function(wrap_pyfunction!(create_efts_client, m)?)?;
+    m.add_function(wrap_pyfunction!(score_document_keywords, m)?)?;
+    m.add_function(wrap_pyfunction!(rank_documents_by_keywords, m)?)?;
     Ok(())
 }
 

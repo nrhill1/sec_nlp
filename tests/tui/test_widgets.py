@@ -165,7 +165,7 @@ def test_results_panel_accepts_classes_kwarg() -> None:
 
 
 def test_results_panel_set_paths() -> None:
-    """ResultsPanel.set_paths() should populate the list."""
+    """ResultsPanel.set_paths() should populate the tree."""
     app = ResultsApp()
 
     async def run_test() -> None:
@@ -178,13 +178,14 @@ def test_results_panel_set_paths() -> None:
                 path2.write_text("key: value2\n")
                 panel.set_paths([path1, path2])
                 assert len(panel._all_paths) == 2
-                assert len(panel._filtered_paths) == 2
+                # Tree-based implementation uses _path_to_node dict
+                assert len(panel._path_to_node) == 2
 
     asyncio.run(run_test())
 
 
 def test_results_panel_filter() -> None:
-    """ResultsPanel filter should narrow the list."""
+    """ResultsPanel filter should narrow the tree."""
     app = ResultsApp()
 
     async def run_test() -> None:
@@ -198,11 +199,14 @@ def test_results_panel_filter() -> None:
                 path2.write_text("b: 2\n")
                 path3.write_text("c: 3\n")
                 panel.set_paths([path1, path2, path3])
-                assert len(panel._filtered_paths) == 3
+                assert len(panel._path_to_node) == 3
+                # Simulate filter input change - rebuilds tree
                 panel._filter_input.value = "alpha"
-                panel._apply_filter()
-                assert len(panel._filtered_paths) == 1
-                assert panel._filtered_paths[0].name == "alpha.yaml"
+                panel._rebuild_tree()
+                assert len(panel._path_to_node) == 1
+                # Check that the filtered path is alpha.yaml
+                filtered_paths = list(panel._path_to_node.values())
+                assert filtered_paths[0].name == "alpha.yaml"
 
     asyncio.run(run_test())
 
@@ -216,7 +220,7 @@ def test_results_panel_empty_paths() -> None:
             panel = app.query_one(ResultsPanel)
             panel.set_paths([])
             assert panel._all_paths == []
-            assert panel._filtered_paths == []
+            assert len(panel._path_to_node) == 0
 
     asyncio.run(run_test())
 
@@ -258,13 +262,92 @@ def test_form_view_sections_toggle() -> None:
             view = app.query_one(FormView)
             view.set_form(form_spec)
             await pilot.pause()
-            sections = view._sections
-            assert sections
-            core_section = sections.get("core")
-            assert core_section is not None
-            initial = core_section._collapsed
-            core_section.toggle()
-            assert core_section._collapsed is not initial
+            # New list-based navigation uses _section_containers
+            containers = view._section_containers
+            assert containers
+            # Should have __overview__ plus any sections
+            assert "__overview__" in containers
+            # Check that selecting a section shows it
+            if view._section_keys and len(view._section_keys) > 1:
+                second_key = view._section_keys[1]
+                view._set_active_section(second_key)
+                assert view._active_section_key == second_key
+
+    asyncio.run(run_test())
+
+
+def test_form_view_switch_forms_no_duplicate_ids() -> None:
+    """Switching forms should not cause duplicate ID errors.
+
+    This guards against a regression where ListView.clear() doesn't immediately
+    remove widget IDs, causing DuplicateIds exception when mounting new items.
+    """
+    app = FormApp()
+    analyze_spec = get_form_spec("analyze")
+    assert analyze_spec is not None
+
+    async def run_test() -> None:
+        async with app.run_test() as pilot:
+            view = app.query_one(FormView)
+            # Set initial form
+            view.set_form(analyze_spec)
+            await pilot.pause()
+
+            # Verify nav has overview item
+            assert view._section_nav is not None
+            nav_ids_before = {child.id for child in view._section_nav.children}
+            assert "nav-__overview__" in nav_ids_before
+
+            # Switch to same form again - this should NOT raise DuplicateIds
+            view.set_form(analyze_spec)
+            await pilot.pause()
+
+            # Verify nav still has overview item (replaced, not duplicated)
+            nav_ids_after = {child.id for child in view._section_nav.children}
+            assert "nav-__overview__" in nav_ids_after
+
+            # Count should be same, not doubled
+            assert len(nav_ids_after) == len(nav_ids_before)
+
+    asyncio.run(run_test())
+
+
+def test_form_view_switch_different_forms() -> None:
+    """Switching between different form specs should work without errors."""
+    app = FormApp()
+    analyze_spec = get_form_spec("analyze")
+    exb_spec = get_form_spec("exb")
+    assert analyze_spec is not None
+    assert exb_spec is not None
+
+    async def run_test() -> None:
+        async with app.run_test() as pilot:
+            view = app.query_one(FormView)
+
+            # Set analyze form
+            view.set_form(analyze_spec)
+            await pilot.pause()
+            assert view._form_spec is analyze_spec
+
+            # Switch to exhibit form
+            view.set_form(exb_spec)
+            await pilot.pause()
+            assert view._form_spec is exb_spec
+
+            # Switch back to analyze
+            view.set_form(analyze_spec)
+            await pilot.pause()
+            assert view._form_spec is analyze_spec
+
+            # All switches should complete without DuplicateIds error
+            assert view._section_nav is not None
+            # Verify we have exactly one overview nav item
+            overview_items = [
+                c
+                for c in view._section_nav.children
+                if c.id == "nav-__overview__"
+            ]
+            assert len(overview_items) == 1
 
     asyncio.run(run_test())
 

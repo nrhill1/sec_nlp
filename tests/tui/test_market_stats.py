@@ -269,7 +269,9 @@ class TestBuildMarketChartLines:
             normalize=True,
         )
         assert len(lines) == 3
-        assert "#" in str(lines[-1])
+        # Uses Unicode block characters now (█ or ▄)
+        all_text = "".join(str(line) for line in lines)
+        assert "█" in all_text or "▄" in all_text
 
     def test_points_style(self) -> None:
         lines = build_market_chart_lines(
@@ -280,7 +282,8 @@ class TestBuildMarketChartLines:
             normalize=True,
         )
         assert len(lines) == 3
-        assert "*" in "".join(str(line) for line in lines)
+        # Uses Unicode bullet character now (●)
+        assert "●" in "".join(str(line) for line in lines)
 
     def test_overlay_produces_dashes(self) -> None:
         lines = build_market_chart_lines(
@@ -292,8 +295,8 @@ class TestBuildMarketChartLines:
             overlay=[2.0, 2.5, 3.0, 3.5, 4.0],
         )
         all_text = "".join(str(line) for line in lines)
-        # Overlay should produce "-" characters
-        assert "-" in all_text
+        # Overlay uses Unicode horizontal line character (─)
+        assert "─" in all_text
 
 
 class TestExtractMarketSnapshot:

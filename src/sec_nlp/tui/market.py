@@ -27,9 +27,13 @@ MARKET_METRICS: tuple[ConfigScalar, ...] = (
 
 MARKET_STYLE_BARS = "bars"
 MARKET_STYLE_POINTS = "points"
+MARKET_STYLE_CANDLE = "candle"
+MARKET_STYLE_LINE = "line"
 MARKET_STYLES: tuple[ConfigScalar, ...] = (
     MARKET_STYLE_BARS,
     MARKET_STYLE_POINTS,
+    MARKET_STYLE_CANDLE,
+    MARKET_STYLE_LINE,
 )
 
 
@@ -178,10 +182,21 @@ def build_market_chart_lines(
     style: ConfigScalar,
     normalize: bool,
     overlay: Sequence[float] | None = None,
+    quotes: Sequence[MarketQuotePoint] | None = None,
 ) -> list[str]:
-    """Build ASCII chart lines, optionally with an overlay (e.g. SMA)."""
+    """Build ASCII chart lines, optionally with an overlay (e.g. SMA).
+
+    For candlestick style, pass quotes with OHLC data.
+    """
     if not values or width <= 0 or height <= 0:
         return []
+
+    # Use candlestick rendering if style is candle and we have OHLC data
+    if style == MARKET_STYLE_CANDLE and quotes:
+        return _build_candlestick_chart(quotes, width, height, normalize)
+
+    if style == MARKET_STYLE_LINE:
+        return _build_line_chart(values, width, height, normalize, overlay)
 
     series = _compress_series(values, width)
     if not series:
@@ -218,13 +233,184 @@ def build_market_chart_lines(
         for idx, level in enumerate(levels):
             ov_hit = overlay_levels is not None and overlay_levels[idx] == row
             if ov_hit:
-                chars.append("-")  # overlay marker
+                chars.append("─")  # overlay marker (nicer dash)
             elif style == MARKET_STYLE_POINTS:
-                chars.append("*" if level == row else " ")
+                chars.append("●" if level == row else " ")
             else:
-                chars.append("#" if level >= row else " ")
+                # Gradient bars using block characters
+                if level >= row:
+                    # Use different characters based on position in bar
+                    if row == level:
+                        chars.append("█")
+                    elif row == 0:
+                        chars.append("▄")
+                    else:
+                        chars.append("█")
+                else:
+                    chars.append(" ")
         lines.append("".join(chars).rstrip())
     return lines
+
+
+def _build_candlestick_chart(
+    quotes: Sequence[MarketQuotePoint],
+    width: int,
+    height: int,
+    normalize: bool,
+) -> list[str]:
+    """Build candlestick-style chart from OHLC data.
+
+    Uses unicode box-drawing characters:
+    - │ for wick (high-low range)
+    - █ for bullish body (close > open) - green implied
+    - ░ for bearish body (close < open) - red implied
+    """
+    if not quotes:
+        return []
+
+    # Compress quotes to fit width
+    compressed = _compress_quotes(quotes, width)
+    if not compressed:
+        return []
+
+    # Find price range
+    all_prices: list[float] = []
+    for q in compressed:
+        all_prices.extend(
+            [q.high_value, q.low_value, q.open_value, q.close_value]
+        )
+
+    min_price = min(all_prices)
+    max_price = max(all_prices)
+    if not normalize:
+        if min_price > 0:
+            min_price = 0.0
+    scale = max_price - min_price if max_price != min_price else 1.0
+
+    def to_level(v: float) -> int:
+        return int(round((v - min_price) / scale * (height - 1)))
+
+    lines: list[str] = []
+    for row in range(height - 1, -1, -1):
+        chars: list[str] = []
+        for q in compressed:
+            high_level = to_level(q.high_value)
+            low_level = to_level(q.low_value)
+            open_level = to_level(q.open_value)
+            close_level = to_level(q.close_value)
+            body_top = max(open_level, close_level)
+            body_bottom = min(open_level, close_level)
+            bullish = q.close_value >= q.open_value
+
+            if body_bottom <= row <= body_top:
+                # Body region
+                chars.append("█" if bullish else "░")
+            elif low_level <= row <= high_level:
+                # Wick region
+                chars.append("│")
+            else:
+                chars.append(" ")
+        lines.append("".join(chars).rstrip())
+    return lines
+
+
+def _build_line_chart(
+    values: Sequence[float],
+    width: int,
+    height: int,
+    normalize: bool,
+    overlay: Sequence[float] | None = None,
+) -> list[str]:
+    """Build a smooth line chart using braille-like characters."""
+    series = _compress_series(values, width)
+    if not series:
+        return []
+
+    all_vals = list(series)
+    if overlay:
+        overlay_compressed = _compress_series(overlay, width)
+        all_vals.extend(overlay_compressed)
+    else:
+        overlay_compressed = None
+
+    min_value = min(all_vals)
+    max_value = max(all_vals)
+    if not normalize:
+        if min_value > 0:
+            min_value = 0.0
+        elif max_value < 0:
+            max_value = 0.0
+    scale = max_value - min_value if max_value != min_value else 1.0
+
+    def to_level(v: float) -> int:
+        return int(round((v - min_value) / scale * (height - 1)))
+
+    levels = [to_level(v) for v in series]
+    overlay_levels = (
+        [to_level(v) for v in overlay_compressed]
+        if overlay_compressed
+        else None
+    )
+
+    # Line drawing characters for connections
+    # ╱ ╲ ─ for diagonal, horizontal connections
+    lines: list[str] = []
+    for row in range(height - 1, -1, -1):
+        chars: list[str] = []
+        for idx, level in enumerate(levels):
+            ov_hit = overlay_levels is not None and overlay_levels[idx] == row
+            if ov_hit and level != row:
+                chars.append("┄")  # overlay line
+            elif level == row:
+                # Determine connection style
+                prev_level = levels[idx - 1] if idx > 0 else level
+                next_level = levels[idx + 1] if idx < len(levels) - 1 else level
+                if prev_level < level and next_level < level:
+                    chars.append("╱")  # peak
+                elif prev_level > level and next_level > level:
+                    chars.append("╲")  # valley
+                elif prev_level < level:
+                    chars.append("╱")
+                elif next_level < level:
+                    chars.append("╲")
+                else:
+                    chars.append("─")
+            else:
+                chars.append(" ")
+        lines.append("".join(chars).rstrip())
+    return lines
+
+
+def _compress_quotes(
+    quotes: Sequence[MarketQuotePoint], width: int
+) -> list[MarketQuotePoint]:
+    """Compress quotes to fit within width, averaging OHLC values."""
+    if len(quotes) <= width:
+        return list(quotes)
+    step = len(quotes) / width
+    compressed: list[MarketQuotePoint] = []
+    for idx in range(width):
+        start = int(idx * step)
+        end = int((idx + 1) * step)
+        if end <= start:
+            end = start + 1
+        bucket = quotes[start:end]
+        if not bucket:
+            continue
+        # Aggregate: first open, max high, min low, last close
+        compressed.append(
+            MarketQuotePoint(
+                start=bucket[0].start,
+                end=bucket[-1].end,
+                open_value=bucket[0].open_value,
+                high_value=max(q.high_value for q in bucket),
+                low_value=min(q.low_value for q in bucket),
+                close_value=bucket[-1].close_value,
+                adjclose_value=bucket[-1].adjclose_value,
+                volume_value=sum(q.volume_value for q in bucket) / len(bucket),
+            )
+        )
+    return compressed
 
 
 def build_sparkline(values: Sequence[float], width: int) -> str:

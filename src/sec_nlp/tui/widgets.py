@@ -8,6 +8,7 @@ from datetime import date
 from pathlib import Path
 
 from rich.syntax import Syntax
+from textual.app import ComposeResult
 from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.message import Message
 from textual.widgets import (
@@ -20,6 +21,7 @@ from textual.widgets import (
     ProgressBar,
     Select,
     Static,
+    Tree,
 )
 
 from sec_nlp.tui.interfaces import (
@@ -38,7 +40,10 @@ from sec_nlp.tui.market import (
     MARKET_METRIC_RETURNS,
     MARKET_METRIC_VOLUME,
     MARKET_STYLE_BARS,
+    MARKET_STYLE_CANDLE,
+    MARKET_STYLE_LINE,
     MARKET_STYLE_POINTS,
+    MarketQuotePoint,
     MarketSnapshot,
     build_market_chart_lines,
     build_sparkline,
@@ -312,38 +317,118 @@ class CollapsibleSection(Vertical):
         return self._content
 
 
-class FormView(VerticalScroll):
+class FormView(Horizontal):
+    """Form view with sidebar section navigation.
+
+    Uses a ListView on the left for section selection, and shows
+    the selected section's fields on the right.
+    """
+
     can_focus = True
     can_focus_children = True
-    show_vertical_scrollbar = True
+
+    DEFAULT_CSS = """
+    FormView {
+        height: 1fr;
+    }
+
+    FormView > .section-nav {
+        width: 22;
+        height: 1fr;
+        background: #09090b;
+        border: none;
+        margin-right: 1;
+    }
+
+    FormView > .section-nav > ListItem {
+        padding: 0 1;
+        height: 2;
+        color: #6b7280;
+    }
+
+    FormView > .section-nav > ListItem:hover {
+        background: #161619;
+        color: #9ca3af;
+    }
+
+    FormView > .section-nav > ListItem.-active {
+        background: #1c1c20;
+        color: #60a5fa;
+    }
+
+    FormView > .section-nav > ListItem.--highlight,
+    FormView > .section-nav > ListItem:focus {
+        background: #1c1c20;
+        color: #60a5fa;
+    }
+
+    FormView > .section-content {
+        width: 1fr;
+        height: 1fr;
+    }
+    """
+
+    # Class-level counter for unique widget IDs across form switches
+    _form_counter: int = 0
 
     def __init__(self) -> None:
         super().__init__(classes="panel")
         self._form_spec: FormSpec | None = None
         self._fields: dict[ConfigScalar, _FieldWidget] = {}
         self._extra_args: Input | None = None
-        self._sections: dict[ConfigScalar, CollapsibleSection] = {}
+        self._section_containers: dict[ConfigScalar, Vertical] = {}
         self._pending_form_spec: FormSpec | None = None
-        self._root_rows: list[FieldRow] = []
+        self._root_container: Vertical | None = None
         self._extra_row: FieldRow | None = None
         self._active_section_key: ConfigScalar | None = None
         self._section_mode_active = False
         self._section_field_keys: dict[ConfigScalar, list[ConfigScalar]] = {}
-        self._section_select: Select | None = None
-        self._section_row: FieldRow | None = None
+        self._section_nav: ListView | None = None
+        self._section_keys: list[ConfigScalar] = []
+        self._content_area: VerticalScroll | None = None
+        self._id_suffix: int = 0
+
+    def compose(self) -> ComposeResult:
+        # Will be populated by set_form
+        self._section_nav = ListView(id="section-nav-0", classes="section-nav")
+        self._content_area = VerticalScroll(
+            id="section-content-0", classes="section-content"
+        )
+        yield self._section_nav
+        yield self._content_area
 
     def set_form(self, form_spec: FormSpec) -> None:
         self._form_spec = form_spec
         self._fields = {}
-        self._sections = {}
-        self._root_rows = []
+        self._section_containers = {}
+        self._root_container = None
         self._extra_row = None
         self._active_section_key = None
         self._section_field_keys = {}
-        self._section_select = None
-        self._section_row = None
-        self.remove_children()
-        self.mount(Label("Configuration", classes="panel-title"))
+        self._section_keys = []
+
+        # Replace the entire ListView and VerticalScroll containers to avoid
+        # duplicate ID issues. Widget.remove() is async, so we can't reliably
+        # clear and re-populate. Instead, we remove the old containers entirely
+        # and mount fresh ones with unique IDs using an incrementing suffix.
+        if self._section_nav is not None:
+            self._section_nav.remove()
+        if self._content_area is not None:
+            self._content_area.remove()
+
+        # Increment suffix to ensure unique IDs
+        self._id_suffix += 1
+        suffix = self._id_suffix
+
+        # Create fresh containers with unique IDs and mount them to self
+        self._section_nav = ListView(
+            id=f"section-nav-{suffix}", classes="section-nav"
+        )
+        self._content_area = VerticalScroll(
+            id=f"section-content-{suffix}", classes="section-content"
+        )
+        self.mount(self._section_nav)
+        self.mount(self._content_area)
 
         # Group fields by section
         section_fields: dict[ConfigScalar, list[FieldSpec]] = {}
@@ -359,61 +444,90 @@ class FormView(VerticalScroll):
             else:
                 root_fields.append(field)
 
-        # Build sections with their fields inline
+        # Build navigation items
+        nav_items: list[ListItem] = []
+        # Add "Overview" for root fields
+        nav_items.append(ListItem(Label("Overview"), id="nav-__overview__"))
+        self._section_keys.append("__overview__")
+
+        # Add section items
         if form_spec.sections:
-            section_row = self._build_section_switcher(form_spec.sections)
-            self.mount(section_row)
-            self._section_row = section_row
             for section_spec in form_spec.sections:
-                section_widget = self._build_section(
-                    section_spec, section_fields.get(section_spec.key, [])
+                nav_items.append(
+                    ListItem(
+                        Label(str(section_spec.label)),
+                        id=f"nav-{section_spec.key}",
+                    )
                 )
-                self.mount(section_widget)
-                self._sections[section_spec.key] = section_widget
+                self._section_keys.append(section_spec.key)
 
-        # Add root fields (not in any section)
-        for field in root_fields:
-            row = self._build_field_row(field)
-            self.mount(row)
-            self._root_rows.append(row)
+        # Mount nav items
+        if self._section_nav is not None:
+            for item in nav_items:
+                self._section_nav.mount(item)
 
-        extra_input = Input(
-            placeholder=str(form_spec.extra_args_placeholder),
-            id="extra-args",
-        )
-        extra_row = FieldRow(
-            form_spec.extra_args_label,
-            extra_input,
-            "Additional CLI arguments",
-        )
-        self.mount(extra_row)
-        self._extra_args = extra_input
-        self._extra_row = extra_row
-        self._set_active_section(None)
-        self.scroll_home(animate=False, immediate=True)
+        # Build content containers - collect children first, then mount
+        if self._content_area is not None:
+            # Overview container (root fields + extra args)
+            overview_children: list[FieldRow] = []
+            for field in root_fields:
+                row = self._build_field_row(field)
+                overview_children.append(row)
+            # Extra args at end of overview
+            extra_input = Input(
+                placeholder=str(form_spec.extra_args_placeholder),
+                id="extra-args",
+            )
+            extra_row = FieldRow(
+                form_spec.extra_args_label,
+                extra_input,
+                "Additional CLI arguments",
+            )
+            overview_children.append(extra_row)
+            self._extra_args = extra_input
+            self._extra_row = extra_row
 
-    def _build_section(
-        self, section_spec: SectionSpec, fields: list[FieldSpec]
-    ) -> CollapsibleSection:
-        """Build a collapsible section with fields pre-populated."""
-        rows: list[FieldRow] = [
-            self._build_field_row(field) for field in fields
-        ]
-        return CollapsibleSection(
-            section_spec, rows, on_toggle=self._handle_section_toggle
-        )
+            overview = Vertical(
+                *overview_children,
+                id="content-__overview__",
+                classes="section-pane",
+            )
+            self._content_area.mount(overview)
+            self._root_container = overview
+            self._section_containers["__overview__"] = overview
 
-    def _build_section_switcher(
-        self, sections: tuple[SectionSpec, ...]
-    ) -> FieldRow:
-        options: list[tuple[str, str]] = [("All sections", "__all__")]
-        for section in sections:
-            options.append((str(section.label), str(section.key)))
-        select = Select(options, value="__all__", allow_blank=False)
-        self._section_select = select
-        row = FieldRow("Section", select, "Choose a section to focus")
-        row.add_class("section-switcher")
-        return row
+            # Section containers
+            if form_spec.sections:
+                for section_spec in form_spec.sections:
+                    section_children: list[Label | FieldRow] = [
+                        Label(str(section_spec.label), classes="section-title")
+                    ]
+                    for field in section_fields.get(section_spec.key, []):
+                        row = self._build_field_row(field)
+                        section_children.append(row)
+                    container = Vertical(
+                        *section_children,
+                        id=f"content-{section_spec.key}",
+                        classes="section-pane",
+                    )
+                    self._content_area.mount(container)
+                    self._section_containers[section_spec.key] = container
+
+        # Show overview by default
+        self._set_active_section("__overview__")
+        if self._section_nav is not None:
+            self._section_nav.index = 0
+
+    def on_list_view_selected(self, event: ListView.Selected) -> None:
+        if event.list_view is not self._section_nav:
+            return
+        if event.item is None or event.item.id is None:
+            return
+        # Extract section key from item id (nav-{key})
+        item_id = str(event.item.id)
+        if item_id.startswith("nav-"):
+            key = item_id[4:]  # Remove "nav-" prefix
+            self._set_active_section(key)
 
     def _build_field_row(self, field: FieldSpec) -> FieldRow:
         """Build a row containing a label and widget for a field."""
@@ -423,30 +537,14 @@ class FormView(VerticalScroll):
 
     def focus_first(self) -> None:
         active = self._active_section_key
-        if active is not None:
+        if active is not None and active != "__overview__":
             self._focus_section_first(active)
-            return
-        if self._section_select is not None:
-            self._section_select.focus()
             return
         for widget in self._fields.values():
             widget.focus()
             return
         if self._extra_args is not None:
             self._extra_args.focus()
-
-    def on_select_changed(self, event: Select.Changed) -> None:
-        if self._section_select is None:
-            return
-        if event.select is not self._section_select:
-            return
-        value = event.value
-        if value is None or value == "__all__":
-            self._set_active_section(None)
-            return
-        if not isinstance(value, (str, int, float, Path)):
-            return
-        self._set_active_section(value)
 
     def _focus_section_first(self, key: ConfigScalar) -> None:
         field_keys = self._section_field_keys.get(key)
@@ -458,65 +556,26 @@ class FormView(VerticalScroll):
                 widget.focus()
                 return
 
-    def _handle_section_toggle(
-        self, key: ConfigScalar, collapsed: bool
-    ) -> None:
-        if collapsed:
-            if self._active_section_key == key:
-                self._set_active_section(None)
-            return
-        self._set_active_section(key)
-
     def _set_active_section(self, key: ConfigScalar | None) -> None:
+        if key is None:
+            key = "__overview__"
         was_active = self._section_mode_active
         self._active_section_key = key
         self._apply_section_visibility()
-        self._section_mode_active = key is not None
+        self._section_mode_active = key != "__overview__"
         if was_active != self._section_mode_active:
             self.post_message(SectionModeChanged(self._section_mode_active))
-        self._sync_section_select()
-        if key is None:
-            self.call_after_refresh(self.focus_first)
-        else:
-            self.call_after_refresh(lambda: self._focus_section_first(key))
-
-    def _sync_section_select(self) -> None:
-        if self._section_select is None:
-            return
-        desired = (
-            "__all__"
-            if self._active_section_key is None
-            else str(self._active_section_key)
-        )
-        current = self._section_select.value
-        if current != desired:
-            self._section_select.value = desired
 
     def _apply_section_visibility(self) -> None:
         active = self._active_section_key
         if active is None:
-            for section in self._sections.values():
-                section.remove_class("section-active")
-                section.remove_class("section-hidden")
-            for row in self._root_rows:
-                row.set_styles("display: block;")
-            if self._extra_row is not None:
-                self._extra_row.set_styles("display: block;")
-            self.refresh(layout=True)
-            return
+            active = "__overview__"
 
-        for key, section in self._sections.items():
+        for key, container in self._section_containers.items():
             if key == active:
-                section.remove_class("section-hidden")
-                section.add_class("section-active")
-                section.set_collapsed(False, notify=False)
+                container.set_styles("display: block;")
             else:
-                section.remove_class("section-active")
-                section.add_class("section-hidden")
-        for row in self._root_rows:
-            row.set_styles("display: none;")
-        if self._extra_row is not None:
-            self._extra_row.set_styles("display: none;")
+                container.set_styles("display: none;")
         self.refresh(layout=True)
 
     def focus_field(self, key: ConfigScalar) -> None:
@@ -594,6 +653,8 @@ _MARKET_METRIC_LABELS: dict[ConfigScalar, ConfigScalar] = {
 _MARKET_STYLE_LABELS: dict[ConfigScalar, ConfigScalar] = {
     MARKET_STYLE_BARS: "Bars",
     MARKET_STYLE_POINTS: "Points",
+    MARKET_STYLE_CANDLE: "Candle",
+    MARKET_STYLE_LINE: "Line",
 }
 
 MARKET_DISPLAY_FULL = "full"
@@ -623,6 +684,18 @@ class MarketPanel(Vertical):
             (str(label), str(key))
             for key, label in _MARKET_DISPLAY_LABELS.items()
         ]
+        # Direct fetch controls
+        self._ticker_input = Input(
+            placeholder="AAPL",
+            id="market-ticker",
+        )
+        self._days_input = Input(
+            placeholder="30",
+            value="30",
+            id="market-days",
+        )
+        self._fetch_button = Button("Fetch", id="market-fetch-btn")
+        self._fetch_status = Static("", id="market-fetch-status")
         self._metric_select = Select(
             metric_options,
             value=str(MARKET_METRIC_CLOSE),
@@ -658,11 +731,19 @@ class MarketPanel(Vertical):
         self._context_label = Static("", id="market-context")
         self._snapshot: MarketSnapshot | None = None
         self._message: ConfigScalar | None = (
-            "Run analyze with market enabled to populate this view."
+            "Enter a ticker and click Fetch, or run analyze with market enabled."
         )
+        self._fetching = False
 
     def compose(self):
-        yield Label("Market", classes="panel-title")
+        yield Label("Market Data", classes="panel-title")
+        with Horizontal(classes="market-fetch-row"):
+            yield Label("Ticker", classes="market-label")
+            yield self._ticker_input
+            yield Label("Days", classes="market-label")
+            yield self._days_input
+            yield self._fetch_button
+            yield self._fetch_status
         with Horizontal(classes="market-controls"):
             yield Label("Metric", classes="market-label")
             yield self._metric_select
@@ -677,6 +758,10 @@ class MarketPanel(Vertical):
         yield self._detail
         yield self._stats
         yield self._context_label
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button is self._fetch_button:
+            self._start_fetch()
 
     def on_select_changed(self, event: Select.Changed) -> None:
         if event.select in (
@@ -704,6 +789,94 @@ class MarketPanel(Vertical):
 
     def reset(self) -> None:
         self._snapshot = None
+        self._render_snapshot()
+
+    def _start_fetch(self) -> None:
+        if self._fetching:
+            return
+        ticker = self._ticker_input.value.strip().upper()
+        if not ticker:
+            self._fetch_status.update("Enter a ticker")
+            return
+        days_text = self._days_input.value.strip()
+        try:
+            days = int(days_text) if days_text else 30
+        except ValueError:
+            days = 30
+        if days < 1:
+            days = 1
+        if days > 365:
+            days = 365
+        self._fetching = True
+        self._fetch_button.disabled = True
+        self._fetch_status.update("Fetching...")
+        asyncio.create_task(self._do_fetch(ticker, days))
+
+    async def _do_fetch(self, ticker: str, days: int) -> None:
+        from datetime import (
+            datetime as dt,
+            timedelta,
+        )
+
+        from sec_nlp.core.market import (
+            MarketExtensionError,
+            create_market_retriever,
+        )
+
+        end_date = date.today()
+        start_date = end_date - timedelta(days=days)
+        retriever = create_market_retriever()
+        try:
+            raw_quotes = await asyncio.to_thread(
+                retriever.retrieve_range, ticker, (start_date, end_date)
+            )
+        except MarketExtensionError as exc:
+            self._fetch_status.update(f"Error: {exc}")
+            self._fetching = False
+            self._fetch_button.disabled = False
+            return
+        except Exception as exc:
+            self._fetch_status.update(f"Error: {exc}")
+            self._fetching = False
+            self._fetch_button.disabled = False
+            return
+
+        if not raw_quotes:
+            self._fetch_status.update("No data found")
+            self._fetching = False
+            self._fetch_button.disabled = False
+            return
+
+        # Convert to MarketQuotePoint
+        quotes: list[MarketQuotePoint] = []
+        for q in raw_quotes:
+            quotes.append(
+                MarketQuotePoint(
+                    start=dt.fromtimestamp(q.timestamp).date().isoformat(),
+                    end=dt.fromtimestamp(q.timestamp).date().isoformat(),
+                    open_value=q.open_price,
+                    high_value=q.high,
+                    low_value=q.low,
+                    close_value=q.close,
+                    adjclose_value=q.adjclose,
+                    volume_value=float(q.volume),
+                )
+            )
+
+        snapshot = MarketSnapshot(
+            symbol=ticker,
+            ticker=ticker,
+            filing_date=None,
+            window_start=start_date.isoformat(),
+            window_end=end_date.isoformat(),
+            granularity="daily",
+            quotes=tuple(quotes),
+            correlation=None,
+        )
+        self._snapshot = snapshot
+        self._fetch_status.update(f"Loaded {len(quotes)} quotes")
+        self._fetching = False
+        self._fetch_button.disabled = False
         self._render_snapshot()
 
     def _render_snapshot(self) -> None:
@@ -736,24 +909,54 @@ class MarketPanel(Vertical):
 
         # Optionally overlay SMA
         sma_series = compute_sma(series, window=5) if show_sma else None
+        # Pass quotes for candlestick rendering
+        quotes = list(self._snapshot.quotes) if self._snapshot else None
+        chart_width = self._chart_width()
+        chart_height = 8  # Rows for the chart
         chart_lines = build_market_chart_lines(
             series,
-            width=self._chart_width(),
-            height=6,
+            width=chart_width,
+            height=chart_height,
             style=style_key,
             normalize=normalize,
             overlay=sma_series,
+            quotes=quotes,
         )
-        self._chart.update(
-            "\n".join(str(line) for line in chart_lines)
-            if chart_lines
-            else "(no chart data)"
-        )
+
+        # Build chart display with axis labels
+        if chart_lines and series:
+            min_val = min(series)
+            max_val = max(series)
+            # Add price axis labels on the left
+            labeled_lines: list[str] = []
+            for i, line in enumerate(chart_lines):
+                if i == 0:
+                    price_label = f"{self._format_number(max_val):>8} │"
+                elif i == len(chart_lines) - 1:
+                    price_label = f"{self._format_number(min_val):>8} │"
+                elif i == len(chart_lines) // 2:
+                    mid_val = (max_val + min_val) / 2
+                    price_label = f"{self._format_number(mid_val):>8} │"
+                else:
+                    price_label = "         │"
+                labeled_lines.append(f"{price_label}{line}")
+            # Add bottom axis line
+            labeled_lines.append("         └" + "─" * min(chart_width, 60))
+            chart_text = "\n".join(labeled_lines)
+        else:
+            chart_text = "(no chart data)"
+
+        self._chart.update(chart_text)
         detail = self._build_detail(label, series)
         self._detail.update(str(detail))
-        # stats
+
+        # Stats display
         stats_lines = format_stats_lines(series)
-        self._stats.update("\n".join(str(line) for line in stats_lines))
+        if stats_lines:
+            self._stats.update("\n".join(str(line) for line in stats_lines))
+        else:
+            self._stats.update("(no stats)")
+
         context = self._snapshot.correlation
         self._context_label.update(str(context) if context else "")
 
@@ -817,35 +1020,76 @@ class MarketPanel(Vertical):
         return default
 
     def _chart_width(self) -> int:
-        width = self.size.width - 4
-        if width < 10:
-            return 10
+        """Calculate available width for chart rendering."""
+        # Account for padding (2 chars each side) and border (1 char each side)
+        width = self.size.width - 6
+        # Ensure minimum width for readable charts
+        if width < 20:
+            return 20
+        # Cap at reasonable max to prevent overly wide charts
+        if width > 120:
+            return 120
         return width
 
 
 class ResultsPanel(Vertical):
+    """Results panel with tree view for hierarchical file browsing."""
+
+    DEFAULT_CSS = """
+    ResultsPanel {
+        height: 1fr;
+    }
+
+    #results-tree {
+        width: 42;
+        height: 1fr;
+        background: #09090b;
+        border: none;
+        margin-right: 1;
+        scrollbar-size: 1 1;
+    }
+
+    #results-tree > .tree--guides {
+        color: #1e1e22;
+    }
+
+    #results-tree > .tree--cursor {
+        background: #161619;
+        color: #60a5fa;
+    }
+
+    #results-view-full {
+        height: 1fr;
+        background: #09090b;
+        border: none;
+        padding: 1;
+        overflow-y: auto;
+    }
+    """
+
     def __init__(self, classes: ConfigScalar = "panel results-panel") -> None:
         classes_text = None if classes is None else str(classes)
         super().__init__(classes=classes_text)
         self._filter_input = Input(
             placeholder="Filter files...", id="results-filter"
         )
-        self._list = ListView(id="results-list")
-        self._viewer = Static("", id="results-view")
+        self._tree: Tree[Path] = Tree("Results", id="results-tree")
+        self._tree.show_root = True
+        self._tree.guide_depth = 2
+        self._viewer = Static("", id="results-view-full")
         self._all_paths: list[Path] = []
-        self._filtered_paths: list[Path] = []
-        self._filter_generation = 0
+        self._path_to_node: dict[str, Path] = {}
 
     def compose(self):
         yield Label("Results", classes="panel-title")
         yield self._filter_input
         with Horizontal(classes="results-row"):
-            yield self._list
-            yield self._viewer
+            yield self._tree
+            yield VerticalScroll(self._viewer, id="results-view-scroll")
 
     def on_input_changed(self, event: Input.Changed) -> None:
         if event.input is self._filter_input:
-            self._apply_filter()
+            self._rebuild_tree()
 
     def set_paths(self, paths: list[Path]) -> None:
         # de-duplicate and keep newest first
@@ -863,53 +1107,111 @@ class ResultsPanel(Vertical):
             unique.append(p)
         self._all_paths = unique
         self._filter_input.value = ""
-        self._apply_filter()
+        self._rebuild_tree()
 
-    def _apply_filter(self) -> None:
+    def _rebuild_tree(self) -> None:
+        """Build tree structure from paths, grouped by symbol/pipeline/run."""
         query = self._filter_input.value.strip().lower()
         if query:
-            self._filtered_paths = [
-                p for p in self._all_paths if query in p.name.lower()
-            ]
+            filtered = [p for p in self._all_paths if query in str(p).lower()]
         else:
-            self._filtered_paths = list(self._all_paths)
-        # Increment generation to ensure unique IDs across filter operations
-        self._filter_generation += 1
-        gen = self._filter_generation
-        # Remove existing children before adding new ones
-        self._list.remove_children()
-        if self._filtered_paths:
-            items = [
-                ListItem(Label(p.name), id=f"result-{gen}-{idx}")
-                for idx, p in enumerate(self._filtered_paths)
-            ]
-            for item in items:
-                self._list.mount(item)
-            self._list.index = 0
-            self._load_index(0)
-        else:
-            self._viewer.update("(no YAML results)")
+            filtered = list(self._all_paths)
 
-    def on_list_view_selected(self, event: ListView.Selected) -> None:
-        if event.item is None or event.item.id is None:
+        self._tree.clear()
+        self._path_to_node = {}
+
+        if not filtered:
+            self._viewer.update("(no results)")
             return
-        item_id = str(event.item.id)
-        if not item_id.startswith("result-"):
-            return
-        # ID format: result-{generation}-{index}
-        parts = item_id.removeprefix("result-").split("-", 1)
-        if len(parts) != 2:
-            return
+
+        # Group paths into hierarchy: symbol -> pipeline -> run_id -> files
+        # Expected structure: outputs/<SYMBOL>/<pipeline>/<run_id>/<accession>/file.yaml
+        hierarchy: dict[
+            str, dict[str, dict[str, list[Path]]]
+        ] = {}  # symbol -> pipeline -> run -> files
+
+        for path in filtered:
+            parts = path.parts
+            # Try to find 'outputs' in path and extract hierarchy
+            symbol, pipeline, run_id = self._extract_hierarchy(parts)
+            if symbol not in hierarchy:
+                hierarchy[symbol] = {}
+            if pipeline not in hierarchy[symbol]:
+                hierarchy[symbol][pipeline] = {}
+            if run_id not in hierarchy[symbol][pipeline]:
+                hierarchy[symbol][pipeline][run_id] = []
+            hierarchy[symbol][pipeline][run_id].append(path)
+
+        # Build tree nodes
+        root = self._tree.root
+        root.expand()
+
+        for symbol in sorted(hierarchy.keys()):
+            symbol_node = root.add(f"📁 {symbol}", expand=True)
+            for pipeline in sorted(hierarchy[symbol].keys()):
+                pipeline_label = self._pipeline_icon(pipeline) + f" {pipeline}"
+                pipeline_node = symbol_node.add(pipeline_label, expand=True)
+                for run_id in sorted(
+                    hierarchy[symbol][pipeline].keys(), reverse=True
+                ):
+                    run_files = hierarchy[symbol][pipeline][run_id]
+                    if len(run_files) == 1:
+                        # Single file - add as leaf directly
+                        path = run_files[0]
+                        file_label = f"📄 {run_id}/{path.name}"
+                        pipeline_node.add_leaf(file_label, data=path)
+                        self._path_to_node[str(path)] = path
+                    else:
+                        # Multiple files - add run as folder
+                        run_node = pipeline_node.add(
+                            f"📂 {run_id}", expand=False
+                        )
+                        for path in run_files:
+                            run_node.add_leaf(f"📄 {path.name}", data=path)
+                            self._path_to_node[str(path)] = path
+
+        # Select first file if available
+        if filtered:
+            self._load_path(filtered[0])
+
+    def _extract_hierarchy(
+        self, parts: tuple[str, ...]
+    ) -> tuple[str, str, str]:
+        """Extract symbol, pipeline, run_id from path parts."""
+        # Look for 'outputs' directory and extract structure after it
         try:
-            idx = int(parts[1])
+            outputs_idx = list(parts).index("outputs")
+            if len(parts) > outputs_idx + 3:
+                symbol = parts[outputs_idx + 1]
+                pipeline = parts[outputs_idx + 2]
+                run_id = parts[outputs_idx + 3]
+                return symbol, pipeline, run_id
         except ValueError:
-            return
-        self._load_index(idx)
+            pass
+        # Fallback: use parent directories
+        if len(parts) >= 4:
+            return parts[-4], parts[-3], parts[-2]
+        if len(parts) >= 3:
+            return "unknown", parts[-3], parts[-2]
+        if len(parts) >= 2:
+            return "unknown", "unknown", parts[-2]
+        return "unknown", "unknown", "unknown"
 
-    def _load_index(self, idx: int) -> None:
-        if idx < 0 or idx >= len(self._filtered_paths):
-            return
-        path = self._filtered_paths[idx]
+    def _pipeline_icon(self, pipeline: str) -> str:
+        icons = {
+            "analyze": "🔍",
+            "exhibit": "📋",
+            "warranty": "⚙️",
+            "search": "🔎",
+        }
+        return icons.get(pipeline.lower(), "📁")
+
+    def on_tree_node_selected(self, event: Tree.NodeSelected[Path]) -> None:
+        node = event.node
+        if node.data is not None:
+            self._load_path(node.data)
+
+    def _load_path(self, path: Path) -> None:
         try:
             text = path.read_text(encoding="utf-8")
         except OSError:
@@ -953,6 +1255,20 @@ class EFTSPanel(Vertical):
     #efts-options-row {
         height: auto;
         margin-bottom: 1;
+    }
+
+    #efts-progress-row {
+        height: auto;
+        margin-bottom: 1;
+    }
+
+    #efts-progress {
+        width: 1fr;
+    }
+
+    #efts-max-results {
+        width: 12;
+        margin-left: 1;
     }
 
     #efts-status {
@@ -1013,12 +1329,20 @@ class EFTSPanel(Vertical):
         self._exact_match = Checkbox(
             label="Exact", value=False, id="efts-exact"
         )
+        self._max_results_input = Input(
+            placeholder="100",
+            value="100",
+            id="efts-max-results",
+        )
+        self._progress = ProgressBar(
+            total=100, show_percentage=True, id="efts-progress"
+        )
         self._status = Static(
             "Enter a search query and press Search or Enter", id="efts-status"
         )
         self._results_list = ListView(id="efts-results-list")
         self._detail_view = Static("", id="efts-detail")
-        self._results: list[dict[str, str | int | date | None]] = []
+        self._results: list[dict[str, str | int | float | date | None]] = []
         self._search_task: asyncio.Task[None] | None = None
         self._spinner = Spinner()
 
@@ -1031,6 +1355,10 @@ class EFTSPanel(Vertical):
             yield self._spinner
         with Horizontal(id="efts-options-row"):
             yield self._exact_match
+            yield Label("Max results:", classes="market-label")
+            yield self._max_results_input
+        with Horizontal(id="efts-progress-row"):
+            yield self._progress
         yield self._status
         with Horizontal(id="efts-results-container"):
             yield self._results_list
@@ -1063,6 +1391,7 @@ class EFTSPanel(Vertical):
         self._results_list.remove_children()
         self._detail_view.update("")
         self._results = []
+        self._progress.update(total=100, progress=0)
 
         form_types_raw = self._form_types_input.value.strip()
         form_types: list[str] | None = None
@@ -1071,15 +1400,39 @@ class EFTSPanel(Vertical):
                 ft.strip() for ft in form_types_raw.split(",") if ft.strip()
             ]
 
+        # Parse max results
+        try:
+            max_results = int(self._max_results_input.value.strip())
+            max_results = max(1, min(max_results, 1000))
+        except ValueError:
+            max_results = 100
+
         try:
             client = EFTSClient()
-            response = await client.search(
-                query,
-                forms=form_types,
-            )
 
-            hits = response.hits
-            total = response.total
+            # Use search_all for pagination with larger result sets
+            if max_results > 100:
+                self._status.update(
+                    f"Fetching up to {max_results} results for '{query}'..."
+                )
+                hits = await client.search_all(
+                    query,
+                    forms=form_types,
+                    max_results=max_results,
+                )
+                total = len(hits)
+                # Update progress to complete
+                self._progress.update(total=100, progress=100)
+            else:
+                response = await client.search(
+                    query,
+                    forms=form_types,
+                    limit=max_results,
+                )
+                hits = response.hits
+                total = response.total
+                self._progress.update(total=100, progress=100)
+
             self._results = [
                 {
                     "cik": hit.cik,
@@ -1088,6 +1441,8 @@ class EFTSPanel(Vertical):
                     "filed": hit.filed_date,
                     "accession": hit.accession_number,
                     "url": hit.filing_url,
+                    "snippet": hit.snippet,
+                    "score": hit.score,
                 }
                 for hit in hits
             ]
@@ -1135,13 +1490,24 @@ class EFTSPanel(Vertical):
         if idx < 0 or idx >= len(self._results):
             return
         result = self._results[idx]
+        score = result.get("score", 0)
+        score_display = (
+            f"{score:.2f}" if isinstance(score, float) else str(score)
+        )
         lines = [
             f"Company:   {result.get('company', 'N/A')}",
             f"CIK:       {result.get('cik', 'N/A')}",
             f"Form:      {result.get('form', 'N/A')}",
             f"Filed:     {result.get('filed', 'N/A')}",
             f"Accession: {result.get('accession', 'N/A')}",
+            f"Score:     {score_display}",
             "",
             f"URL: {result.get('url', 'N/A')}",
         ]
+        snippet = result.get("snippet", "")
+        if snippet:
+            lines.append("")
+            lines.append("─" * 40)
+            lines.append("Snippet:")
+            lines.append(str(snippet))
         self._detail_view.update("\n".join(lines))
