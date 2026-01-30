@@ -52,18 +52,19 @@ from .io.outputs import OutputFormatter
 from .io.result_writer import write_results
 from .market import MarketEnrichment, build_market_enrichment
 from .models import AnalysisInput, AnalysisResult, AnalyzeResult
-from .steps.analysis.analysis_runner import AnalyzerRunnable
+from .runnables.analysis import AnalyzerRunnable
+from .runnables.efts import EFTSSearchInput, EFTSSearchRunnable
+from .runnables.search import (
+    SearchQueryResults,
+    SearchResultsByQuery,
+    SearchRunnable,
+)
 from .steps.analysis.callbacks import TracingCallbackHandler
 from .steps.analysis.instructions import AnalysisInstructionBuilder
 from .steps.indexing.vector_index import VectorIndexer
 from .steps.preprocess.preprocess import ChunkPreprocessor
 from .steps.preprocess.topic_scoring import build_topic_matcher
-from .steps.search.efts_search import EFTSSearchResult, run_efts_search
-from .steps.search.vector_search import (
-    SearchQueryResults,
-    SearchResultsByQuery,
-    SearchRunnable,
-)
+from .steps.search.efts_search import EFTSSearchResult
 from .types import ChunkStats, SymbolRunMetadata, Timings
 
 type PromptInput = dict[
@@ -116,6 +117,7 @@ class AnalyzePipeline(BasePipeline):
     _vector_indexer: VectorIndexer = PrivateAttr()
     _analysis_runner: AnalyzerRunnable = PrivateAttr()
     _search_runner: SearchRunnable = PrivateAttr()
+    _efts_runner: EFTSSearchRunnable | None = PrivateAttr(default=None)
     _search_results_by_query: SearchResultsByQuery | None = PrivateAttr(
         default=None
     )
@@ -367,6 +369,10 @@ class AnalyzePipeline(BasePipeline):
             config=self.config,
             vector_store=self._vector_store,
         )
+        self._efts_runner = EFTSSearchRunnable(
+            config=self.config,
+            email=self.config.email,
+        )
 
     def run(self) -> AnalyzeResult:
         """Execute the semantic search pipeline."""
@@ -591,13 +597,19 @@ class AnalyzePipeline(BasePipeline):
             return [], [], False
 
         local_accessions = self._local_accessions(symbol)
-        config = self.config.model_copy(update={"symbols": [symbol]})
-        try:
-            results = run_efts_search(
-                config=config,
-                queries=queries,
+        efts_runner = self._efts_runner
+        if efts_runner is None:
+            efts_runner = EFTSSearchRunnable(
+                config=self.config,
                 email=self.config.email,
-                local_accessions=local_accessions,
+            )
+        try:
+            results = efts_runner.invoke(
+                EFTSSearchInput(
+                    symbol=symbol,
+                    queries=queries,
+                    local_accessions=local_accessions,
+                )
             )
         except Exception as exc:
             logger.warning("EFTS search failed for %s: %s", symbol, exc)
@@ -1295,6 +1307,7 @@ class AnalyzePipeline(BasePipeline):
                 confidence_mode=self.config.confidence_mode,
                 prompt_path=self.config.llm.prompt_path,
                 pipeline_version=sec_nlp_version,
+                market_correlation_enabled=self.config.market_correlation_enabled,
             )
         return write_results(
             config=self.config,

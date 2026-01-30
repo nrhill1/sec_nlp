@@ -24,7 +24,7 @@ NLP tools for SEC filings. Analyze filings with local LLMs, run semantic search,
 | `warranty` | Extract warranty accrual/payout data from XBRL | Deterministic, no LLM. |
 
 Docs:
-- Analyze pipeline walkthrough: [src/sec_nlp/pipelines/presets/analyze/README.md](src/sec_nlp/pipelines/presets/analyze/README.md)
+- Analyze pipeline walkthrough: [docs/pipelines/analyze/README.md](docs/pipelines/analyze/README.md)
 
 ## Quickstart
 ### 1) Install

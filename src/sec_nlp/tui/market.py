@@ -606,6 +606,11 @@ def _stringify(value: JsonValue) -> ConfigScalar | None:
         return cleaned if cleaned else None
     if isinstance(value, (int, float, bool)):
         return str(value)
+    if isinstance(value, (dict, list)):
+        try:
+            return json.dumps(value, ensure_ascii=True)
+        except (TypeError, ValueError):
+            return None
     return None
 
 

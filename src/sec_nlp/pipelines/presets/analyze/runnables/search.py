@@ -1,4 +1,4 @@
-# src/sec_nlp/pipelines/presets/analyze/steps/search/vector_search.py
+# src/sec_nlp/pipelines/presets/analyze/runnables/search.py
 """Vector search utilities for the analyze pipeline."""
 
 from __future__ import annotations
@@ -26,10 +26,8 @@ from sec_nlp.pipelines.types import (
 )
 from sec_nlp.types import JsonDict, JsonValue
 
-from ...config import AnalyzeConfig
-from ...utils import query_term_overlap, resolve_symbol_for_output
-from ..analysis.analysis_runner import AnalysisBatchInput
-from .payloads import (
+from ..config import AnalyzeConfig
+from ..steps.search.payloads import (
     SearchHighlightsPayload,
     SearchMatchPayload,
     SearchQuerySectionPayload,
@@ -38,6 +36,8 @@ from .payloads import (
     SearchSummaryPayload,
     SearchUniqueResultPayload,
 )
+from ..utils import query_term_overlap, resolve_symbol_for_output
+from .analysis import AnalysisBatchInput
 
 
 @dataclass(frozen=True)

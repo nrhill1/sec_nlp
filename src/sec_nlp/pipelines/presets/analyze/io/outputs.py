@@ -4,10 +4,8 @@
 import csv
 import json
 from collections import defaultdict
-from datetime import date, timedelta
 from hashlib import sha256
 from pathlib import Path
-from statistics import pstdev
 from typing import Literal
 
 from sec_nlp.core.infra.logger import logger
@@ -20,7 +18,7 @@ from sec_nlp.pipelines.output_io import (
 from sec_nlp.pipelines.types import AnalysisResultDict, MetadataMap
 from sec_nlp.types import JsonDict, JsonValue
 
-from ..market import MarketEnrichment, MarketQuoteSummary
+from ..market import MarketEnrichment
 from ..models import (
     Aggregates,
     AnalysisDiagnostics,
@@ -30,6 +28,7 @@ from ..models import (
     FilingInfo,
     OutputProvenance,
 )
+from .formats.market_correlation import build_market_correlation
 
 
 class OutputFormatter:
@@ -47,6 +46,7 @@ class OutputFormatter:
         prompt_path: Path | None = None,
         prompt_version: str | None = None,
         pipeline_version: str | None = None,
+        market_correlation_enabled: bool = True,
     ) -> None:
         self.export_format = export_format
         self.confidence_threshold = confidence_threshold
@@ -60,6 +60,7 @@ class OutputFormatter:
             prompt_path
         )
         self.pipeline_version = pipeline_version
+        self.market_correlation_enabled = market_correlation_enabled
 
     def is_relevant_result(self, result: AnalysisResultDict) -> bool:
         """Check if a result meets the relevance threshold."""
@@ -211,7 +212,7 @@ class OutputFormatter:
             relevant_results: Filtered relevant results
             timings: Optional timing breakdown
             market_data: Optional market enrichment metadata to attach to the output
-            market_context: Optional human-readable correlation summary
+            market_context: Legacy correlation string (ignored; kept for compatibility)
 
         Returns:
             Structured AnalysisOutput model
@@ -311,8 +312,10 @@ class OutputFormatter:
         )
         relationship_timeline = self._build_relationship_timeline(filing_meta)
         executive_comp_summary = self._build_exec_comp_summary(ranked_results)
-        market_correlation = self._build_market_correlation(
-            market_data, relevant_results
+        market_correlation = (
+            build_market_correlation(market_data, relevant_results)
+            if self.market_correlation_enabled
+            else None
         )
 
         return AnalysisOutput(
@@ -453,153 +456,6 @@ class OutputFormatter:
             pay_for_performance_flags=pay_flags,
             notes=notes,
         )
-
-    @staticmethod
-    def _select_quotes_for_window(
-        quotes: list[MarketQuoteSummary],
-        *,
-        start: date,
-        end: date,
-    ) -> list[MarketQuoteSummary]:
-        return [
-            quote
-            for quote in quotes
-            if quote.start_date <= end and quote.end_date >= start
-        ]
-
-    @staticmethod
-    def _compute_cumulative_return(
-        quotes: list[MarketQuoteSummary],
-    ) -> float | None:
-        if len(quotes) < 2:
-            return None
-        first = quotes[0].average_close
-        last = quotes[-1].average_close
-        if first == 0:
-            return None
-        return (last / first) - 1.0
-
-    @staticmethod
-    def _compute_returns(
-        quotes: list[MarketQuoteSummary],
-    ) -> list[float]:
-        returns: list[float] = []
-        for prev, curr in zip(quotes, quotes[1:], strict=True):
-            if prev.average_close == 0:
-                continue
-            returns.append((curr.average_close / prev.average_close) - 1.0)
-        return returns
-
-    @staticmethod
-    def _compute_volume_spike(
-        quotes: list[MarketQuoteSummary],
-    ) -> float | None:
-        if not quotes:
-            return None
-        volumes = [quote.average_volume for quote in quotes]
-        avg_volume = sum(volumes) / len(volumes)
-        if avg_volume == 0:
-            return None
-        return max(volumes) / avg_volume
-
-    @staticmethod
-    def _compute_net_sentiment(
-        results: list[AnalysisResultDict],
-    ) -> float | None:
-        if not results:
-            return None
-        score_map = {
-            "positive": 1.0,
-            "neutral": 0.0,
-            "negative": -1.0,
-        }
-        scores: list[float] = []
-        for result in results:
-            sentiment = result.get("sentiment")
-            if isinstance(sentiment, str):
-                cleaned = sentiment.strip().lower()
-                score = score_map.get(cleaned)
-                if score is not None:
-                    scores.append(score)
-        if not scores:
-            return None
-        return sum(scores) / len(scores)
-
-    def _build_market_correlation(
-        self,
-        market_data: MarketEnrichment | None,
-        results: list[AnalysisResultDict],
-    ) -> JsonDict | None:
-        if market_data is None or not market_data.quotes:
-            return None
-
-        quotes = sorted(
-            market_data.quotes, key=lambda q: (q.start_date, q.end_date)
-        )
-        filing_date = market_data.filing_date
-        event_window = [-5, 30]
-        if filing_date is None:
-            metrics: JsonDict = {
-                "car_pre5": None,
-                "car_post5": None,
-                "car_post30": None,
-                "volume_spike": None,
-                "volatility_change": None,
-            }
-        else:
-            pre_start = filing_date + timedelta(days=event_window[0])
-            pre_end = filing_date - timedelta(days=1)
-            post5_end = filing_date + timedelta(days=5)
-            post30_end = filing_date + timedelta(days=event_window[1])
-
-            pre_quotes = self._select_quotes_for_window(
-                quotes, start=pre_start, end=pre_end
-            )
-            post5_quotes = self._select_quotes_for_window(
-                quotes, start=filing_date, end=post5_end
-            )
-            post30_quotes = self._select_quotes_for_window(
-                quotes, start=filing_date, end=post30_end
-            )
-
-            pre_returns = self._compute_returns(pre_quotes)
-            post_returns = self._compute_returns(post30_quotes)
-            pre_volatility = (
-                pstdev(pre_returns) if len(pre_returns) >= 2 else None
-            )
-            post_volatility = (
-                pstdev(post_returns) if len(post_returns) >= 2 else None
-            )
-            volatility_change = (
-                (post_volatility - pre_volatility)
-                if post_volatility is not None and pre_volatility is not None
-                else None
-            )
-
-            window_quotes = self._select_quotes_for_window(
-                quotes, start=pre_start, end=post30_end
-            )
-
-            metrics = {
-                "car_pre5": self._compute_cumulative_return(pre_quotes),
-                "car_post5": self._compute_cumulative_return(post5_quotes),
-                "car_post30": self._compute_cumulative_return(post30_quotes),
-                "volume_spike": self._compute_volume_spike(window_quotes),
-                "volatility_change": volatility_change,
-            }
-
-        signal_correlations: JsonDict = {
-            "sentiment_score": self._compute_net_sentiment(results),
-            "risk_novelty_count": None,
-            "warranty_accrual_delta": None,
-        }
-
-        return {
-            "filing_date": filing_date.isoformat() if filing_date else None,
-            "event_window": event_window,
-            "metrics": metrics,
-            "signal_correlations": signal_correlations,
-        }
 
     def _build_aggregates(
         self, relevant_results: list[AnalysisResultDict]

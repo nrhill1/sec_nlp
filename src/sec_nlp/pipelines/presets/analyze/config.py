@@ -25,6 +25,7 @@ from sec_nlp.pipelines.llm.config import LLMConfig
 from sec_nlp.pipelines.metadata.filters import MetadataFilters
 from sec_nlp.pipelines.vector.config import VectorConfig
 from sec_nlp.prompts import (
+    ANALYZE_MARKET_CORRELATION_PROMPT_PATH,
     ANALYZE_PROMPT_PATH,
     HOLDINGS_PROMPT_PATH,
     PROXY_PROMPT_PATH,
@@ -79,6 +80,11 @@ _DEFAULT_MODE_TOPICS = {
         "sale",
         "equity award",
     ],
+}
+
+_PROMPT_PROFILES: dict[str, str] = {
+    "default": str(ANALYZE_PROMPT_PATH),
+    "market_correlation": str(ANALYZE_MARKET_CORRELATION_PROMPT_PATH),
 }
 
 
@@ -256,6 +262,16 @@ class AnalyzeConfig(BasePipelineSettings):
         ),
         description="LLM configuration for document analysis",
     )
+    prompt: Literal["default", "market_correlation"] | None = Field(
+        default=None,
+        description="Select the prompt profile for analysis output.",
+        json_schema_extra={
+            "cli_args": {
+                "aliases": ["--prompt-profile", "--prompt"],
+                "choices": ["default", "market_correlation"],
+            }
+        },
+    )
 
     # Vector Database Configuration
     vdb: VectorConfig = Field(
@@ -358,6 +374,15 @@ class AnalyzeConfig(BasePipelineSettings):
         description="Limit of aggregated rows to include when market enrichment is enabled.",
         json_schema_extra={"cli_args": {"aliases": ["--market-limit"]}},
     )
+    market_correlation_enabled: bool = Field(
+        default=True,
+        description="Include market correlation metrics in analysis output.",
+        json_schema_extra={
+            "cli_args": {
+                "aliases": ["--market-correlation-enabled"],
+            }
+        },
+    )
 
     @model_validator(mode="before")
     @classmethod
@@ -381,6 +406,26 @@ class AnalyzeConfig(BasePipelineSettings):
         elif raw_llm is None:
             # Ensure default is applied
             values["llm"] = {"prompt_file": str(ANALYZE_PROMPT_PATH)}
+        return values
+
+    @model_validator(mode="before")
+    @classmethod
+    def _apply_prompt_profile(
+        cls, values: dict[str, JsonValue]
+    ) -> dict[str, JsonValue]:
+        profile_value = values.get("prompt")
+        if profile_value is None:
+            profile_value = values.get("prompt_profile")
+        if not isinstance(profile_value, str):
+            return values
+        profile = profile_value.strip().replace("-", "_")
+        prompt_path = _PROMPT_PROFILES.get(profile)
+        if prompt_path is None:
+            return values
+        raw_llm = values.get("llm")
+        llm_values = coerce_json_dict(raw_llm) or {}
+        llm_values["prompt_file"] = prompt_path
+        values["llm"] = llm_values
         return values
 
     @model_validator(mode="before")

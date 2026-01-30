@@ -1,4 +1,4 @@
-# src/sec_nlp/pipelines/presets/analyze/steps/analysis/analysis_runner.py
+# src/sec_nlp/pipelines/presets/analyze/runnables/analysis.py
 """LLM analysis runner for analyze pipeline chunks."""
 
 from __future__ import annotations
@@ -20,9 +20,9 @@ from sec_nlp.core.infra.logger import logger
 from sec_nlp.pipelines.metadata.accession import get_accession_from_metadata
 from sec_nlp.pipelines.types import AnalysisResultDict, MetadataRecord
 
-from ...config import AnalyzeConfig
-from ...models import AnalysisInput, AnalysisResult
-from ...utils import query_term_overlap, resolve_symbol_for_output
+from ..config import AnalyzeConfig
+from ..models import AnalysisInput, AnalysisResult
+from ..utils import query_term_overlap, resolve_symbol_for_output
 
 NUMERIC_SIGNAL_RE = re.compile(r"[$€£]?\d")
 

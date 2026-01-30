@@ -13,6 +13,7 @@ from sec_nlp.core.infra.logger import logger
 
 def load_prompt_template(prompt_path: Path) -> BasePromptTemplate:
     """Load a LangChain prompt template from disk."""
+
     try:
         template = load_prompt(str(prompt_path))
     except Exception as exc:
