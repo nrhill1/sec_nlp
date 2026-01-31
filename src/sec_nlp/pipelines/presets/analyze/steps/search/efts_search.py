@@ -16,6 +16,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from sec_nlp.core.edgar.efts import EFTSAPIError, EFTSClient, create_efts_client
 from sec_nlp.core.edgar.efts_models import EFTSHit
+from sec_nlp.core.edgar.filing_mode import FilingMode
 from sec_nlp.core.infra.logger import logger
 from sec_nlp.core.text.ranking import KeywordExtractor, RankingAlgorithm
 
@@ -66,6 +67,7 @@ class EFTSSearchRunnable(BaseModel):
     efts_config: EFTSConfig = Field(description="EFTS configuration")
     symbols: list[str] = Field(default_factory=list)
     forms: list[str] = Field(default_factory=list)
+    mode: FilingMode | None = None
     start_date: date | None = None
     end_date: date | None = None
     email: str = Field(
@@ -108,8 +110,13 @@ class EFTSSearchRunnable(BaseModel):
         if efts_config.forms:
             return list(efts_config.forms)
 
-        # Fall back to pipeline mode
-        return list(self.forms)
+        if self.forms:
+            return list(self.forms)
+
+        if self.mode is not None:
+            return list(self.mode.forms)
+
+        return []
 
     def _get_ciks(self) -> list[str]:
         """Get CIKs for configured symbols."""
@@ -357,6 +364,7 @@ def run_efts_search(
     efts_config: EFTSConfig,
     symbols: list[str],
     forms: list[str],
+    mode: FilingMode | None,
     start_date: date | None,
     end_date: date | None,
     queries: list[str],
@@ -369,6 +377,7 @@ def run_efts_search(
         efts_config: EFTS configuration
         symbols: Symbols to scope the EFTS searches
         forms: Filing form types to include
+        mode: Filing mode used for default forms
         start_date: Optional pipeline start date
         end_date: Optional pipeline end date
         queries: Search queries to execute
@@ -382,6 +391,7 @@ def run_efts_search(
         efts_config=efts_config,
         symbols=symbols,
         forms=forms,
+        mode=mode,
         start_date=start_date,
         end_date=end_date,
         email=email,

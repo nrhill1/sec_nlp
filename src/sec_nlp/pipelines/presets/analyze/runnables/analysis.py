@@ -191,7 +191,7 @@ class AnalyzerRunnable(
                 f"Batch size mismatch: {len(batch)} inputs vs {len(docs)} docs"
             )
 
-        config_callbacks = self._build_runnable_config()
+        config_callbacks = self._build_runnable_config(include_run_id=False)
 
         attempts = self.llm_retry_attempts + 1
         backoff = self.llm_retry_backoff
@@ -237,7 +237,7 @@ class AnalyzerRunnable(
     ) -> AnalysisResultDict:
         """Process a single item."""
         try:
-            config_callbacks = self._build_runnable_config()
+            config_callbacks = self._build_runnable_config(include_run_id=True)
             result: AnalysisResult = self.graph.invoke(
                 item, config=config_callbacks
             )
@@ -486,10 +486,14 @@ class AnalyzerRunnable(
             **({"raw_chunk": item.chunk} if self.include_raw_chunks else {}),
         }
 
-    def _build_runnable_config(self) -> RunnableConfig | None:
+    def _build_runnable_config(
+        self, *, include_run_id: bool
+    ) -> RunnableConfig | None:
         config: RunnableConfig = {}
         if self.callbacks:
             config["callbacks"] = self.callbacks
         if self.run_id is not None:
-            config["run_id"] = self.run_id
+            config["metadata"] = {"pipeline_run_id": str(self.run_id)}
+            if include_run_id:
+                config["run_id"] = self.run_id
         return config or None

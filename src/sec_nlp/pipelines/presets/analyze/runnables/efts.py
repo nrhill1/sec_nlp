@@ -7,6 +7,7 @@ from datetime import date
 from langchain_core.runnables import RunnableConfig, RunnableSerializable
 from pydantic import BaseModel, ConfigDict, Field
 
+from sec_nlp.core.edgar.filing_mode import FilingMode
 from sec_nlp.types import JsonValue
 
 from ..config import EFTSConfig
@@ -42,6 +43,7 @@ class EFTSSearchRunnable(
 
     efts_config: EFTSConfig = Field(description="EFTS configuration")
     forms: list[str] = Field(default_factory=list)
+    mode: FilingMode | None = None
     start_date: date | None = None
     end_date: date | None = None
     email: str = Field(description="Contact email for SEC API requests")
@@ -61,6 +63,7 @@ class EFTSSearchRunnable(
             efts_config=self.efts_config,
             symbols=[symbol],
             forms=self.forms,
+            mode=self.mode,
             start_date=self.start_date,
             end_date=self.end_date,
             queries=input.queries,

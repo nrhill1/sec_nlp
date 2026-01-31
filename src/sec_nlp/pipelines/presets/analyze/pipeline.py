@@ -395,6 +395,7 @@ class AnalyzePipeline(BasePipeline):
         self._efts_runner = EFTSSearchRunnable(
             efts_config=self.config.efts,
             forms=list(self.config.mode.forms),
+            mode=self.config.mode,
             start_date=self.config.start_date,
             end_date=self.config.end_date,
             email=self.config.email,
@@ -625,6 +626,7 @@ class AnalyzePipeline(BasePipeline):
             efts_runner = EFTSSearchRunnable(
                 efts_config=self.config.efts,
                 forms=list(self.config.mode.forms),
+                mode=self.config.mode,
                 start_date=self.config.start_date,
                 end_date=self.config.end_date,
                 email=self.config.email,
