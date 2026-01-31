@@ -144,6 +144,10 @@ class EFTSHit(BaseModel):
         default="",
         description="Text snippet showing query match context",
     )
+    yake_keywords: list[str] = Field(
+        default_factory=list,
+        description="Top YAKE keywords extracted from the snippet",
+    )
     score: float = Field(
         default=0.0,
         ge=0.0,

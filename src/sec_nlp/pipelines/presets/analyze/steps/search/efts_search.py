@@ -17,6 +17,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from sec_nlp.core.edgar.efts import EFTSAPIError, EFTSClient, create_efts_client
 from sec_nlp.core.edgar.efts_models import EFTSHit
 from sec_nlp.core.infra.logger import logger
+from sec_nlp.core.text.ranking import KeywordExtractor, RankingAlgorithm
 
 from ...config import EFTSConfig
 
@@ -200,6 +201,15 @@ class EFTSSearchRunnable(BaseModel):
             logger.error("Unexpected error in EFTS batch search: %s", e)
             return [EFTSSearchResult(query=q) for q in queries]
 
+        extractor: KeywordExtractor | None = None
+        try:
+            extractor = KeywordExtractor(
+                algorithm=RankingAlgorithm.YAKE,
+                ngram_size=3,
+            )
+        except Exception as exc:
+            logger.warning("YAKE extractor unavailable: %s", exc)
+
         results: list[EFTSSearchResult] = []
         for batch_result in batch_results:
             if batch_result.error:
@@ -227,6 +237,23 @@ class EFTSSearchRunnable(BaseModel):
                     len(scoped_hits),
                     len(hits),
                 )
+
+            if extractor is not None:
+                enriched_hits: list[EFTSHit] = []
+                for hit in scoped_hits:
+                    snippet = hit.snippet or ""
+                    keywords = (
+                        [
+                            kw.keyword
+                            for kw in extractor.extract(snippet, top_n=5)
+                        ]
+                        if snippet.strip()
+                        else []
+                    )
+                    enriched_hits.append(
+                        hit.model_copy(update={"yake_keywords": keywords})
+                    )
+                scoped_hits = enriched_hits
 
             # Identify new accessions
             scoped_new_accessions = [
@@ -315,6 +342,7 @@ class EFTSSearchRunnable(BaseModel):
                         "filed_date": hit.filed_date.isoformat(),
                         "efts_score": hit.score,
                         "efts_query": result.query,
+                        "yake_keywords": hit.yake_keywords,
                         "edgar_url": hit.edgar_url,
                         "is_local": hit.accession_number
                         in self.local_accessions,
