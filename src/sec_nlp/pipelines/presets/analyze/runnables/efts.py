@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
-from typing import Any
+from datetime import date
 
 from langchain_core.runnables import RunnableConfig, RunnableSerializable
 from pydantic import BaseModel, ConfigDict, Field
 
-from ..config import AnalyzeConfig
+from sec_nlp.types import JsonValue
+
+from ..config import EFTSConfig
 from ..steps.search.efts_search import EFTSSearchResult, run_efts_search
 
 
@@ -38,23 +40,29 @@ class EFTSSearchRunnable(
         defer_build=True,
     )
 
-    config: AnalyzeConfig = Field(description="Analyze pipeline config")
+    efts_config: EFTSConfig = Field(description="EFTS configuration")
+    forms: list[str] = Field(default_factory=list)
+    start_date: date | None = None
+    end_date: date | None = None
     email: str = Field(description="Contact email for SEC API requests")
 
     def invoke(
         self,
         input: EFTSSearchInput,
         config: RunnableConfig | None = None,
-        **kwargs: Any,
+        **kwargs: JsonValue,
     ) -> list[EFTSSearchResult]:
         _ = config
         _ = kwargs
         symbol = input.symbol
         if not symbol or not input.queries:
             return []
-        run_config = self.config.model_copy(update={"symbols": [symbol]})
         return run_efts_search(
-            config=run_config,
+            efts_config=self.efts_config,
+            symbols=[symbol],
+            forms=self.forms,
+            start_date=self.start_date,
+            end_date=self.end_date,
             queries=input.queries,
             email=self.email,
             local_accessions=input.local_accessions,

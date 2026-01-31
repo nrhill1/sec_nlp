@@ -204,7 +204,24 @@ def test_export_results_writes_summary_with_unique_hits(
         search=search,
         collect_metrics=False,
     )
-    runner = SearchRunnable(config=config, vector_store=None)
+    runner = SearchRunnable(
+        vector_store=None,
+        symbols=config.symbols,
+        vector_mode=config.vector_mode,
+        search_limit=search.limit,
+        score_threshold=search.score_threshold,
+        metadata_filters=search.metadata_filters,
+        query_term_min_hits=search.query_term_min_hits,
+        query_term_min_ratio=search.query_term_min_ratio,
+        query_term_min_len=search.query_term_min_len,
+        search_analyze=search.analyze,
+        export_results_enabled=search.export_results,
+        distance_metric=config.vdb.qdrant_distance,
+        output_root=config.out_path,
+        pipeline_type=config.pipeline_type,
+        run_id=config.run_id,
+        short_id=config.short_id,
+    )
 
     doc_common = Document(
         page_content="doc1 text about supply chain",

@@ -11,6 +11,7 @@ from datetime import UTC, date, datetime, timedelta
 from functools import cached_property
 from pathlib import Path
 from typing import ClassVar, Literal, Self
+from uuid import UUID
 
 from pydantic import Field, PrivateAttr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -18,7 +19,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 from sec_nlp.core.edgar.filing_mode import FilingMode
 from sec_nlp.core.infra.logger import logger
 from sec_nlp.pipelines.utils import is_valid_email
-from sec_nlp.types import InitSubclassKwargs, JsonDict, JsonObject
+from sec_nlp.types import InitSubclassKwargs, JsonDict, JsonObject, JsonValue
 
 _CLASSVAR_UNSET = "__UNSET__"
 
@@ -84,9 +85,9 @@ class BasePipelineSettings(BaseSettings, ABC):
     )
 
     # Run identifiers (run_id is public; timestamp is private)
-    run_id: int = Field(
-        default=0,
-        description="Unique run identifier (integer, always present)",
+    run_id: UUID = Field(
+        default_factory=uuid.uuid4,
+        description="Unique run identifier (UUID, always present)",
     )
     _run_timestamp: datetime = PrivateAttr(
         default_factory=lambda: datetime.now(UTC)
@@ -187,25 +188,26 @@ class BasePipelineSettings(BaseSettings, ABC):
         return [s.strip().upper() for s in v]
 
     @classmethod
-    def _generate_run_id(cls) -> int:
-        ts = datetime.now(UTC)
-        millis = int(ts.timestamp() // 1000)
-        rand_component = int(uuid.uuid4().int % 10_000)
-        return int(f"{millis}{rand_component:04d}")
+    def _generate_run_id(cls) -> UUID:
+        return uuid.uuid4()
+
+    def run_path_component(self) -> str:
+        return self._run_timestamp.astimezone(UTC).strftime("%Y%m%dT%H%M%S%z")
 
     @field_validator("run_id", mode="before")
     @classmethod
-    def coerce_run_id(cls, v: int | str | None) -> int:
-        """Ensure run_id is a positive integer to prevent injection-style inputs."""
+    def coerce_run_id(cls, v: JsonValue) -> UUID:
+        """Ensure run_id is a valid UUID."""
         if v in (None, "", 0, "0"):
             return cls._generate_run_id()
-        try:
-            run_id_int = int(str(v).strip())
-        except Exception as e:
-            raise ValueError("run_id must be an integer") from e
-        if run_id_int <= 0:
-            raise ValueError("run_id must be a positive integer")
-        return run_id_int
+        if isinstance(v, UUID):
+            return v
+        if isinstance(v, str):
+            try:
+                return UUID(v)
+            except Exception as e:
+                raise ValueError("run_id must be a valid UUID") from e
+        raise ValueError("run_id must be a valid UUID")
 
     @field_validator("log_file", mode="after")
     @classmethod
@@ -281,9 +283,7 @@ class BasePipelineSettings(BaseSettings, ABC):
             Path in the form <out_path>/<SYMBOL>/<pipeline_type>/<short_id_or_run_id>
         """
         normalized_symbol = symbol.strip().upper()
-        run_component = (
-            str(self._short_id) if self._short_id > 0 else str(self.run_id)
-        )
+        run_component = self.run_path_component()
         symbol_out_path = (
             self.out_path
             / normalized_symbol

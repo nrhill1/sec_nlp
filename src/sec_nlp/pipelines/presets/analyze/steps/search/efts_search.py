@@ -18,7 +18,7 @@ from sec_nlp.core.edgar.efts import EFTSAPIError, EFTSClient, create_efts_client
 from sec_nlp.core.edgar.efts_models import EFTSHit
 from sec_nlp.core.infra.logger import logger
 
-from ...config import AnalyzeConfig, EFTSConfig
+from ...config import EFTSConfig
 
 
 @dataclass
@@ -42,12 +42,16 @@ class HybridSearchResult:
     downloaded_filings: int = 0
 
 
-class EFTSSearchRunner(BaseModel):
+class EFTSSearchRunnable(BaseModel):
     """Run EFTS searches and optionally download discovered filings.
 
     Example:
-        runner = EFTSSearchRunner(
-            config=analyze_config,
+        runner = EFTSSearchRunnable(
+            efts_config=analyze_config.efts,
+            symbols=analyze_config.symbols,
+            forms=list(analyze_config.mode.forms),
+            start_date=analyze_config.start_date,
+            end_date=analyze_config.end_date,
             email="user@example.com",
         )
         results = await runner.search_queries(["warranty accrual", "recall"])
@@ -58,9 +62,11 @@ class EFTSSearchRunner(BaseModel):
         extra="forbid",
     )
 
-    config: AnalyzeConfig = Field(
-        description="Analyze pipeline configuration",
-    )
+    efts_config: EFTSConfig = Field(description="EFTS configuration")
+    symbols: list[str] = Field(default_factory=list)
+    forms: list[str] = Field(default_factory=list)
+    start_date: date | None = None
+    end_date: date | None = None
     email: str = Field(
         description="Contact email for SEC API requests",
     )
@@ -71,7 +77,7 @@ class EFTSSearchRunner(BaseModel):
 
     def _get_efts_config(self) -> EFTSConfig:
         """Get EFTS configuration from analyze config."""
-        return self.config.efts
+        return self.efts_config
 
     def _create_client(self) -> EFTSClient:
         """Create an EFTS client with proper user agent."""
@@ -92,7 +98,7 @@ class EFTSSearchRunner(BaseModel):
             return start_date, end_date
 
         # Use pipeline date range if configured
-        return self.config.start_date, self.config.end_date
+        return self.start_date, self.end_date
 
     def _get_form_types(self) -> list[str]:
         """Get form types to search."""
@@ -102,7 +108,7 @@ class EFTSSearchRunner(BaseModel):
             return list(efts_config.forms)
 
         # Fall back to pipeline mode
-        return list(self.config.mode.forms)
+        return list(self.forms)
 
     def _get_ciks(self) -> list[str]:
         """Get CIKs for configured symbols."""
@@ -112,7 +118,7 @@ class EFTSSearchRunner(BaseModel):
 
     def _get_tickers(self) -> list[str]:
         """Get tickers to filter EFTS results."""
-        return [s.strip().upper() for s in self.config.symbols if s.strip()]
+        return [s.strip().upper() for s in self.symbols if s.strip()]
 
     @staticmethod
     def _filter_hits_by_ticker(
@@ -320,7 +326,11 @@ class EFTSSearchRunner(BaseModel):
 
 
 def run_efts_search(
-    config: AnalyzeConfig,
+    efts_config: EFTSConfig,
+    symbols: list[str],
+    forms: list[str],
+    start_date: date | None,
+    end_date: date | None,
     queries: list[str],
     email: str,
     local_accessions: set[str] | None = None,
@@ -328,7 +338,11 @@ def run_efts_search(
     """Synchronous wrapper for EFTS search.
 
     Args:
-        config: Analyze pipeline configuration
+        efts_config: EFTS configuration
+        symbols: Symbols to scope the EFTS searches
+        forms: Filing form types to include
+        start_date: Optional pipeline start date
+        end_date: Optional pipeline end date
         queries: Search queries to execute
         email: Contact email for SEC API
         local_accessions: Set of already-downloaded accession numbers
@@ -336,8 +350,12 @@ def run_efts_search(
     Returns:
         List of EFTS search results
     """
-    runner = EFTSSearchRunner(
-        config=config,
+    runner = EFTSSearchRunnable(
+        efts_config=efts_config,
+        symbols=symbols,
+        forms=forms,
+        start_date=start_date,
+        end_date=end_date,
         email=email,
         local_accessions=local_accessions or set(),
     )

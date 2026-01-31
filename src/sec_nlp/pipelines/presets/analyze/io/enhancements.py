@@ -87,9 +87,10 @@ def build_symbol_summary(
     relevant_results: list[AnalysisResultDict],
     fallback_meta: MetadataRecord,
 ) -> JsonDict:
+    run_id_value = str(run_id) if run_id is not None else None
     summary: JsonDict = {
         "symbol": symbol,
-        "run_id": run_id,
+        "run_id": run_id_value,
         "sentiment_trends": build_sentiment_trends(
             results=relevant_results,
             fallback_meta=fallback_meta,
@@ -163,9 +164,10 @@ def build_executive_comp_summary(
     yoy_changes = _build_exec_comp_yoy(filings)
     peer_deltas = _build_exec_comp_peer_deltas(filings)
 
+    run_id_value = str(run_id) if run_id is not None else None
     summary: JsonDict = {
         "symbol": symbol,
-        "run_id": run_id,
+        "run_id": run_id_value,
         "filings": filings,
         "yoy_changes": yoy_changes,
         "peer_deltas": peer_deltas,

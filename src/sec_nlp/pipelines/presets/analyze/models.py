@@ -3,6 +3,7 @@
 
 from collections.abc import Mapping, Sequence
 from typing import ClassVar, Literal
+from uuid import UUID
 
 from pydantic import (
     BaseModel,
@@ -411,7 +412,7 @@ class OutputProvenance(BaseModel):
         defer_build=True,
     )
 
-    run_id: int | None = None
+    run_id: UUID | None = None
     pipeline_version: str | None = None
     model_name: str | None = None
     confidence_mode: str | None = None

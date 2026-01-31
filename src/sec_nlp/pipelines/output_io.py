@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from uuid import UUID
 
 from pydantic import BaseModel
 
@@ -28,7 +29,7 @@ def build_accession_dir(output_dir: Path, accession: str | None) -> Path:
 def build_run_file_stem(
     symbol: str,
     suffix: str,
-    run_id: int | str | None,
+    run_id: UUID | None,
 ) -> str:
     """Build a filename stem with a run_id suffix when provided."""
     run_component = f"_{run_id}" if run_id is not None else ""
@@ -39,7 +40,7 @@ def build_accession_file_stem(
     symbol: str,
     suffix: str,
     accession: str | None,
-    run_id: int | str | None,
+    run_id: UUID | None,
 ) -> str:
     """Build a filename stem that includes the accession and run_id."""
     safe_acc = format_accession(accession)

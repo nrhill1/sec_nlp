@@ -204,7 +204,7 @@ class ExhibitPipeline(BasePipeline):
 
             all_outputs: list[Path] = []
             metadata: ResultDict = {
-                "run_id": self.config.run_id,
+                "run_id": str(self.config.run_id),
                 "short_id": self.config.short_id,
             }
 
@@ -504,7 +504,7 @@ class ExhibitPipeline(BasePipeline):
         ]
 
         meta_payload = SearchManifestMetaPayload(
-            run_id=self.config.run_id,
+            run_id=str(self.config.run_id),
             timestamp=self.config.run_timestamp.isoformat(),
             pipeline_type=self.config.pipeline_type,
             search_type=self.config.vdb.search_type,

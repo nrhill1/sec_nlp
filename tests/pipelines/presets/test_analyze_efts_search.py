@@ -8,13 +8,9 @@ from unittest.mock import AsyncMock, Mock
 import pytest
 
 from sec_nlp.core.edgar.efts_models import EFTSHit
-from sec_nlp.pipelines.presets.analyze.config import (
-    AnalyzeConfig,
-    EFTSConfig,
-    SearchConfig,
-)
+from sec_nlp.pipelines.presets.analyze.config import EFTSConfig
 from sec_nlp.pipelines.presets.analyze.steps.search.efts_search import (
-    EFTSSearchRunner,
+    EFTSSearchRunnable,
 )
 
 
@@ -48,17 +44,17 @@ def test_filter_hits_by_ticker_filters_to_matching_tickers() -> None:
     ]
 
     # Filter for ALPHA only
-    filtered = EFTSSearchRunner._filter_hits_by_ticker(hits, ["ALPHA"])
+    filtered = EFTSSearchRunnable._filter_hits_by_ticker(hits, ["ALPHA"])
     assert len(filtered) == 1
     assert filtered[0].tickers == ["ALPHA"]
 
     # Filter for BETA only
-    filtered = EFTSSearchRunner._filter_hits_by_ticker(hits, ["BETA"])
+    filtered = EFTSSearchRunnable._filter_hits_by_ticker(hits, ["BETA"])
     assert len(filtered) == 1
     assert filtered[0].tickers == ["BETA"]
 
     # Filter for non-existent ticker returns empty
-    filtered = EFTSSearchRunner._filter_hits_by_ticker(hits, ["ZZZZ"])
+    filtered = EFTSSearchRunnable._filter_hits_by_ticker(hits, ["ZZZZ"])
     assert len(filtered) == 0
 
 
@@ -75,7 +71,7 @@ def test_filter_hits_by_ticker_empty_filter_keeps_all() -> None:
         ),
     ]
 
-    filtered = EFTSSearchRunner._filter_hits_by_ticker(hits, [])
+    filtered = EFTSSearchRunnable._filter_hits_by_ticker(hits, [])
     assert filtered == hits
 
 
@@ -93,7 +89,7 @@ def test_filter_hits_by_ticker_case_insensitive() -> None:
     ]
 
     # Lowercase filter should match uppercase ticker
-    filtered = EFTSSearchRunner._filter_hits_by_ticker(hits, ["aapl"])
+    filtered = EFTSSearchRunnable._filter_hits_by_ticker(hits, ["aapl"])
     assert len(filtered) == 1
 
 
@@ -201,12 +197,14 @@ def test_efts_search_uses_rust_client(
 
     monkeypatch.setattr(efts_module, "_load_efts_module", lambda: rust_module)
 
-    config = AnalyzeConfig(
+    runner = EFTSSearchRunnable(
+        efts_config=EFTSConfig(enabled=True, limit=1),
         symbols=["AAPL"],
-        search=SearchConfig(queries=["warranty"]),
-        efts=EFTSConfig(enabled=True, limit=1),
+        forms=["10-K"],
+        start_date=None,
+        end_date=None,
+        email="test@example.com",
     )
-    runner = EFTSSearchRunner(config=config, email="test@example.com")
 
     results = asyncio.run(runner.search_queries(["warranty"]))
 

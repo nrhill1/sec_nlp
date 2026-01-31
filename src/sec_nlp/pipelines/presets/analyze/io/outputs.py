@@ -7,6 +7,7 @@ from collections import defaultdict
 from hashlib import sha256
 from pathlib import Path
 from typing import Literal
+from uuid import UUID
 
 from sec_nlp.core.infra.logger import logger
 from sec_nlp.core.types import coerce_float, coerce_json_dict
@@ -40,7 +41,7 @@ class OutputFormatter:
         confidence_threshold: float,
         topics: list[str] | None = None,
         include_raw_chunks: bool = False,
-        run_id: int | None = None,
+        run_id: UUID | None = None,
         model_name: str | None = None,
         confidence_mode: str | None = None,
         prompt_path: Path | None = None,

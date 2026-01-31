@@ -326,11 +326,7 @@ class AnalyzePipeline(BasePipeline):
         )
 
         # Initialize output formatter
-        output_run_id = (
-            self.config.short_id
-            if self.config.short_id > 0
-            else self.config.run_id
-        )
+        output_run_id = self.config.run_id
         self._output_formatter = OutputFormatter(
             export_format=self.config.export_format,
             confidence_threshold=self.config.confidence_threshold,
@@ -360,17 +356,41 @@ class AnalyzePipeline(BasePipeline):
             deduplicator=self._deduplicator,
         )
         self._analysis_runner = AnalyzerRunnable(
-            config=self.config,
             graph=self._graph,
             callbacks=self._callbacks,
             analysis_instructions=self._analysis_instructions,
+            symbols=self.config.symbols,
+            llm_retry_attempts=self.config.llm_retry_attempts,
+            llm_retry_backoff=self.config.llm_retry_backoff,
+            confidence_mode=self.config.confidence_mode,
+            include_raw_chunks=self.config.include_raw_chunks,
+            batch_size=self.config.batch_size,
+            query_term_min_len=self.config.search.query_term_min_len,
+            run_id=self.config.run_id,
         )
         self._search_runner = SearchRunnable(
-            config=self.config,
             vector_store=self._vector_store,
+            symbols=self.config.symbols,
+            vector_mode=self.config.vector_mode,
+            search_limit=self.config.search.limit,
+            score_threshold=self.config.search.score_threshold,
+            metadata_filters=self.config.search.metadata_filters,
+            query_term_min_hits=self.config.search.query_term_min_hits,
+            query_term_min_ratio=self.config.search.query_term_min_ratio,
+            query_term_min_len=self.config.search.query_term_min_len,
+            search_analyze=self.config.search.analyze,
+            export_results_enabled=self.config.search.export_results,
+            distance_metric=self.config.vdb.qdrant_distance,
+            output_root=self.config.out_path,
+            pipeline_type=self.config.pipeline_type,
+            run_id=self.config.run_id,
+            short_id=self.config.short_id,
         )
         self._efts_runner = EFTSSearchRunnable(
-            config=self.config,
+            efts_config=self.config.efts,
+            forms=list(self.config.mode.forms),
+            start_date=self.config.start_date,
+            end_date=self.config.end_date,
             email=self.config.email,
         )
 
@@ -388,7 +408,7 @@ class AnalyzePipeline(BasePipeline):
 
             all_outputs: list[Path] = []
             metadata: ResultDict = {
-                "run_id": self.config.run_id,
+                "run_id": str(self.config.run_id),
                 "short_id": self.config.short_id,
             }
 
@@ -419,11 +439,7 @@ class AnalyzePipeline(BasePipeline):
                         log_divider(logger, color="magenta")
 
             if len(self._symbol_profiles) > 1:
-                run_component = (
-                    str(self.config.short_id)
-                    if self.config.short_id > 0
-                    else str(self.config.run_id)
-                )
+                run_component = self.config.run_path_component()
                 peer_summary = build_peer_comparison(self._symbol_profiles)
                 peer_dir = (
                     self.config.out_path / self.pipeline_type / run_component
@@ -600,7 +616,10 @@ class AnalyzePipeline(BasePipeline):
         efts_runner = self._efts_runner
         if efts_runner is None:
             efts_runner = EFTSSearchRunnable(
-                config=self.config,
+                efts_config=self.config.efts,
+                forms=list(self.config.mode.forms),
+                start_date=self.config.start_date,
+                end_date=self.config.end_date,
                 email=self.config.email,
             )
         try:
@@ -1212,10 +1231,17 @@ class AnalyzePipeline(BasePipeline):
         runner = getattr(self, "_analysis_runner", None)
         if runner is None:
             runner = AnalyzerRunnable(
-                config=self.config,
                 graph=self._graph,
                 callbacks=self._callbacks,
                 analysis_instructions=self._analysis_instructions,
+                symbols=self.config.symbols,
+                llm_retry_attempts=self.config.llm_retry_attempts,
+                llm_retry_backoff=self.config.llm_retry_backoff,
+                confidence_mode=self.config.confidence_mode,
+                include_raw_chunks=self.config.include_raw_chunks,
+                batch_size=self.config.batch_size,
+                query_term_min_len=self.config.search.query_term_min_len,
+                run_id=self.config.run_id,
             )
         return runner._process_batch(batch, docs)
 
@@ -1224,8 +1250,22 @@ class AnalyzePipeline(BasePipeline):
         runner = getattr(self, "_search_runner", None)
         if runner is None:
             runner = SearchRunnable(
-                config=self.config,
                 vector_store=self._vector_store,
+                symbols=self.config.symbols,
+                vector_mode=self.config.vector_mode,
+                search_limit=self.config.search.limit,
+                score_threshold=self.config.search.score_threshold,
+                metadata_filters=self.config.search.metadata_filters,
+                query_term_min_hits=self.config.search.query_term_min_hits,
+                query_term_min_ratio=self.config.search.query_term_min_ratio,
+                query_term_min_len=self.config.search.query_term_min_len,
+                search_analyze=self.config.search.analyze,
+                export_results_enabled=self.config.search.export_results,
+                distance_metric=self.config.vdb.qdrant_distance,
+                output_root=self.config.out_path,
+                pipeline_type=self.config.pipeline_type,
+                run_id=self.config.run_id,
+                short_id=self.config.short_id,
             )
         return runner.retrieve_hits(queries=self.config.get_search_queries())
 
@@ -1292,11 +1332,7 @@ class AnalyzePipeline(BasePipeline):
         """Expose result writing for tests and downstream usage."""
         formatter = getattr(self, "_output_formatter", None)
         if formatter is None:
-            output_run_id = (
-                self.config.short_id
-                if self.config.short_id > 0
-                else self.config.run_id
-            )
+            output_run_id = self.config.run_id
             formatter = OutputFormatter(
                 export_format=self.config.export_format,
                 confidence_threshold=self.config.confidence_threshold,

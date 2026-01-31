@@ -6,7 +6,8 @@ from __future__ import annotations
 from collections import defaultdict
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Literal
+from uuid import UUID
 
 from langchain_core.documents import Document
 from langchain_core.runnables import RunnableConfig, RunnableSerializable
@@ -26,7 +27,6 @@ from sec_nlp.pipelines.types import (
 )
 from sec_nlp.types import JsonDict, JsonValue
 
-from ..config import AnalyzeConfig
 from ..steps.search.payloads import (
     SearchHighlightsPayload,
     SearchMatchPayload,
@@ -81,7 +81,21 @@ class SearchRunnable(
         defer_build=True,
     )
 
-    config: AnalyzeConfig = Field(description="Analyze pipeline config")
+    symbols: list[str] = Field(default_factory=list)
+    vector_mode: Literal["off", "read", "write"] = Field(default="write")
+    search_limit: int = Field(default=10, ge=1)
+    score_threshold: float = Field(default=0.4, ge=0.0)
+    metadata_filters: MetadataFilters = Field(default_factory=dict)
+    query_term_min_hits: int = Field(default=1, ge=0)
+    query_term_min_ratio: float = Field(default=0.3, ge=0.0)
+    query_term_min_len: int = Field(default=3, ge=1)
+    search_analyze: bool = Field(default=True)
+    export_results_enabled: bool = Field(default=True)
+    distance_metric: str = Field(default="Cosine")
+    output_root: Path = Field(default=Path("./outputs"))
+    pipeline_type: str = Field(default="analyze")
+    run_id: UUID | None = None
+    short_id: int = Field(default=0)
     vector_store: QdrantVectorStore | None = Field(
         default=None, description="Vector store backend"
     )
@@ -90,7 +104,7 @@ class SearchRunnable(
         self,
         input: SearchRetrieveInput,
         config: RunnableConfig | None = None,
-        **kwargs: Any,
+        **kwargs: JsonValue,
     ) -> AnalysisBatchInput:
         """Invoke the runnable for chaining in a sequence."""
         _ = config
@@ -98,7 +112,7 @@ class SearchRunnable(
         queries = input.queries
         docs = self.retrieve_hits(queries)
         fallback_symbol = input.symbol or (
-            self.config.symbols[0] if self.config.symbols else "<unknown>"
+            self.symbols[0] if self.symbols else "<unknown>"
         )
         return AnalysisBatchInput(symbol=fallback_symbol, docs=docs)
 
@@ -106,23 +120,15 @@ class SearchRunnable(
         self, queries: list[str] | None = None
     ) -> SearchResultsByQuery:
         """Run similarity search per query and return filtered hits."""
-        query_list = (
-            self.config.get_search_queries() if queries is None else queries
-        )
+        query_list = queries or []
         query_list = self._clean_queries(query_list)
-        if (
-            not self.vector_store
-            or not query_list
-            or self.config.vector_mode == "off"
-        ):
+        if not self.vector_store or not query_list or self.vector_mode == "off":
             return {}
 
-        distance_metric = self.config.vdb.qdrant_distance
+        distance_metric = self.distance_metric
         distance_prefers_lower = distance_metric in ("Cosine", "Euclid")
-        threshold = self.config.search.score_threshold
-        metadata_filter = build_metadata_filter(
-            self.config.search.metadata_filters
-        )
+        threshold = self.score_threshold
+        metadata_filter = build_metadata_filter(self.metadata_filters)
         try:
             collection = self.vector_store.collection_name
             client = self.vector_store.client
@@ -141,7 +147,7 @@ class SearchRunnable(
         for query in query_list:
             results = self.vector_store.similarity_search_with_score(
                 query,
-                k=self.config.search.limit,
+                k=self.search_limit,
                 filter=metadata_filter,
             )
             filtered = [
@@ -174,7 +180,7 @@ class SearchRunnable(
         if not results_by_query:
             return [], results_by_query
 
-        distance_metric = self.config.vdb.qdrant_distance
+        distance_metric = self.distance_metric
         distance_prefers_lower = distance_metric in ("Cosine", "Euclid")
 
         unique_hits: dict[tuple[str, str | None, str | None], _UniqueHit] = {}
@@ -224,9 +230,9 @@ class SearchRunnable(
     def _passes_query_term_gate(
         self, query: str | None, content: str | None
     ) -> bool:
-        min_hits = self.config.search.query_term_min_hits
-        min_ratio = self.config.search.query_term_min_ratio
-        min_len = self.config.search.query_term_min_len
+        min_hits = self.query_term_min_hits
+        min_ratio = self.query_term_min_ratio
+        min_len = self.query_term_min_len
         if min_hits <= 0 and min_ratio <= 0:
             return True
         matched_terms, _, ratio = query_term_overlap(
@@ -243,9 +249,7 @@ class SearchRunnable(
 
     def run(self, queries: list[str] | None = None) -> list[Path]:
         """Run semantic search queries if configured."""
-        query_list = (
-            self.config.get_search_queries() if queries is None else queries
-        )
+        query_list = queries or []
         query_list = self._clean_queries(query_list)
         if not query_list:
             logger.warning(
@@ -259,7 +263,7 @@ class SearchRunnable(
                 "(vector_mode may be 'off'?)"
             )
             return []
-        if self.config.search.analyze:
+        if self.search_analyze:
             logger.info(
                 "Search export analysis disabled; run the analyze chain instead"
             )
@@ -275,16 +279,14 @@ class SearchRunnable(
         queries: list[str] | None = None,
     ) -> list[Path]:
         """Export search results from precomputed hits."""
-        query_list = (
-            self.config.get_search_queries() if queries is None else queries
-        )
+        query_list = queries or []
         query_list = self._clean_queries(query_list)
         if not query_list:
             logger.warning(
                 "Search not configured: no queries or topics provided"
             )
             return []
-        if not self.config.search.export_results:
+        if not self.export_results_enabled:
             logger.info("Search export disabled; skipping results export")
             return []
 
@@ -297,11 +299,11 @@ class SearchRunnable(
             len(query_list),
         )
 
-        distance_metric = self.config.vdb.qdrant_distance
+        distance_metric = self.distance_metric
         distance_prefers_lower = distance_metric in ("Cosine", "Euclid")
-        threshold = self.config.search.score_threshold
+        threshold = self.score_threshold
         metadata_filters_payload = self._build_metadata_filters_payload(
-            self.config.search.metadata_filters
+            self.metadata_filters
         )
 
         per_symbol_query_results: dict[
@@ -340,9 +342,7 @@ class SearchRunnable(
                 for doc, score in filtered_results:
                     meta = doc.metadata or {}
                     symbol_for_output = resolve_symbol_for_output(
-                        self.config.symbols[0]
-                        if self.config.symbols
-                        else "<unknown>",
+                        self.symbols[0] if self.symbols else "<unknown>",
                         meta,
                     )
                     per_symbol_query_results[symbol_for_output][query].append(
@@ -382,9 +382,7 @@ class SearchRunnable(
         search_outputs: list[Path] = []
 
         for symbol_key, query_results_map in per_symbol_query_results.items():
-            output_dir = (
-                self.config.get_symbol_output_dir(symbol_key) / "search"
-            )
+            output_dir = self._get_symbol_output_dir(symbol_key) / "search"
             output_dir.mkdir(parents=True, exist_ok=True)
             output_file = output_dir / "summary.yaml"
 
@@ -509,6 +507,24 @@ class SearchRunnable(
             )
 
         return search_outputs
+
+    def _get_symbol_output_dir(self, symbol: str) -> Path:
+        normalized_symbol = symbol.strip().upper()
+        run_component = (
+            str(self.short_id)
+            if self.short_id > 0
+            else str(self.run_id)
+            if self.run_id is not None
+            else "0"
+        )
+        symbol_out_path = (
+            self.output_root
+            / normalized_symbol
+            / self.pipeline_type
+            / run_component
+        )
+        symbol_out_path.mkdir(parents=True, exist_ok=True)
+        return symbol_out_path
 
     @staticmethod
     def _clean_queries(queries: list[str] | None) -> list[str]:

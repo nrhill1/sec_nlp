@@ -1,6 +1,8 @@
 # tests/pipelines/presets/test_analyze_enhancements.py
 """Tests for analysis enhancement summaries."""
 
+from uuid import uuid4
+
 from sec_nlp.core.types import as_json_dict, coerce_json_value
 from sec_nlp.pipelines.presets.analyze.io.enhancements import (
     build_executive_comp_summary,
@@ -57,7 +59,7 @@ def test_build_symbol_summary_tracks_trends_and_comparisons() -> None:
 
     summary: JsonDict = build_symbol_summary(
         symbol="ACME",
-        run_id=123,
+        run_id=uuid4(),
         analysis_results=results,
         relevant_results=results,
         fallback_meta=fallback_meta,
@@ -189,7 +191,7 @@ def test_build_executive_comp_summary_tracks_peer_deltas_and_yoy() -> None:
 
     summary: JsonDict = build_executive_comp_summary(
         symbol="ACME",
-        run_id=101,
+        run_id=uuid4(),
         analysis_results=results,
         relevant_results=results,
         fallback_meta={},
