@@ -54,6 +54,10 @@ from .market import MarketEnrichment, build_market_enrichment
 from .models import AnalysisInput, AnalysisResult, AnalyzeResult
 from .runnables.analysis import AnalyzerRunnable
 from .runnables.efts import EFTSSearchInput, EFTSSearchRunnable
+from .runnables.market_correlation import (
+    MarketCorrelationInput,
+    MarketCorrelationRunnable,
+)
 from .runnables.search import (
     SearchQueryResults,
     SearchResultsByQuery,
@@ -118,6 +122,9 @@ class AnalyzePipeline(BasePipeline):
     _analysis_runner: AnalyzerRunnable = PrivateAttr()
     _search_runner: SearchRunnable = PrivateAttr()
     _efts_runner: EFTSSearchRunnable | None = PrivateAttr(default=None)
+    _market_correlation_runner: MarketCorrelationRunnable | None = PrivateAttr(
+        default=None
+    )
     _search_results_by_query: SearchResultsByQuery | None = PrivateAttr(
         default=None
     )
@@ -383,8 +390,7 @@ class AnalyzePipeline(BasePipeline):
             distance_metric=self.config.vdb.qdrant_distance,
             output_root=self.config.out_path,
             pipeline_type=self.config.pipeline_type,
-            run_id=self.config.run_id,
-            short_id=self.config.short_id,
+            run_dir=self.config.run_path_component(),
         )
         self._efts_runner = EFTSSearchRunnable(
             efts_config=self.config.efts,
@@ -393,6 +399,7 @@ class AnalyzePipeline(BasePipeline):
             end_date=self.config.end_date,
             email=self.config.email,
         )
+        self._market_correlation_runner = MarketCorrelationRunnable()
 
     def run(self) -> AnalyzeResult:
         """Execute the semantic search pipeline."""
@@ -1150,6 +1157,23 @@ class AnalyzePipeline(BasePipeline):
                 sample_error.get("error") or sample_error.get("exception"),
             )
 
+        market_correlation = None
+        if self.config.market_correlation_enabled:
+            runner = self._market_correlation_runner
+            if runner is None:
+                runner = MarketCorrelationRunnable()
+            try:
+                market_correlation = runner.invoke(
+                    MarketCorrelationInput(
+                        market_data=market_data,
+                        relevant_results=relevant_results,
+                    )
+                )
+            except Exception as exc:
+                logger.warning(
+                    "Market correlation failed for %s: %s", symbol, exc
+                )
+
         # Write results to output file
         t_write_start = perf_counter()
         output_files = self._write_results(
@@ -1161,6 +1185,7 @@ class AnalyzePipeline(BasePipeline):
             timings=timings,
             market_data=market_data,
             market_context=market_context,
+            market_correlation=market_correlation,
         )
         self._symbol_profiles[symbol] = build_symbol_profile(
             symbol=symbol,
@@ -1169,11 +1194,7 @@ class AnalyzePipeline(BasePipeline):
         summary_path = write_symbol_summary(
             output_dir=self.config.get_symbol_output_dir(symbol),
             symbol=symbol,
-            run_id=(
-                self.config.short_id
-                if self.config.short_id > 0
-                else self.config.run_id
-            ),
+            run_id=self.config.run_id,
             analysis_results=analysis_results,
             relevant_results=relevant_results,
             fallback_meta=docs[0].metadata or {},
@@ -1184,11 +1205,7 @@ class AnalyzePipeline(BasePipeline):
             exec_comp_path = write_executive_comp_summary(
                 output_dir=self.config.get_symbol_output_dir(symbol),
                 symbol=symbol,
-                run_id=(
-                    self.config.short_id
-                    if self.config.short_id > 0
-                    else self.config.run_id
-                ),
+                run_id=self.config.run_id,
                 analysis_results=analysis_results,
                 relevant_results=relevant_results,
                 fallback_meta=docs[0].metadata or {},
@@ -1264,8 +1281,7 @@ class AnalyzePipeline(BasePipeline):
                 distance_metric=self.config.vdb.qdrant_distance,
                 output_root=self.config.out_path,
                 pipeline_type=self.config.pipeline_type,
-                run_id=self.config.run_id,
-                short_id=self.config.short_id,
+                run_dir=self.config.run_path_component(),
             )
         return runner.retrieve_hits(queries=self.config.get_search_queries())
 
@@ -1328,6 +1344,7 @@ class AnalyzePipeline(BasePipeline):
         timings: Timings | None = None,
         market_data: MarketEnrichment | None = None,
         market_context: str | None = None,
+        market_correlation: JsonDict | None = None,
     ) -> list[Path]:
         """Expose result writing for tests and downstream usage."""
         formatter = getattr(self, "_output_formatter", None)
@@ -1343,7 +1360,6 @@ class AnalyzePipeline(BasePipeline):
                 confidence_mode=self.config.confidence_mode,
                 prompt_path=self.config.llm.prompt_path,
                 pipeline_version=sec_nlp_version,
-                market_correlation_enabled=self.config.market_correlation_enabled,
             )
         return write_results(
             config=self.config,
@@ -1356,4 +1372,5 @@ class AnalyzePipeline(BasePipeline):
             timings=timings,
             market_data=market_data,
             market_context=market_context,
+            market_correlation=market_correlation,
         )

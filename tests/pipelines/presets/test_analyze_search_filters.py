@@ -219,8 +219,7 @@ def test_export_results_writes_summary_with_unique_hits(
         distance_metric=config.vdb.qdrant_distance,
         output_root=config.out_path,
         pipeline_type=config.pipeline_type,
-        run_id=config.run_id,
-        short_id=config.short_id,
+        run_dir=config.run_path_component(),
     )
 
     doc_common = Document(

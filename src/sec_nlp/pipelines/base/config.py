@@ -280,7 +280,7 @@ class BasePipelineSettings(BaseSettings, ABC):
             symbol: Stock ticker symbol
 
         Returns:
-            Path in the form <out_path>/<SYMBOL>/<pipeline_type>/<short_id_or_run_id>
+            Path in the form <out_path>/<SYMBOL>/<pipeline_type>/<run_timestamp>
         """
         normalized_symbol = symbol.strip().upper()
         run_component = self.run_path_component()

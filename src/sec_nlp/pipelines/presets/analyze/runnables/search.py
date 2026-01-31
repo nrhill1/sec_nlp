@@ -7,7 +7,6 @@ from collections import defaultdict
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
-from uuid import UUID
 
 from langchain_core.documents import Document
 from langchain_core.runnables import RunnableConfig, RunnableSerializable
@@ -94,8 +93,7 @@ class SearchRunnable(
     distance_metric: str = Field(default="Cosine")
     output_root: Path = Field(default=Path("./outputs"))
     pipeline_type: str = Field(default="analyze")
-    run_id: UUID | None = None
-    short_id: int = Field(default=0)
+    run_dir: str = Field(default="")
     vector_store: QdrantVectorStore | None = Field(
         default=None, description="Vector store backend"
     )
@@ -510,13 +508,7 @@ class SearchRunnable(
 
     def _get_symbol_output_dir(self, symbol: str) -> Path:
         normalized_symbol = symbol.strip().upper()
-        run_component = (
-            str(self.short_id)
-            if self.short_id > 0
-            else str(self.run_id)
-            if self.run_id is not None
-            else "0"
-        )
+        run_component = self.run_dir or "run"
         symbol_out_path = (
             self.output_root
             / normalized_symbol

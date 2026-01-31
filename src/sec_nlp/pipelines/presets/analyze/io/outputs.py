@@ -29,7 +29,6 @@ from ..models import (
     FilingInfo,
     OutputProvenance,
 )
-from .formats.market_correlation import build_market_correlation
 
 
 class OutputFormatter:
@@ -47,7 +46,6 @@ class OutputFormatter:
         prompt_path: Path | None = None,
         prompt_version: str | None = None,
         pipeline_version: str | None = None,
-        market_correlation_enabled: bool = True,
     ) -> None:
         self.export_format = export_format
         self.confidence_threshold = confidence_threshold
@@ -61,7 +59,6 @@ class OutputFormatter:
             prompt_path
         )
         self.pipeline_version = pipeline_version
-        self.market_correlation_enabled = market_correlation_enabled
 
     def is_relevant_result(self, result: AnalysisResultDict) -> bool:
         """Check if a result meets the relevance threshold."""
@@ -203,6 +200,7 @@ class OutputFormatter:
         timings: dict[str, float] | None = None,
         market_data: MarketEnrichment | None = None,
         market_context: str | None = None,
+        market_correlation: JsonDict | None = None,
     ) -> AnalysisOutput:
         """Build structured output from analysis results.
 
@@ -313,12 +311,6 @@ class OutputFormatter:
         )
         relationship_timeline = self._build_relationship_timeline(filing_meta)
         executive_comp_summary = self._build_exec_comp_summary(ranked_results)
-        market_correlation = (
-            build_market_correlation(market_data, relevant_results)
-            if self.market_correlation_enabled
-            else None
-        )
-
         return AnalysisOutput(
             symbol=symbol,
             search_queries=search_queries or [],

@@ -413,11 +413,10 @@ class ExhibitPipeline(BasePipeline):
         search_outputs: list[Path] = []
         search_records: list[SearchRecord] = []
 
-        # Create dedicated search output directory using run_id
-        search_run_id = (
-            str(self.config.run_id) if self.config.run_id else "run_unknown"
+        # Create dedicated search output directory using run timestamp
+        search_dir = (
+            self.config.out_path / "search" / self.config.run_path_component()
         )
-        search_dir = self.config.out_path / "search" / search_run_id
         search_dir.mkdir(parents=True, exist_ok=True)
 
         log_divider(logger, color="yellow")

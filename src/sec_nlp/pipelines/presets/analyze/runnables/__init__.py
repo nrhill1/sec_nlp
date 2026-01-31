@@ -2,6 +2,10 @@
 
 from .analysis import AnalysisBatchInput, AnalyzerRunnable
 from .efts import EFTSSearchInput, EFTSSearchRunnable
+from .market_correlation import (
+    MarketCorrelationInput,
+    MarketCorrelationRunnable,
+)
 from .search import (
     SearchQueryResults,
     SearchResultsByQuery,
@@ -14,6 +18,8 @@ __all__: tuple[str, ...] = (
     "AnalyzerRunnable",
     "EFTSSearchInput",
     "EFTSSearchRunnable",
+    "MarketCorrelationInput",
+    "MarketCorrelationRunnable",
     "SearchQueryResults",
     "SearchResultsByQuery",
     "SearchRetrieveInput",
