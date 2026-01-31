@@ -52,18 +52,23 @@ from .io.outputs import OutputFormatter
 from .io.result_writer import write_results
 from .market import MarketEnrichment, build_market_enrichment
 from .models import AnalysisInput, AnalysisResult, AnalyzeResult
-from .steps.analysis.analysis_runner import AnalyzerRunnable
+from .runnables.analysis import AnalyzerRunnable
+from .runnables.efts import EFTSSearchInput, EFTSSearchRunnable
+from .runnables.market_correlation import (
+    MarketCorrelationInput,
+    MarketCorrelationRunnable,
+)
+from .runnables.search import (
+    SearchQueryResults,
+    SearchResultsByQuery,
+    SearchRunnable,
+)
 from .steps.analysis.callbacks import TracingCallbackHandler
 from .steps.analysis.instructions import AnalysisInstructionBuilder
 from .steps.indexing.vector_index import VectorIndexer
 from .steps.preprocess.preprocess import ChunkPreprocessor
 from .steps.preprocess.topic_scoring import build_topic_matcher
-from .steps.search.efts_search import EFTSSearchResult, run_efts_search
-from .steps.search.vector_search import (
-    SearchQueryResults,
-    SearchResultsByQuery,
-    SearchRunnable,
-)
+from .steps.search.efts_search import EFTSSearchResult
 from .types import ChunkStats, SymbolRunMetadata, Timings
 
 type PromptInput = dict[
@@ -116,6 +121,10 @@ class AnalyzePipeline(BasePipeline):
     _vector_indexer: VectorIndexer = PrivateAttr()
     _analysis_runner: AnalyzerRunnable = PrivateAttr()
     _search_runner: SearchRunnable = PrivateAttr()
+    _efts_runner: EFTSSearchRunnable | None = PrivateAttr(default=None)
+    _market_correlation_runner: MarketCorrelationRunnable | None = PrivateAttr(
+        default=None
+    )
     _search_results_by_query: SearchResultsByQuery | None = PrivateAttr(
         default=None
     )
@@ -324,11 +333,7 @@ class AnalyzePipeline(BasePipeline):
         )
 
         # Initialize output formatter
-        output_run_id = (
-            self.config.short_id
-            if self.config.short_id > 0
-            else self.config.run_id
-        )
+        output_run_id = self.config.run_id
         self._output_formatter = OutputFormatter(
             export_format=self.config.export_format,
             confidence_threshold=self.config.confidence_threshold,
@@ -358,15 +363,44 @@ class AnalyzePipeline(BasePipeline):
             deduplicator=self._deduplicator,
         )
         self._analysis_runner = AnalyzerRunnable(
-            config=self.config,
             graph=self._graph,
             callbacks=self._callbacks,
             analysis_instructions=self._analysis_instructions,
+            symbols=self.config.symbols,
+            llm_retry_attempts=self.config.llm_retry_attempts,
+            llm_retry_backoff=self.config.llm_retry_backoff,
+            confidence_mode=self.config.confidence_mode,
+            include_raw_chunks=self.config.include_raw_chunks,
+            batch_size=self.config.batch_size,
+            query_term_min_len=self.config.search.query_term_min_len,
+            run_id=self.config.run_id,
         )
         self._search_runner = SearchRunnable(
-            config=self.config,
             vector_store=self._vector_store,
+            symbols=self.config.symbols,
+            vector_mode=self.config.vector_mode,
+            search_limit=self.config.search.limit,
+            score_threshold=self.config.search.score_threshold,
+            metadata_filters=self.config.search.metadata_filters,
+            query_term_min_hits=self.config.search.query_term_min_hits,
+            query_term_min_ratio=self.config.search.query_term_min_ratio,
+            query_term_min_len=self.config.search.query_term_min_len,
+            search_analyze=self.config.search.analyze,
+            export_results_enabled=self.config.search.export_results,
+            distance_metric=self.config.vdb.qdrant_distance,
+            output_root=self.config.out_path,
+            pipeline_type=self.config.pipeline_type,
+            run_dir=self.config.run_path_component(),
         )
+        self._efts_runner = EFTSSearchRunnable(
+            efts_config=self.config.efts,
+            forms=list(self.config.mode.forms),
+            mode=self.config.mode,
+            start_date=self.config.start_date,
+            end_date=self.config.end_date,
+            email=self.config.email,
+        )
+        self._market_correlation_runner = MarketCorrelationRunnable()
 
     def run(self) -> AnalyzeResult:
         """Execute the semantic search pipeline."""
@@ -382,7 +416,7 @@ class AnalyzePipeline(BasePipeline):
 
             all_outputs: list[Path] = []
             metadata: ResultDict = {
-                "run_id": self.config.run_id,
+                "run_id": str(self.config.run_id),
                 "short_id": self.config.short_id,
             }
 
@@ -413,11 +447,7 @@ class AnalyzePipeline(BasePipeline):
                         log_divider(logger, color="magenta")
 
             if len(self._symbol_profiles) > 1:
-                run_component = (
-                    str(self.config.short_id)
-                    if self.config.short_id > 0
-                    else str(self.config.run_id)
-                )
+                run_component = self.config.run_path_component()
                 peer_summary = build_peer_comparison(self._symbol_profiles)
                 peer_dir = (
                     self.config.out_path / self.pipeline_type / run_component
@@ -591,13 +621,23 @@ class AnalyzePipeline(BasePipeline):
             return [], [], False
 
         local_accessions = self._local_accessions(symbol)
-        config = self.config.model_copy(update={"symbols": [symbol]})
-        try:
-            results = run_efts_search(
-                config=config,
-                queries=queries,
+        efts_runner = self._efts_runner
+        if efts_runner is None:
+            efts_runner = EFTSSearchRunnable(
+                efts_config=self.config.efts,
+                forms=list(self.config.mode.forms),
+                mode=self.config.mode,
+                start_date=self.config.start_date,
+                end_date=self.config.end_date,
                 email=self.config.email,
-                local_accessions=local_accessions,
+            )
+        try:
+            results = efts_runner.invoke(
+                EFTSSearchInput(
+                    symbol=symbol,
+                    queries=queries,
+                    local_accessions=local_accessions,
+                )
             )
         except Exception as exc:
             logger.warning("EFTS search failed for %s: %s", symbol, exc)
@@ -1119,6 +1159,23 @@ class AnalyzePipeline(BasePipeline):
                 sample_error.get("error") or sample_error.get("exception"),
             )
 
+        market_correlation = None
+        if self.config.market_correlation_enabled:
+            runner = self._market_correlation_runner
+            if runner is None:
+                runner = MarketCorrelationRunnable()
+            try:
+                market_correlation = runner.invoke(
+                    MarketCorrelationInput(
+                        market_data=market_data,
+                        relevant_results=relevant_results,
+                    )
+                )
+            except Exception as exc:
+                logger.warning(
+                    "Market correlation failed for %s: %s", symbol, exc
+                )
+
         # Write results to output file
         t_write_start = perf_counter()
         output_files = self._write_results(
@@ -1130,6 +1187,7 @@ class AnalyzePipeline(BasePipeline):
             timings=timings,
             market_data=market_data,
             market_context=market_context,
+            market_correlation=market_correlation,
         )
         self._symbol_profiles[symbol] = build_symbol_profile(
             symbol=symbol,
@@ -1138,11 +1196,7 @@ class AnalyzePipeline(BasePipeline):
         summary_path = write_symbol_summary(
             output_dir=self.config.get_symbol_output_dir(symbol),
             symbol=symbol,
-            run_id=(
-                self.config.short_id
-                if self.config.short_id > 0
-                else self.config.run_id
-            ),
+            run_id=self.config.run_id,
             analysis_results=analysis_results,
             relevant_results=relevant_results,
             fallback_meta=docs[0].metadata or {},
@@ -1153,11 +1207,7 @@ class AnalyzePipeline(BasePipeline):
             exec_comp_path = write_executive_comp_summary(
                 output_dir=self.config.get_symbol_output_dir(symbol),
                 symbol=symbol,
-                run_id=(
-                    self.config.short_id
-                    if self.config.short_id > 0
-                    else self.config.run_id
-                ),
+                run_id=self.config.run_id,
                 analysis_results=analysis_results,
                 relevant_results=relevant_results,
                 fallback_meta=docs[0].metadata or {},
@@ -1200,10 +1250,17 @@ class AnalyzePipeline(BasePipeline):
         runner = getattr(self, "_analysis_runner", None)
         if runner is None:
             runner = AnalyzerRunnable(
-                config=self.config,
                 graph=self._graph,
                 callbacks=self._callbacks,
                 analysis_instructions=self._analysis_instructions,
+                symbols=self.config.symbols,
+                llm_retry_attempts=self.config.llm_retry_attempts,
+                llm_retry_backoff=self.config.llm_retry_backoff,
+                confidence_mode=self.config.confidence_mode,
+                include_raw_chunks=self.config.include_raw_chunks,
+                batch_size=self.config.batch_size,
+                query_term_min_len=self.config.search.query_term_min_len,
+                run_id=self.config.run_id,
             )
         return runner._process_batch(batch, docs)
 
@@ -1212,8 +1269,21 @@ class AnalyzePipeline(BasePipeline):
         runner = getattr(self, "_search_runner", None)
         if runner is None:
             runner = SearchRunnable(
-                config=self.config,
                 vector_store=self._vector_store,
+                symbols=self.config.symbols,
+                vector_mode=self.config.vector_mode,
+                search_limit=self.config.search.limit,
+                score_threshold=self.config.search.score_threshold,
+                metadata_filters=self.config.search.metadata_filters,
+                query_term_min_hits=self.config.search.query_term_min_hits,
+                query_term_min_ratio=self.config.search.query_term_min_ratio,
+                query_term_min_len=self.config.search.query_term_min_len,
+                search_analyze=self.config.search.analyze,
+                export_results_enabled=self.config.search.export_results,
+                distance_metric=self.config.vdb.qdrant_distance,
+                output_root=self.config.out_path,
+                pipeline_type=self.config.pipeline_type,
+                run_dir=self.config.run_path_component(),
             )
         return runner.retrieve_hits(queries=self.config.get_search_queries())
 
@@ -1276,15 +1346,12 @@ class AnalyzePipeline(BasePipeline):
         timings: Timings | None = None,
         market_data: MarketEnrichment | None = None,
         market_context: str | None = None,
+        market_correlation: JsonDict | None = None,
     ) -> list[Path]:
         """Expose result writing for tests and downstream usage."""
         formatter = getattr(self, "_output_formatter", None)
         if formatter is None:
-            output_run_id = (
-                self.config.short_id
-                if self.config.short_id > 0
-                else self.config.run_id
-            )
+            output_run_id = self.config.run_id
             formatter = OutputFormatter(
                 export_format=self.config.export_format,
                 confidence_threshold=self.config.confidence_threshold,
@@ -1307,4 +1374,5 @@ class AnalyzePipeline(BasePipeline):
             timings=timings,
             market_data=market_data,
             market_context=market_context,
+            market_correlation=market_correlation,
         )

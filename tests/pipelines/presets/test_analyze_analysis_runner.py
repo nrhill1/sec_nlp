@@ -1,7 +1,7 @@
 # tests/pipelines/presets/test_analyze_analysis_runner.py
 """Tests for analyze analysis runner helpers."""
 
-from sec_nlp.pipelines.presets.analyze.steps.analysis.analysis_runner import (
+from sec_nlp.pipelines.presets.analyze.runnables.analysis import (
     AnalyzerRunnable,
 )
 

@@ -10,6 +10,7 @@ from collections.abc import Mapping
 from contextlib import AbstractContextManager
 from pathlib import Path
 from types import TracebackType
+from uuid import UUID
 
 from scripts.profile.utils import Profiler
 from sec_nlp.core.infra.logger import logger
@@ -23,7 +24,7 @@ class PipelineProfiler(AbstractContextManager):
     def __init__(
         self,
         pipeline_name: str,
-        run_id: int | str | None = None,
+        run_id: UUID | None = None,
         output_root: Path | None = None,
         tracemalloc_frames: int = 8,
     ) -> None:

@@ -13,7 +13,7 @@ from sec_nlp.pipelines.presets.analyze import (
     OutputFormatter,
     SearchConfig,
 )
-from sec_nlp.pipelines.presets.analyze.steps.search.vector_search import (
+from sec_nlp.pipelines.presets.analyze.runnables.search import (
     SearchQueryResults,
     SearchRunnable,
 )

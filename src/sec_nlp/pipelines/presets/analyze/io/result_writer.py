@@ -32,6 +32,7 @@ def write_results(
     timings: Timings | None = None,
     market_data: MarketEnrichment | None = None,
     market_context: str | None = None,
+    market_correlation: JsonDict | None = None,
 ) -> list[Path]:
     """Write analysis results to output files."""
     output_files: list[Path] = []
@@ -73,6 +74,7 @@ def write_results(
                     timings=timings,
                     market_data=market_data,
                     market_context=market_context,
+                    market_correlation=market_correlation,
                 )
                 if config.show_timeline and output.relationship_timeline:
                     _log_relationship_timeline(
@@ -97,6 +99,7 @@ def write_results(
             timings=timings,
             market_data=market_data,
             market_context=market_context,
+            market_correlation=market_correlation,
         )
         if config.show_timeline and output.relationship_timeline:
             _log_relationship_timeline(
@@ -135,6 +138,7 @@ def write_results(
             timings=timings,
             market_data=market_data,
             market_context=market_context,
+            market_correlation=market_correlation,
         )
         if config.show_timeline and output.relationship_timeline:
             _log_relationship_timeline(

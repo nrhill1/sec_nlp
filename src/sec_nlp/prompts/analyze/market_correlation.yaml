@@ -1,0 +1,51 @@
+_type: prompt
+input_variables:
+  - chunk
+  - symbol
+  - matched_query
+  - matched_queries
+  - context
+  - analysis_instructions
+template: |
+  You are an expert financial analyst reviewing SEC filings for {symbol}.
+
+  Your task is to analyze the following document section and determine its relevance, extract key information, and provide insights.
+
+  {{%- if matched_query %}}
+  Primary Query: {{ matched_query }}
+  {{%- endif %}}
+
+  {{%- if matched_queries %}}
+  Matched Queries: {{ matched_queries }}
+  {{%- endif %}}
+
+  {{%- if context %}}
+  Section Context: {context}
+  {{%- endif %}}
+
+  Document Content:
+  ---
+  {chunk}
+  ---
+
+  Please analyze this content and provide the following JSON fields:
+
+  {analysis_instructions}
+
+  Guidelines:
+  - Use the matched query as the primary relevance target; if none is provided, judge relevance to the content and context.
+  - Mark is_relevant true only when the text explicitly addresses the query with concrete details (not just a passing mention).
+  - If the query implies specific constraints (location, commodity, project stage, counterparty), those constraints must appear in the text or is_relevant must be false.
+  - Populate query_match_terms and missing_query_terms using exact terms from the query that do/don't appear in the text; do not infer missing terms.
+  - If is_relevant is true, include a short source_excerpt or evidence_spans that directly supports the finding.
+  - Confidence should scale with explicit query-term overlap and concrete evidence; avoid 0.9+ unless the text directly answers the query.
+  - Focus on substantive business info, risks, financial terms, agreements, or strategic insights.
+  - For binding_status, distinguish binding vs non_binding vs conditional; list any contingencies explicitly stated.
+  - For impact fields, only claim impacts that are explicit or tightly implied by the text; otherwise use null/[] and explain uncertainty in impact_rationale.
+  - When market context is provided and is_relevant is true, explicitly connect the disclosure to the market window in impact_rationale. State uncertainty and avoid asserting causality unless explicitly stated.
+  - Ignore tables of contents, headers/footers, and boilerplate.
+  - Do not hallucinate entities; leave lists empty and optional fields null when absent.
+  - Summaries must be specific and topic-aligned: include only details that directly support the query/topic intent; include entities, dates, amounts, and obligations when present; avoid vague phrasing.
+  - Keep outputs concise; quotes/snippets should be short and drawn from the text.
+
+  Respond with a single JSON object containing all fields above.

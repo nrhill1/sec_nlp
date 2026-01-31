@@ -1,10 +1,10 @@
-# src/sec_nlp/pipelines/presets/analyze/steps/analysis/analysis_runner.py
+# src/sec_nlp/pipelines/presets/analyze/runnables/analysis.py
 """LLM analysis runner for analyze pipeline chunks."""
 
 from __future__ import annotations
 
 import re
-from typing import Any
+from uuid import UUID
 
 from langchain_core.callbacks.base import BaseCallbackHandler
 from langchain_core.documents import Document
@@ -19,10 +19,10 @@ from tqdm import tqdm
 from sec_nlp.core.infra.logger import logger
 from sec_nlp.pipelines.metadata.accession import get_accession_from_metadata
 from sec_nlp.pipelines.types import AnalysisResultDict, MetadataRecord
+from sec_nlp.types import JsonValue
 
-from ...config import AnalyzeConfig
-from ...models import AnalysisInput, AnalysisResult
-from ...utils import query_term_overlap, resolve_symbol_for_output
+from ..models import AnalysisInput, AnalysisResult
+from ..utils import query_term_overlap, resolve_symbol_for_output
 
 NUMERIC_SIGNAL_RE = re.compile(r"[$€£]?\d")
 
@@ -53,18 +53,25 @@ class AnalyzerRunnable(
         defer_build=True,
     )
 
-    config: AnalyzeConfig = Field(description="Analyze pipeline config")
     graph: Runnable[AnalysisInput, AnalysisResult] = Field(
         description="Runnable LLM graph"
     )
     callbacks: list[BaseCallbackHandler] = Field(default_factory=list)
     analysis_instructions: str = Field(default="")
+    symbols: list[str] = Field(default_factory=list)
+    llm_retry_attempts: int = Field(default=0, ge=0)
+    llm_retry_backoff: float = Field(default=0.0, ge=0.0)
+    confidence_mode: str = Field(default="basic")
+    include_raw_chunks: bool = Field(default=False)
+    batch_size: int = Field(default=8, ge=1)
+    query_term_min_len: int = Field(default=3, ge=1)
+    run_id: UUID | None = None
 
     def invoke(
         self,
         input: AnalysisBatchInput,
         config: RunnableConfig | None = None,
-        **kwargs: Any,
+        **kwargs: JsonValue,
     ) -> list[AnalysisResultDict]:
         """Invoke the runnable for chaining in a sequence."""
         _ = config
@@ -115,9 +122,9 @@ class AnalyzerRunnable(
             leave=False,
             bar_format=bar_format,
         ) as pbar:
-            for i in range(0, len(inputs), self.config.batch_size):
-                batch = inputs[i : i + self.config.batch_size]
-                batch_docs = docs[i : i + self.config.batch_size]
+            for i in range(0, len(inputs), self.batch_size):
+                batch = inputs[i : i + self.batch_size]
+                batch_docs = docs[i : i + self.batch_size]
                 batch_results = self._process_batch(batch, batch_docs)
                 results.extend(batch_results)
                 pbar.update(len(batch))
@@ -150,7 +157,7 @@ class AnalyzerRunnable(
             symbol = (
                 symbol_value
                 if isinstance(symbol_value, str) and symbol_value
-                else self.config.symbols[0]
+                else (self.symbols[0] if self.symbols else "<unknown>")
             )
             topic_hits_value = meta.get("topic_hits")
             topic_hits = (
@@ -184,12 +191,10 @@ class AnalyzerRunnable(
                 f"Batch size mismatch: {len(batch)} inputs vs {len(docs)} docs"
             )
 
-        config_callbacks: RunnableConfig | None = (
-            RunnableConfig(callbacks=self.callbacks) if self.callbacks else None
-        )
+        config_callbacks = self._build_runnable_config(include_run_id=False)
 
-        attempts = self.config.llm_retry_attempts + 1
-        backoff = self.config.llm_retry_backoff
+        attempts = self.llm_retry_attempts + 1
+        backoff = self.llm_retry_backoff
 
         for attempt in range(attempts):
             try:
@@ -232,9 +237,7 @@ class AnalyzerRunnable(
     ) -> AnalysisResultDict:
         """Process a single item."""
         try:
-            config_callbacks: RunnableConfig | None = None
-            if self.callbacks:
-                config_callbacks = RunnableConfig(callbacks=self.callbacks)
+            config_callbacks = self._build_runnable_config(include_run_id=True)
             result: AnalysisResult = self.graph.invoke(
                 item, config=config_callbacks
             )
@@ -300,7 +303,7 @@ class AnalyzerRunnable(
             _, _, ratio = query_term_overlap(
                 cleaned,
                 content,
-                min_len=self.config.search.query_term_min_len,
+                min_len=self.query_term_min_len,
             )
             if ratio > best_ratio:
                 best_ratio = ratio
@@ -395,7 +398,7 @@ class AnalyzerRunnable(
             query_term_overlap(
                 primary_query,
                 doc.page_content,
-                min_len=self.config.search.query_term_min_len,
+                min_len=self.query_term_min_len,
             )
         )
         for key in ("matched_queries", "search_query", "search_score"):
@@ -405,7 +408,7 @@ class AnalyzerRunnable(
             is_relevant = False
 
         confidence_score = result.confidence_score
-        if self.config.confidence_mode == "calibrated":
+        if self.confidence_mode == "calibrated":
             calibrated = self._calibrate_confidence(
                 llm_confidence=confidence_score,
                 is_relevant=is_relevant,
@@ -454,7 +457,7 @@ class AnalyzerRunnable(
         if matched_queries:
             result_dict["matched_queries"] = matched_queries
 
-        if self.config.include_raw_chunks:
+        if self.include_raw_chunks:
             result_dict["raw_chunk"] = doc.page_content
 
         return result_dict
@@ -480,9 +483,17 @@ class AnalyzerRunnable(
             "chunk_preview": chunk_preview,
             "source_metadata": source_metadata,
             **({"matched_queries": matched_queries} if matched_queries else {}),
-            **(
-                {"raw_chunk": item.chunk}
-                if self.config.include_raw_chunks
-                else {}
-            ),
+            **({"raw_chunk": item.chunk} if self.include_raw_chunks else {}),
         }
+
+    def _build_runnable_config(
+        self, *, include_run_id: bool
+    ) -> RunnableConfig | None:
+        config: RunnableConfig = {}
+        if self.callbacks:
+            config["callbacks"] = self.callbacks
+        if self.run_id is not None:
+            config["metadata"] = {"pipeline_run_id": str(self.run_id)}
+            if include_run_id:
+                config["run_id"] = self.run_id
+        return config or None

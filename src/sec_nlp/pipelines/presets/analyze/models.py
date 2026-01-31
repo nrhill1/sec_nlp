@@ -3,6 +3,7 @@
 
 from collections.abc import Mapping, Sequence
 from typing import ClassVar, Literal
+from uuid import UUID
 
 from pydantic import (
     BaseModel,
@@ -229,6 +230,38 @@ class AnalysisResult(BasePipelineResult):
             return items
         return []
 
+    @field_validator("evidence_spans", mode="before")
+    @classmethod
+    def _coerce_evidence_spans(cls, v: JsonValue) -> list[EvidenceSpan]:
+        """Normalize evidence spans from LLM output."""
+        if v is None:
+            return []
+        if isinstance(v, str):
+            cleaned = v.strip()
+            if not cleaned:
+                return []
+            return []
+        if isinstance(v, Sequence) and not isinstance(v, str):
+            spans: list[EvidenceSpan] = []
+            for item in v:
+                if isinstance(item, dict):
+                    span: EvidenceSpan = {
+                        str(k): val
+                        for k, val in item.items()
+                        if isinstance(val, (str, int, float))
+                    }
+                    if span:
+                        spans.append(span)
+            return spans
+        if isinstance(v, dict):
+            span: EvidenceSpan = {
+                str(k): val
+                for k, val in v.items()
+                if isinstance(val, (str, int, float))
+            }
+            return [span] if span else []
+        return []
+
     @field_validator(
         "tags",
         "follow_up_questions",
@@ -411,7 +444,7 @@ class OutputProvenance(BaseModel):
         defer_build=True,
     )
 
-    run_id: int | None = None
+    run_id: UUID | None = None
     pipeline_version: str | None = None
     model_name: str | None = None
     confidence_mode: str | None = None
