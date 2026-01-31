@@ -687,6 +687,9 @@ class AnalyzePipeline(BasePipeline):
                     hit_symbol = hit.ticker or (
                         tickers[0] if tickers else symbol
                     )
+                    yake_keywords: list[MetadataScalar] = list(
+                        hit.yake_keywords
+                    )
                     metadata: dict[str, MetadataValue] = {
                         "source": "efts",
                         "search_source": "efts",
@@ -699,6 +702,7 @@ class AnalyzePipeline(BasePipeline):
                         "filed_date": hit.filed_date.isoformat(),
                         "efts_score": float(hit.score),
                         "efts_query": query,
+                        "yake_keywords": yake_keywords,
                         "edgar_url": hit.edgar_url,
                         "is_local": accession in local_accessions,
                     }
