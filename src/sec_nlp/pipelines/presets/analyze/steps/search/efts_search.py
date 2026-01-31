@@ -249,12 +249,15 @@ class EFTSSearchRunnable(BaseModel):
                 enriched_hits: list[EFTSHit] = []
                 for hit in scoped_hits:
                     snippet = hit.snippet or ""
+                    keyword_source = (
+                        snippet if snippet.strip() else batch_result.query
+                    )
                     keywords = (
                         [
                             kw.keyword
-                            for kw in extractor.extract(snippet, top_n=5)
+                            for kw in extractor.extract(keyword_source, top_n=5)
                         ]
-                        if snippet.strip()
+                        if keyword_source.strip()
                         else []
                     )
                     enriched_hits.append(

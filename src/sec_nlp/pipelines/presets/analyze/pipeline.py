@@ -27,6 +27,7 @@ from sec_nlp.core.ingest.loader import Loader
 from sec_nlp.core.llm.chains import InputModelKeys, build_runnable
 from sec_nlp.core.text.deduplication import SimHashConfig, SimHashDeduplicator
 from sec_nlp.core.text.filters import SectionFilter
+from sec_nlp.core.text.ranking import KeywordExtractor, RankingAlgorithm
 from sec_nlp.core.text.section_extractor import SectionExtractor
 from sec_nlp.pipelines import BasePipeline
 from sec_nlp.pipelines.metadata.accession import get_accession_from_metadata
@@ -1011,6 +1012,8 @@ class AnalyzePipeline(BasePipeline):
                 "timings": timings,
             }
 
+        self._update_efts_keywords_from_docs(symbol, docs)
+
         chunk_lengths = [len((doc.page_content or "").strip()) for doc in docs]
         stats: ChunkStats = {
             "count": float(len(chunk_lengths)),
@@ -1338,6 +1341,51 @@ class AnalyzePipeline(BasePipeline):
             f"{enrichment.granularity.value} window {window}: "
             f"{'; '.join(rows)}{suffix}"
         )
+
+    def _update_efts_keywords_from_docs(
+        self, symbol: str, docs: list[Document]
+    ) -> None:
+        results = self._efts_results_by_symbol.get(symbol)
+        if not results:
+            return
+
+        try:
+            extractor = KeywordExtractor(
+                algorithm=RankingAlgorithm.YAKE,
+                ngram_size=3,
+            )
+        except Exception as exc:
+            logger.warning("YAKE extractor unavailable: %s", exc)
+            return
+
+        accession_sources: dict[str, str] = {}
+        for doc in docs:
+            accession = get_accession_from_metadata(doc.metadata)
+            if not accession or accession in accession_sources:
+                continue
+            content = (doc.page_content or "").strip()
+            if not content:
+                continue
+            accession_sources[accession] = content
+
+        if not accession_sources:
+            return
+
+        for result in results:
+            updated_hits: list[EFTSHit] = []
+            for hit in result.hits:
+                source_text = accession_sources.get(hit.accession_number, "")
+                if source_text:
+                    keywords = [
+                        kw.keyword
+                        for kw in extractor.extract(source_text, top_n=5)
+                    ]
+                    updated_hits.append(
+                        hit.model_copy(update={"yake_keywords": keywords})
+                    )
+                else:
+                    updated_hits.append(hit)
+            result.hits = updated_hits
 
     def _write_results(
         self,
