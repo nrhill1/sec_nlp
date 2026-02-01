@@ -138,6 +138,7 @@ class AnalysisResultDict(TypedDict, total=False):
     is_relevant: bool
     confidence_score: float | None
     confidence_rationale: str
+    yake_overlap: float | None
     rank: int
     confidence_bucket: str
     summary: str | None

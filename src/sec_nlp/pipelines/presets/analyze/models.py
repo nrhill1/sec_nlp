@@ -208,6 +208,26 @@ class AnalysisResult(BasePipelineResult):
         description="Questions an analyst should pursue based on this chunk",
     )
 
+    @field_validator("impact_confidence", mode="before")
+    @classmethod
+    def _coerce_impact_confidence(cls, v: JsonValue) -> float | None:
+        if v is None:
+            return None
+        if isinstance(v, (int, float)):
+            return round(float(v), 2)
+        if isinstance(v, str):
+            cleaned = v.strip().lower()
+            if not cleaned:
+                return None
+            if cleaned in {"low", "medium", "high"}:
+                mapping = {"low": 0.3, "medium": 0.6, "high": 0.85}
+                return round(mapping[cleaned], 2)
+            try:
+                return round(float(cleaned), 2)
+            except ValueError:
+                return None
+        return None
+
     @field_validator("key_points", mode="before")
     @classmethod
     def _coerce_key_points(

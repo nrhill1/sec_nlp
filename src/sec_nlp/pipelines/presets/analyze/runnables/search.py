@@ -422,7 +422,7 @@ class SearchRunnable(
 
                 results_payload = [
                     SearchResultPayload(
-                        score=float(score),
+                        score=self._round_score(float(score)) or 0.0,
                         content=(doc.page_content or "")[:500],
                         metadata=(
                             metadata_payload := self._normalize_metadata(
@@ -435,16 +435,18 @@ class SearchRunnable(
                         forward_looking=coerce_bool(
                             metadata_payload.get("forward_looking")
                         ),
-                        confidence_score=coerce_float(
-                            metadata_payload.get("confidence_score")
+                        confidence_score=self._round_score(
+                            coerce_float(
+                                metadata_payload.get("confidence_score")
+                            )
                         ),
                     )
                     for doc, score in symbol_results
                 ]
 
                 stats_payload = SearchStatsPayload(
-                    average_score=avg_score,
-                    best_score=best_score,
+                    average_score=self._round_score(avg_score),
+                    best_score=self._round_score(best_score),
                     symbols=(
                         {symbol_key: len(symbol_results)}
                         if symbol_results
@@ -529,6 +531,12 @@ class SearchRunnable(
         ]
 
     @staticmethod
+    def _round_score(value: float | None) -> float | None:
+        if value is None:
+            return None
+        return round(float(value), 2)
+
+    @staticmethod
     def _score_is_better(
         candidate: float, current: float, prefers_lower: bool
     ) -> bool:
@@ -589,10 +597,13 @@ class SearchRunnable(
                     content=(hit.doc.page_content or "")[:500],
                     metadata=metadata_payload,
                     matched_queries=[
-                        SearchMatchPayload(query=query, score=float(score))
+                        SearchMatchPayload(
+                            query=query,
+                            score=self._round_score(float(score)) or 0.0,
+                        )
                         for query, score in sorted_matches
                     ],
-                    best_score=best_score,
+                    best_score=self._round_score(best_score),
                 )
             )
 
@@ -620,17 +631,19 @@ class SearchRunnable(
             return {}
         payload: JsonDict = {}
         for key, raw_value in metadata.items():
-            normalized = cls._normalize_metadata_value(raw_value)
+            normalized = cls._normalize_metadata_value(str(key), raw_value)
             if normalized is not None:
                 payload[str(key)] = normalized
         return payload
 
     @classmethod
     def _normalize_metadata_value(
-        cls, value: MetadataValue | Path
+        cls, key: str, value: MetadataValue | Path
     ) -> JsonValue | None:
         if isinstance(value, Path):
             return str(value)
+        if isinstance(value, (int, float)) and cls._should_round_key(key):
+            return round(float(value), 2)
         if isinstance(value, (str, int, float, bool)) or value is None:
             return value
         if isinstance(value, dict):
@@ -638,15 +651,26 @@ class SearchRunnable(
             for nested_key, nested_value in value.items():
                 if not isinstance(nested_key, str):
                     continue
-                normalized = cls._normalize_metadata_value(nested_value)
+                normalized = cls._normalize_metadata_value(
+                    nested_key, nested_value
+                )
                 if normalized is not None:
                     nested[nested_key] = normalized
             return nested or None
         if isinstance(value, list):
             items: list[JsonValue] = []
             for item in value:
-                normalized = cls._normalize_metadata_value(item)
+                normalized = cls._normalize_metadata_value(key, item)
                 if normalized is not None:
                     items.append(normalized)
             return items or None
         return None
+
+    @staticmethod
+    def _should_round_key(key: str) -> bool:
+        lowered = key.lower()
+        return (
+            "score" in lowered
+            or "confidence" in lowered
+            or "overlap" in lowered
+        )

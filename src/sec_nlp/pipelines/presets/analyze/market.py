@@ -280,12 +280,21 @@ def _aggregate_quotes(
             MarketQuoteSummary(
                 start_date=datetime.fromtimestamp(min_ts, UTC).date(),
                 end_date=datetime.fromtimestamp(max_ts, UTC).date(),
-                average_open=sum(quote.open_price for quote in bucket) / count,
-                average_high=sum(quote.high for quote in bucket) / count,
-                average_low=sum(quote.low for quote in bucket) / count,
-                average_close=sum(quote.close for quote in bucket) / count,
-                average_adjclose=sum(quote.adjclose for quote in bucket)
-                / count,
+                average_open=round(
+                    sum(quote.open_price for quote in bucket) / count, 2
+                ),
+                average_high=round(
+                    sum(quote.high for quote in bucket) / count, 2
+                ),
+                average_low=round(
+                    sum(quote.low for quote in bucket) / count, 2
+                ),
+                average_close=round(
+                    sum(quote.close for quote in bucket) / count, 2
+                ),
+                average_adjclose=round(
+                    sum(quote.adjclose for quote in bucket) / count, 2
+                ),
                 average_volume=sum(quote.volume for quote in bucket) / count,
             )
         )

@@ -148,6 +148,24 @@ def build_market_correlation(
         "warranty_accrual_delta": None,
     }
 
+    def _round_value(value: float | None) -> float | None:
+        if value is None:
+            return None
+        return round(float(value), 2)
+
+    metrics = {
+        key: _round_value(value)
+        if isinstance(value, (int, float)) or value is None
+        else value
+        for key, value in metrics.items()
+    }
+    signal_correlations = {
+        key: _round_value(value)
+        if isinstance(value, (int, float)) or value is None
+        else value
+        for key, value in signal_correlations.items()
+    }
+
     return {
         "filing_date": filing_date.isoformat() if filing_date else None,
         "event_window": event_window,

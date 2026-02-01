@@ -16,7 +16,13 @@ from sec_nlp.pipelines.output_io import (
     write_json,
     write_yaml,
 )
-from sec_nlp.pipelines.types import AnalysisResultDict, MetadataMap
+from sec_nlp.pipelines.types import (
+    AnalysisResultDict,
+    MetadataMap,
+    MetadataRecord,
+    MetadataScalar,
+    MetadataValue,
+)
 from sec_nlp.types import JsonDict, JsonValue
 
 from ..market import MarketEnrichment
@@ -96,6 +102,11 @@ class OutputFormatter:
             score = coerce_float(result.get("confidence_score"))
             return score if score is not None else -1.0
 
+        def round_score(value: float | None) -> float | None:
+            if value is None:
+                return None
+            return round(float(value), 2)
+
         sorted_results = sorted(
             results,
             key=sort_score,
@@ -105,10 +116,152 @@ class OutputFormatter:
         for idx, result in enumerate(sorted_results, start=1):
             score = coerce_float(result.get("confidence_score"))
             enriched: AnalysisResultDict = {**result}
+            if score is not None:
+                enriched["confidence_score"] = round_score(score)
+            impact_confidence = coerce_float(result.get("impact_confidence"))
+            if impact_confidence is not None:
+                enriched["impact_confidence"] = round_score(impact_confidence)
+            yake_overlap = coerce_float(result.get("yake_overlap"))
+            if yake_overlap is not None:
+                enriched["yake_overlap"] = round_score(yake_overlap)
+            source_meta = enriched.get("source_metadata")
+            if isinstance(source_meta, dict):
+                enriched["source_metadata"] = self._round_metadata_scores(
+                    source_meta
+                )
             enriched["rank"] = idx
             enriched["confidence_bucket"] = self._confidence_bucket(score)
             ranked.append(enriched)
         return ranked
+
+    @classmethod
+    def _round_metadata_scores(cls, metadata: MetadataRecord) -> MetadataRecord:
+        rounded: dict[str, MetadataValue] = {}
+        for key, value in metadata.items():
+            if isinstance(key, str):
+                rounded[key] = cls._round_metadata_value(key, value)
+        return rounded
+
+    @classmethod
+    def _round_metadata_value(
+        cls, key: str, value: MetadataValue
+    ) -> MetadataValue:
+        if isinstance(value, (int, float)) and cls._is_score_key(key):
+            return round(float(value), 2)
+        if isinstance(value, (str, bool)) or value is None:
+            return value
+        if isinstance(value, dict):
+            if cls._is_dict_list_map(value):
+                return cls._round_metadata_dict_list(
+                    cls._as_dict_list_map(value)
+                )
+            return cls._round_metadata_dict(cls._as_dict_scalar_map(value))
+        if isinstance(value, list):
+            return cls._round_metadata_list(key, value)
+        return value
+
+    @classmethod
+    def _round_metadata_dict(
+        cls, value: dict[str, MetadataScalar]
+    ) -> dict[str, MetadataScalar]:
+        nested: dict[str, MetadataScalar] = {}
+        for nested_key, nested_value in value.items():
+            if isinstance(nested_value, (int, float)) and cls._is_score_key(
+                nested_key
+            ):
+                nested[nested_key] = round(float(nested_value), 2)
+            else:
+                nested[nested_key] = nested_value
+        return nested
+
+    @classmethod
+    def _round_metadata_dict_list(
+        cls, value: dict[str, list[dict[str, MetadataScalar]]]
+    ) -> dict[str, list[dict[str, MetadataScalar]]]:
+        nested: dict[str, list[dict[str, MetadataScalar]]] = {}
+        for nested_key, nested_value in value.items():
+            if isinstance(nested_value, list):
+                nested[nested_key] = [
+                    cls._round_metadata_dict(item)
+                    for item in nested_value
+                    if isinstance(item, dict)
+                ]
+        return nested
+
+    @staticmethod
+    def _is_dict_list_map(
+        value: dict[str, MetadataScalar]
+        | dict[str, list[dict[str, MetadataScalar]]],
+    ) -> bool:
+        if not value:
+            return False
+        for item in value.values():
+            if isinstance(item, list):
+                return True
+        return False
+
+    @staticmethod
+    def _as_dict_scalar_map(
+        value: dict[str, MetadataScalar]
+        | dict[str, list[dict[str, MetadataScalar]]],
+    ) -> dict[str, MetadataScalar]:
+        return {
+            key: item
+            for key, item in value.items()
+            if isinstance(item, (str, int, float, bool)) or item is None
+        }
+
+    @staticmethod
+    def _as_dict_list_map(
+        value: dict[str, MetadataScalar]
+        | dict[str, list[dict[str, MetadataScalar]]],
+    ) -> dict[str, list[dict[str, MetadataScalar]]]:
+        filtered: dict[str, list[dict[str, MetadataScalar]]] = {}
+        for key, item in value.items():
+            if not isinstance(item, list):
+                continue
+            filtered[key] = [
+                {
+                    nested_key: nested_value
+                    for nested_key, nested_value in entry.items()
+                    if isinstance(nested_value, (str, int, float, bool))
+                    or nested_value is None
+                }
+                for entry in item
+                if isinstance(entry, dict)
+            ]
+        return filtered
+
+    @classmethod
+    def _round_metadata_list(
+        cls,
+        key: str,
+        value: list[MetadataScalar] | list[dict[str, MetadataScalar]],
+    ) -> list[MetadataScalar] | list[dict[str, MetadataScalar]]:
+        if not value:
+            return value
+        if isinstance(value[0], dict):
+            return [
+                cls._round_metadata_dict(item)
+                for item in value
+                if isinstance(item, dict)
+            ]
+        rounded: list[MetadataScalar] = []
+        for item in value:
+            if isinstance(item, (int, float)) and cls._is_score_key(key):
+                rounded.append(round(float(item), 2))
+            elif isinstance(item, (str, bool)) or item is None:
+                rounded.append(item)
+        return rounded
+
+    @staticmethod
+    def _is_score_key(key: str) -> bool:
+        lowered = key.lower()
+        return (
+            "score" in lowered
+            or "confidence" in lowered
+            or "overlap" in lowered
+        )
 
     @staticmethod
     def _extract_queries(result: AnalysisResultDict) -> list[str]:
@@ -303,11 +456,31 @@ class OutputFormatter:
                 return str(value)
             return None
 
+        def _meta_str_any(keys: tuple[str, ...]) -> str | None:
+            for key in keys:
+                value = filing_meta.get(key)
+                if isinstance(value, (str, int, float, bool)):
+                    return str(value)
+            source_meta = filing_meta.get("source_metadata")
+            if isinstance(source_meta, dict):
+                for key in keys:
+                    value = source_meta.get(key)
+                    if isinstance(value, (str, int, float, bool)):
+                        return str(value)
+            return None
+
         filing = FilingInfo(
             accession_number=_meta_str("accession_number"),
-            form_type=_meta_str("form_type"),
-            acceptance_date=_meta_str("acceptance_date"),
-            filing_date=_meta_str("filing_date"),
+            form_type=_meta_str_any(("form_type", "form", "formType")),
+            acceptance_date=_meta_str_any(
+                (
+                    "acceptance_date",
+                    "accepted_date",
+                    "filed_date",
+                    "filing_date",
+                )
+            ),
+            filing_date=_meta_str_any(("filing_date", "filed_date")),
         )
         relationship_timeline = self._build_relationship_timeline(filing_meta)
         executive_comp_summary = self._build_exec_comp_summary(ranked_results)

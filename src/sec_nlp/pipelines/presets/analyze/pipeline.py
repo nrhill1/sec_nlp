@@ -24,6 +24,7 @@ from sec_nlp.core.edgar.efts_models import EFTSHit
 from sec_nlp.core.edgar.filing_mode import FilingMode
 from sec_nlp.core.infra.logger import log_divider, logger
 from sec_nlp.core.ingest.downloader import download_accessions
+from sec_nlp.core.ingest.filings import get_filing_date_from_dir
 from sec_nlp.core.ingest.loader import Loader
 from sec_nlp.core.llm.chains import InputModelKeys, build_runnable
 from sec_nlp.core.text.deduplication import SimHashConfig, SimHashDeduplicator
@@ -73,6 +74,7 @@ from .steps.preprocess.preprocess import ChunkPreprocessor
 from .steps.preprocess.topic_scoring import build_topic_matcher
 from .steps.search.efts_search import EFTSSearchResult
 from .types import ChunkStats, SymbolRunMetadata, Timings
+from .utils import normalize_query_terms
 
 type PromptInput = dict[
     str,
@@ -586,6 +588,56 @@ class AnalyzePipeline(BasePipeline):
         return min(best, 1.0)
 
     @staticmethod
+    def _collect_query_terms(result: AnalysisResultDict) -> list[str]:
+        matched = result.get("query_match_terms")
+        missing = result.get("missing_query_terms")
+        terms: list[str] = []
+        seen: set[str] = set()
+        for item in (matched, missing):
+            if not isinstance(item, list):
+                continue
+            for term in item:
+                if not isinstance(term, str):
+                    continue
+                cleaned = term.strip().lower()
+                if not cleaned or cleaned in seen:
+                    continue
+                seen.add(cleaned)
+                terms.append(cleaned)
+        return terms
+
+    @classmethod
+    def _extract_yake_terms(cls, result: AnalysisResultDict) -> list[str]:
+        source_meta = result.get("source_metadata")
+        if not isinstance(source_meta, dict):
+            return []
+        yake_keywords = source_meta.get("yake_keywords")
+        if not isinstance(yake_keywords, list):
+            return []
+        terms: list[str] = []
+        seen: set[str] = set()
+        for keyword in yake_keywords:
+            if not isinstance(keyword, str):
+                continue
+            for term in normalize_query_terms(keyword, min_len=3):
+                if term in seen:
+                    continue
+                seen.add(term)
+                terms.append(term)
+        return terms
+
+    @classmethod
+    def _score_yake_overlap(cls, result: AnalysisResultDict) -> float | None:
+        query_terms = cls._collect_query_terms(result)
+        if not query_terms:
+            return None
+        yake_terms = cls._extract_yake_terms(result)
+        if not yake_terms:
+            return None
+        matches = [term for term in query_terms if term in yake_terms]
+        return len(matches) / len(query_terms) if query_terms else None
+
+    @staticmethod
     def _has_evidence(result: AnalysisResultDict) -> bool:
         evidence = result.get("evidence_spans")
         if isinstance(evidence, list) and evidence:
@@ -613,10 +665,14 @@ class AnalyzePipeline(BasePipeline):
     ) -> tuple[float, str]:
         query_relevance = cls._score_query_relevance(result)
         match_strength = cls._score_match_strength(result)
+        yake_overlap = cls._score_yake_overlap(result)
         evidence = cls._has_evidence(result)
         numeric = cls._has_numeric_signal(result)
 
-        base = 0.2 + (0.4 * query_relevance)
+        overlap_weight = (
+            yake_overlap if yake_overlap is not None else query_relevance
+        )
+        base = 0.2 + (0.4 * overlap_weight)
         if match_strength is not None:
             base += 0.2 * match_strength
         if evidence:
@@ -635,7 +691,7 @@ class AnalyzePipeline(BasePipeline):
         score = max(0.05, min(base, 0.99))
 
         rationale_parts = [
-            f"query_overlap={query_relevance:.2f}",
+            f"yake_overlap={(yake_overlap if yake_overlap is not None else query_relevance):.2f}",
             f"match_score={(match_strength if match_strength is not None else 0.0):.2f}",
             f"evidence={'yes' if evidence else 'no'}",
             f"numeric={'yes' if numeric else 'no'}",
@@ -659,12 +715,17 @@ class AnalyzePipeline(BasePipeline):
             derived_score, rationale = self._derive_confidence_score(
                 result, market_signal=market_signal
             )
+            yake_overlap = self._score_yake_overlap(result)
             existing = result.get("confidence_score")
             if isinstance(existing, (int, float)):
-                result["confidence_score"] = min(float(existing), derived_score)
+                result["confidence_score"] = round(
+                    min(float(existing), derived_score), 2
+                )
             else:
-                result["confidence_score"] = derived_score
+                result["confidence_score"] = round(derived_score, 2)
             result["confidence_rationale"] = rationale
+            if yake_overlap is not None:
+                result["yake_overlap"] = round(float(yake_overlap), 2)
 
     @staticmethod
     def _select_efts_accessions(
@@ -1144,6 +1205,7 @@ class AnalyzePipeline(BasePipeline):
 
         t0 = perf_counter()
         docs = self._preprocessor.chunk_and_prepare(docs)
+        self._ensure_filing_dates(docs)
         timings["prepare"] = perf_counter() - t0
 
         if not docs:
@@ -1385,6 +1447,30 @@ class AnalyzePipeline(BasePipeline):
         timings["total"] = sum(timings.values())
 
         return output_files, stats
+
+    @staticmethod
+    def _ensure_filing_dates(docs: list[Document]) -> None:
+        for doc in docs:
+            metadata = dict(doc.metadata or {})
+            if metadata.get("filing_date") or metadata.get("acceptance_date"):
+                continue
+            filed_date = metadata.get("filed_date")
+            if isinstance(filed_date, str) and filed_date.strip():
+                metadata.setdefault("filing_date", filed_date)
+                metadata.setdefault("acceptance_date", filed_date)
+                doc.metadata = metadata
+                continue
+            source = metadata.get("file_path") or metadata.get("source")
+            if isinstance(source, str) and source.strip():
+                try:
+                    filing_date = get_filing_date_from_dir(Path(source).parent)
+                except Exception:
+                    filing_date = None
+                if filing_date is not None:
+                    iso_date = filing_date.isoformat()
+                    metadata.setdefault("filing_date", iso_date)
+                    metadata.setdefault("acceptance_date", iso_date)
+                    doc.metadata = metadata
 
     def _prepare_documents(self, docs: list[Document]) -> list[Document]:
         """Expose preprocessing for tests and standalone use."""
