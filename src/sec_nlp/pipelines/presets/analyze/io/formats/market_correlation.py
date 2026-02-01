@@ -41,7 +41,7 @@ def _compute_returns(
     quotes: list[MarketQuoteSummary],
 ) -> list[float]:
     returns: list[float] = []
-    for prev, curr in zip(quotes, quotes[1:], strict=True):
+    for prev, curr in zip(quotes, quotes[1:], strict=False):
         if prev.average_close == 0:
             continue
         returns.append((curr.average_close / prev.average_close) - 1.0)
