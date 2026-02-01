@@ -1,6 +1,7 @@
 # src/sec_nlp/pipelines/presets/analyze/pipeline.py
 """Generalized semantic search and confidence analysis pipeline for SEC filings."""
 
+import re
 from collections import defaultdict
 from pathlib import Path
 from statistics import mean, median
@@ -29,6 +30,7 @@ from sec_nlp.core.text.deduplication import SimHashConfig, SimHashDeduplicator
 from sec_nlp.core.text.filters import SectionFilter
 from sec_nlp.core.text.ranking import KeywordExtractor, RankingAlgorithm
 from sec_nlp.core.text.section_extractor import SectionExtractor
+from sec_nlp.core.types import coerce_json_dict
 from sec_nlp.pipelines import BasePipeline
 from sec_nlp.pipelines.metadata.accession import get_accession_from_metadata
 from sec_nlp.pipelines.observability.telemetry import log_chunk_length_stats
@@ -76,6 +78,8 @@ type PromptInput = dict[
     str,
     InputModelKeys | list[InputModelKeys] | dict[str, InputModelKeys],
 ]
+
+NUMERIC_SIGNAL_RE = re.compile(r"[$€£]?\d")
 
 
 class AnalyzePipeline(BasePipeline):
@@ -419,6 +423,7 @@ class AnalyzePipeline(BasePipeline):
             metadata: ResultDict = {
                 "run_id": str(self.config.run_id),
                 "short_id": self.config.short_id,
+                "run_path": self.config.run_path_component(),
             }
 
             bar_format = "\n{n_fmt}/{total_fmt} [{elapsed}<{remaining}]"
@@ -451,7 +456,7 @@ class AnalyzePipeline(BasePipeline):
                 run_component = self.config.run_path_component()
                 peer_summary = build_peer_comparison(self._symbol_profiles)
                 peer_dir = (
-                    self.config.out_path / self.pipeline_type / run_component
+                    self.config.out_path / run_component / self.pipeline_type
                 )
                 peer_path = write_peer_summary(
                     output_dir=peer_dir,
@@ -519,6 +524,147 @@ class AnalyzePipeline(BasePipeline):
         if auto_limit <= 0:
             return 0
         return auto_limit
+
+    @staticmethod
+    def _compute_market_confidence_signal(
+        market_correlation: JsonDict | None,
+    ) -> float | None:
+        if market_correlation is None:
+            return None
+        metrics_value = market_correlation.get("metrics")
+        metrics = coerce_json_dict(metrics_value)
+        if metrics is None:
+            return None
+
+        scores: list[float] = []
+        for key in ("car_post5", "car_post30", "car_pre5"):
+            value = metrics.get(key)
+            if isinstance(value, (int, float)):
+                scores.append(min(abs(float(value)) / 0.1, 1.0))
+
+        volume_spike = metrics.get("volume_spike")
+        if isinstance(volume_spike, (int, float)):
+            spike = max(float(volume_spike) - 1.0, 0.0)
+            scores.append(min(spike / 1.5, 1.0))
+
+        volatility_change = metrics.get("volatility_change")
+        if isinstance(volatility_change, (int, float)):
+            scores.append(min(abs(float(volatility_change)) / 0.05, 1.0))
+
+        if not scores:
+            return None
+        return float(mean(scores))
+
+    @staticmethod
+    def _score_query_relevance(result: AnalysisResultDict) -> float:
+        matched = result.get("query_match_terms")
+        missing = result.get("missing_query_terms")
+        matched_count = len(matched) if isinstance(matched, list) else 0
+        missing_count = len(missing) if isinstance(missing, list) else 0
+        total = matched_count + missing_count
+        if total == 0:
+            return 0.0
+        return matched_count / total
+
+    @staticmethod
+    def _score_match_strength(result: AnalysisResultDict) -> float | None:
+        matched_queries = result.get("matched_queries")
+        if not isinstance(matched_queries, list):
+            return None
+        scores: list[float] = []
+        for item in matched_queries:
+            if not isinstance(item, dict):
+                continue
+            score = item.get("score")
+            if isinstance(score, (int, float)):
+                scores.append(float(score))
+        if not scores:
+            return None
+        best = max(scores)
+        if best < 0:
+            return 0.0
+        return min(best, 1.0)
+
+    @staticmethod
+    def _has_evidence(result: AnalysisResultDict) -> bool:
+        evidence = result.get("evidence_spans")
+        if isinstance(evidence, list) and evidence:
+            return True
+        excerpt = result.get("source_excerpt")
+        return isinstance(excerpt, str) and excerpt.strip() != ""
+
+    @staticmethod
+    def _has_numeric_signal(result: AnalysisResultDict) -> bool:
+        summary = result.get("summary")
+        if isinstance(summary, str) and NUMERIC_SIGNAL_RE.search(summary):
+            return True
+        key_points = result.get("key_points")
+        if isinstance(key_points, list):
+            joined = " ".join(str(item) for item in key_points)
+            return NUMERIC_SIGNAL_RE.search(joined) is not None
+        return False
+
+    @classmethod
+    def _derive_confidence_score(
+        cls,
+        result: AnalysisResultDict,
+        *,
+        market_signal: float | None,
+    ) -> tuple[float, str]:
+        query_relevance = cls._score_query_relevance(result)
+        match_strength = cls._score_match_strength(result)
+        evidence = cls._has_evidence(result)
+        numeric = cls._has_numeric_signal(result)
+
+        base = 0.2 + (0.4 * query_relevance)
+        if match_strength is not None:
+            base += 0.2 * match_strength
+        if evidence:
+            base += 0.1
+        if numeric:
+            base += 0.1
+
+        if market_signal is not None and result.get("is_relevant"):
+            base += 0.1 * market_signal
+
+        if result.get("missing_query_terms"):
+            base -= 0.1
+        if not result.get("is_relevant"):
+            base = min(base, 0.4)
+
+        score = max(0.05, min(base, 0.99))
+
+        rationale_parts = [
+            f"query_overlap={query_relevance:.2f}",
+            f"match_score={(match_strength if match_strength is not None else 0.0):.2f}",
+            f"evidence={'yes' if evidence else 'no'}",
+            f"numeric={'yes' if numeric else 'no'}",
+        ]
+        if market_signal is not None:
+            rationale_parts.append(f"market_signal={market_signal:.2f}")
+        rationale = ", ".join(rationale_parts)
+        return score, rationale
+
+    def _apply_confidence_derivation(
+        self,
+        analysis_results: list[AnalysisResultDict],
+        market_correlation: JsonDict | None,
+    ) -> None:
+        market_signal = self._compute_market_confidence_signal(
+            market_correlation
+        )
+        for result in analysis_results:
+            if result.get("error") or result.get("exception"):
+                continue
+            derived_score, rationale = self._derive_confidence_score(
+                result, market_signal=market_signal
+            )
+            existing = result.get("confidence_score")
+            if isinstance(existing, (int, float)):
+                result["confidence_score"] = min(float(existing), derived_score)
+            else:
+                result["confidence_score"] = derived_score
+            result["confidence_rationale"] = rationale
 
     @staticmethod
     def _select_efts_accessions(
@@ -1136,6 +1282,29 @@ class AnalyzePipeline(BasePipeline):
         error_results = [
             r for r in analysis_results if r.get("error") or r.get("exception")
         ]
+
+        market_correlation = None
+        if self.config.market_correlation_enabled:
+            runner = self._market_correlation_runner
+            if runner is None:
+                runner = MarketCorrelationRunnable()
+            try:
+                market_correlation = runner.invoke(
+                    MarketCorrelationInput(
+                        market_data=market_data,
+                        relevant_results=relevant_results,
+                    )
+                )
+            except Exception as exc:
+                logger.warning(
+                    "Market correlation failed for %s: %s", symbol, exc
+                )
+
+        if self.config.confidence_mode == "calibrated":
+            self._apply_confidence_derivation(
+                analysis_results, market_correlation
+            )
+
         total_hits = len(analysis_results)
         relevant_hits = len(relevant_results)
         confidence_scores = [
@@ -1165,23 +1334,6 @@ class AnalyzePipeline(BasePipeline):
                 len(error_results),
                 sample_error.get("error") or sample_error.get("exception"),
             )
-
-        market_correlation = None
-        if self.config.market_correlation_enabled:
-            runner = self._market_correlation_runner
-            if runner is None:
-                runner = MarketCorrelationRunnable()
-            try:
-                market_correlation = runner.invoke(
-                    MarketCorrelationInput(
-                        market_data=market_data,
-                        relevant_results=relevant_results,
-                    )
-                )
-            except Exception as exc:
-                logger.warning(
-                    "Market correlation failed for %s: %s", symbol, exc
-                )
 
         # Write results to output file
         t_write_start = perf_counter()

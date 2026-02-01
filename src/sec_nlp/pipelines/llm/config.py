@@ -42,7 +42,7 @@ class LLMConfig(BaseModel):
     )
 
     max_new_tokens: int = Field(
-        default=4096,
+        default=6144,
         ge=1,
         le=8192,
         description="Maximum number of tokens for LLM generation",

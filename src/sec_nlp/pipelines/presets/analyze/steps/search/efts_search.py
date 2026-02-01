@@ -248,10 +248,7 @@ class EFTSSearchRunnable(BaseModel):
             if extractor is not None:
                 enriched_hits: list[EFTSHit] = []
                 for hit in scoped_hits:
-                    snippet = hit.snippet or ""
-                    keyword_source = (
-                        snippet if snippet.strip() else batch_result.query
-                    )
+                    keyword_source = f"{hit.company_name}\n{hit.snippet or ''}"
                     keywords = (
                         [
                             kw.keyword

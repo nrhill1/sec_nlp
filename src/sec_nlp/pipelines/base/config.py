@@ -255,8 +255,8 @@ class BasePipelineSettings(BaseSettings, ABC):
 
         Note: Downloads use a flat structure (sec_edgar_downloader creates its own
         sec-edgar-filings/SYMBOL/FORM_TYPE/ hierarchy inside dl_path).
-        Outputs use per-symbol/pipeline-type subdirectories for organization
-        (e.g., outputs/AAPL/warranty).
+        Outputs use run-scoped subdirectories for organization
+        (e.g., outputs/<run_timestamp>/warranty/AAPL).
         """
 
         if self.fresh:
@@ -280,15 +280,15 @@ class BasePipelineSettings(BaseSettings, ABC):
             symbol: Stock ticker symbol
 
         Returns:
-            Path in the form <out_path>/<SYMBOL>/<pipeline_type>/<run_timestamp>
+            Path in the form <out_path>/<run_timestamp>/<pipeline_type>/<SYMBOL>
         """
         normalized_symbol = symbol.strip().upper()
         run_component = self.run_path_component()
         symbol_out_path = (
             self.out_path
-            / normalized_symbol
-            / self.pipeline_type
             / run_component
+            / self.pipeline_type
+            / normalized_symbol
         )
         symbol_out_path.mkdir(parents=True, exist_ok=True)
         return symbol_out_path

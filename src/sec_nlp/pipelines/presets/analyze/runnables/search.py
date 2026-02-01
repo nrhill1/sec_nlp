@@ -511,9 +511,9 @@ class SearchRunnable(
         run_component = self.run_dir or "run"
         symbol_out_path = (
             self.output_root
-            / normalized_symbol
-            / self.pipeline_type
             / run_component
+            / self.pipeline_type
+            / normalized_symbol
         )
         symbol_out_path.mkdir(parents=True, exist_ok=True)
         return symbol_out_path

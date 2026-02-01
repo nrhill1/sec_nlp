@@ -748,7 +748,7 @@ class AnalyzeConfig(BasePipelineSettings):
         description="Minimum confidence score to consider results relevant",
     )
     confidence_mode: Literal["llm", "calibrated"] = Field(
-        default="llm",
+        default="calibrated",
         description=(
             "How to set confidence_score: use raw LLM output or calibrate "
             "with query-term overlap and evidence signals"

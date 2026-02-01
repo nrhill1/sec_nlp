@@ -137,6 +137,7 @@ class AnalysisResultDict(TypedDict, total=False):
     # Core fields
     is_relevant: bool
     confidence_score: float | None
+    confidence_rationale: str
     rank: int
     confidence_bucket: str
     summary: str | None
