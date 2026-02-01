@@ -120,7 +120,7 @@ class MetricsSummary(TypedDict):
     end_time: float | None
     total_duration_seconds: float
     counters: dict[str, int]
-    gauges: dict[str, float]
+    gauges: dict[str, float | int]
     timers: dict[str, TimerStats]
     memory: MemoryStats
     custom_metrics: list[CustomMetricDict]

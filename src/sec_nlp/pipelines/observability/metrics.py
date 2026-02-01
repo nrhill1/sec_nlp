@@ -63,7 +63,7 @@ class PipelineMetrics:
 
         # Metric storage
         self.counters: dict[str, int] = defaultdict(int)
-        self.gauges: dict[str, float] = {}
+        self.gauges: dict[str, float | int] = {}
         self.timers: dict[str, list[float]] = defaultdict(list)
         self.active_timers: dict[str, TimerMetric] = {}
         self.custom_metrics: list[MetricPoint] = []
@@ -103,7 +103,10 @@ class PipelineMetrics:
         self.counters[key] += value
 
     def set_gauge(
-        self, gauge: str, value: float, tags: dict[str, str] | None = None
+        self,
+        gauge: str,
+        value: float | int,
+        tags: dict[str, str] | None = None,
     ) -> None:
         """Set a gauge metric.
 
@@ -274,7 +277,10 @@ class PipelineMetrics:
         if summary["gauges"]:
             logger.info("Gauges:")
             for name, gauge_val in sorted(summary["gauges"].items()):
-                logger.info(f"  {name}: {gauge_val:.2f}")
+                if isinstance(gauge_val, int):
+                    logger.info(f"  {name}: {gauge_val}")
+                else:
+                    logger.info(f"  {name}: {gauge_val:.2f}")
             logger.info("")
 
         # Timers

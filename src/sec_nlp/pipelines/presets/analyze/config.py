@@ -164,7 +164,7 @@ class SearchConfig(BaseModel):
         description="Maximum results per query",
     )
     score_threshold: float = Field(
-        default=0.4,
+        default=0.5,
         ge=0.0,
         le=1.0,
         description=(
