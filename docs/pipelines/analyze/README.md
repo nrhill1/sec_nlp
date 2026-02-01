@@ -24,6 +24,7 @@ flowchart TD
 ```
 
 Implementation layout:
+- `runnables/` contains the execution units (analysis, search, EFTS, market correlation).
 - `steps/` groups pipeline stages (preprocess, indexing, search, analysis).
 - `io/` holds output formatting/export helpers.
 
@@ -94,12 +95,12 @@ Code: `src/sec_nlp/pipelines/presets/analyze/steps/indexing/vector_index.py`
 ### 7) Vector search retrieval
 If search queries (or topics when queries are empty) are configured, the pipeline retrieves candidate chunks by similarity search and applies the score threshold. Search hits are de-duplicated by content/section/symbol and annotated with `matched_queries` (query + score). Per-query results are cached for the optional summary export after the symbol loop.
 
-Code: `src/sec_nlp/pipelines/presets/analyze/steps/search/vector_search.py`
+Code: `src/sec_nlp/pipelines/presets/analyze/runnables/search.py`
 
 ### 8) LLM analysis
 Only retrieved search hits are analyzed. The analyzer builds `AnalysisInput` items with matched query hints, context (section + topic hits), and analysis instructions, runs batched LLM calls with retries and fallback, and formats structured result dicts.
 
-Code: `src/sec_nlp/pipelines/presets/analyze/steps/analysis/analysis_runner.py`
+Code: `src/sec_nlp/pipelines/presets/analyze/runnables/analysis.py`
 
 ### 9) Filter relevant results + write outputs
 Results are filtered by relevance and confidence threshold via `OutputFormatter`. Aggregates and diagnostics are computed and exported in the configured formats (YAML/JSON/CSV).
@@ -109,16 +110,25 @@ Code: `src/sec_nlp/pipelines/presets/analyze/io/outputs.py`, `src/sec_nlp/pipeli
 ### 10) Export search results (optional)
 After all symbols are processed, search results can be exported to consolidated YAML summaries with per-query sections and unique hits. The export reuses cached search results from the analysis pass when available and does not run LLM analysis.
 
-Code: `src/sec_nlp/pipelines/presets/analyze/steps/search/vector_search.py`
+Code: `src/sec_nlp/pipelines/presets/analyze/runnables/search.py`
+
+### 11) Market correlation (optional)
+If enabled, the pipeline computes market correlation metrics for relevant results and attaches them to the analysis output.
+
+Code: `src/sec_nlp/pipelines/presets/analyze/runnables/market_correlation.py`
 
 ## Output Files
 
 - Analysis outputs are written under:
-  `<out_path>/<SYMBOL>/<pipeline_type>/<run_id>/<accession>/analysis.{yaml,csv,json}`
+  `<out_path>/<run_timestamp>/<pipeline_type>/<SYMBOL>/<accession>/analysis.{yaml,csv,json}`
 - Search exports are written under:
-  `<out_path>/<SYMBOL>/<pipeline_type>/<run_id>/search/summary.yaml`
+  `<out_path>/<run_timestamp>/<pipeline_type>/<SYMBOL>/search/summary.yaml`
 
 Paths are created by `AnalyzeConfig.get_symbol_output_dir` and `OutputFormatter.export`.
+
+See also:
+- `docs/OUTPUTS_ANALYZE.md`
+- `docs/OUTPUTS_SEARCH_SUMMARY.md`
 
 ## Key Config Gates
 

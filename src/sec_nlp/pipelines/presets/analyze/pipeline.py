@@ -35,6 +35,7 @@ from sec_nlp.core.types import coerce_json_dict
 from sec_nlp.pipelines import BasePipeline
 from sec_nlp.pipelines.metadata.accession import get_accession_from_metadata
 from sec_nlp.pipelines.observability.telemetry import log_chunk_length_stats
+from sec_nlp.pipelines.serialization import round_score
 from sec_nlp.pipelines.types import (
     AnalysisResultDict,
     MetadataRecord,
@@ -718,14 +719,14 @@ class AnalyzePipeline(BasePipeline):
             yake_overlap = self._score_yake_overlap(result)
             existing = result.get("confidence_score")
             if isinstance(existing, (int, float)):
-                result["confidence_score"] = round(
-                    min(float(existing), derived_score), 2
+                result["confidence_score"] = round_score(
+                    min(float(existing), derived_score)
                 )
             else:
-                result["confidence_score"] = round(derived_score, 2)
+                result["confidence_score"] = round_score(derived_score)
             result["confidence_rationale"] = rationale
             if yake_overlap is not None:
-                result["yake_overlap"] = round(float(yake_overlap), 2)
+                result["yake_overlap"] = round_score(yake_overlap)
 
     @staticmethod
     def _select_efts_accessions(

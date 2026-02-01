@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import date, timedelta
 from statistics import pstdev
 
+from sec_nlp.pipelines.serialization import round_score
 from sec_nlp.pipelines.types import AnalysisResultDict
 from sec_nlp.types import JsonDict
 
@@ -149,9 +150,7 @@ def build_market_correlation(
     }
 
     def _round_value(value: float | None) -> float | None:
-        if value is None:
-            return None
-        return round(float(value), 2)
+        return round_score(value)
 
     metrics = {
         key: _round_value(value)

@@ -9,6 +9,7 @@ from uuid import UUID
 
 from pydantic import BaseModel
 
+from sec_nlp.pipelines.serialization import serialize_payload
 from sec_nlp.pipelines.utils import safe_filename
 from sec_nlp.types import JsonValue
 
@@ -52,16 +53,14 @@ def write_json(
     path: Path,
     data: JsonValue | BaseModel,
     *,
+    payload: JsonValue | None = None,
     indent: int = 2,
     ensure_ascii: bool = True,
     exclude_none: bool = False,
 ) -> None:
     """Write JSON data to disk."""
-    payload = (
-        data.model_dump(mode="json", exclude_none=exclude_none)
-        if isinstance(data, BaseModel)
-        else data
-    )
+    if payload is None:
+        payload = serialize_payload(data, exclude_none=exclude_none)
     with open(path, "w", encoding="utf-8") as f:
         json.dump(payload, f, indent=indent, ensure_ascii=ensure_ascii)
 
@@ -70,6 +69,7 @@ def write_yaml(
     path: Path,
     data: JsonValue | BaseModel,
     *,
+    payload: JsonValue | None = None,
     sort_keys: bool = False,
     allow_unicode: bool | None = None,
     exclude_none: bool = False,
@@ -77,11 +77,8 @@ def write_yaml(
     """Write YAML data to disk."""
     import yaml
 
-    payload = (
-        data.model_dump(mode="json", exclude_none=exclude_none)
-        if isinstance(data, BaseModel)
-        else data
-    )
+    if payload is None:
+        payload = serialize_payload(data, exclude_none=exclude_none)
 
     with open(path, "w", encoding="utf-8") as f:
         if allow_unicode is None:

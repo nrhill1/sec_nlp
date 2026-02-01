@@ -11,10 +11,20 @@ from uuid import UUID
 
 from sec_nlp.core.infra.logger import logger
 from sec_nlp.core.types import coerce_float, coerce_json_dict
+from sec_nlp.pipelines.metadata.normalize import (
+    get_meta_str,
+    get_meta_str_any,
+)
 from sec_nlp.pipelines.output_io import (
     build_accession_dir,
     write_json,
     write_yaml,
+)
+from sec_nlp.pipelines.serialization import (
+    is_score_key,
+    round_score,
+    round_timing,
+    serialize_payload,
 )
 from sec_nlp.pipelines.types import (
     AnalysisResultDict,
@@ -102,10 +112,8 @@ class OutputFormatter:
             score = coerce_float(result.get("confidence_score"))
             return score if score is not None else -1.0
 
-        def round_score(value: float | None) -> float | None:
-            if value is None:
-                return None
-            return round(float(value), 2)
+        def round_score_value(value: float | None) -> float | None:
+            return round_score(value)
 
         sorted_results = sorted(
             results,
@@ -117,13 +125,15 @@ class OutputFormatter:
             score = coerce_float(result.get("confidence_score"))
             enriched: AnalysisResultDict = {**result}
             if score is not None:
-                enriched["confidence_score"] = round_score(score)
+                enriched["confidence_score"] = round_score_value(score)
             impact_confidence = coerce_float(result.get("impact_confidence"))
             if impact_confidence is not None:
-                enriched["impact_confidence"] = round_score(impact_confidence)
+                enriched["impact_confidence"] = round_score_value(
+                    impact_confidence
+                )
             yake_overlap = coerce_float(result.get("yake_overlap"))
             if yake_overlap is not None:
-                enriched["yake_overlap"] = round_score(yake_overlap)
+                enriched["yake_overlap"] = round_score_value(yake_overlap)
             source_meta = enriched.get("source_metadata")
             if isinstance(source_meta, dict):
                 enriched["source_metadata"] = self._round_metadata_scores(
@@ -147,7 +157,7 @@ class OutputFormatter:
         cls, key: str, value: MetadataValue
     ) -> MetadataValue:
         if isinstance(value, (int, float)) and cls._is_score_key(key):
-            return round(float(value), 2)
+            return round_score(value)
         if isinstance(value, (str, bool)) or value is None:
             return value
         if isinstance(value, dict):
@@ -169,7 +179,7 @@ class OutputFormatter:
             if isinstance(nested_value, (int, float)) and cls._is_score_key(
                 nested_key
             ):
-                nested[nested_key] = round(float(nested_value), 2)
+                nested[nested_key] = round_score(nested_value)
             else:
                 nested[nested_key] = nested_value
         return nested
@@ -189,10 +199,7 @@ class OutputFormatter:
         return nested
 
     @staticmethod
-    def _is_dict_list_map(
-        value: dict[str, MetadataScalar]
-        | dict[str, list[dict[str, MetadataScalar]]],
-    ) -> bool:
+    def _is_dict_list_map(value: MetadataMap) -> bool:
         if not value:
             return False
         for item in value.values():
@@ -202,8 +209,7 @@ class OutputFormatter:
 
     @staticmethod
     def _as_dict_scalar_map(
-        value: dict[str, MetadataScalar]
-        | dict[str, list[dict[str, MetadataScalar]]],
+        value: MetadataMap,
     ) -> dict[str, MetadataScalar]:
         return {
             key: item
@@ -213,8 +219,7 @@ class OutputFormatter:
 
     @staticmethod
     def _as_dict_list_map(
-        value: dict[str, MetadataScalar]
-        | dict[str, list[dict[str, MetadataScalar]]],
+        value: MetadataMap,
     ) -> dict[str, list[dict[str, MetadataScalar]]]:
         filtered: dict[str, list[dict[str, MetadataScalar]]] = {}
         for key, item in value.items():
@@ -249,19 +254,14 @@ class OutputFormatter:
         rounded: list[MetadataScalar] = []
         for item in value:
             if isinstance(item, (int, float)) and cls._is_score_key(key):
-                rounded.append(round(float(item), 2))
+                rounded.append(round_score(item))
             elif isinstance(item, (str, bool)) or item is None:
                 rounded.append(item)
         return rounded
 
     @staticmethod
     def _is_score_key(key: str) -> bool:
-        lowered = key.lower()
-        return (
-            "score" in lowered
-            or "confidence" in lowered
-            or "overlap" in lowered
-        )
+        return is_score_key(key)
 
     @staticmethod
     def _extract_queries(result: AnalysisResultDict) -> list[str]:
@@ -425,6 +425,11 @@ class OutputFormatter:
         )
 
         # Build diagnostics
+        rounded_timings = (
+            {key: round_timing(value) or 0.0 for key, value in timings.items()}
+            if isinstance(timings, dict)
+            else {}
+        )
         diagnostics = AnalysisDiagnostics(
             chunks_analyzed=total_chunks,
             chunks_successful=successful,
@@ -434,7 +439,7 @@ class OutputFormatter:
             relevant_rate=(relevant_count / total_chunks)
             if total_chunks
             else 0.0,
-            timings=timings or {},
+            timings=rounded_timings,
             confidence_threshold=self.confidence_threshold,
         )
 
@@ -450,37 +455,23 @@ class OutputFormatter:
         )
 
         # Build filing info
-        def _meta_str(key: str) -> str | None:
-            value = filing_meta.get(key)
-            if isinstance(value, (str, int, float, bool)):
-                return str(value)
-            return None
-
-        def _meta_str_any(keys: tuple[str, ...]) -> str | None:
-            for key in keys:
-                value = filing_meta.get(key)
-                if isinstance(value, (str, int, float, bool)):
-                    return str(value)
-            source_meta = filing_meta.get("source_metadata")
-            if isinstance(source_meta, dict):
-                for key in keys:
-                    value = source_meta.get(key)
-                    if isinstance(value, (str, int, float, bool)):
-                        return str(value)
-            return None
-
         filing = FilingInfo(
-            accession_number=_meta_str("accession_number"),
-            form_type=_meta_str_any(("form_type", "form", "formType")),
-            acceptance_date=_meta_str_any(
+            accession_number=get_meta_str(filing_meta, "accession_number"),
+            form_type=get_meta_str_any(
+                filing_meta, ("form_type", "form", "formType")
+            ),
+            acceptance_date=get_meta_str_any(
+                filing_meta,
                 (
                     "acceptance_date",
                     "accepted_date",
                     "filed_date",
                     "filing_date",
-                )
+                ),
             ),
-            filing_date=_meta_str_any(("filing_date", "filed_date")),
+            filing_date=get_meta_str_any(
+                filing_meta, ("filing_date", "filed_date")
+            ),
         )
         relationship_timeline = self._build_relationship_timeline(filing_meta)
         executive_comp_summary = self._build_exec_comp_summary(ranked_results)
@@ -754,19 +745,20 @@ class OutputFormatter:
         output_files: list[Path] = []
         accession_dir = build_accession_dir(output_dir, accession)
         base_name = "analysis"
+        payload = serialize_payload(output, exclude_none=True)
 
         # Convert to dict for export
         # Export JSON
         if self.export_format in ("json", "both"):
             json_file = accession_dir / f"{base_name}.json"
-            write_json(json_file, output)
+            write_json(json_file, output, payload=payload)
             output_files.append(json_file)
             logger.debug("Analysis results written to %s", json_file)
 
         # Export YAML
         if self.export_format in ("yaml", "yaml_csv"):
             yaml_file = accession_dir / f"{base_name}.yaml"
-            write_yaml(yaml_file, output, sort_keys=False)
+            write_yaml(yaml_file, output, payload=payload, sort_keys=False)
             output_files.append(yaml_file)
             logger.debug("Analysis results written to %s", yaml_file)
 

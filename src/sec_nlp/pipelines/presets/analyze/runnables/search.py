@@ -19,11 +19,9 @@ from sec_nlp.pipelines.metadata.filters import (
     MetadataFilters,
     build_metadata_filter,
 )
+from sec_nlp.pipelines.metadata.normalize import normalize_metadata_for_output
 from sec_nlp.pipelines.output_io import write_yaml
-from sec_nlp.pipelines.types import (
-    MetadataMap,
-    MetadataValue,
-)
+from sec_nlp.pipelines.serialization import round_score
 from sec_nlp.types import JsonDict, JsonValue
 
 from ..steps.search.payloads import (
@@ -181,16 +179,11 @@ class SearchRunnable(
         distance_metric = self.distance_metric
         distance_prefers_lower = distance_metric in ("Cosine", "Euclid")
 
-        unique_hits: dict[tuple[str, str | None, str | None], _UniqueHit] = {}
+        unique_hits: dict[tuple[str | None, str | None, str], _UniqueHit] = {}
 
         for query, query_results in results_by_query.items():
             for doc, score in query_results.filtered:
-                meta = doc.metadata or {}
-                key = (
-                    doc.page_content or "",
-                    meta.get("section_number"),
-                    meta.get("symbol"),
-                )
+                key = self._build_unique_hit_key(doc)
                 hit = unique_hits.get(key)
                 score_value = float(score)
                 if hit is None:
@@ -244,6 +237,45 @@ class SearchRunnable(
         if min_ratio > 0 and ratio < min_ratio:
             return False
         return True
+
+    @staticmethod
+    def _build_unique_hit_key(
+        doc: Document,
+        *,
+        fallback_symbol: str | None = None,
+    ) -> tuple[str | None, str | None, str]:
+        meta = doc.metadata or {}
+        symbol_value = meta.get("symbol") or meta.get("ticker")
+        symbol = (
+            str(symbol_value).strip().upper()
+            if isinstance(symbol_value, str) and symbol_value.strip()
+            else None
+        )
+        if symbol is None and isinstance(fallback_symbol, str):
+            fallback = fallback_symbol.strip().upper()
+            symbol = fallback if fallback else None
+        accession_value = meta.get("accession_number") or meta.get("accession")
+        accession = (
+            str(accession_value).strip()
+            if isinstance(accession_value, str) and accession_value.strip()
+            else None
+        )
+        section_value = meta.get("section_number")
+        section = (
+            str(section_value).strip() if section_value is not None else ""
+        )
+        simhash_value = meta.get("simhash")
+        if isinstance(simhash_value, (int, float)):
+            content_key = f"simhash:{int(simhash_value)}"
+        elif isinstance(simhash_value, str) and simhash_value.strip():
+            content_key = f"simhash:{simhash_value.strip()}"
+        else:
+            chunk_index = meta.get("chunk_index")
+            if isinstance(chunk_index, (int, float, str)):
+                content_key = f"chunk:{chunk_index}"
+            else:
+                content_key = f"len:{len(doc.page_content or '')}"
+        return (symbol, accession, f"{section}|{content_key}")
 
     def run(self, queries: list[str] | None = None) -> list[Path]:
         """Run semantic search queries if configured."""
@@ -308,7 +340,7 @@ class SearchRunnable(
             str, dict[str, list[tuple[Document, float]]]
         ] = defaultdict(lambda: defaultdict(list))
         unique_hits: dict[
-            str, dict[tuple[str, str | None, str], _UniqueHit]
+            str, dict[tuple[str | None, str | None, str], _UniqueHit]
         ] = defaultdict(dict)
 
         for i, query in enumerate(query_list, 1):
@@ -347,10 +379,8 @@ class SearchRunnable(
                         (doc, score)
                     )
 
-                    key = (
-                        doc.page_content or "",
-                        meta.get("section_number"),
-                        symbol_for_output,
+                    key = self._build_unique_hit_key(
+                        doc, fallback_symbol=symbol_for_output
                     )
                     hit = unique_hits[symbol_for_output].get(key)
                     score_value = float(score)
@@ -425,7 +455,7 @@ class SearchRunnable(
                         score=self._round_score(float(score)) or 0.0,
                         content=(doc.page_content or "")[:500],
                         metadata=(
-                            metadata_payload := self._normalize_metadata(
+                            metadata_payload := normalize_metadata_for_output(
                                 doc.metadata
                             )
                         ),
@@ -532,9 +562,7 @@ class SearchRunnable(
 
     @staticmethod
     def _round_score(value: float | None) -> float | None:
-        if value is None:
-            return None
-        return round(float(value), 2)
+        return round_score(value)
 
     @staticmethod
     def _score_is_better(
@@ -581,7 +609,7 @@ class SearchRunnable(
 
     def _build_unique_results(
         self,
-        unique_hits: dict[tuple[str, str | None, str], _UniqueHit],
+        unique_hits: dict[tuple[str | None, str | None, str], _UniqueHit],
         prefers_lower: bool,
     ) -> list[SearchUniqueResultPayload]:
         unique_payloads: list[SearchUniqueResultPayload] = []
@@ -590,7 +618,7 @@ class SearchRunnable(
                 continue
             sorted_matches = self._sort_matches(hit.matches, prefers_lower)
             best_score = sorted_matches[0][1] if sorted_matches else None
-            metadata_payload = self._normalize_metadata(hit.doc.metadata)
+            metadata_payload = normalize_metadata_for_output(hit.doc.metadata)
             metadata_payload.pop("matched_queries", None)
             unique_payloads.append(
                 SearchUniqueResultPayload(
@@ -625,52 +653,4 @@ class SearchRunnable(
                 payload[str(key)] = cleaned
         return payload
 
-    @classmethod
-    def _normalize_metadata(cls, metadata: MetadataMap | None) -> JsonDict:
-        if not metadata:
-            return {}
-        payload: JsonDict = {}
-        for key, raw_value in metadata.items():
-            normalized = cls._normalize_metadata_value(str(key), raw_value)
-            if normalized is not None:
-                payload[str(key)] = normalized
-        return payload
-
-    @classmethod
-    def _normalize_metadata_value(
-        cls, key: str, value: MetadataValue | Path
-    ) -> JsonValue | None:
-        if isinstance(value, Path):
-            return str(value)
-        if isinstance(value, (int, float)) and cls._should_round_key(key):
-            return round(float(value), 2)
-        if isinstance(value, (str, int, float, bool)) or value is None:
-            return value
-        if isinstance(value, dict):
-            nested: JsonDict = {}
-            for nested_key, nested_value in value.items():
-                if not isinstance(nested_key, str):
-                    continue
-                normalized = cls._normalize_metadata_value(
-                    nested_key, nested_value
-                )
-                if normalized is not None:
-                    nested[nested_key] = normalized
-            return nested or None
-        if isinstance(value, list):
-            items: list[JsonValue] = []
-            for item in value:
-                normalized = cls._normalize_metadata_value(key, item)
-                if normalized is not None:
-                    items.append(normalized)
-            return items or None
-        return None
-
-    @staticmethod
-    def _should_round_key(key: str) -> bool:
-        lowered = key.lower()
-        return (
-            "score" in lowered
-            or "confidence" in lowered
-            or "overlap" in lowered
-        )
+    # metadata normalization now handled by normalize_metadata_for_output

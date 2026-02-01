@@ -16,6 +16,7 @@ from sec_nlp.core.market import (
     MarketRetriever,
     create_market_retriever,
 )
+from sec_nlp.pipelines.serialization import round_float
 from sec_nlp.types import JsonDict, JsonValue
 
 
@@ -34,6 +35,7 @@ class MarketConfig(BaseModel):
         frozen=True,
         extra="forbid",
         defer_build=True,
+        str_strip_whitespace=True,
     )
 
     enabled: bool = Field(
@@ -58,7 +60,11 @@ class MarketConfig(BaseModel):
 class MarketQuoteSummary(BaseModel):
     """A single aggregated interval of market data."""
 
-    model_config = ConfigDict(frozen=True, extra="forbid")
+    model_config = ConfigDict(
+        frozen=True,
+        extra="forbid",
+        str_strip_whitespace=True,
+    )
 
     start_date: date
     end_date: date
@@ -77,6 +83,7 @@ class MarketEnrichment(BaseModel):
         frozen=True,
         extra="ignore",
         defer_build=True,
+        str_strip_whitespace=True,
     )
 
     symbol: str
@@ -280,21 +287,31 @@ def _aggregate_quotes(
             MarketQuoteSummary(
                 start_date=datetime.fromtimestamp(min_ts, UTC).date(),
                 end_date=datetime.fromtimestamp(max_ts, UTC).date(),
-                average_open=round(
-                    sum(quote.open_price for quote in bucket) / count, 2
-                ),
-                average_high=round(
-                    sum(quote.high for quote in bucket) / count, 2
-                ),
-                average_low=round(
-                    sum(quote.low for quote in bucket) / count, 2
-                ),
-                average_close=round(
-                    sum(quote.close for quote in bucket) / count, 2
-                ),
-                average_adjclose=round(
-                    sum(quote.adjclose for quote in bucket) / count, 2
-                ),
+                average_open=round_float(
+                    sum(quote.open_price for quote in bucket) / count,
+                    places=2,
+                )
+                or 0.0,
+                average_high=round_float(
+                    sum(quote.high for quote in bucket) / count,
+                    places=2,
+                )
+                or 0.0,
+                average_low=round_float(
+                    sum(quote.low for quote in bucket) / count,
+                    places=2,
+                )
+                or 0.0,
+                average_close=round_float(
+                    sum(quote.close for quote in bucket) / count,
+                    places=2,
+                )
+                or 0.0,
+                average_adjclose=round_float(
+                    sum(quote.adjclose for quote in bucket) / count,
+                    places=2,
+                )
+                or 0.0,
                 average_volume=sum(quote.volume for quote in bucket) / count,
             )
         )

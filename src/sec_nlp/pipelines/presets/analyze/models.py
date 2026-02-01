@@ -16,6 +16,7 @@ from pydantic import (
 from sec_nlp.core.types import coerce_json_value
 from sec_nlp.pipelines import BasePipelineResult
 from sec_nlp.pipelines.base.result import SummaryFieldValue
+from sec_nlp.pipelines.serialization import round_score
 from sec_nlp.pipelines.types import AnalysisResultDict
 from sec_nlp.types import JsonDict, JsonValue
 
@@ -53,7 +54,11 @@ def _normalize_key_point_item(item: StringListInput) -> str | None:
 class AnalysisInput(BaseModel):
     """Input schema for semantic analysis chain."""
 
-    model_config = ConfigDict(frozen=True, extra="forbid")
+    model_config = ConfigDict(
+        frozen=True,
+        extra="forbid",
+        str_strip_whitespace=True,
+    )
 
     chunk: str
     symbol: str
@@ -88,6 +93,7 @@ class AnalysisResult(BasePipelineResult):
         extra="ignore",
         defer_build=True,
         use_attribute_docstrings=False,
+        str_strip_whitespace=True,
         frozen=True,
     )
 
@@ -214,16 +220,16 @@ class AnalysisResult(BasePipelineResult):
         if v is None:
             return None
         if isinstance(v, (int, float)):
-            return round(float(v), 2)
+            return round_score(v)
         if isinstance(v, str):
             cleaned = v.strip().lower()
             if not cleaned:
                 return None
             if cleaned in {"low", "medium", "high"}:
                 mapping = {"low": 0.3, "medium": 0.6, "high": 0.85}
-                return round(mapping[cleaned], 2)
+                return round_score(mapping[cleaned])
             try:
-                return round(float(cleaned), 2)
+                return round_score(float(cleaned))
             except ValueError:
                 return None
         return None
@@ -371,6 +377,7 @@ class FilingInfo(BaseModel):
         frozen=True,
         extra="ignore",
         defer_build=True,
+        str_strip_whitespace=True,
     )
 
     accession_number: str | None = None
@@ -386,6 +393,7 @@ class ExecutiveSummary(BaseModel):
         frozen=True,
         extra="ignore",
         defer_build=True,
+        str_strip_whitespace=True,
     )
 
     status: str = Field(
@@ -408,6 +416,7 @@ class ExecutiveCompSummary(BaseModel):
         frozen=True,
         extra="ignore",
         defer_build=True,
+        str_strip_whitespace=True,
     )
 
     executives: list[JsonDict] = Field(
@@ -443,6 +452,7 @@ class AnalysisDiagnostics(BaseModel):
         frozen=True,
         extra="ignore",
         defer_build=True,
+        str_strip_whitespace=True,
     )
 
     chunks_analyzed: int = 0
@@ -462,6 +472,7 @@ class OutputProvenance(BaseModel):
         frozen=True,
         extra="ignore",
         defer_build=True,
+        str_strip_whitespace=True,
     )
 
     run_id: UUID | None = None
@@ -480,6 +491,7 @@ class Aggregates(BaseModel):
         frozen=True,
         extra="ignore",
         defer_build=True,
+        str_strip_whitespace=True,
     )
 
     tag_frequency: dict[str, int] = Field(default_factory=dict)
@@ -501,6 +513,7 @@ class AnalysisOutput(BaseModel):
         frozen=True,
         extra="ignore",
         defer_build=True,
+        str_strip_whitespace=True,
     )
 
     symbol: str
@@ -549,6 +562,7 @@ class AnalyzeResult(BasePipelineResult):
         frozen=True,
         extra="forbid",
         defer_build=True,
+        str_strip_whitespace=True,
     )
 
     pipeline_type: ClassVar[Literal["analyze"]] = "analyze"
