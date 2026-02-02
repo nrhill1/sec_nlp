@@ -428,6 +428,7 @@ class AnalyzePipeline(BasePipeline):
                 "short_id": self.config.short_id,
                 "run_path": self.config.run_path_component(),
             }
+            total_analyzed_chunks = 0
 
             bar_format = "\n{n_fmt}/{total_fmt} [{elapsed}<{remaining}]"
 
@@ -447,6 +448,9 @@ class AnalyzePipeline(BasePipeline):
                     symbol_outputs, chunk_stats = self._process_symbol(symbol)
                     symbol_outputs = list(set(symbol_outputs))
                     all_outputs.extend(symbol_outputs)
+                    total_analyzed_chunks += int(
+                        chunk_stats.get("analyzed_count", 0)
+                    )
                     symbol_meta: SymbolRunMetadata = {
                         "outputs": len(symbol_outputs),
                         "chunk_stats": chunk_stats,
@@ -498,6 +502,8 @@ class AnalyzePipeline(BasePipeline):
 
             if self._relationship_graphs:
                 metadata["relationships"] = dict(self._relationship_graphs)
+
+            metadata["total_chunks_analyzed"] = total_analyzed_chunks
 
             self.config.complete_run(success=True)
             all_outputs = list(set(all_outputs))
@@ -1201,6 +1207,7 @@ class AnalyzePipeline(BasePipeline):
                 "min_value": 0.0,
                 "max_value": 0.0,
                 "mean": 0.0,
+                "analyzed_count": 0,
                 "timings": timings,
             }
 
@@ -1218,6 +1225,7 @@ class AnalyzePipeline(BasePipeline):
                 "min_value": 0.0,
                 "max_value": 0.0,
                 "mean": 0.0,
+                "analyzed_count": 0,
                 "timings": timings,
             }
 
@@ -1230,6 +1238,7 @@ class AnalyzePipeline(BasePipeline):
             "max_value": float(max(chunk_lengths)),
             "median": float(median(chunk_lengths)),
             "mean": float(mean(chunk_lengths)),
+            "analyzed_count": 0,
             "timings": timings,
         }
         market_data = self._build_market_enrichment(symbol, docs)
@@ -1331,6 +1340,7 @@ class AnalyzePipeline(BasePipeline):
         else:
             analysis_results = []
             timings["analyze"] = 0.0
+        stats["analyzed_count"] = len(analysis_results)
 
         # Filter relevant items once to keep storage/output in sync
         formatter = self._output_formatter

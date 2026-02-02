@@ -12,6 +12,7 @@ class ChunkStats(TypedDict, total=False):
     max_value: float
     median: float
     mean: float
+    analyzed_count: int
     timings: Timings
 
 

@@ -100,6 +100,9 @@ class BasePipelineCommand(BaseModel, ABC):
                     metrics.increment("successful_runs")
                     if result.outputs:
                         metrics.set_gauge("output_files", len(result.outputs))
+                    total_chunks = result.metadata.get("total_chunks_analyzed")
+                    if isinstance(total_chunks, int):
+                        metrics.set_gauge("total_chunks_analyzed", total_chunks)
                 else:
                     metrics.increment("failed_runs")
         else:
