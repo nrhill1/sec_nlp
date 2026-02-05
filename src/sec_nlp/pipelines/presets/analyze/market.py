@@ -95,6 +95,41 @@ class MarketEnrichment(BaseModel):
     quotes: list[MarketQuoteSummary]
 
 
+def format_market_context(
+    enrichment: MarketEnrichment | None,
+) -> str | None:
+    """Summarize market data for inclusion in the LLM context."""
+    if enrichment is None or not enrichment.quotes:
+        return None
+
+    rows: list[str] = []
+    for summary in enrichment.quotes[:3]:
+        rows.append(
+            f"{summary.start_date.isoformat()}..{summary.end_date.isoformat()} "
+            f"close={summary.average_close:.2f}"
+        )
+    suffix = ""
+    extra = len(enrichment.quotes) - len(rows)
+    if extra > 0:
+        suffix = f" (+{extra} more)"
+
+    filing_hint = (
+        f"filing {enrichment.filing_date.isoformat()}"
+        if enrichment.filing_date
+        else "filing date unknown"
+    )
+    window = (
+        f"{enrichment.window_start.isoformat()}.."
+        f"{enrichment.window_end.isoformat()}"
+    )
+
+    return (
+        f"{filing_hint} | market {enrichment.ticker} "
+        f"{enrichment.granularity.value} window {window}: "
+        f"{'; '.join(rows)}{suffix}"
+    )
+
+
 _DATE_KEYS: tuple[str, ...] = (
     "filing_date",
     "acceptance_date",
