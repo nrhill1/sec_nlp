@@ -24,12 +24,18 @@ from sec_nlp.core.text.ranking import (
 def normalize_topics(topics: Iterable[str] | None) -> list[str]:
     """Normalize topic inputs by filtering empty/non-string values."""
     cleaned: list[str] = []
+    seen: set[str] = set()
     for topic in topics or []:
         if not isinstance(topic, str):
             continue
         stripped = topic.strip()
-        if stripped:
-            cleaned.append(stripped)
+        if not stripped:
+            continue
+        key = stripped.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        cleaned.append(stripped)
     return cleaned
 
 

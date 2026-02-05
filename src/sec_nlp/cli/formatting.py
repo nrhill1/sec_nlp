@@ -8,7 +8,26 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Literal
 
+from rich import box
+from rich.align import Align
+from rich.console import Console, Group
+from rich.panel import Panel
+from rich.rule import Rule
+from rich.text import Text
+
 from sec_nlp.core.infra.logger import color_text, visible_length
+
+
+def _render_rich(renderable) -> str:
+    console = Console(
+        force_terminal=True,
+        color_system="truecolor",
+        width=get_terminal_width(),
+        soft_wrap=True,
+    )
+    with console.capture() as capture:
+        console.print(renderable)
+    return capture.get().rstrip("\n")
 
 
 @dataclass(frozen=True)
@@ -56,48 +75,39 @@ def format_section_header(
         Formatted header string
     """
     term_width = width if width is not None else get_terminal_width()
+    title_text = Text(title, style=color)
+    subtitle_text = Text(subtitle, style="dim") if subtitle else None
 
     if style == "minimal":
-        header = color_text(f"  {title}  ", color=color)
-        if subtitle:
-            header += "\n" + color_text(f"  {subtitle}  ", color="dim")
-        return "\n" + center_text(header, term_width) + "\n"
+        text = Text.assemble(title_text, "\n") if subtitle_text else title_text
+        if subtitle_text:
+            text.append(subtitle_text)
+        return _render_rich(Align.center(text))
 
     if style == "line":
-        title_line = color_text(f"  {title}  ", color=color)
-        line_width = max(visible_length(title_line), 40)
-        divider = color_text("─" * line_width, color="dim")
-        lines = [
-            "",
-            center_text(title_line, term_width),
-            center_text(divider, term_width),
-        ]
-        if subtitle:
-            sub_line = color_text(f"  {subtitle}  ", color="dim")
-            lines.append(center_text(sub_line, term_width))
-        lines.append("")
-        return "\n".join(lines)
+        rule = Rule(title_text, style=color)
+        if subtitle_text:
+            return _render_rich(
+                Group(
+                    Align.center(rule),
+                    Align.center(subtitle_text),
+                )
+            )
+        return _render_rich(Align.center(rule))
 
-    # Box style (default)
-    visible_title = visible_length(title)
-    visible_sub = visible_length(subtitle) if subtitle else 0
-    inner_width = max(visible_title, visible_sub, 30)
-    box_width = min(inner_width + 6, term_width - 4)
+    body = Text.assemble(title_text)
+    if subtitle_text:
+        body.append("\n")
+        body.append(subtitle_text)
 
-    top = f"╔{'═' * (box_width - 2)}╗"
-    bottom = f"╚{'═' * (box_width - 2)}╝"
-    title_padded = title.center(box_width - 4)
-    mid = f"║ {title_padded} ║"
-
-    lines = ["", top, mid]
-    if subtitle:
-        sub_padded = subtitle.center(box_width - 4)
-        lines.append(f"║ {sub_padded} ║")
-    lines.append(bottom)
-    lines.append("")
-
-    colored_lines = [color_text(line, color=color) for line in lines]
-    return "\n".join(center_text(line, term_width) for line in colored_lines)
+    panel = Panel(
+        Align.center(body),
+        border_style=color,
+        box=box.ROUNDED,
+        padding=(0, 2),
+        width=min(term_width - 4, max(36, len(title) + 12)),
+    )
+    return _render_rich(panel)
 
 
 def format_divider(
@@ -122,10 +132,10 @@ def format_divider(
     line_length = (
         length if length is not None else min(60, get_terminal_width() - 4)
     )
-    divider = color_text(char * line_length, color=color)
+    rule = Text(char * line_length, style=color)
     if centered:
-        return center_text(divider, width=width)
-    return divider
+        return _render_rich(Align.center(rule))
+    return _render_rich(rule)
 
 
 def format_key_value(
@@ -152,10 +162,9 @@ def format_key_value(
     """
     display_value = value if value is not None else "—"
     label_part = f"{icon} {label}:".ljust(label_width + 3)
-    colored_label = color_text(label_part, color=label_color)
-    if value_color:
-        display_value = color_text(display_value, color=value_color)
-    return f"{colored_label} {display_value}"
+    label_text = Text(label_part, style=label_color)
+    value_text = Text(str(display_value), style=value_color or "white")
+    return _render_rich(Text.assemble(label_text, " ", value_text))
 
 
 def format_table(
@@ -383,4 +392,4 @@ def format_status(
     }
     icon = icons.get(status, "•")
     c = colors.get(status, "dim")
-    return color_text(f"{icon} {message}", color=c)
+    return _render_rich(Text(f"{icon} {message}", style=c))

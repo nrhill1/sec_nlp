@@ -1,16 +1,26 @@
 # src/sec_nlp/cli/interactive.py
 """Interactive mode for the analyze pipeline using questionary."""
 
+import re
 import sys
 from collections.abc import Callable, Mapping, Sequence
+from pathlib import Path
 
 import ollama
 import questionary
 from questionary import Style
+from rich import box
+from rich.align import Align
+from rich.console import Console
+from rich.panel import Panel
+from rich.rule import Rule
+from rich.table import Table
+from rich.text import Text
+from rich.theme import Theme
 
 from sec_nlp.cli.presets import PRESET_DESCRIPTIONS, AnalyzePreset
 from sec_nlp.core.infra.logger import logger
-from sec_nlp.types import ConfigData, JsonObject, JsonValue
+from sec_nlp.types import ConfigData, ConfigValue, JsonObject, JsonValue
 
 # Custom style for questionary prompts
 INTERACTIVE_STYLE: Style = Style(
@@ -27,9 +37,106 @@ INTERACTIVE_STYLE: Style = Style(
     ]
 )
 
+INTERACTIVE_THEME: Theme = Theme(
+    {
+        "accent": "cyan",
+        "accent_bold": "bold cyan",
+        "title": "bold white",
+        "good": "green",
+        "warn": "yellow",
+        "error": "red",
+        "muted": "grey62",
+    }
+)
+CONSOLE: Console = Console(theme=INTERACTIVE_THEME, soft_wrap=True)
+
 DEFAULT_LLM_MODEL: str = "llama3.2:1b"
 DEFAULT_EMBEDDING_MODEL: str = "mxbai-embed-large"
 MANUAL_MODEL_CHOICE: str = "__manual_model__"
+SYMBOL_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9.\-/]{0,14}$")
+
+
+def _print_banner() -> None:
+    title = Text("SEC-NLP Interactive Setup", style="title")
+    subtitle = Text(
+        "Guided configuration for the analyze pipeline.", style="muted"
+    )
+    body = Align.center(Text.assemble(title, "\n", subtitle))
+    panel = Panel(
+        body,
+        title="Welcome",
+        title_align="left",
+        border_style="accent",
+        padding=(1, 4),
+        box=box.ASCII,
+    )
+    CONSOLE.print()
+    CONSOLE.print(panel)
+    CONSOLE.print(
+        Text(
+            "Tip: use the arrow keys to navigate, Enter to select.",
+            style="muted",
+        )
+    )
+    CONSOLE.print(Text("Press Ctrl+C at any time to cancel.", style="muted"))
+    CONSOLE.print()
+
+
+def _print_section(title: str, subtitle: str | None = None) -> None:
+    CONSOLE.print(Rule(Text(title, style="accent_bold"), style="accent"))
+    if subtitle:
+        CONSOLE.print(Text(subtitle, style="muted"))
+
+
+def _print_notice(message: str, style: str = "muted") -> None:
+    CONSOLE.print(Text(message, style=style))
+
+
+def _format_list(values: Sequence[str]) -> str:
+    if not values:
+        return "—"
+    return ", ".join(values)
+
+
+def _format_config_value(value: ConfigValue) -> Text:
+    if isinstance(value, Mapping):
+        lines = []
+        for key, val in value.items():
+            lines.append(f"{key}: {val}")
+        return Text("\n".join(lines))
+    if isinstance(value, Sequence) and not isinstance(value, (str, Path)):
+        return Text(_format_list([str(v) for v in value]))
+    return Text(str(value))
+
+
+def _build_config_table(config: ConfigData) -> Table:
+    table = Table(
+        show_header=True,
+        header_style="accent_bold",
+        box=box.ASCII,
+        expand=True,
+    )
+    table.add_column("Setting", style="accent", no_wrap=True)
+    table.add_column("Value")
+    for key, value in config.items():
+        table.add_row(str(key), _format_config_value(value))
+    return table
+
+
+def _parse_symbols(symbols_input: str) -> tuple[list[str], list[str]]:
+    raw_symbols = [
+        s.strip().upper()
+        for s in symbols_input.replace(",", " ").split()
+        if s.strip()
+    ]
+    valid: list[str] = []
+    invalid: list[str] = []
+    for symbol in raw_symbols:
+        if SYMBOL_PATTERN.match(symbol):
+            valid.append(symbol)
+        else:
+            invalid.append(symbol)
+    return valid, invalid
 
 
 def run_interactive_setup() -> ConfigData | None:
@@ -42,10 +149,7 @@ def run_interactive_setup() -> ConfigData | None:
         logger.warning("Interactive mode requires a terminal")
         return None
 
-    print("\n" + "=" * 60)
-    print("  SEC-NLP Interactive Setup")
-    print("  Press Ctrl+C at any time to cancel")
-    print("=" * 60 + "\n")
+    _print_banner()
 
     try:
         config = _gather_config()
@@ -54,13 +158,13 @@ def run_interactive_setup() -> ConfigData | None:
 
         # Show summary and confirm
         if not _confirm_config(config):
-            print("\nSetup cancelled.")
+            _print_notice("Setup cancelled.", style="warn")
             return None
 
         return config
 
     except KeyboardInterrupt:
-        print("\n\nSetup cancelled.")
+        _print_notice("Setup cancelled.", style="warn")
         return None
 
 
@@ -182,11 +286,16 @@ def _prompt_model_selection(
 ) -> str | None:
     """Prompt the user to select or enter a model name."""
     choices = _build_model_choices(models, filter_fn=filter_fn)
+    if choices:
+        _print_notice(
+            f"Detected {len(choices)} local model(s).",
+            style="muted",
+        )
 
     # If a filter yields nothing but models exist, fall back to showing all
     if filter_fn and not choices and models:
         if fallback_message:
-            print(fallback_message)
+            _print_notice(fallback_message, style="warn")
         choices = _build_model_choices(models)
 
     if choices:
@@ -219,7 +328,7 @@ def _prompt_model_selection(
         return answer if isinstance(answer, str) else None
 
     if fallback_message:
-        print(fallback_message)
+        _print_notice(fallback_message, style="warn")
 
     manual = questionary.text(
         f"{prompt} (enter model name):",
@@ -234,6 +343,7 @@ def _gather_config() -> ConfigData | None:
     config: ConfigData = {}
 
     # 1. Preset selection first (so we can skip other prompts if preset covers them)
+    _print_section("Preset", "Choose a baseline configuration.")
     preset_choices = [
         questionary.Choice(
             title=f"{preset.value}: {PRESET_DESCRIPTIONS[preset]}",
@@ -256,6 +366,22 @@ def _gather_config() -> ConfigData | None:
 
     if preset_answer != "custom":
         config["preset"] = preset_answer
+        try:
+            preset_obj = AnalyzePreset(preset_answer)
+            _print_notice(
+                f"Selected preset '{preset_answer}': {PRESET_DESCRIPTIONS[preset_obj]}",
+                style="good",
+            )
+        except Exception:
+            _print_notice(
+                f"Selected preset '{preset_answer}'.",
+                style="good",
+            )
+    else:
+        _print_notice(
+            "Selected custom configuration (we will ask a few extra questions).",
+            style="good",
+        )
 
     # 2. Symbols (skip if preset provides them)
     preset_symbols: list[str] = []
@@ -272,29 +398,44 @@ def _gather_config() -> ConfigData | None:
 
     symbols: list[str] = []
     if not preset_symbols:
+        _print_section(
+            "Symbols",
+            "Enter one or more ticker symbols separated by space or comma.",
+        )
+
+        def _validate_symbols(value: str) -> bool | str:
+            valid, invalid = _parse_symbols(value)
+            if not valid:
+                return "Enter at least one ticker symbol."
+            if invalid:
+                return f"Invalid symbol(s): {', '.join(invalid)}"
+            return True
+
         symbols_input = questionary.text(
             "Enter ticker symbols (space or comma separated):",
             instruction="e.g., AAPL MSFT GOOGL",
             style=INTERACTIVE_STYLE,
+            validate=_validate_symbols,
         ).ask()
 
         if symbols_input is None:
             return None
 
-        symbols = [
-            s.strip().upper()
-            for s in symbols_input.replace(",", " ").split()
-            if s.strip()
-        ]
-        if not symbols:
-            print("No symbols provided. Please enter at least one symbol.")
-            return None
+        symbols, invalid = _parse_symbols(symbols_input)
+        if invalid:
+            _print_notice(
+                f"Skipping invalid symbols: {', '.join(invalid)}",
+                style="warn",
+            )
     else:
         symbols = preset_symbols
+        _print_section("Symbols", "Using symbols from the selected preset.")
+        _print_notice(f"Symbols: {_format_list(symbols)}", style="good")
 
     config["symbols"] = symbols
 
     # 3. Topics (optional)
+    _print_section("Topics", "Optional filters to narrow relevant content.")
     add_topics = questionary.confirm(
         "Add topic keywords to filter content?",
         default=False,
@@ -321,6 +462,14 @@ def _gather_config() -> ConfigData | None:
         ]
         if topics:
             config["topics"] = topics
+            _print_notice(
+                f"Topics: {_format_list([str(t) for t in topics])}",
+                style="good",
+            )
+        else:
+            _print_notice("No topics entered; continuing without filters.")
+    else:
+        _print_notice("No topic filters selected.", style="muted")
 
     # 4. Filing mode (skip prompt if preset provides it)
     preset_mode = None
@@ -335,7 +484,10 @@ def _gather_config() -> ConfigData | None:
 
     if preset_mode:
         config["mode"] = preset_mode
+        _print_section("Filing Type", "Using filing type from the preset.")
+        _print_notice(f"Mode: {preset_mode}", style="good")
     else:
+        _print_section("Filing Type", "Select the filing type to analyze.")
         mode_answer = questionary.select(
             "Select filing type:",
             choices=[
@@ -364,6 +516,7 @@ def _gather_config() -> ConfigData | None:
         config["mode"] = mode_answer
 
     # 5. Dry run option
+    _print_section("Dry Run", "Preview configuration without processing.")
     dry_run = questionary.confirm(
         "Run in dry-run mode (skip actual processing)?",
         default=False,
@@ -374,6 +527,17 @@ def _gather_config() -> ConfigData | None:
         return None
 
     config["dry_run"] = dry_run
+    _print_notice(
+        "Dry-run enabled." if dry_run else "Dry-run disabled.",
+        style="good" if dry_run else "muted",
+    )
+
+    if preset_answer == "custom":
+        _print_section("Advanced Options", "Fine-tune LLM and output settings.")
+        custom_config = _gather_custom_config()
+        if custom_config is None:
+            return None
+        config.update(custom_config)
 
     return config
 
@@ -383,11 +547,13 @@ def _gather_custom_config() -> ConfigData | None:
     config: ConfigData = {}
     available_models = _list_ollama_models()
     if not available_models:
-        print(
-            "No local models detected via Ollama; enter model names manually if needed."
+        _print_notice(
+            "No local models detected via Ollama; enter model names manually if needed.",
+            style="warn",
         )
 
     # Model selection
+    _print_section("LLM Model", "Select the model used for analysis.")
     model_answer = _prompt_model_selection(
         "Select LLM model:",
         available_models,
@@ -400,6 +566,7 @@ def _gather_custom_config() -> ConfigData | None:
     config["llm"] = {"model_name": model_answer}
 
     # Filing limit
+    _print_section("Filing Limit", "Cap the number of filings per symbol.")
     limit_answer = questionary.text(
         "Maximum filings per symbol:",
         default="3",
@@ -413,6 +580,7 @@ def _gather_custom_config() -> ConfigData | None:
     config["limit"] = int(limit_answer)
 
     # Vector DB
+    _print_section("Vector Database", "Store and reuse embeddings for search.")
     vector_mode = questionary.select(
         "Vector database mode:",
         choices=[
@@ -431,6 +599,7 @@ def _gather_custom_config() -> ConfigData | None:
 
     # Embedding model (only when vector DB is used)
     if vector_mode != "off":
+        _print_section("Embedding Model", "Used for vector search embeddings.")
         embedding_model = _prompt_model_selection(
             "Select embedding model:",
             available_models,
@@ -447,6 +616,7 @@ def _gather_custom_config() -> ConfigData | None:
         config["vdb"] = {"embedding_model": embedding_model}
 
     # Export format
+    _print_section("Output Format", "Choose output files written to disk.")
     export_format = questionary.select(
         "Output format:",
         choices=[
@@ -469,21 +639,17 @@ def _gather_custom_config() -> ConfigData | None:
 
 def _confirm_config(config: ConfigData) -> bool:
     """Show configuration summary and confirm."""
-    print("\n" + "-" * 40)
-    print("Configuration Summary:")
-    print("-" * 40)
-
-    for key, value in config.items():
-        if isinstance(value, list):
-            print(f"  {key}: {', '.join(str(v) for v in value)}")
-        elif isinstance(value, dict):
-            print(f"  {key}:")
-            for k, v in value.items():
-                print(f"    {k}: {v}")
-        else:
-            print(f"  {key}: {value}")
-
-    print("-" * 40 + "\n")
+    table = _build_config_table(config)
+    panel = Panel(
+        table,
+        title="Configuration Summary",
+        title_align="left",
+        border_style="accent",
+        box=box.ASCII,
+    )
+    CONSOLE.print()
+    CONSOLE.print(panel)
+    CONSOLE.print()
 
     return (
         questionary.confirm(
