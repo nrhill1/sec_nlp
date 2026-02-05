@@ -3,6 +3,7 @@
 
 import re
 from collections import defaultdict
+from datetime import date, timedelta
 from pathlib import Path
 from statistics import mean, median
 from time import perf_counter
@@ -811,6 +812,7 @@ class AnalyzePipeline(BasePipeline):
         return downloaded
 
     def _local_accessions(self, symbol: str) -> set[str]:
+        start_date, end_date = self._efts_date_range()
         accession_set = set()
         for form_type in self.config.mode.forms:
             filing_dir = (
@@ -821,10 +823,29 @@ class AnalyzePipeline(BasePipeline):
             )
             if not filing_dir.exists():
                 continue
-            accession_set.update(
-                {path.name for path in filing_dir.iterdir() if path.is_dir()}
-            )
+            for path in filing_dir.iterdir():
+                if not path.is_dir():
+                    continue
+                filing_date = get_filing_date_from_dir(path)
+                if start_date or end_date:
+                    if filing_date is None:
+                        accession_set.add(path.name)
+                        continue
+                    if start_date and filing_date < start_date:
+                        continue
+                    if end_date and filing_date > end_date:
+                        continue
+                accession_set.add(path.name)
         return accession_set
+
+    def _efts_date_range(self) -> tuple[date | None, date | None]:
+        if self.config.efts.expand_date_range:
+            end_date = date.today()
+            start_date = end_date - timedelta(
+                days=365 * self.config.efts.date_range_years
+            )
+            return start_date, end_date
+        return self.config.start_date, self.config.end_date
 
     def _run_efts_for_symbol(
         self,
@@ -1020,7 +1041,7 @@ class AnalyzePipeline(BasePipeline):
             return base_results
 
         distance_metric = self.config.vdb.qdrant_distance
-        prefers_lower = distance_metric in ("Cosine", "Euclid")
+        prefers_lower = distance_metric in ("Cosine", "Euclidean")
 
         hybrid_results: SearchResultsByQuery = {}
         all_queries = set(base_results) | set(efts_hits_by_query)
@@ -1279,12 +1300,17 @@ class AnalyzePipeline(BasePipeline):
         # Retrieve relevant chunks via vector search (if enabled)
         search_queries = self.config.get_search_queries()
         if search_queries and self._vector_store:
+            per_symbol_filters = dict(self.config.search.metadata_filters)
+            per_symbol_filters["symbol"] = [symbol]
+            search_runner = self._search_runner
+            if search_runner.metadata_filters != per_symbol_filters:
+                search_runner = search_runner.model_copy(
+                    update={"metadata_filters": per_symbol_filters}
+                )
             (
                 docs_for_analysis,
                 search_results,
-            ) = self._search_runner.retrieve_hits_with_results(
-                queries=search_queries
-            )
+            ) = search_runner.retrieve_hits_with_results(queries=search_queries)
             self._search_results_by_query = search_results
             if not docs_for_analysis:
                 logger.info(
