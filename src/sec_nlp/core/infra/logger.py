@@ -136,16 +136,24 @@ class RichLogFormatter(logging.Formatter):
         if self._show_name:
             parts.append(Text(record.name, style="log.name"))
 
-        parts.append(message_text)
-
         separator = Text(" - ", style="muted")
+        is_multiline = "\n" in message_text.plain
         line = Text()
         for idx, part in enumerate(parts):
             if idx:
                 line.append(separator)
             line.append(part)
 
-        renderables = [line]
+        renderables = []
+        if is_multiline:
+            if line:
+                renderables.append(line)
+            renderables.append(message_text)
+        else:
+            if line:
+                line.append(separator)
+            line.append(message_text)
+            renderables.append(line)
         exc_info = record.exc_info
         if exc_info:
             exc_type, exc, tb = exc_info

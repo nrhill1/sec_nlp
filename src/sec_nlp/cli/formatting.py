@@ -107,7 +107,7 @@ def format_section_header(
         padding=(0, 2),
         width=min(term_width - 4, max(36, len(title) + 12)),
     )
-    return _render_rich(panel)
+    return _render_rich(Align.center(panel))
 
 
 def format_divider(
