@@ -31,15 +31,11 @@ dependencies = [
   "unstructured>=0.18.20",
   "pyahocorasick>=2.2.0",
   "pandas>=2.3.3",
-  "textual>=0.66.0",
-  "textual-dev>=1.8.0",
+  "rich>=13.8.0",
 ]
 
 [project.scripts]
 sec-nlp = "sec_nlp.cli.__main__:main"
-sec-nlp-tui = "sec_nlp.tui.app:main"
-snlp = "sec_nlp.tui.app:main"
-sn = "sec_nlp.tui.app:main"
 profile-memory = "scripts.profile.memory:main"
 check-imports = "scripts.build.check_imports:main"
 

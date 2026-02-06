@@ -6,7 +6,7 @@ from datetime import date
 from pathlib import Path
 from statistics import mean, median
 from time import perf_counter
-from typing import ClassVar, Literal
+from typing import ClassVar, Literal, cast
 
 from langchain_core.callbacks.base import BaseCallbackHandler
 from langchain_core.documents import Document
@@ -36,7 +36,7 @@ from sec_nlp.pipelines.types import (
     MetadataValue,
 )
 from sec_nlp.prompts import load_prompt_template
-from sec_nlp.types import JsonDict, ResultDict
+from sec_nlp.types import JsonDict, ResultDict, ResultValue
 
 from . import (
     confidence as confidence_utils,
@@ -420,7 +420,8 @@ class AnalyzePipeline(BasePipeline):
                         "outputs": len(symbol_output_set),
                         "chunk_stats": chunk_stats,
                     }
-                    metadata[symbol] = symbol_meta
+                    symbol_key = str(symbol)
+                    metadata[symbol_key] = cast(ResultValue, symbol_meta)
                     if index < last_index:
                         log_divider(logger, color="magenta")
 

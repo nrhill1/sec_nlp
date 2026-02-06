@@ -16,10 +16,10 @@ from rich.panel import Panel
 from rich.rule import Rule
 from rich.table import Table
 from rich.text import Text
-from rich.theme import Theme
 
 from sec_nlp.cli.presets import PRESET_DESCRIPTIONS, AnalyzePreset
 from sec_nlp.core.infra.logger import logger
+from sec_nlp.core.infra.rich_console import get_rich_console
 from sec_nlp.types import ConfigData, ConfigValue, JsonObject, JsonValue
 
 # Custom style for questionary prompts
@@ -37,18 +37,7 @@ INTERACTIVE_STYLE: Style = Style(
     ]
 )
 
-INTERACTIVE_THEME: Theme = Theme(
-    {
-        "accent": "cyan",
-        "accent_bold": "bold cyan",
-        "title": "bold white",
-        "good": "green",
-        "warn": "yellow",
-        "error": "red",
-        "muted": "grey62",
-    }
-)
-CONSOLE: Console = Console(theme=INTERACTIVE_THEME, soft_wrap=True)
+CONSOLE: Console = get_rich_console(force_terminal=True, stderr=False)
 
 DEFAULT_LLM_MODEL: str = "llama3.2:1b"
 DEFAULT_EMBEDDING_MODEL: str = "mxbai-embed-large"
@@ -68,7 +57,7 @@ def _print_banner() -> None:
         title_align="left",
         border_style="accent",
         padding=(1, 4),
-        box=box.ASCII,
+        box=box.ROUNDED,
     )
     CONSOLE.print()
     CONSOLE.print(panel)
@@ -645,7 +634,7 @@ def _confirm_config(config: ConfigData) -> bool:
         title="Configuration Summary",
         title_align="left",
         border_style="accent",
-        box=box.ASCII,
+        box=box.ROUNDED,
     )
     CONSOLE.print()
     CONSOLE.print(panel)

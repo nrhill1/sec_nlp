@@ -10,20 +10,20 @@ from typing import Literal
 
 from rich import box
 from rich.align import Align
-from rich.console import Console, Group
+from rich.console import Group
 from rich.panel import Panel
 from rich.rule import Rule
 from rich.text import Text
 
 from sec_nlp.core.infra.logger import color_text, visible_length
+from sec_nlp.core.infra.rich_console import get_rich_console
 
 
 def _render_rich(renderable) -> str:
-    console = Console(
+    console = get_rich_console(
         force_terminal=True,
-        color_system="truecolor",
         width=get_terminal_width(),
-        soft_wrap=True,
+        stderr=False,
     )
     with console.capture() as capture:
         console.print(renderable)

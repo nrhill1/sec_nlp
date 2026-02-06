@@ -11,7 +11,11 @@ from pathlib import Path
 from types import TracebackType
 from typing import Literal, TextIO
 
+from rich.text import Text
+from rich.traceback import Traceback
 from tqdm import tqdm
+
+from sec_nlp.core.infra.rich_console import get_rich_console
 
 
 class TqdmLoggingHandler(logging.StreamHandler[TextIO]):
@@ -95,6 +99,70 @@ class FileSafeFormatter(logging.Formatter):
         return _sanitize_for_file(base)
 
 
+class RichLogFormatter(logging.Formatter):
+    """Rich-based formatter for console logging."""
+
+    def __init__(
+        self,
+        *,
+        show_time: bool,
+        show_name: bool,
+        datefmt: str | None = None,
+    ) -> None:
+        super().__init__(datefmt=datefmt)
+        self._console = get_rich_console(stderr=True)
+        self._show_time = show_time
+        self._show_name = show_name
+
+    def format(self, record: logging.LogRecord) -> str:
+        message_text = Text.from_ansi(record.getMessage())
+        parts: list[Text] = []
+
+        if self._show_time:
+            parts.append(
+                Text(self.formatTime(record, self.datefmt), style="log.time")
+            )
+
+        level_style = f"log.level.{record.levelname.lower()}"
+        parts.append(Text(record.levelname, style=level_style))
+
+        if self._show_name:
+            parts.append(Text(record.name, style="log.name"))
+
+        parts.append(message_text)
+
+        separator = Text(" - ", style="muted")
+        line = Text()
+        for idx, part in enumerate(parts):
+            if idx:
+                line.append(separator)
+            line.append(part)
+
+        renderables = [line]
+        exc_info = record.exc_info
+        if exc_info:
+            exc_type, exc, tb = exc_info
+            if exc_type is not None and exc is not None and tb is not None:
+                renderables.append(
+                    Traceback.from_exception(
+                        exc_type,
+                        exc,
+                        tb,
+                        show_locals=False,
+                        width=self._console.width or 120,
+                    )
+                )
+            elif exc is not None:
+                renderables.append(Text(str(exc), style="log.level.error"))
+        elif record.stack_info:
+            renderables.append(Text.from_ansi(record.stack_info))
+
+        with self._console.capture() as capture:
+            for renderable in renderables:
+                self._console.print(renderable, highlight=False)
+        return capture.get().rstrip("\n")
+
+
 def get_timestamped_log_path(
     prefix: str = "run_log", ext: str = ".log"
 ) -> Path:
@@ -164,14 +232,22 @@ def setup_logging(
     date_format = "%Y-%m-%d %H:%M:%S %z"
 
     # Choose formatter based on output type
-    # Allow colored console even when also writing to a file; only disable for json format
-    use_colors = enable_colors and format_type != "json"
-    if use_colors:
-        console_formatter: logging.Formatter = PaddedColoredFormatter(
-            log_format, datefmt=date_format
+    # Allow rich console output even when also writing to a file; disable for json
+    use_rich = enable_colors and format_type != "json"
+    if use_rich:
+        console_formatter = RichLogFormatter(
+            show_time=format_type != "simple",
+            show_name=format_type == "detailed",
+            datefmt=date_format,
         )
     else:
-        console_formatter = PaddedFormatter(log_format, datefmt=date_format)
+        use_colors = enable_colors and format_type != "json"
+        if use_colors:
+            console_formatter = PaddedColoredFormatter(
+                log_format, datefmt=date_format
+            )
+        else:
+            console_formatter = PaddedFormatter(log_format, datefmt=date_format)
 
     # Configure root logger
     root_logger = logging.getLogger()
@@ -230,9 +306,7 @@ def setup_logging(
         f"Logging initialized -> root=DEBUG console={logging.getLevelName(level)} "
         f"format={format_type} file={log_path}"
     )
-    root_logger.info(
-        color_text(startup_msg, color="cyan") if use_colors else startup_msg
-    )
+    root_logger.info(startup_msg)
 
     # Suppress noisy third-party loggers
     for lib in ["urllib3", "requests", "transformers", "torch", "httpx"]:
