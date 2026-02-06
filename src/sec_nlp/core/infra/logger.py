@@ -119,9 +119,16 @@ class RichLogFormatter(logging.Formatter):
         parts: list[Text] = []
 
         if self._show_time:
-            parts.append(
-                Text(self.formatTime(record, self.datefmt), style="log.time")
-            )
+            dt = datetime.fromtimestamp(record.created).astimezone()
+            timestamp = dt.strftime("%Y-%m-%d %H:%M:%S")
+            offset = dt.strftime("%z")
+            tzname = dt.tzname() or "local"
+            time_block = Text(timestamp, style="log.time")
+            if offset:
+                time_block.append(f" {offset}", style="muted")
+            if tzname:
+                time_block.append(f" {tzname}", style="log.tz")
+            parts.append(time_block)
 
         level_style = f"log.level.{record.levelname.lower()}"
         parts.append(Text(record.levelname, style=level_style))

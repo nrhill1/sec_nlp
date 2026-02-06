@@ -16,6 +16,7 @@ GLOBAL_RICH_THEME: Theme = Theme(
         "error": "red",
         "muted": "grey62",
         "log.time": "grey62",
+        "log.tz": "bright_magenta",
         "log.name": "magenta",
         "log.level.debug": "cyan",
         "log.level.info": "green",
