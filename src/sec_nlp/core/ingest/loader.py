@@ -187,6 +187,7 @@ class Loader(BaseModel):
         perform_download: bool = True,
         keywords: list[str] | None = None,
         section_filter: SectionFilter | None = None,
+        symbols: Iterable[str] | None = None,
     ) -> list[Document]:
         """Download filings and return preprocessed LangChain Documents.
 
@@ -200,9 +201,24 @@ class Loader(BaseModel):
                 Overrides instance-level keywords if provided.
             section_filter: Optional SectionFilter to filter for specific sections.
                 Overrides instance-level section_filter if provided.
+            symbols: Optional subset of symbols to process. Defaults to all
+                added symbols.
         """
         if not self._symbols:
             raise ValueError("No symbols added; call add_symbol(s) first")
+        symbols_to_process = (
+            self._symbols
+            if symbols is None
+            else {s.strip().upper() for s in symbols if s and s.strip()}
+        )
+        if not symbols_to_process:
+            raise ValueError("No symbols provided to load_documents")
+        missing_symbols = symbols_to_process - self._symbols
+        if missing_symbols:
+            missing = ", ".join(sorted(missing_symbols))
+            raise ValueError(
+                f"Symbols not added; call add_symbol(s) first for: {missing}"
+            )
 
         if self.fetch_mode != "download":
             raise ValueError(
@@ -226,7 +242,7 @@ class Loader(BaseModel):
         download_results: DownloadResults = {}
         if perform_download:
             download_results = download_filings(
-                symbols=self._symbols,
+                symbols=symbols_to_process,
                 mode=mode,
                 work_folder=work_folder,
                 company_name=self.company_name,
@@ -241,7 +257,7 @@ class Loader(BaseModel):
         per_symbol_counts: dict[str, int] = {}
         relationships_by_symbol: JsonDict = {}
 
-        for symbol in sorted(self._symbols):
+        for symbol in sorted(symbols_to_process):
             try:
                 related_map, graph_payload = (
                     self._build_relationships_for_symbol(symbol)
@@ -342,6 +358,7 @@ class Loader(BaseModel):
         perform_download: bool = True,
         keywords: list[str] | None = None,
         section_filter: SectionFilter | None = None,
+        symbols: Iterable[str] | None = None,
     ) -> list[str]:
         """Convenience helper: return only text chunks from the Documents."""
         docs = self.load_documents(
@@ -352,6 +369,7 @@ class Loader(BaseModel):
             perform_download=perform_download,
             keywords=keywords,
             section_filter=section_filter,
+            symbols=symbols,
         )
         return [d.page_content for d in docs]
 
@@ -889,6 +907,7 @@ class Loader(BaseModel):
         perform_download: bool = True,
         keywords: list[str] | None = None,
         section_filter: SectionFilter | None = None,
+        symbols: Iterable[str] | None = None,
     ) -> Generator[Document, None, LoaderRunMetadata]:
         """Stream documents as they're processed.
 
@@ -903,6 +922,8 @@ class Loader(BaseModel):
             perform_download: whether to download filings before processing
             keywords: Optional keywords to filter content
             section_filter: Optional section filter
+            symbols: Optional subset of symbols to process. Defaults to all
+                added symbols.
 
         Yields:
             Document objects one at a time
@@ -912,6 +933,19 @@ class Loader(BaseModel):
         """
         if not self._symbols:
             raise ValueError("No symbols added; call add_symbol(s) first")
+        symbols_to_process = (
+            self._symbols
+            if symbols is None
+            else {s.strip().upper() for s in symbols if s and s.strip()}
+        )
+        if not symbols_to_process:
+            raise ValueError("No symbols provided to load_documents_stream")
+        missing_symbols = symbols_to_process - self._symbols
+        if missing_symbols:
+            missing = ", ".join(sorted(missing_symbols))
+            raise ValueError(
+                f"Symbols not added; call add_symbol(s) first for: {missing}"
+            )
 
         filter_keywords = keywords if keywords is not None else self.keywords
         active_section_filter = (
@@ -927,7 +961,7 @@ class Loader(BaseModel):
         download_results: DownloadResults = {}
         if perform_download:
             download_results = download_filings(
-                symbols=self._symbols,
+                symbols=symbols_to_process,
                 mode=mode,
                 work_folder=work_folder,
                 company_name=self.company_name,
@@ -942,7 +976,7 @@ class Loader(BaseModel):
         per_symbol_counts: dict[str, int] = {}
         relationships_by_symbol: JsonDict = {}
 
-        for symbol in sorted(self._symbols):
+        for symbol in sorted(symbols_to_process):
             try:
                 related_map, graph_payload = (
                     self._build_relationships_for_symbol(symbol)
@@ -1047,6 +1081,7 @@ class Loader(BaseModel):
         perform_download: bool = True,
         keywords: list[str] | None = None,
         section_filter: SectionFilter | None = None,
+        symbols: Iterable[str] | None = None,
     ) -> Generator[str, None, LoaderRunMetadata]:
         """Stream text chunks from documents.
 
@@ -1060,6 +1095,8 @@ class Loader(BaseModel):
             perform_download: whether to download filings before processing
             keywords: Optional keywords to filter content
             section_filter: Optional section filter
+            symbols: Optional subset of symbols to process. Defaults to all
+                added symbols.
 
         Yields:
             Text content from documents
@@ -1075,6 +1112,7 @@ class Loader(BaseModel):
             perform_download=perform_download,
             keywords=keywords,
             section_filter=section_filter,
+            symbols=symbols,
         )
 
         try:

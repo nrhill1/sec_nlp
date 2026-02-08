@@ -46,6 +46,30 @@ class AnalyzeCommand(AnalyzeConfig, BasePipelineCommand):
     def pipeline_class(cls) -> type[AnalyzePipeline]:
         return AnalyzePipeline
 
+    def cli_cmd(self) -> None:
+        """Execute the configured pipeline, applying preset defaults if set."""
+        if self.preset:
+            from sec_nlp.cli.presets import AnalyzePreset, get_preset_config
+
+            preset = AnalyzePreset(self.preset)
+            preset_overrides = get_preset_config(preset)
+
+            base_dict = self.model_dump()
+            fields_set = set(getattr(self, "model_fields_set", set()))
+
+            for key, value in preset_overrides.items():
+                if key == "symbols":
+                    if not base_dict.get("symbols"):
+                        base_dict[key] = value
+                    continue
+                if key not in fields_set:
+                    base_dict[key] = value
+
+            merged = AnalyzeCommand.model_validate(base_dict)
+            return BasePipelineCommand.cli_cmd(merged)
+
+        return BasePipelineCommand.cli_cmd(self)
+
     symbols: CliPositionalArg[list[str]] = Field(
         default_factory=list,
         description="Ticker symbols to analyze (e.g., AAPL MSFT GOOGL). Omit for interactive mode.",
@@ -63,7 +87,8 @@ class AnalyzeCommand(AnalyzeConfig, BasePipelineCommand):
     )
 
     def _supports_interactive(self) -> bool:
-        return True
+        # If a preset is explicitly provided, don't enter interactive mode.
+        return not bool(self.preset)
 
     def _run_interactive(self) -> None:
         """Run interactive setup and execute pipeline."""

@@ -319,12 +319,41 @@ class BasePipelineSettings(BaseSettings, ABC):
     @property
     def short_id(self) -> int:
         """Get the short sequential run ID (e.g., 42)."""
+        self._ensure_short_id()
         return self._short_id
 
     @property
     def short_id_display(self) -> str:
         """Get the short ID for display (e.g., '#42')."""
+        self._ensure_short_id()
         return f"#{self._short_id}" if self._short_id else str(self.run_id)
+
+    def _ensure_short_id(self) -> None:
+        """Populate _short_id from the run registry if missing."""
+        if self._short_id:
+            return
+        try:
+            from sec_nlp.pipelines.observability.run_registry import (
+                get_registry,
+            )
+
+            registry = get_registry()
+            existing = registry.get_run(str(self.run_id))
+            if existing is not None:
+                object.__setattr__(self, "_short_id", existing.record_id)
+                return
+
+            short_id = registry.register_run(
+                run_id=str(self.run_id),
+                pipeline_type=self.pipeline_type,
+                started_at=self._run_timestamp,
+                output_dir=str(self.out_path),
+            )
+            if short_id is not None:
+                object.__setattr__(self, "_short_id", short_id)
+        except Exception:
+            # Registry is optional; keep _short_id unset if unavailable.
+            return
 
     @property
     def run_timestamp(self) -> datetime:

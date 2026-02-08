@@ -787,6 +787,7 @@ class AnalyzePipeline(BasePipeline):
             limit_per_symbol=limit_per_symbol,
             perform_download=perform_download,
             section_filter=self._section_filter,
+            symbols=[symbol],
         )
         if allowed_accessions is not None:
             docs = self._filter_docs_by_accession(docs, allowed_accessions)
