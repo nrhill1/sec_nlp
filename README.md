@@ -99,15 +99,10 @@ Use `--preset <name>` with `sec-nlp analyze`.
 
 Run `sec-nlp <command> --help` for full options.
 
-## TUI dashboard
-Run the Textual dashboard (UI layer shells out to the CLI and stays isolated from pipeline logic):
+## Interactive setup
+Run the analyze command without symbols to launch the guided interactive setup:
 ```
-sec-nlp-tui
-```
-
-Using uv:
-```
-uv run sec-nlp-tui
+sec-nlp analyze
 ```
 
 ## Configuration

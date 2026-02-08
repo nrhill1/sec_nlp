@@ -1,12 +1,12 @@
 # src/sec_nlp/pipelines/presets/analyze/pipeline.py
 """Generalized semantic search and confidence analysis pipeline for SEC filings."""
 
-import re
 from collections import defaultdict
+from datetime import date
 from pathlib import Path
 from statistics import mean, median
 from time import perf_counter
-from typing import ClassVar, Literal
+from typing import ClassVar, Literal, cast
 
 from langchain_core.callbacks.base import BaseCallbackHandler
 from langchain_core.documents import Document
@@ -19,32 +19,35 @@ from pydantic import PrivateAttr
 from qdrant_client.models import Distance, VectorParams
 from tqdm import tqdm
 
-from sec_nlp import __version__ as sec_nlp_version
-from sec_nlp.core.edgar.efts_models import EFTSHit
 from sec_nlp.core.edgar.filing_mode import FilingMode
 from sec_nlp.core.infra.logger import log_divider, logger
-from sec_nlp.core.ingest.downloader import download_accessions
 from sec_nlp.core.ingest.filings import get_filing_date_from_dir
 from sec_nlp.core.ingest.loader import Loader
 from sec_nlp.core.llm.chains import InputModelKeys, build_runnable
 from sec_nlp.core.text.deduplication import SimHashConfig, SimHashDeduplicator
 from sec_nlp.core.text.filters import SectionFilter
-from sec_nlp.core.text.ranking import KeywordExtractor, RankingAlgorithm
 from sec_nlp.core.text.section_extractor import SectionExtractor
-from sec_nlp.core.types import coerce_json_dict
 from sec_nlp.pipelines import BasePipeline
 from sec_nlp.pipelines.metadata.accession import get_accession_from_metadata
 from sec_nlp.pipelines.observability.telemetry import log_chunk_length_stats
-from sec_nlp.pipelines.serialization import round_score
 from sec_nlp.pipelines.types import (
     AnalysisResultDict,
     MetadataRecord,
-    MetadataScalar,
     MetadataValue,
 )
 from sec_nlp.prompts import load_prompt_template
-from sec_nlp.types import JsonDict, ResultDict
+from sec_nlp.types import JsonDict, ResultDict, ResultValue
 
+from . import (
+    confidence as confidence_utils,
+    efts as efts_utils,
+)
+from .builders import (
+    build_analysis_runner,
+    build_output_formatter,
+    build_preprocessor,
+    build_search_runner,
+)
 from .config import AnalyzeConfig
 from .io.enhancements import (
     build_peer_comparison,
@@ -55,34 +58,30 @@ from .io.enhancements import (
 )
 from .io.outputs import OutputFormatter
 from .io.result_writer import write_results
-from .market import MarketEnrichment, build_market_enrichment
+from .market import (
+    MarketEnrichment,
+    build_market_enrichment,
+    format_market_context,
+)
 from .models import AnalysisInput, AnalysisResult, AnalyzeResult
 from .runnables.analysis import AnalyzerRunnable
-from .runnables.efts import EFTSSearchInput, EFTSSearchRunnable
+from .runnables.efts import EFTSSearchRunnable
 from .runnables.market_correlation import (
     MarketCorrelationInput,
     MarketCorrelationRunnable,
 )
-from .runnables.search import (
-    SearchQueryResults,
-    SearchResultsByQuery,
-    SearchRunnable,
-)
+from .runnables.search import SearchResultsByQuery, SearchRunnable
 from .steps.analysis.callbacks import TracingCallbackHandler
 from .steps.analysis.instructions import AnalysisInstructionBuilder
 from .steps.indexing.vector_index import VectorIndexer
 from .steps.preprocess.preprocess import ChunkPreprocessor
-from .steps.preprocess.topic_scoring import build_topic_matcher
 from .steps.search.efts_search import EFTSSearchResult
 from .types import ChunkStats, SymbolRunMetadata, Timings
-from .utils import normalize_query_terms
 
 type PromptInput = dict[
     str,
     InputModelKeys | list[InputModelKeys] | dict[str, InputModelKeys],
 ]
-
-NUMERIC_SIGNAL_RE = re.compile(r"[$€£]?\d")
 
 
 class AnalyzePipeline(BasePipeline):
@@ -340,29 +339,15 @@ class AnalyzePipeline(BasePipeline):
             )
         )
 
-        # Initialize output formatter
-        output_run_id = self.config.run_id
-        self._output_formatter = OutputFormatter(
-            export_format=self.config.export_format,
-            confidence_threshold=self.config.confidence_threshold,
+        # Initialize output formatter and preprocessors
+        self._output_formatter = build_output_formatter(
+            config=self.config,
             topics=keyword_terms,
-            include_raw_chunks=self.config.include_raw_chunks,
-            run_id=output_run_id,
-            model_name=self.config.llm.model_name,
-            confidence_mode=self.config.confidence_mode,
-            prompt_path=self.config.llm.prompt_path,
-            pipeline_version=sec_nlp_version,
         )
-
-        topic_matcher = build_topic_matcher(keyword_terms)
-
-        self._preprocessor = ChunkPreprocessor(
+        self._preprocessor = build_preprocessor(
             config=self.config,
             section_extractor=self._section_extractor,
             topics=keyword_terms,
-            topic_matcher=topic_matcher,
-            min_topic_hits=self.config.min_topic_hits,
-            prioritize_topics=self.config.prioritize_topics,
             embedder=self._embedder,
         )
         self._vector_indexer = VectorIndexer(
@@ -370,35 +355,15 @@ class AnalyzePipeline(BasePipeline):
             vector_store=self._vector_store,
             deduplicator=self._deduplicator,
         )
-        self._analysis_runner = AnalyzerRunnable(
+        self._analysis_runner = build_analysis_runner(
+            config=self.config,
             graph=self._graph,
             callbacks=self._callbacks,
             analysis_instructions=self._analysis_instructions,
-            symbols=self.config.symbols,
-            llm_retry_attempts=self.config.llm_retry_attempts,
-            llm_retry_backoff=self.config.llm_retry_backoff,
-            confidence_mode=self.config.confidence_mode,
-            include_raw_chunks=self.config.include_raw_chunks,
-            batch_size=self.config.batch_size,
-            query_term_min_len=self.config.search.query_term_min_len,
-            run_id=self.config.run_id,
         )
-        self._search_runner = SearchRunnable(
+        self._search_runner = build_search_runner(
+            config=self.config,
             vector_store=self._vector_store,
-            symbols=self.config.symbols,
-            vector_mode=self.config.vector_mode,
-            search_limit=self.config.search.limit,
-            score_threshold=self.config.search.score_threshold,
-            metadata_filters=self.config.search.metadata_filters,
-            query_term_min_hits=self.config.search.query_term_min_hits,
-            query_term_min_ratio=self.config.search.query_term_min_ratio,
-            query_term_min_len=self.config.search.query_term_min_len,
-            search_analyze=self.config.search.analyze,
-            export_results_enabled=self.config.search.export_results,
-            distance_metric=self.config.vdb.qdrant_distance,
-            output_root=self.config.out_path,
-            pipeline_type=self.config.pipeline_type,
-            run_dir=self.config.run_path_component(),
         )
         self._efts_runner = EFTSSearchRunnable(
             efts_config=self.config.efts,
@@ -422,7 +387,7 @@ class AnalyzePipeline(BasePipeline):
                 self.config.run_id,
             )
 
-            all_outputs: list[Path] = []
+            output_set: set[Path] = set()
             metadata: ResultDict = {
                 "run_id": str(self.config.run_id),
                 "short_id": self.config.short_id,
@@ -446,16 +411,17 @@ class AnalyzePipeline(BasePipeline):
                 for index, symbol in enumerate(pbar):
                     pbar.set_description(f"Processing {symbol}")
                     symbol_outputs, chunk_stats = self._process_symbol(symbol)
-                    symbol_outputs = list(set(symbol_outputs))
-                    all_outputs.extend(symbol_outputs)
+                    symbol_output_set = set(symbol_outputs)
+                    output_set.update(symbol_output_set)
                     total_analyzed_chunks += int(
                         chunk_stats.get("analyzed_count", 0)
                     )
                     symbol_meta: SymbolRunMetadata = {
-                        "outputs": len(symbol_outputs),
+                        "outputs": len(symbol_output_set),
                         "chunk_stats": chunk_stats,
                     }
-                    metadata[symbol] = symbol_meta
+                    symbol_key = str(symbol)
+                    metadata[symbol_key] = cast(ResultValue, symbol_meta)
                     if index < last_index:
                         log_divider(logger, color="magenta")
 
@@ -470,11 +436,11 @@ class AnalyzePipeline(BasePipeline):
                     summary=peer_summary,
                 )
                 if peer_path is not None:
-                    all_outputs.append(peer_path)
+                    output_set.add(peer_path)
 
             # Run semantic search if queries are configured
-            if self.config.get_search_queries():
-                search_queries = self.config.get_search_queries()
+            search_queries = self.config.get_search_queries()
+            if search_queries:
                 if self._efts_results_by_symbol:
                     hybrid_results = self._build_hybrid_search_results(
                         self._search_results_by_query,
@@ -494,10 +460,10 @@ class AnalyzePipeline(BasePipeline):
                     search_outputs = self._search_runner.run(
                         queries=search_queries,
                     )
-                search_outputs = list(set(search_outputs))
-                all_outputs.extend(search_outputs)
-                metadata["search_results"] = len(search_outputs)
-                metadata["search_outputs"] = search_outputs
+                search_output_set = set(search_outputs)
+                output_set.update(search_output_set)
+                metadata["search_results"] = len(search_output_set)
+                metadata["search_outputs"] = list(search_output_set)
                 metadata["search_queries"] = list(search_queries)
 
             if self._relationship_graphs:
@@ -506,10 +472,9 @@ class AnalyzePipeline(BasePipeline):
             metadata["total_chunks_analyzed"] = total_analyzed_chunks
 
             self.config.complete_run(success=True)
-            all_outputs = list(set(all_outputs))
             return AnalyzeResult(
                 success=True,
-                outputs=all_outputs,
+                outputs=list(output_set),
                 metadata=metadata,
             )
 
@@ -527,141 +492,45 @@ class AnalyzePipeline(BasePipeline):
         self,
         limit_per_symbol: int | None,
     ) -> int | None:
-        if limit_per_symbol is not None:
-            return limit_per_symbol
-        auto_limit = self.config.efts.auto_download_limit
-        if auto_limit <= 0:
-            return 0
-        return auto_limit
+        return efts_utils.cap_efts_download_limit(self.config, limit_per_symbol)
 
     @staticmethod
     def _compute_market_confidence_signal(
         market_correlation: JsonDict | None,
     ) -> float | None:
-        if market_correlation is None:
-            return None
-        metrics_value = market_correlation.get("metrics")
-        metrics = coerce_json_dict(metrics_value)
-        if metrics is None:
-            return None
-
-        scores: list[float] = []
-        for key in ("car_post5", "car_post30", "car_pre5"):
-            value = metrics.get(key)
-            if isinstance(value, (int, float)):
-                scores.append(min(abs(float(value)) / 0.1, 1.0))
-
-        volume_spike = metrics.get("volume_spike")
-        if isinstance(volume_spike, (int, float)):
-            spike = max(float(volume_spike) - 1.0, 0.0)
-            scores.append(min(spike / 1.5, 1.0))
-
-        volatility_change = metrics.get("volatility_change")
-        if isinstance(volatility_change, (int, float)):
-            scores.append(min(abs(float(volatility_change)) / 0.05, 1.0))
-
-        if not scores:
-            return None
-        return float(mean(scores))
+        return confidence_utils.compute_market_confidence_signal(
+            market_correlation
+        )
 
     @staticmethod
     def _score_query_relevance(result: AnalysisResultDict) -> float:
-        matched = result.get("query_match_terms")
-        missing = result.get("missing_query_terms")
-        matched_count = len(matched) if isinstance(matched, list) else 0
-        missing_count = len(missing) if isinstance(missing, list) else 0
-        total = matched_count + missing_count
-        if total == 0:
-            return 0.0
-        return matched_count / total
+        return confidence_utils.score_query_relevance(result)
 
     @staticmethod
     def _score_match_strength(result: AnalysisResultDict) -> float | None:
-        matched_queries = result.get("matched_queries")
-        if not isinstance(matched_queries, list):
-            return None
-        scores: list[float] = []
-        for item in matched_queries:
-            if not isinstance(item, dict):
-                continue
-            score = item.get("score")
-            if isinstance(score, (int, float)):
-                scores.append(float(score))
-        if not scores:
-            return None
-        best = max(scores)
-        if best < 0:
-            return 0.0
-        return min(best, 1.0)
+        return confidence_utils.score_match_strength(result)
 
     @staticmethod
     def _collect_query_terms(result: AnalysisResultDict) -> list[str]:
-        matched = result.get("query_match_terms")
-        missing = result.get("missing_query_terms")
-        terms: list[str] = []
-        seen: set[str] = set()
-        for item in (matched, missing):
-            if not isinstance(item, list):
-                continue
-            for term in item:
-                if not isinstance(term, str):
-                    continue
-                cleaned = term.strip().lower()
-                if not cleaned or cleaned in seen:
-                    continue
-                seen.add(cleaned)
-                terms.append(cleaned)
-        return terms
+        return confidence_utils.collect_query_terms(result)
 
     @classmethod
     def _extract_yake_terms(cls, result: AnalysisResultDict) -> list[str]:
-        source_meta = result.get("source_metadata")
-        if not isinstance(source_meta, dict):
-            return []
-        yake_keywords = source_meta.get("yake_keywords")
-        if not isinstance(yake_keywords, list):
-            return []
-        terms: list[str] = []
-        seen: set[str] = set()
-        for keyword in yake_keywords:
-            if not isinstance(keyword, str):
-                continue
-            for term in normalize_query_terms(keyword, min_len=3):
-                if term in seen:
-                    continue
-                seen.add(term)
-                terms.append(term)
-        return terms
+        _ = cls
+        return confidence_utils.extract_yake_terms(result)
 
     @classmethod
     def _score_yake_overlap(cls, result: AnalysisResultDict) -> float | None:
-        query_terms = cls._collect_query_terms(result)
-        if not query_terms:
-            return None
-        yake_terms = cls._extract_yake_terms(result)
-        if not yake_terms:
-            return None
-        matches = [term for term in query_terms if term in yake_terms]
-        return len(matches) / len(query_terms) if query_terms else None
+        _ = cls
+        return confidence_utils.score_yake_overlap(result)
 
     @staticmethod
     def _has_evidence(result: AnalysisResultDict) -> bool:
-        evidence = result.get("evidence_spans")
-        if isinstance(evidence, list) and evidence:
-            return True
-        excerpt = result.get("source_excerpt")
-        return isinstance(excerpt, str) and excerpt.strip() != ""
+        return confidence_utils.has_evidence(result)
 
     @staticmethod
     def _has_numeric_signal(result: AnalysisResultDict) -> bool:
-        summary = result.get("summary")
-        if isinstance(summary, str) and NUMERIC_SIGNAL_RE.search(summary):
-            return True
-        key_points = result.get("key_points")
-        if isinstance(key_points, list):
-            joined = " ".join(str(item) for item in key_points)
-            return NUMERIC_SIGNAL_RE.search(joined) is not None
-        return False
+        return confidence_utils.has_numeric_signal(result)
 
     @classmethod
     def _derive_confidence_score(
@@ -670,69 +539,20 @@ class AnalyzePipeline(BasePipeline):
         *,
         market_signal: float | None,
     ) -> tuple[float, str]:
-        query_relevance = cls._score_query_relevance(result)
-        match_strength = cls._score_match_strength(result)
-        yake_overlap = cls._score_yake_overlap(result)
-        evidence = cls._has_evidence(result)
-        numeric = cls._has_numeric_signal(result)
-
-        overlap_weight = (
-            yake_overlap if yake_overlap is not None else query_relevance
+        _ = cls
+        return confidence_utils.derive_confidence_score(
+            result, market_signal=market_signal
         )
-        base = 0.2 + (0.4 * overlap_weight)
-        if match_strength is not None:
-            base += 0.2 * match_strength
-        if evidence:
-            base += 0.1
-        if numeric:
-            base += 0.1
-
-        if market_signal is not None and result.get("is_relevant"):
-            base += 0.1 * market_signal
-
-        if result.get("missing_query_terms"):
-            base -= 0.1
-        if not result.get("is_relevant"):
-            base = min(base, 0.4)
-
-        score = max(0.05, min(base, 0.99))
-
-        rationale_parts = [
-            f"yake_overlap={(yake_overlap if yake_overlap is not None else query_relevance):.2f}",
-            f"match_score={(match_strength if match_strength is not None else 0.0):.2f}",
-            f"evidence={'yes' if evidence else 'no'}",
-            f"numeric={'yes' if numeric else 'no'}",
-        ]
-        if market_signal is not None:
-            rationale_parts.append(f"market_signal={market_signal:.2f}")
-        rationale = ", ".join(rationale_parts)
-        return score, rationale
 
     def _apply_confidence_derivation(
         self,
         analysis_results: list[AnalysisResultDict],
         market_correlation: JsonDict | None,
     ) -> None:
-        market_signal = self._compute_market_confidence_signal(
-            market_correlation
+        confidence_utils.apply_confidence_derivation(
+            analysis_results,
+            market_correlation,
         )
-        for result in analysis_results:
-            if result.get("error") or result.get("exception"):
-                continue
-            derived_score, rationale = self._derive_confidence_score(
-                result, market_signal=market_signal
-            )
-            yake_overlap = self._score_yake_overlap(result)
-            existing = result.get("confidence_score")
-            if isinstance(existing, (int, float)):
-                result["confidence_score"] = round_score(
-                    min(float(existing), derived_score)
-                )
-            else:
-                result["confidence_score"] = round_score(derived_score)
-            result["confidence_rationale"] = rationale
-            if yake_overlap is not None:
-                result["yake_overlap"] = round_score(yake_overlap)
 
     @staticmethod
     def _select_efts_accessions(
@@ -740,29 +560,7 @@ class AnalyzePipeline(BasePipeline):
         accessions: list[str],
         limit: int | None,
     ) -> list[str]:
-        if not accessions:
-            return []
-        allowed = {accession for accession in accessions if accession}
-        if not allowed:
-            return []
-        best_scores: dict[str, float] = {}
-        for result in results:
-            for hit in result.hits:
-                accession = hit.accession_number
-                if accession not in allowed:
-                    continue
-                score = float(hit.score)
-                best = best_scores.get(accession)
-                if best is None or score > best:
-                    best_scores[accession] = score
-        ordered = sorted(
-            best_scores.items(),
-            key=lambda item: (-item[1], item[0]),
-        )
-        ranked = [accession for accession, _ in ordered]
-        if limit is None:
-            return ranked
-        return ranked[:limit]
+        return efts_utils.select_efts_accessions(results, accessions, limit)
 
     def _download_efts_accessions(
         self,
@@ -771,60 +569,19 @@ class AnalyzePipeline(BasePipeline):
         accessions: list[str],
         results: list[EFTSSearchResult],
     ) -> int:
-        if not accessions:
-            return 0
-
-        accession_set = set(accessions)
-        hits_by_accession: dict[str, EFTSHit] = {}
-        for result in results:
-            for hit in result.hits:
-                accession = hit.accession_number
-                if (
-                    accession in accession_set
-                    and accession not in hits_by_accession
-                ):
-                    hits_by_accession[accession] = hit
-        if not hits_by_accession:
-            return 0
-
-        accession_cik_map = {
-            accession: hit.cik for accession, hit in hits_by_accession.items()
-        }
-
-        download_results = download_accessions(
+        return efts_utils.download_efts_accessions(
+            config=self.config,
+            company_name=self._loader.company_name,
             symbol=symbol,
             accessions=accessions,
-            accession_cik_map=accession_cik_map,
-            mode=self.config.mode,
-            work_folder=self.config.dl_path,
-            company_name=self._loader.company_name,
-            email=self.config.email,
+            results=results,
         )
 
-        downloaded = 0
-        for result in download_results.values():
-            if not result.get("success"):
-                continue
-            count = result.get("downloaded")
-            if isinstance(count, int) and count > 0:
-                downloaded += 1
-        return downloaded
-
     def _local_accessions(self, symbol: str) -> set[str]:
-        accession_set = set()
-        for form_type in self.config.mode.forms:
-            filing_dir = (
-                self.config.dl_path
-                / "sec-edgar-filings"
-                / symbol.upper()
-                / form_type
-            )
-            if not filing_dir.exists():
-                continue
-            accession_set.update(
-                {path.name for path in filing_dir.iterdir() if path.is_dir()}
-            )
-        return accession_set
+        return efts_utils.local_accessions(self.config, symbol)
+
+    def _efts_date_range(self) -> tuple[date | None, date | None]:
+        return efts_utils.efts_date_range(self.config)
 
     def _run_efts_for_symbol(
         self,
@@ -832,38 +589,12 @@ class AnalyzePipeline(BasePipeline):
         symbol: str,
         queries: list[str],
     ) -> tuple[list[EFTSSearchResult], list[str], bool]:
-        if not queries or not self.config.efts.enabled:
-            return [], [], False
-
-        local_accessions = self._local_accessions(symbol)
-        efts_runner = self._efts_runner
-        if efts_runner is None:
-            efts_runner = EFTSSearchRunnable(
-                efts_config=self.config.efts,
-                forms=list(self.config.mode.forms),
-                mode=self.config.mode,
-                start_date=self.config.start_date,
-                end_date=self.config.end_date,
-                email=self.config.email,
-            )
-        try:
-            results = efts_runner.invoke(
-                EFTSSearchInput(
-                    symbol=symbol,
-                    queries=queries,
-                    local_accessions=local_accessions,
-                )
-            )
-        except Exception as exc:
-            logger.warning("EFTS search failed for %s: %s", symbol, exc)
-            return [], [], False
-
-        new_accessions: set[str] = set()
-        for result in results:
-            for accession in result.new_accessions:
-                new_accessions.add(accession)
-
-        return results, sorted(new_accessions), True
+        return efts_utils.run_efts_for_symbol(
+            config=self.config,
+            efts_runner=self._efts_runner,
+            symbol=symbol,
+            queries=queries,
+        )
 
     def _collect_efts_hits(
         self,
@@ -871,75 +602,15 @@ class AnalyzePipeline(BasePipeline):
         dict[str, list[tuple[Document, float]]],
         dict[str, int],
     ]:
-        hits_by_query: dict[str, list[tuple[Document, float]]] = defaultdict(
-            list
+        return efts_utils.collect_efts_hits(
+            config=self.config,
+            results_by_symbol=self._efts_results_by_symbol,
+            market_context_by_symbol=self._market_context_by_symbol,
         )
-        totals_by_query: dict[str, int] = defaultdict(int)
-
-        for symbol, results in self._efts_results_by_symbol.items():
-            if not results:
-                continue
-            local_accessions = self._local_accessions(symbol)
-            market_context = self._market_context_by_symbol.get(symbol)
-            for result in results:
-                query = result.query
-                if not query:
-                    continue
-                totals_by_query[query] += result.total
-                seen_accessions: set[str] = set()
-                for hit in result.hits:
-                    accession = hit.accession_number
-                    if accession in seen_accessions:
-                        continue
-                    seen_accessions.add(accession)
-                    tickers: list[MetadataScalar] = [
-                        ticker
-                        for ticker in hit.tickers
-                        if isinstance(ticker, str) and ticker
-                    ]
-                    # Use the actual hit's ticker, not the search context symbol
-                    # EFTS returns filings from all companies matching the query
-                    hit_symbol = hit.ticker or (
-                        tickers[0] if tickers else symbol
-                    )
-                    yake_keywords: list[MetadataScalar] = list(
-                        hit.yake_keywords
-                    )
-                    metadata: dict[str, MetadataValue] = {
-                        "source": "efts",
-                        "search_source": "efts",
-                        "symbol": str(hit_symbol).upper(),
-                        "accession_number": accession,
-                        "cik": hit.cik,
-                        "company_name": hit.company_name,
-                        "tickers": tickers,
-                        "form_type": hit.form_type,
-                        "filed_date": hit.filed_date.isoformat(),
-                        "efts_score": float(hit.score),
-                        "efts_query": query,
-                        "yake_keywords": yake_keywords,
-                        "edgar_url": hit.edgar_url,
-                        "is_local": accession in local_accessions,
-                    }
-                    if market_context:
-                        metadata["market_enrichment_context"] = market_context
-                    doc = Document(
-                        page_content=hit.snippet,
-                        metadata=metadata,
-                    )
-                    hits_by_query[query].append((doc, float(hit.score)))
-
-        return dict(hits_by_query), dict(totals_by_query)
 
     @staticmethod
     def _normalize_scores(scores: list[float]) -> list[float]:
-        if not scores:
-            return []
-        low = min(scores)
-        high = max(scores)
-        if high <= low:
-            return [1.0 for _ in scores]
-        return [(score - low) / (high - low) for score in scores]
+        return efts_utils.normalize_scores(scores)
 
     @staticmethod
     def _adjust_efts_score(
@@ -948,32 +619,18 @@ class AnalyzePipeline(BasePipeline):
         vector_scores: list[float],
         prefers_lower: bool,
     ) -> float:
-        if not vector_scores:
-            return 1.0 - normalized_score if prefers_lower else normalized_score
-        best = min(vector_scores) if prefers_lower else max(vector_scores)
-        worst = max(vector_scores) if prefers_lower else min(vector_scores)
-        if best == worst:
-            return best
-        if prefers_lower:
-            return best + (1.0 - normalized_score) * (worst - best)
-        return worst + normalized_score * (best - worst)
+        return efts_utils.adjust_efts_score(
+            normalized_score,
+            vector_scores=vector_scores,
+            prefers_lower=prefers_lower,
+        )
 
     @staticmethod
     def _update_search_sources(
         metadata: dict[str, MetadataValue],
         source: str,
     ) -> None:
-        existing = metadata.get("search_sources")
-        sources: list[MetadataScalar] = []
-        if isinstance(existing, list):
-            for item in existing:
-                if isinstance(item, str) and item not in sources:
-                    sources.append(item)
-        elif isinstance(existing, str):
-            sources.append(existing)
-        if source not in sources:
-            sources.append(source)
-        metadata["search_sources"] = sources
+        return efts_utils.update_search_sources(metadata, source)
 
     def _annotate_efts_match(
         self,
@@ -982,125 +639,63 @@ class AnalyzePipeline(BasePipeline):
         query: str,
         score: float,
     ) -> None:
-        for doc in docs:
-            metadata: dict[str, MetadataValue] = dict(doc.metadata or {})
-            matches = metadata.get("efts_matches")
-            cleaned: list[dict[str, MetadataScalar]] = []
-            if isinstance(matches, list):
-                for item in matches:
-                    if isinstance(item, dict):
-                        filtered: dict[str, MetadataScalar] = {}
-                        for key, value in item.items():
-                            if isinstance(key, str) and isinstance(
-                                value, (str, int, float, bool)
-                            ):
-                                filtered[key] = value
-                            elif isinstance(key, str) and value is None:
-                                filtered[key] = value
-                        if filtered:
-                            cleaned.append(filtered)
-            already_present = False
-            for item in cleaned:
-                if item.get("query") == query:
-                    already_present = True
-                    break
-            if not already_present:
-                cleaned.append({"query": query, "score": float(score)})
-            metadata["efts_matches"] = cleaned
-            self._update_search_sources(metadata, "efts")
-            doc.metadata = metadata
+        efts_utils.annotate_efts_match(docs, query=query, score=score)
 
     def _build_hybrid_search_results(
         self,
         vector_results: SearchResultsByQuery | None,
     ) -> SearchResultsByQuery:
-        base_results = vector_results or {}
-        efts_hits_by_query, efts_totals = self._collect_efts_hits()
-        if not efts_hits_by_query:
-            return base_results
-
-        distance_metric = self.config.vdb.qdrant_distance
-        prefers_lower = distance_metric in ("Cosine", "Euclid")
-
-        hybrid_results: SearchResultsByQuery = {}
-        all_queries = set(base_results) | set(efts_hits_by_query)
-        for query in all_queries:
-            vector_entry = base_results.get(query)
-            vector_filtered = (
-                list(vector_entry.filtered) if vector_entry else []
-            )
-            vector_total = vector_entry.total if vector_entry else 0
-            vector_scores = [float(score) for _, score in vector_filtered]
-            vector_accessions: dict[str, list[Document]] = defaultdict(list)
-            for doc, _ in vector_filtered:
-                metadata: dict[str, MetadataValue] = dict(doc.metadata or {})
-                self._update_search_sources(metadata, "vector")
-                doc.metadata = metadata
-                accession = get_accession_from_metadata(doc.metadata)
-                if accession:
-                    vector_accessions[accession].append(doc)
-
-            efts_hits = efts_hits_by_query.get(query, [])
-            efts_filtered: list[tuple[Document, float]] = []
-            for doc, raw_score in efts_hits:
-                accession = get_accession_from_metadata(doc.metadata)
-                if accession and accession in vector_accessions:
-                    self._annotate_efts_match(
-                        vector_accessions[accession],
-                        query=query,
-                        score=raw_score,
-                    )
-                    continue
-                efts_filtered.append((doc, raw_score))
-
-            normalized = self._normalize_scores(
-                [float(score) for _, score in efts_filtered]
-            )
-            combined = list(vector_filtered)
-            for (doc, raw_score), norm in zip(
-                efts_filtered, normalized, strict=True
-            ):
-                metadata: dict[str, MetadataValue] = dict(doc.metadata or {})
-                if "efts_score" not in metadata:
-                    metadata["efts_score"] = float(raw_score)
-                self._update_search_sources(metadata, "efts")
-                doc.metadata = metadata
-                adjusted_score = self._adjust_efts_score(
-                    norm,
-                    vector_scores=vector_scores,
-                    prefers_lower=prefers_lower,
-                )
-                combined.append((doc, adjusted_score))
-
-            total_hits = vector_total + efts_totals.get(query, 0)
-            hybrid_results[query] = SearchQueryResults(
-                filtered=combined,
-                total=total_hits,
-            )
-
-        return hybrid_results
+        return efts_utils.build_hybrid_search_results(
+            config=self.config,
+            vector_results=vector_results,
+            efts_results_by_symbol=self._efts_results_by_symbol,
+            market_context_by_symbol=self._market_context_by_symbol,
+        )
 
     @staticmethod
     def _efts_accessions(results: list[EFTSSearchResult]) -> set[str]:
-        accessions: set[str] = set()
-        for result in results:
-            for hit in result.hits:
-                accessions.add(hit.accession_number)
-        return accessions
+        return efts_utils.efts_accessions(results)
 
     @staticmethod
     def _filter_docs_by_accession(
         docs: list[Document],
         accessions: set[str],
     ) -> list[Document]:
-        if not accessions:
-            return []
-        filtered: list[Document] = []
+        return efts_utils.filter_docs_by_accession(docs, accessions)
+
+    def _log_chunk_stats_by_accession(
+        self,
+        docs: list[Document],
+        *,
+        symbol: str | None,
+        label: str | None,
+    ) -> None:
+        accession_docs: dict[str | None, list[Document]] = defaultdict(list)
         for doc in docs:
-            accession = get_accession_from_metadata(doc.metadata or {})
-            if accession in accessions:
-                filtered.append(doc)
-        return filtered
+            accession = get_accession_from_metadata(doc.metadata)
+            accession_docs[accession].append(doc)
+        symbol_text = str(symbol) if symbol is not None else None
+        label_text = str(label) if label is not None else None
+        if len(accession_docs) == 1:
+            only_accession = next(iter(accession_docs))
+            log_chunk_length_stats(
+                label=label_text,
+                symbol=symbol_text,
+                accession=str(only_accession) if only_accession else None,
+                docs=docs,
+                prefix_color="dim",
+            )
+            return
+        for accession in sorted(
+            accession_docs, key=lambda value: (value is None, value or "")
+        ):
+            log_chunk_length_stats(
+                label=label_text,
+                symbol=symbol_text,
+                accession=str(accession) if accession else None,
+                docs=accession_docs[accession],
+                prefix_color="dim",
+            )
 
     def _process_symbol(self, symbol: str) -> tuple[list[Path], ChunkStats]:
         """Process a single symbol."""
@@ -1212,7 +807,8 @@ class AnalyzePipeline(BasePipeline):
             }
 
         t0 = perf_counter()
-        docs = self._preprocessor.chunk_and_prepare(docs)
+        preprocessor = self._get_preprocessor()
+        docs = preprocessor.chunk_and_prepare(docs)
         self._ensure_filing_dates(docs)
         timings["prepare"] = perf_counter() - t0
 
@@ -1249,29 +845,11 @@ class AnalyzePipeline(BasePipeline):
                 metadata = dict(doc.metadata or {})
                 metadata["market_enrichment_context"] = market_context
                 doc.metadata = metadata
-        accession_docs: dict[str, list[Document]] = defaultdict(list)
-        for doc in docs:
-            accession = get_accession_from_metadata(doc.metadata)
-            accession_docs[accession].append(doc)
-
-        if len(accession_docs) == 1:
-            only_accession = next(iter(accession_docs))
-            log_chunk_length_stats(
-                label=None,
-                symbol=symbol,
-                accession=only_accession,
-                docs=docs,
-                prefix_color="dim",
-            )
-        else:
-            for accession in sorted(accession_docs):
-                log_chunk_length_stats(
-                    label=None,
-                    symbol=symbol,
-                    accession=accession,
-                    docs=accession_docs[accession],
-                    prefix_color="dim",
-                )
+        self._log_chunk_stats_by_accession(
+            docs,
+            symbol=symbol,
+            label=None,
+        )
 
         # Index chunks before analysis
         self._vector_indexer.index(symbol, docs, timings)
@@ -1279,12 +857,17 @@ class AnalyzePipeline(BasePipeline):
         # Retrieve relevant chunks via vector search (if enabled)
         search_queries = self.config.get_search_queries()
         if search_queries and self._vector_store:
+            per_symbol_filters = dict(self.config.search.metadata_filters)
+            per_symbol_filters["symbol"] = [symbol]
+            search_runner = self._get_search_runner()
+            if search_runner.metadata_filters != per_symbol_filters:
+                search_runner = search_runner.model_copy(
+                    update={"metadata_filters": per_symbol_filters}
+                )
             (
                 docs_for_analysis,
                 search_results,
-            ) = self._search_runner.retrieve_hits_with_results(
-                queries=search_queries
-            )
+            ) = search_runner.retrieve_hits_with_results(queries=search_queries)
             self._search_results_by_query = search_results
             if not docs_for_analysis:
                 logger.info(
@@ -1297,28 +880,11 @@ class AnalyzePipeline(BasePipeline):
                     len(docs_for_analysis),
                     symbol,
                 )
-                search_accession_docs = defaultdict(list)
-                for doc in docs_for_analysis:
-                    accession = get_accession_from_metadata(doc.metadata)
-                    search_accession_docs[accession].append(doc)
-                if len(search_accession_docs) == 1:
-                    only_accession = next(iter(search_accession_docs))
-                    log_chunk_length_stats(
-                        label="vector",
-                        symbol=symbol,
-                        accession=only_accession,
-                        docs=docs_for_analysis,
-                        prefix_color="dim",
-                    )
-                else:
-                    for accession in sorted(search_accession_docs):
-                        log_chunk_length_stats(
-                            label="vector",
-                            symbol=symbol,
-                            accession=accession,
-                            docs=search_accession_docs[accession],
-                            prefix_color="dim",
-                        )
+                self._log_chunk_stats_by_accession(
+                    docs_for_analysis,
+                    symbol=symbol,
+                    label="vector",
+                )
         else:
             logger.info(
                 "Search not configured (no queries/topics) or vector store unavailable; skipping analysis"
@@ -1333,7 +899,8 @@ class AnalyzePipeline(BasePipeline):
                 len(docs_for_analysis),
                 symbol,
             )
-            analysis_results = self._analysis_runner.analyze_chunks(
+            analysis_runner = self._get_analysis_runner()
+            analysis_results = analysis_runner.analyze_chunks(
                 symbol, docs_for_analysis
             )
             timings["analyze"] = perf_counter() - t0
@@ -1343,15 +910,12 @@ class AnalyzePipeline(BasePipeline):
         stats["analyzed_count"] = len(analysis_results)
 
         # Filter relevant items once to keep storage/output in sync
-        formatter = self._output_formatter
-        relevant_pairs = [
-            (doc, result)
-            for doc, result in zip(
-                docs_for_analysis, analysis_results, strict=False
-            )
+        formatter = self._get_output_formatter()
+        relevant_results = [
+            result
+            for result in analysis_results
             if formatter.is_relevant_result(result)
         ]
-        relevant_results = [r for _, r in relevant_pairs]
         error_results = [
             r for r in analysis_results if r.get("error") or r.get("exception")
         ]
@@ -1410,9 +974,10 @@ class AnalyzePipeline(BasePipeline):
 
         # Write results to output file
         t_write_start = perf_counter()
+        fallback_meta = docs[0].metadata or {}
         output_files = self._write_results(
             symbol,
-            docs[0].metadata or {},
+            fallback_meta,
             analysis_results,
             relevant_results=relevant_results,
             search_queries=search_queries,
@@ -1431,7 +996,7 @@ class AnalyzePipeline(BasePipeline):
             run_id=self.config.run_id,
             analysis_results=analysis_results,
             relevant_results=relevant_results,
-            fallback_meta=docs[0].metadata or {},
+            fallback_meta=fallback_meta,
         )
         if summary_path is not None:
             output_files.append(summary_path)
@@ -1442,7 +1007,7 @@ class AnalyzePipeline(BasePipeline):
                 run_id=self.config.run_id,
                 analysis_results=analysis_results,
                 relevant_results=relevant_results,
-                fallback_meta=docs[0].metadata or {},
+                fallback_meta=fallback_meta,
             )
             if exec_comp_path is not None:
                 output_files.append(exec_comp_path)
@@ -1483,64 +1048,65 @@ class AnalyzePipeline(BasePipeline):
                     metadata.setdefault("acceptance_date", iso_date)
                     doc.metadata = metadata
 
-    def _prepare_documents(self, docs: list[Document]) -> list[Document]:
-        """Expose preprocessing for tests and standalone use."""
+    def _get_preprocessor(self) -> ChunkPreprocessor:
         preprocessor = getattr(self, "_preprocessor", None)
         if preprocessor is None:
-            topics = self.config.topics or self.config.keywords
-            preprocessor = ChunkPreprocessor(
+            preprocessor = build_preprocessor(
                 config=self.config,
                 section_extractor=getattr(self, "_section_extractor", None),
-                topics=topics,
-                topic_matcher=build_topic_matcher(topics),
-                min_topic_hits=self.config.min_topic_hits,
-                prioritize_topics=self.config.prioritize_topics,
+                topics=self.config.topics or self.config.keywords,
                 embedder=getattr(self, "_embedder", None),
             )
+            self._preprocessor = preprocessor
+        return preprocessor
+
+    def _get_analysis_runner(self) -> AnalyzerRunnable:
+        runner = getattr(self, "_analysis_runner", None)
+        if runner is None:
+            runner = build_analysis_runner(
+                config=self.config,
+                graph=self._graph,
+                callbacks=self._callbacks,
+                analysis_instructions=self._analysis_instructions,
+            )
+            self._analysis_runner = runner
+        return runner
+
+    def _get_search_runner(self) -> SearchRunnable:
+        runner = getattr(self, "_search_runner", None)
+        if runner is None:
+            runner = build_search_runner(
+                config=self.config,
+                vector_store=self._vector_store,
+            )
+            self._search_runner = runner
+        return runner
+
+    def _get_output_formatter(self) -> OutputFormatter:
+        formatter = getattr(self, "_output_formatter", None)
+        if formatter is None:
+            formatter = build_output_formatter(
+                config=self.config,
+                topics=self.config.topics or self.config.keywords,
+            )
+            self._output_formatter = formatter
+        return formatter
+
+    def _prepare_documents(self, docs: list[Document]) -> list[Document]:
+        """Expose preprocessing for tests and standalone use."""
+        preprocessor = self._get_preprocessor()
         return preprocessor.prepare_documents(docs)
 
     def _process_batch(
         self, batch: list[AnalysisInput], docs: list[Document]
     ) -> list[AnalysisResultDict]:
         """Expose batch processing for tests and retries."""
-        runner = getattr(self, "_analysis_runner", None)
-        if runner is None:
-            runner = AnalyzerRunnable(
-                graph=self._graph,
-                callbacks=self._callbacks,
-                analysis_instructions=self._analysis_instructions,
-                symbols=self.config.symbols,
-                llm_retry_attempts=self.config.llm_retry_attempts,
-                llm_retry_backoff=self.config.llm_retry_backoff,
-                confidence_mode=self.config.confidence_mode,
-                include_raw_chunks=self.config.include_raw_chunks,
-                batch_size=self.config.batch_size,
-                query_term_min_len=self.config.search.query_term_min_len,
-                run_id=self.config.run_id,
-            )
+        runner = self._get_analysis_runner()
         return runner._process_batch(batch, docs)
 
     def _retrieve_search_hits(self) -> list[Document]:
         """Expose vector search retrieval for tests."""
-        runner = getattr(self, "_search_runner", None)
-        if runner is None:
-            runner = SearchRunnable(
-                vector_store=self._vector_store,
-                symbols=self.config.symbols,
-                vector_mode=self.config.vector_mode,
-                search_limit=self.config.search.limit,
-                score_threshold=self.config.search.score_threshold,
-                metadata_filters=self.config.search.metadata_filters,
-                query_term_min_hits=self.config.search.query_term_min_hits,
-                query_term_min_ratio=self.config.search.query_term_min_ratio,
-                query_term_min_len=self.config.search.query_term_min_len,
-                search_analyze=self.config.search.analyze,
-                export_results_enabled=self.config.search.export_results,
-                distance_metric=self.config.vdb.qdrant_distance,
-                output_root=self.config.out_path,
-                pipeline_type=self.config.pipeline_type,
-                run_dir=self.config.run_path_component(),
-            )
+        runner = self._get_search_runner()
         return runner.retrieve_hits(queries=self.config.get_search_queries())
 
     def _build_market_enrichment(
@@ -1561,80 +1127,16 @@ class AnalyzePipeline(BasePipeline):
         enrichment: MarketEnrichment | None,
     ) -> str | None:
         """Summarize market data for inclusion in the LLM context."""
-        if enrichment is None or not enrichment.quotes:
-            return None
-
-        rows: list[str] = []
-        for summary in enrichment.quotes[:3]:
-            rows.append(
-                f"{summary.start_date.isoformat()}..{summary.end_date.isoformat()} "
-                f"close={summary.average_close:.2f}"
-            )
-        suffix = ""
-        extra = len(enrichment.quotes) - len(rows)
-        if extra > 0:
-            suffix = f" (+{extra} more)"
-
-        filing_hint = (
-            f"filing {enrichment.filing_date.isoformat()}"
-            if enrichment.filing_date
-            else "filing date unknown"
-        )
-        window = (
-            f"{enrichment.window_start.isoformat()}.."
-            f"{enrichment.window_end.isoformat()}"
-        )
-
-        return (
-            f"{filing_hint} | market {enrichment.ticker} "
-            f"{enrichment.granularity.value} window {window}: "
-            f"{'; '.join(rows)}{suffix}"
-        )
+        return format_market_context(enrichment)
 
     def _update_efts_keywords_from_docs(
         self, symbol: str, docs: list[Document]
     ) -> None:
-        results = self._efts_results_by_symbol.get(symbol)
-        if not results:
-            return
-
-        try:
-            extractor = KeywordExtractor(
-                algorithm=RankingAlgorithm.YAKE,
-                ngram_size=3,
-            )
-        except Exception as exc:
-            logger.warning("YAKE extractor unavailable: %s", exc)
-            return
-
-        accession_sources: dict[str, str] = {}
-        for doc in docs:
-            accession = get_accession_from_metadata(doc.metadata)
-            if not accession or accession in accession_sources:
-                continue
-            content = (doc.page_content or "").strip()
-            if not content:
-                continue
-            accession_sources[accession] = content
-
-        if not accession_sources:
-            return
-
-        for result in results:
-            updated_hits: list[EFTSHit] = []
-            for hit in result.hits:
-                source_text = accession_sources.get(hit.accession_number, "")
-                if source_text:
-                    keywords = [
-                        kw.keyword
-                        for kw in extractor.extract(source_text, top_n=5)
-                    ]
-                    updated_hits.append(
-                        hit.model_copy(update={"yake_keywords": keywords})
-                    )
-                else:
-                    updated_hits.append(hit)
-            result.hits = updated_hits
+        efts_utils.update_efts_keywords_from_docs(
+            symbol=symbol,
+            docs=docs,
+            results_by_symbol=self._efts_results_by_symbol,
+        )
 
     def _write_results(
         self,
@@ -1650,20 +1152,7 @@ class AnalyzePipeline(BasePipeline):
         market_correlation: JsonDict | None = None,
     ) -> list[Path]:
         """Expose result writing for tests and downstream usage."""
-        formatter = getattr(self, "_output_formatter", None)
-        if formatter is None:
-            output_run_id = self.config.run_id
-            formatter = OutputFormatter(
-                export_format=self.config.export_format,
-                confidence_threshold=self.config.confidence_threshold,
-                topics=self.config.topics or self.config.keywords,
-                include_raw_chunks=self.config.include_raw_chunks,
-                run_id=output_run_id,
-                model_name=self.config.llm.model_name,
-                confidence_mode=self.config.confidence_mode,
-                prompt_path=self.config.llm.prompt_path,
-                pipeline_version=sec_nlp_version,
-            )
+        formatter = self._get_output_formatter()
         return write_results(
             config=self.config,
             formatter=formatter,
