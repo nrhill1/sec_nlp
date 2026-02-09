@@ -20,6 +20,7 @@ from sec_nlp.pipelines.presets.analyze import (
     OutputFormatter,
     SearchConfig,
 )
+from sec_nlp.pipelines.presets.analyze.builders import build_search_runner
 from sec_nlp.pipelines.presets.analyze.runnables.search import (
     SearchQueryResults,
     SearchRunnable,
@@ -41,6 +42,11 @@ class _TestAnalyzePipeline(AnalyzePipeline):
             include_raw_chunks=self.config.include_raw_chunks,
         )
         self._vector_store = Mock(spec=QdrantVectorStore)
+        # Initialize search runner with the mock vector store
+        self._search_runner = build_search_runner(
+            config=self.config,
+            vector_store=self._vector_store,
+        )
 
 
 def _make_config(

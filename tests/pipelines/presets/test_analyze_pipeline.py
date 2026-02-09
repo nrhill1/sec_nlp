@@ -13,6 +13,11 @@ from sec_nlp.pipelines.presets.analyze import (
     OutputFormatter,
     SearchConfig,
 )
+from sec_nlp.pipelines.presets.analyze.builders import (
+    build_analysis_runner,
+    build_output_formatter,
+    build_preprocessor,
+)
 from sec_nlp.pipelines.presets.analyze.runnables.search import (
     SearchQueryResults,
     SearchRunnable,
@@ -30,6 +35,24 @@ class _TestAnalyzePipeline(AnalyzePipeline):
     def _build_components(self) -> None:
         self._callbacks = []
         self._graph = _FakeGraph()
+        # Initialize required components with test-friendly versions
+        self._preprocessor = build_preprocessor(
+            config=self.config,
+            section_extractor=None,
+            topics=self.config.topics or self.config.keywords,
+            embedder=None,
+        )
+        self._analysis_runner = build_analysis_runner(
+            config=self.config,
+            graph=self._graph,
+            callbacks=self._callbacks,
+            analysis_instructions="",
+        )
+        self._output_formatter = build_output_formatter(
+            config=self.config,
+            topics=self.config.topics or self.config.keywords,
+        )
+        self._search_runner = Mock(spec=SearchRunnable)
 
 
 class _CachedSearchPipeline(AnalyzePipeline):
