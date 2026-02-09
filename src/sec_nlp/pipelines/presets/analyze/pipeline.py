@@ -29,6 +29,7 @@ from sec_nlp.core.text.section_extractor import SectionExtractor
 from sec_nlp.pipelines import BasePipeline
 from sec_nlp.pipelines.metadata.accession import get_accession_from_metadata
 from sec_nlp.pipelines.observability.telemetry import log_chunk_length_stats
+from sec_nlp.pipelines.state import ProcessingState, get_state_dir
 from sec_nlp.pipelines.types import (
     AnalysisResultDict,
     MetadataRecord,
@@ -140,6 +141,7 @@ class AnalyzePipeline(BasePipeline):
         default_factory=dict
     )
     _symbol_profiles: dict[str, JsonDict] = PrivateAttr(default_factory=dict)
+    _processing_state: ProcessingState | None = PrivateAttr(default=None)
 
     @classmethod
     def config_model(cls) -> type[AnalyzeConfig]:
@@ -374,6 +376,17 @@ class AnalyzePipeline(BasePipeline):
         )
         self._market_correlation_runner = MarketCorrelationRunnable()
 
+        # Initialize processing state for incremental mode
+        if self.config.incremental:
+            state_dir = get_state_dir(self.config.out_path)
+            self._processing_state = ProcessingState(
+                state_dir=state_dir,
+                pipeline_type=self.pipeline_type,
+            )
+            # Clear state if fresh mode is enabled
+            if self.config.fresh:
+                self._processing_state.clear()
+
     def run(self) -> AnalyzeResult:
         """Execute the semantic search pipeline."""
         try:
@@ -573,6 +586,34 @@ class AnalyzePipeline(BasePipeline):
         )
 
         timings["total"] = sum(timings.values())
+
+        # Mark accessions as processed for incremental mode
+        if self._processing_state is not None and docs:
+            processed_accessions = list(
+                {
+                    get_accession_from_metadata(doc.metadata)
+                    for doc in docs
+                    if get_accession_from_metadata(doc.metadata)
+                }
+            )
+            if processed_accessions:
+                self._processing_state.mark_processed_batch(
+                    symbol=symbol,
+                    accessions=processed_accessions,
+                    run_id=self.config.run_id,
+                    chunk_counts={
+                        acc: len(
+                            [
+                                d
+                                for d in docs
+                                if get_accession_from_metadata(d.metadata)
+                                == acc
+                            ]
+                        )
+                        for acc in processed_accessions
+                    },
+                )
+
         return output_files, stats
 
     def _run_efts_and_load_docs(
@@ -639,6 +680,29 @@ class AnalyzePipeline(BasePipeline):
         )
         if allowed_accessions is not None:
             docs = efts_utils.filter_docs_by_accession(docs, allowed_accessions)
+
+        # Apply incremental processing - filter out already-processed accessions
+        if self._processing_state is not None and docs:
+            all_accessions = {
+                get_accession_from_metadata(doc.metadata)
+                for doc in docs
+                if get_accession_from_metadata(doc.metadata)
+            }
+            if all_accessions:
+                pending = self._processing_state.get_pending_accessions(
+                    symbol, all_accessions
+                )
+                if pending != all_accessions:
+                    docs = [
+                        doc
+                        for doc in docs
+                        if get_accession_from_metadata(doc.metadata) in pending
+                    ]
+                    if not docs:
+                        logger.info(
+                            "Incremental mode: all accessions already processed for %s",
+                            symbol,
+                        )
         relationships = self._loader.last_meta["relationships"]
         if relationships:
             self._relationship_graphs.update(relationships)

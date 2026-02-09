@@ -73,6 +73,10 @@ class BasePipelineSettings(BaseSettings, ABC):
         default=False,
         description="Clear download and output folders prior to run",
     )
+    incremental: bool = Field(
+        default=True,
+        description="Enable incremental processing - skip accessions that have already been processed",
+    )
     cleanup: bool = Field(
         default=True,
         description="Clean up downloaded files after processing",

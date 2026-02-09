@@ -23,12 +23,12 @@ class PipelineProfiler(AbstractContextManager):
 
     def __init__(
         self,
-        pipeline_name: str,
+        pipeline_name: str = "pipeline",
         run_id: UUID | None = None,
         output_root: Path | None = None,
         tracemalloc_frames: int = 8,
     ) -> None:
-        self.pipeline_name = pipeline_name or "pipeline"
+        self.pipeline_name = pipeline_name
         self.run_id = (
             str(run_id)
             if run_id is not None

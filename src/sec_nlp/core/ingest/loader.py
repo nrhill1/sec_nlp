@@ -327,6 +327,7 @@ class Loader(BaseModel):
                         keywords=filter_keywords,
                         section_filter=active_section_filter,
                     )
+                self._ensure_symbol_metadata(docs, symbol)
                 self._attach_related_filings(docs, related_map)
                 all_docs.extend(docs)
                 per_symbol_counts[symbol] = len(docs)
@@ -394,6 +395,18 @@ class Loader(BaseModel):
         graph = resolver.resolve_symbol(symbol)
         related_map = build_related_filings_map(graph)
         return related_map, serialize_relationship_graph(graph)
+
+    @staticmethod
+    def _ensure_symbol_metadata(
+        docs: Sequence[Document], symbol: str
+    ) -> Sequence[Document]:
+        """Ensure each document has symbol metadata."""
+        for doc in docs:
+            meta = dict(doc.metadata or {})
+            if not meta.get("symbol"):
+                meta["symbol"] = symbol
+            doc.metadata = meta
+        return docs
 
     def _accession_dirs_for_filing_dir(
         self,
@@ -994,6 +1007,7 @@ class Loader(BaseModel):
                     parser = HoldingsParser()
                     for accession_dir in accession_dirs:
                         docs = parser.parse_accession_dir(accession_dir)
+                        self._ensure_symbol_metadata(docs, symbol)
                         self._attach_related_filings(docs, related_map)
                         for doc in docs:
                             yield doc
@@ -1016,6 +1030,7 @@ class Loader(BaseModel):
                     parser = InsiderParser()
                     for accession_dir in accession_dirs:
                         docs = parser.parse_accession_dir(accession_dir)
+                        self._ensure_symbol_metadata(docs, symbol)
                         self._attach_related_filings(docs, related_map)
                         for doc in docs:
                             yield doc
@@ -1037,6 +1052,7 @@ class Loader(BaseModel):
                                 keywords=filter_keywords,
                                 section_filter=active_section_filter,
                             )
+                            self._ensure_symbol_metadata(docs, symbol)
                             self._attach_related_filings(docs, related_map)
                             for doc in docs:
                                 yield doc

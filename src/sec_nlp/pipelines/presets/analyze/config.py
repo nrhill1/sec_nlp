@@ -337,6 +337,26 @@ class AnalyzeConfig(BasePipelineSettings):
         le=16,
         description="Max workers for loader async processing",
     )
+    async_mode: Literal["sync", "async", "auto"] = Field(
+        default="auto",
+        description=(
+            "Async execution mode: 'sync' disables async; "
+            "'async' always uses async; "
+            "'auto' uses async when beneficial (multiple symbols or files)"
+        ),
+        json_schema_extra={
+            "cli_args": {
+                "choices": ["sync", "async", "auto"],
+                "aliases": ["--async-mode"],
+            }
+        },
+    )
+    async_max_concurrent: int = Field(
+        default=4,
+        ge=1,
+        le=16,
+        description="Maximum concurrent operations when using async mode",
+    )
 
     limit: int | None = Field(
         default=5,
