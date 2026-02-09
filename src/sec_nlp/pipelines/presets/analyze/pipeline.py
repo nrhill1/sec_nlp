@@ -636,6 +636,7 @@ class AnalyzePipeline(BasePipeline):
                     efts_runner=self._efts_runner,
                     symbol=symbol,
                     queries=search_queries,
+                    forms=self.config.effective_forms,
                 )
             )
             timings["efts"] = perf_counter() - t0

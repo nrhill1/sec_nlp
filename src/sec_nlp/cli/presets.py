@@ -144,6 +144,11 @@ PRESET_CONFIGS: dict[AnalyzePreset, ConfigData] = {
     },
     AnalyzePreset.rare_earths: {
         "symbols": ["LAC", "MP", "ALB", "SMMT", "IDR", "IPXX", "USAR", "UUUU"],
+        "forms": [
+            "8-K",
+            "10-K",
+            "10-Q",
+        ],  # Search event filings and periodic reports
         "search": {
             "limit": 25,
             "analyze_limit": 12,
