@@ -163,6 +163,7 @@ def run_efts_for_symbol(
     efts_runner: EFTSSearchRunnable | None,
     symbol: str,
     queries: list[str],
+    forms: list[str] | None = None,
 ) -> tuple[list[EFTSSearchResult], list[str], bool]:
     if not queries or not config.efts.enabled:
         return [], [], False
@@ -170,9 +171,10 @@ def run_efts_for_symbol(
     local = local_accessions(config, symbol)
     runner = efts_runner
     if runner is None:
+        effective_forms = forms if forms is not None else config.effective_forms
         runner = EFTSSearchRunnable(
             efts_config=config.efts,
-            forms=list(config.mode.forms),
+            forms=effective_forms,
             mode=config.mode,
             start_date=config.start_date,
             end_date=config.end_date,

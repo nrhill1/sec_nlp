@@ -89,6 +89,10 @@ class SearchRunnable(
     search_analyze: bool = Field(default=True)
     export_results_enabled: bool = Field(default=True)
     distance_metric: str = Field(default="Cosine")
+    search_type: str = Field(
+        default="similarity",
+        description="Search type: 'similarity' or 'mmr' (maximal marginal relevance)",
+    )
     output_root: Path = Field(default=Path("./outputs"))
     pipeline_type: str = Field(default="analyze")
     run_dir: str = Field(default="")
@@ -141,21 +145,47 @@ class SearchRunnable(
         results_by_query: SearchResultsByQuery = {}
 
         for query in query_list:
-            results = self.vector_store.similarity_search_with_score(
-                query,
-                k=self.search_limit,
-                filter=metadata_filter,
-            )
-            filtered = [
-                (doc, score)
-                for doc, score in results
-                if (
-                    score <= threshold
-                    if distance_prefers_lower
-                    else score >= threshold
+            if self.search_type == "mmr":
+                # MMR search for diversity
+                docs = self.vector_store.max_marginal_relevance_search(
+                    query=query,
+                    k=self.search_limit,
+                    fetch_k=self.search_limit * 2,
+                    lambda_mult=0.5,  # Balance diversity vs relevance
+                    filter=metadata_filter,
                 )
-                and self._passes_query_term_gate(query, doc.page_content)
-            ]
+                # MMR doesn't return scores, assign rank-based scores
+                results = [
+                    (doc, 1.0 - (i / max(len(docs), 1)))
+                    for i, doc in enumerate(docs)
+                ]
+            else:
+                # Standard similarity search
+                results = self.vector_store.similarity_search_with_score(
+                    query,
+                    k=self.search_limit,
+                    filter=metadata_filter,
+                )
+
+            # For MMR, scores are rank-based (1.0 for best, decreasing), not distances
+            # So we skip distance threshold filtering for MMR
+            if self.search_type == "mmr":
+                filtered = [
+                    (doc, score)
+                    for doc, score in results
+                    if self._passes_query_term_gate(query, doc.page_content)
+                ]
+            else:
+                filtered = [
+                    (doc, score)
+                    for doc, score in results
+                    if (
+                        score <= threshold
+                        if distance_prefers_lower
+                        else score >= threshold
+                    )
+                    and self._passes_query_term_gate(query, doc.page_content)
+                ]
             results_by_query[query] = SearchQueryResults(
                 filtered=filtered,
                 total=len(results),
