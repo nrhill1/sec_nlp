@@ -107,6 +107,7 @@ def build_search_runner(
         search_analyze=config.search.analyze,
         export_results_enabled=config.search.export_results,
         distance_metric=config.vdb.qdrant_distance,
+        search_type=config.vdb.search_type,
         output_root=config.out_path,
         pipeline_type=config.pipeline_type,
         run_dir=config.run_path_component(),

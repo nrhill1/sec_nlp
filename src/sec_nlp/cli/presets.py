@@ -149,10 +149,14 @@ PRESET_CONFIGS: dict[AnalyzePreset, ConfigData] = {
             "10-K",
             "10-Q",
         ],  # Search event filings and periodic reports
+        "vdb": {
+            "search_type": "mmr",  # Use MMR for diversity instead of pure similarity
+            "embedding_model": "granite-embedding:278m",
+        },
         "search": {
             "limit": 25,
             "analyze_limit": 12,
-            "score_threshold": 0.80,  # Lower threshold to capture more hits
+            "score_threshold": 0.40,  # Relaxed for cosine distance (lower is better, 0=identical)
             "query_term_min_hits": 0,
             "query_term_min_ratio": 0.0,
             "queries": [

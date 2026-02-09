@@ -103,10 +103,15 @@ def test_retrieve_search_hits_passes_metadata_filter(
     vector_store = pipeline._vector_store
     assert isinstance(vector_store, Mock)
     vector_store.similarity_search_with_score.return_value = []
+    vector_store.max_marginal_relevance_search.return_value = []
 
     pipeline._retrieve_search_hits()
 
-    call_args = vector_store.similarity_search_with_score.call_args
+    # The search may use MMR or similarity depending on config defaults;
+    # check whichever was called for the filter argument.
+    mmr_call = vector_store.max_marginal_relevance_search.call_args
+    sim_call = vector_store.similarity_search_with_score.call_args
+    call_args = mmr_call or sim_call
     assert call_args is not None
     _args, kwargs = call_args
     filter_arg = kwargs.get("filter")
@@ -114,14 +119,19 @@ def test_retrieve_search_hits_passes_metadata_filter(
     must_conditions = filter_arg.must
     assert isinstance(must_conditions, list)
 
+    # QdrantVectorStore nests metadata under "metadata" in the payload,
+    # so filter keys must use the "metadata." prefix.
     symbol_condition: FieldCondition | None = None
     form_condition: FieldCondition | None = None
     for condition in must_conditions:
-        if isinstance(condition, FieldCondition) and condition.key == "symbol":
+        if (
+            isinstance(condition, FieldCondition)
+            and condition.key == "metadata.symbol"
+        ):
             symbol_condition = condition
         if (
             isinstance(condition, FieldCondition)
-            and condition.key == "form_type"
+            and condition.key == "metadata.form_type"
         ):
             form_condition = condition
 
@@ -149,13 +159,19 @@ def test_retrieve_search_hits_uses_topics_when_queries_empty(
     vector_store = pipeline._vector_store
     assert isinstance(vector_store, Mock)
     vector_store.similarity_search_with_score.return_value = []
+    vector_store.max_marginal_relevance_search.return_value = []
 
     pipeline._retrieve_search_hits()
 
-    call_args = vector_store.similarity_search_with_score.call_args
+    # Check whichever search method was called
+    mmr_call = vector_store.max_marginal_relevance_search.call_args
+    sim_call = vector_store.similarity_search_with_score.call_args
+    call_args = mmr_call or sim_call
     assert call_args is not None
-    args, _kwargs = call_args
-    assert args[0] == "supply chain"
+    _args, kwargs = call_args
+    # MMR passes query as keyword arg, similarity passes as positional
+    query_arg = kwargs.get("query") or _args[0]
+    assert query_arg == "supply chain"
 
 
 def test_write_results_uses_metadata_symbol(tmp_path: Path) -> None:
