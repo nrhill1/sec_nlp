@@ -118,6 +118,10 @@ class BasePipelineSettings(BaseSettings, ABC):
         default=FilingMode.annual,
         description="Filing type: annual (10-K) or quarterly (10-Q)",
     )
+    forms: list[str] | None = Field(
+        default=None,
+        description="SEC form types to search (e.g., ['10-K', '10-Q', '8-K']). Overrides mode if specified.",
+    )
     start_date: date | None = Field(
         default=None,
         description="Start date for filing search (YYYY-MM-DD)",
@@ -191,6 +195,25 @@ class BasePipelineSettings(BaseSettings, ABC):
             v = [part for part in v.replace(",", " ").split() if part]
         return [s.strip().upper() for s in v]
 
+    @field_validator("forms", mode="before")
+    @classmethod
+    def normalize_forms(cls, v: list[str] | str | None) -> list[str] | None:
+        """Normalize form types."""
+        if v is None:
+            return None
+        if isinstance(v, str):
+            # Handle comma or space-separated
+            v = [part for part in v.replace(",", " ").split() if part]
+        # Normalize variants: "10K" -> "10-K", "8k" -> "8-K"
+        normalized = []
+        for form in v:
+            form_upper = form.strip().upper()
+            # Add hyphens if missing for common forms
+            if form_upper in ("10K", "10Q", "8K"):
+                form_upper = form_upper[:-1] + "-" + form_upper[-1]
+            normalized.append(form_upper)
+        return normalized if normalized else None
+
     @classmethod
     def _generate_run_id(cls) -> UUID:
         return uuid.uuid4()
@@ -252,6 +275,16 @@ class BasePipelineSettings(BaseSettings, ABC):
         end = self.end_date or today
         return start, end
 
+    @property
+    def effective_forms(self) -> list[str]:
+        """Get the effective list of SEC forms to process.
+
+        Returns forms if specified, otherwise derives from mode.
+        """
+        if self.forms is not None:
+            return self.forms
+        return list(self.mode.forms)
+
     def setup_paths(self) -> None:
         """
         Create output and download directories if they don't exist.
@@ -301,11 +334,12 @@ class BasePipelineSettings(BaseSettings, ABC):
         """Get human-readable summary of configuration."""
         start, end = self.date_range
         days = (end - start).days
+        forms_display = ", ".join(self.effective_forms)
 
         lines = [
             f"Pipeline: {self.pipeline_type}",
             f"Symbols: {', '.join(self.symbols)}",
-            f"Mode: {self.mode.value} ({self.mode.form})",
+            f"Forms: {forms_display}",
             f"Date Range: {start} to {end} ({days} days)",
             f"Downloads: {self.dl_path}",
             f"Outputs: {self.out_path}",
