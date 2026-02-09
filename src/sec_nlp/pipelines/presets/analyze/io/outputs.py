@@ -123,7 +123,9 @@ class OutputFormatter:
         ranked: list[AnalysisResultDict] = []
         for idx, result in enumerate(sorted_results, start=1):
             score = coerce_float(result.get("confidence_score"))
-            enriched: AnalysisResultDict = {**result}
+            # Build with rank as the first key so it appears first in
+            # serialised YAML/JSON output for readability.
+            enriched: AnalysisResultDict = {"rank": idx, **result}
             if score is not None:
                 enriched["confidence_score"] = round_score_value(score)
             impact_confidence = coerce_float(result.get("impact_confidence"))
@@ -139,7 +141,6 @@ class OutputFormatter:
                 enriched["source_metadata"] = self._round_metadata_scores(
                     source_meta
                 )
-            enriched["rank"] = idx
             enriched["confidence_bucket"] = self._confidence_bucket(score)
             ranked.append(enriched)
         return ranked
@@ -416,6 +417,7 @@ class OutputFormatter:
 
         executive_summary = ExecutiveSummary(
             status=status,
+            result_count=len(ranked_results),
             total_chunks=total_chunks,
             relevant_count=relevant_count,
             average_confidence=avg_confidence,
@@ -774,6 +776,7 @@ class OutputFormatter:
     def _export_csv(self, output: AnalysisOutput, csv_file: Path) -> None:
         """Export results to CSV format."""
         fieldnames = [
+            "rank",
             "confidence_score",
             "summary",
             "key_points",
@@ -814,6 +817,7 @@ class OutputFormatter:
                     "",
                 )
                 row = {
+                    "rank": result.get("rank", ""),
                     "confidence_score": result.get("confidence_score"),
                     "summary": result.get("summary", ""),
                     "key_points": "; ".join(result.get("key_points", [])),

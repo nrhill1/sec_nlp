@@ -399,6 +399,10 @@ class ExecutiveSummary(BaseModel):
     status: str = Field(
         description="One-line status: e.g., '5 relevant findings (avg confidence 0.82)'"
     )
+    result_count: int = Field(
+        default=0,
+        description="Total number of ranked results included in the output",
+    )
     total_chunks: int = 0
     relevant_count: int = 0
     average_confidence: float = 0.0
