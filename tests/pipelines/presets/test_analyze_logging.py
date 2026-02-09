@@ -53,9 +53,12 @@ class _LoggingPipeline(AnalyzePipeline):
         self._vector_indexer.index = Mock()
 
         self._search_runner = Mock()
+        self._search_runner.metadata_filters = {}
         self._search_runner.retrieve_hits_with_results = Mock(
             return_value=(list(docs), {})
         )
+        # Ensure model_copy returns a properly configured mock
+        self._search_runner.model_copy = Mock(return_value=self._search_runner)
 
         self._analysis_runner = Mock()
         self._analysis_runner.analyze_chunks = Mock(

@@ -52,7 +52,6 @@ Potential next steps and new features for sec-nlp.
 - **Multi-model ensemble**: Run multiple LLMs and aggregate/vote on results for higher confidence
 - **RAG pipeline with chat interface**: Interactive Q&A over indexed filings
 - **Caching layer**: Cache LLM responses for repeated queries on same content
-- **Scheduled runs**: Cron/scheduler integration to auto-process new filings
 
 ## Output & Integration
 - **Alerting system**: Notify when specific signals appear (e.g., new risk factor, warranty spike)
