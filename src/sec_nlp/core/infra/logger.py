@@ -47,7 +47,9 @@ class ColoredFormatter(logging.Formatter):
         "ERROR": "\033[31m",  # Red
         "CRITICAL": "\033[38;5;160m",  # Crimson
     }
-    TIME_COLOR: str = "\033[2m"
+    TIME_COLOR: str = "\033[2m"  # Dim
+    TZ_OFFSET_COLOR: str = "\033[35m"  # Magenta
+    TZ_NAME_COLOR: str = "\033[95m"  # Bright magenta
     ICONS: dict[str, str] = {
         "DEBUG": "🐛",
         "INFO": "ℹ️ ",
@@ -71,9 +73,18 @@ class ColoredFormatter(logging.Formatter):
     def formatTime(
         self, record: logging.LogRecord, datefmt: str | None = None
     ) -> str:
-        """Colorize the timestamp."""
-        timestamp = super().formatTime(record, datefmt)
-        return f"{self.TIME_COLOR}{timestamp}{self.RESET}"
+        """Colorize the timestamp with distinct timezone styling."""
+        dt = datetime.fromtimestamp(record.created).astimezone()
+        time_str = dt.strftime("%Y-%m-%d %H:%M:%S")
+        offset = dt.strftime("%z")
+        tz_name = dt.tzname() or ""
+
+        result = f"{self.TIME_COLOR}{time_str}{self.RESET}"
+        if offset:
+            result += f" {self.TZ_OFFSET_COLOR}{offset}{self.RESET}"
+        if tz_name:
+            result += f" {self.TZ_NAME_COLOR}{tz_name}{self.RESET}"
+        return result
 
 
 class PaddedFormatter(logging.Formatter):

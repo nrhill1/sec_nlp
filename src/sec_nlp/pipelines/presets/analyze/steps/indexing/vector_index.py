@@ -23,7 +23,7 @@ class VectorIndexer:
         self,
         *,
         config: AnalyzeConfig,
-        vector_store: QdrantVectorStore,
+        vector_store: QdrantVectorStore | None,
         deduplicator: SimHashDeduplicator,
     ) -> None:
         self.config = config
@@ -32,6 +32,11 @@ class VectorIndexer:
 
     def index(self, symbol: str, docs: list[Document], timings: Timings) -> int:
         """Store chunks in the vector store (deduped) before analysis."""
+        if self.vector_store is None:
+            logger.debug(
+                "Vector store not initialized; skipping indexing for %s", symbol
+            )
+            return 0
 
         t_store_start = perf_counter()
         vstore = self.vector_store

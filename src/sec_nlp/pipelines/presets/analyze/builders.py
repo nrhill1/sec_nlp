@@ -92,7 +92,7 @@ def build_analysis_runner(
 def build_search_runner(
     *,
     config: AnalyzeConfig,
-    vector_store: QdrantVectorStore,
+    vector_store: QdrantVectorStore | None,
 ) -> SearchRunnable:
     return SearchRunnable(
         vector_store=vector_store,

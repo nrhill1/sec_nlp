@@ -24,6 +24,7 @@ from rich.progress import (
     SpinnerColumn,
     TaskProgressColumn,
     TextColumn,
+    TimeElapsedColumn,
     TimeRemainingColumn,
 )
 from rich.table import Table
@@ -123,7 +124,7 @@ class AnalyzePipeline(BasePipeline):
     _section_extractor: SectionExtractor | None = PrivateAttr(default=None)
 
     # Vector Store
-    _vector_store: QdrantVectorStore = PrivateAttr()
+    _vector_store: QdrantVectorStore | None = PrivateAttr(default=None)
     _embedder: OllamaEmbeddings | None = PrivateAttr(default=None)
 
     # Deduplication
@@ -436,6 +437,8 @@ class AnalyzePipeline(BasePipeline):
                 TextColumn("[bold cyan]{task.description}"),
                 BarColumn(complete_style="green", finished_style="bold green"),
                 TaskProgressColumn(),
+                TimeElapsedColumn(),
+                TextColumn("[dim]·[/dim]"),
                 TimeRemainingColumn(),
                 console=console,
                 transient=True,  # Auto-hide after completion
@@ -446,7 +449,10 @@ class AnalyzePipeline(BasePipeline):
                 )
                 for _index, symbol in enumerate(self.config.symbols):
                     progress.update(task, description=f"Processing {symbol}")
+                    symbol_start = perf_counter()
                     symbol_outputs, chunk_stats = self._process_symbol(symbol)
+                    symbol_elapsed = perf_counter() - symbol_start
+                    logger.info("Completed %s in %.1fs", symbol, symbol_elapsed)
                     symbol_output_set = set(symbol_outputs)
                     output_set.update(symbol_output_set)
                     total_analyzed_chunks += int(
