@@ -179,7 +179,7 @@ profiling/
 logs/
 *.log
 
-## 
+##
 **.mypy_cache/
 **.cache/
 _cache/

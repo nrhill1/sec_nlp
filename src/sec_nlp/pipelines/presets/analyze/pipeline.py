@@ -16,6 +16,7 @@ from langchain_ollama.embeddings import OllamaEmbeddings
 from langchain_qdrant import QdrantVectorStore
 from pydantic import PrivateAttr
 from qdrant_client.models import Distance, VectorParams
+from rich.align import Align
 from rich.panel import Panel
 from rich.progress import (
     BarColumn,
@@ -403,7 +404,7 @@ class AnalyzePipeline(BasePipeline):
         try:
             self.config.setup_paths()
 
-            # Rich Panel for run header
+            # Rich Panel for run header (centered)
             console = get_rich_console()
             run_info = Text()
             run_info.append("Run ", style="bold cyan")
@@ -418,12 +419,8 @@ class AnalyzePipeline(BasePipeline):
                 border_style="magenta",
                 expand=False,
             )
-            console.print(panel)
-            logger.info(
-                "Run %s (%s)",
-                self.config.short_id_display,
-                self.config.run_id,
-            )
+            console.print(Align.center(panel))
+            console.print()  # Blank line for spacing
 
             output_set: set[Path] = set()
             metadata: ResultDict = {
@@ -433,7 +430,8 @@ class AnalyzePipeline(BasePipeline):
             }
             total_analyzed_chunks = 0
 
-            # Rich Progress bar for symbols
+            # Rich Progress bar for symbols (transient to avoid clutter)
+            console.print()
             with Progress(
                 SpinnerColumn(),
                 TextColumn("[bold cyan]{task.description}"),
@@ -441,14 +439,13 @@ class AnalyzePipeline(BasePipeline):
                 TaskProgressColumn(),
                 TimeRemainingColumn(),
                 console=console,
-                transient=False,
+                transient=True,  # Auto-hide after completion
             ) as progress:
                 task = progress.add_task(
                     "Processing symbols",
                     total=len(self.config.symbols),
                 )
-                last_index = len(self.config.symbols) - 1
-                for index, symbol in enumerate(self.config.symbols):
+                for _index, symbol in enumerate(self.config.symbols):
                     progress.update(task, description=f"Processing {symbol}")
                     symbol_outputs, chunk_stats = self._process_symbol(symbol)
                     symbol_output_set = set(symbol_outputs)
@@ -464,8 +461,7 @@ class AnalyzePipeline(BasePipeline):
                     # SymbolRunMetadata is a TypedDict compatible with ResultValue
                     metadata[symbol_key] = symbol_meta  # type: ignore[assignment]
                     progress.advance(task)
-                    if index < last_index:
-                        log_divider(logger, color="magenta")
+            console.print()  # Blank line after progress
 
             if len(self._symbol_profiles) > 1:
                 run_component = self.config.run_path_component()
@@ -531,6 +527,8 @@ class AnalyzePipeline(BasePipeline):
                 error=f"{type(e).__name__}: {e}",
             )
         finally:
+            console = get_rich_console()
+            console.print()
             log_divider(logger, color="green")
 
     def _log_chunk_stats_by_accession(
@@ -986,7 +984,7 @@ class AnalyzePipeline(BasePipeline):
         console.print(table)
 
         # Keep log for file output
-        logger.info(
+        logger.debug(
             "Analysis hits for %s: %d total, %d relevant (avg confidence=%s, threshold=%.2f)",
             symbol,
             total_hits,
@@ -1067,7 +1065,7 @@ class AnalyzePipeline(BasePipeline):
             console.print(
                 f"[dim cyan]→[/dim cyan] Wrote [bold magenta]{len(output_files)}[/bold magenta] files for [bold cyan]{symbol}[/bold cyan] → [link=file://{output_dir.resolve()}][blue]{output_dir.resolve()}[/blue][/link]"
             )
-            logger.info(
+            logger.debug(
                 "Wrote %d analysis files for %s -> %s",
                 len(output_files),
                 symbol,
