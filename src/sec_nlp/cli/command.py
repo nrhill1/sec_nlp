@@ -78,7 +78,6 @@ class BasePipelineCommand(BaseModel, ABC):
             self._handle_missing_symbols()
             return
 
-        self._log_header()
         self._log_config_details()
 
         if self._should_validate():

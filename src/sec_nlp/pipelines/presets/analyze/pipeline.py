@@ -404,9 +404,11 @@ class AnalyzePipeline(BasePipeline):
         try:
             self.config.setup_paths()
 
-            # Rich Panel for run header (centered)
+            # Rich Panel for run header (centered) — first visual after log path
             console = get_rich_console()
             run_info = Text()
+            run_info.append(self.pipeline_type, style="bold white")
+            run_info.append("\n")
             run_info.append("Run ", style="bold cyan")
             run_info.append(
                 f"{self.config.short_id_display}", style="bold magenta"
