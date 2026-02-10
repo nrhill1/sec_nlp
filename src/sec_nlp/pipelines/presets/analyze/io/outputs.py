@@ -141,9 +141,29 @@ class OutputFormatter:
                 enriched["source_metadata"] = self._round_metadata_scores(
                     source_meta
                 )
+            matched_queries = enriched.get("matched_queries")
+            if isinstance(matched_queries, list):
+                enriched["matched_queries"] = self._round_matched_queries(
+                    matched_queries
+                )
             enriched["confidence_bucket"] = self._confidence_bucket(score)
             ranked.append(enriched)
         return ranked
+
+    @staticmethod
+    def _round_matched_queries(
+        matched_queries: list[dict[str, float | str]],
+    ) -> list[dict[str, float | str]]:
+        rounded: list[dict[str, float | str]] = []
+        for item in matched_queries:
+            if not isinstance(item, dict):
+                continue
+            updated = dict(item)
+            score = updated.get("score")
+            if isinstance(score, (int, float)):
+                updated["score"] = round_score(score)
+            rounded.append(updated)
+        return rounded
 
     @classmethod
     def _round_metadata_scores(cls, metadata: MetadataRecord) -> MetadataRecord:

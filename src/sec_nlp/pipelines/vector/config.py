@@ -180,8 +180,12 @@ class VectorConfig(BaseModel):
                 e,
             )
 
-    def setup_embedding_model(self) -> OllamaEmbeddings:
-        """Initialize Ollama embedder."""
+    def setup_embedding_model(self) -> tuple[OllamaEmbeddings, int]:
+        """Initialize Ollama embedder and return its embedding dimension.
+
+        Returns:
+            Tuple of (embedder, embedding_dimension).
+        """
         logger.info("Loading embedding model: %s", self.embedding_model)
 
         embedder = OllamaEmbeddings(
@@ -193,7 +197,7 @@ class VectorConfig(BaseModel):
         embedding_dim = len(test_embedding)
         logger.info("Embedding dimension: %d", embedding_dim)
 
-        return embedder
+        return embedder, embedding_dim
 
     def create_vector_store(
         self,

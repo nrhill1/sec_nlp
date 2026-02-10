@@ -80,9 +80,10 @@ class TestVectorStoreCreation:
 
         with patch.object(vector_config, "OllamaEmbeddings", mock_embedder_cls):
             config = VectorConfig(embedding_model="custom-embedder")
-            embedder = config.setup_embedding_model()
+            embedder, dim = config.setup_embedding_model()
 
         assert embedder is mock_instance
+        assert dim == 2
         mock_embedder_cls.assert_called_once_with(
             model="custom-embedder", validate_model_on_init=True
         )

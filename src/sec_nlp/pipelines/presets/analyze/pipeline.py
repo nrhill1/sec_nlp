@@ -235,11 +235,11 @@ class AnalyzePipeline(BasePipeline):
         if should_init_vector:
             try:
                 qdrant_client = self.config.vdb.setup_qdrant_client()
-                embedder = self.config.vdb.setup_embedding_model()
+                embedder, embedding_dim = (
+                    self.config.vdb.setup_embedding_model()
+                )
                 self._embedder = embedder
 
-                test_embedding = embedder.embed_query("test")
-                embedding_dim = len(test_embedding)
                 target_dim = self.config.vdb.vector_size or embedding_dim
                 if embedding_dim != target_dim:
                     logger.warning(

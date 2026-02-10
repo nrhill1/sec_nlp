@@ -6,6 +6,7 @@ from pathlib import Path
 from uuid import uuid4
 
 import pytest
+from pydantic import ValidationError
 
 from sec_nlp.pipelines.state import (
     ProcessedAccession,
@@ -48,7 +49,7 @@ class TestProcessedAccession:
             run_id=run_id,
         )
 
-        with pytest.raises(TypeError):  # Frozen model raises TypeError
+        with pytest.raises(ValidationError):
             record.accession_number = "different"
 
 

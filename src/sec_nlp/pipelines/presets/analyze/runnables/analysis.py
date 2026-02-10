@@ -3,7 +3,9 @@
 
 from __future__ import annotations
 
+import asyncio
 import re
+import time
 from uuid import UUID
 
 from langchain_core.callbacks.base import BaseCallbackHandler
@@ -216,9 +218,20 @@ class AnalyzerRunnable(
                         e,
                         backoff,
                     )
-                    import time
+                    try:
+                        loop = asyncio.get_running_loop()
+                    except RuntimeError:
+                        loop = None
+                    if loop is not None and loop.is_running():
+                        # Inside an async context — yield to the event loop
+                        import concurrent.futures
 
-                    time.sleep(backoff)
+                        with concurrent.futures.ThreadPoolExecutor(
+                            max_workers=1
+                        ) as pool:
+                            loop.run_in_executor(pool, time.sleep, backoff)
+                    else:
+                        time.sleep(backoff)
                     backoff *= 2
                     continue
                 logger.warning(

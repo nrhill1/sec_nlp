@@ -141,10 +141,9 @@ class ExhibitPipeline(BasePipeline):
         if not self.config.dry_run:
             try:
                 self._qdrant_client = self.config.vdb.setup_qdrant_client()
-                embedder = self.config.vdb.setup_embedding_model()
-
-                test_embedding = embedder.embed_query("test")
-                embedding_dim = len(test_embedding)
+                embedder, embedding_dim = (
+                    self.config.vdb.setup_embedding_model()
+                )
                 collection_name = self._collection_name()
 
                 # Delete collection if fresh to avoid corrupted state

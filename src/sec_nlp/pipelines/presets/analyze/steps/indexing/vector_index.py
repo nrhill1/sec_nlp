@@ -114,5 +114,11 @@ class VectorIndexer:
                 collection,
                 {"simhash": [simhash], "symbol": [symbol]},
             )
-        except Exception:
+        except Exception as exc:
+            logger.debug(
+                "simhash existence check failed for %s/%s: %s",
+                symbol,
+                simhash,
+                exc,
+            )
             return False

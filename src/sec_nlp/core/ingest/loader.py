@@ -75,7 +75,7 @@ class Loader(BaseModel):
 
     model_config = ConfigDict(
         arbitrary_types_allowed=True,
-        extra="allow",
+        extra="forbid",
     )
 
     email: str
@@ -408,6 +408,37 @@ class Loader(BaseModel):
             doc.metadata = meta
         return docs
 
+    @staticmethod
+    def _filter_and_sort_accession_dirs(
+        dirs_with_dates: list[tuple[Path, date | None]],
+        *,
+        start_date: date | None,
+        end_date: date | None,
+        limit: int | None,
+    ) -> list[Path]:
+        """Filter by date range, sort newest-first, and apply limit."""
+        filtered: list[tuple[Path, date | None]] = []
+        for accession_dir, filing_date in dirs_with_dates:
+            if start_date or end_date:
+                if filing_date is None:
+                    filtered.append((accession_dir, filing_date))
+                    continue
+                if start_date and filing_date < start_date:
+                    continue
+                if end_date and filing_date > end_date:
+                    continue
+            filtered.append((accession_dir, filing_date))
+
+        def sort_key(item: tuple[Path, date | None]) -> tuple[date, float]:
+            path, filing_date = item
+            if filing_date:
+                return (filing_date, 0.0)
+            return (date.min, -path.stat().st_mtime)
+
+        filtered.sort(key=sort_key, reverse=True)
+        sorted_dirs = [path for path, _ in filtered]
+        return sorted_dirs[:limit] if limit else sorted_dirs
+
     def _accession_dirs_for_filing_dir(
         self,
         filing_dir: Path,
@@ -418,31 +449,17 @@ class Loader(BaseModel):
         if not filing_dir.exists():
             raise FileNotFoundError(f"No filings found at {filing_dir}")
 
-        accession_dirs = [
-            path for path in filing_dir.iterdir() if path.is_dir()
+        dirs_with_dates = [
+            (path, filings.get_filing_date_from_dir(path))
+            for path in filing_dir.iterdir()
+            if path.is_dir()
         ]
-        dirs_with_dates: list[tuple[Path, date | None]] = []
-        for accession_dir in accession_dirs:
-            filing_date = filings.get_filing_date_from_dir(accession_dir)
-            if start_date or end_date:
-                if filing_date is None:
-                    dirs_with_dates.append((accession_dir, filing_date))
-                    continue
-                if start_date and filing_date < start_date:
-                    continue
-                if end_date and filing_date > end_date:
-                    continue
-            dirs_with_dates.append((accession_dir, filing_date))
-
-        def sort_key(item: tuple[Path, date | None]) -> tuple[date, float]:
-            path, filing_date = item
-            if filing_date:
-                return (filing_date, 0.0)
-            return (date.min, -path.stat().st_mtime)
-
-        dirs_with_dates.sort(key=sort_key, reverse=True)
-        sorted_dirs = [path for path, _ in dirs_with_dates]
-        return sorted_dirs[:limit] if limit else sorted_dirs
+        return self._filter_and_sort_accession_dirs(
+            dirs_with_dates,
+            start_date=start_date,
+            end_date=end_date,
+            limit=limit,
+        )
 
     def _accession_dirs_for_filing_dirs(
         self,
@@ -455,31 +472,18 @@ class Loader(BaseModel):
         if not existing_dirs:
             raise FileNotFoundError("No filings found in configured folders")
 
-        dirs_with_dates: list[tuple[Path, date | None]] = []
-        for filing_dir in existing_dirs:
-            for accession_dir in filing_dir.iterdir():
-                if not accession_dir.is_dir():
-                    continue
-                filing_date = filings.get_filing_date_from_dir(accession_dir)
-                if start_date or end_date:
-                    if filing_date is None:
-                        dirs_with_dates.append((accession_dir, filing_date))
-                        continue
-                    if start_date and filing_date < start_date:
-                        continue
-                    if end_date and filing_date > end_date:
-                        continue
-                dirs_with_dates.append((accession_dir, filing_date))
-
-        def sort_key(item: tuple[Path, date | None]) -> tuple[date, float]:
-            path, filing_date = item
-            if filing_date:
-                return (filing_date, 0.0)
-            return (date.min, -path.stat().st_mtime)
-
-        dirs_with_dates.sort(key=sort_key, reverse=True)
-        sorted_dirs = [path for path, _ in dirs_with_dates]
-        return sorted_dirs[:limit] if limit else sorted_dirs
+        dirs_with_dates = [
+            (accession_dir, filings.get_filing_date_from_dir(accession_dir))
+            for filing_dir in existing_dirs
+            for accession_dir in filing_dir.iterdir()
+            if accession_dir.is_dir()
+        ]
+        return self._filter_and_sort_accession_dirs(
+            dirs_with_dates,
+            start_date=start_date,
+            end_date=end_date,
+            limit=limit,
+        )
 
     def _load_holdings_documents(
         self,
