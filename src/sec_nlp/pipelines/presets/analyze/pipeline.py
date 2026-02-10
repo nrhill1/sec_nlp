@@ -16,10 +16,21 @@ from langchain_ollama.embeddings import OllamaEmbeddings
 from langchain_qdrant import QdrantVectorStore
 from pydantic import PrivateAttr
 from qdrant_client.models import Distance, VectorParams
-from tqdm import tqdm
+from rich.panel import Panel
+from rich.progress import (
+    BarColumn,
+    Progress,
+    SpinnerColumn,
+    TaskProgressColumn,
+    TextColumn,
+    TimeRemainingColumn,
+)
+from rich.table import Table
+from rich.text import Text
 
 from sec_nlp.core.edgar.filing_mode import FilingMode
 from sec_nlp.core.infra.logger import log_divider, logger
+from sec_nlp.core.infra.rich_console import get_rich_console
 from sec_nlp.core.ingest.filings import get_filing_date_from_dir
 from sec_nlp.core.ingest.loader import Loader
 from sec_nlp.core.llm.chains import InputModelKeys, build_runnable
@@ -392,7 +403,22 @@ class AnalyzePipeline(BasePipeline):
         try:
             self.config.setup_paths()
 
-            log_divider(logger, color="magenta")
+            # Rich Panel for run header
+            console = get_rich_console()
+            run_info = Text()
+            run_info.append("Run ", style="bold cyan")
+            run_info.append(
+                f"{self.config.short_id_display}", style="bold magenta"
+            )
+            run_info.append(" · ", style="dim")
+            run_info.append(f"{self.config.run_id}", style="dim cyan")
+            panel = Panel(
+                run_info,
+                title="[bold white]Pipeline Start[/bold white]",
+                border_style="magenta",
+                expand=False,
+            )
+            console.print(panel)
             logger.info(
                 "Run %s (%s)",
                 self.config.short_id_display,
@@ -407,21 +433,23 @@ class AnalyzePipeline(BasePipeline):
             }
             total_analyzed_chunks = 0
 
-            bar_format = "\n{n_fmt}/{total_fmt} [{elapsed}<{remaining}]"
-
-            # Process symbols sequentially with progress bar
-            with tqdm(
-                self.config.symbols,
-                desc="Processing symbols",
-                unit="symbol",
-                colour="green",
-                leave=True,
-                disable=not self.config.verbose,
-                bar_format=bar_format,
-            ) as pbar:
+            # Rich Progress bar for symbols
+            with Progress(
+                SpinnerColumn(),
+                TextColumn("[bold cyan]{task.description}"),
+                BarColumn(complete_style="green", finished_style="bold green"),
+                TaskProgressColumn(),
+                TimeRemainingColumn(),
+                console=console,
+                transient=False,
+            ) as progress:
+                task = progress.add_task(
+                    "Processing symbols",
+                    total=len(self.config.symbols),
+                )
                 last_index = len(self.config.symbols) - 1
-                for index, symbol in enumerate(pbar):
-                    pbar.set_description(f"Processing {symbol}")
+                for index, symbol in enumerate(self.config.symbols):
+                    progress.update(task, description=f"Processing {symbol}")
                     symbol_outputs, chunk_stats = self._process_symbol(symbol)
                     symbol_output_set = set(symbol_outputs)
                     output_set.update(symbol_output_set)
@@ -435,6 +463,7 @@ class AnalyzePipeline(BasePipeline):
                     symbol_key = str(symbol)
                     # SymbolRunMetadata is a TypedDict compatible with ResultValue
                     metadata[symbol_key] = symbol_meta  # type: ignore[assignment]
+                    progress.advance(task)
                     if index < last_index:
                         log_divider(logger, color="magenta")
 
@@ -856,14 +885,16 @@ class AnalyzePipeline(BasePipeline):
             docs_for_analysis, symbol=symbol, label="vector"
         )
 
-        # LLM analysis
+        # LLM analysis with status spinner
         t0 = perf_counter()
-        logger.info(
-            "Ready to analyze %d chunks for %s", len(docs_for_analysis), symbol
-        )
-        analysis_results = self._analysis_runner.analyze_chunks(
-            symbol, docs_for_analysis
-        )
+        console = get_rich_console()
+        with console.status(
+            f"[bold green]Running LLM analysis for {symbol}...[/bold green]",
+            spinner="dots",
+        ):
+            analysis_results = self._analysis_runner.analyze_chunks(
+                symbol, docs_for_analysis
+            )
         timings["analyze"] = perf_counter() - t0
 
         return analysis_results, docs_for_analysis
@@ -936,6 +967,25 @@ class AnalyzePipeline(BasePipeline):
         avg_conf_display = (
             f"{avg_confidence:.2f}" if avg_confidence is not None else "n/a"
         )
+
+        # Rich Table for analysis summary
+        console = get_rich_console()
+        table = Table(
+            title=f"[bold cyan]Analysis Summary: {symbol}[/bold cyan]",
+            show_header=False,
+            box=None,
+        )
+        table.add_column("Label", style="dim cyan", justify="right")
+        table.add_column("Value", style="bold white")
+        table.add_row("Total Chunks", str(total_hits))
+        table.add_row("Relevant", f"[green]{relevant_hits}[/green]")
+        table.add_row("Avg Confidence", avg_conf_display)
+        table.add_row("Threshold", f"{self.config.confidence_threshold:.2f}")
+        if error_results:
+            table.add_row("Errors", f"[red]{len(error_results)}[/red]")
+        console.print(table)
+
+        # Keep log for file output
         logger.info(
             "Analysis hits for %s: %d total, %d relevant (avg confidence=%s, threshold=%.2f)",
             symbol,
@@ -1012,6 +1062,11 @@ class AnalyzePipeline(BasePipeline):
 
         if output_files:
             output_dir = self.config.get_symbol_output_dir(symbol)
+            # Rich-styled path output
+            console = get_rich_console()
+            console.print(
+                f"[dim cyan]→[/dim cyan] Wrote [bold magenta]{len(output_files)}[/bold magenta] files for [bold cyan]{symbol}[/bold cyan] → [link=file://{output_dir.resolve()}][blue]{output_dir.resolve()}[/blue][/link]"
+            )
             logger.info(
                 "Wrote %d analysis files for %s -> %s",
                 len(output_files),
