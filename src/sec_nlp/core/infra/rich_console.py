@@ -26,15 +26,43 @@ GLOBAL_RICH_THEME: Theme = Theme(
     }
 )
 
+# ---------------------------------------------------------------------------
+# Singleton Console (stderr) — all pipeline / logger output goes through this
+# so that Rich can coordinate live displays (Progress, Status) with logging.
+# ---------------------------------------------------------------------------
+_CONSOLE: Console | None = None
 
-def get_rich_console(
+
+def get_rich_console() -> Console:
+    """Return the shared Rich console singleton (stderr, themed).
+
+    Every caller that writes directly to the terminal should use this so that
+    Rich Progress / Status bars are not corrupted by interleaved output.
+    """
+    global _CONSOLE  # noqa: PLW0603
+    if _CONSOLE is None:
+        _CONSOLE = Console(
+            theme=GLOBAL_RICH_THEME,
+            soft_wrap=True,
+            color_system="truecolor",
+            stderr=True,
+        )
+    return _CONSOLE
+
+
+def create_rich_console(
     *,
     force_terminal: bool | None = None,
     width: int | None = None,
     stderr: bool = True,
     no_color: bool | None = None,
 ) -> Console:
-    """Build a Rich console configured with the global theme."""
+    """Create a **new** Rich console with custom parameters.
+
+    Use this instead of ``get_rich_console()`` when you need a separate
+    instance — e.g. for string capture (``console.capture()``) or for
+    writing to stdout instead of stderr.
+    """
     return Console(
         theme=GLOBAL_RICH_THEME,
         force_terminal=force_terminal,

@@ -16,11 +16,11 @@ from rich.rule import Rule
 from rich.text import Text
 
 from sec_nlp.core.infra.logger import color_text, visible_length
-from sec_nlp.core.infra.rich_console import get_rich_console
+from sec_nlp.core.infra.rich_console import create_rich_console
 
 
 def _render_rich(renderable) -> str:
-    console = get_rich_console(
+    console = create_rich_console(
         force_terminal=True,
         width=get_terminal_width(),
         stderr=False,

@@ -19,7 +19,7 @@ from rich.text import Text
 
 from sec_nlp.cli.presets import PRESET_DESCRIPTIONS, AnalyzePreset
 from sec_nlp.core.infra.logger import logger
-from sec_nlp.core.infra.rich_console import get_rich_console
+from sec_nlp.core.infra.rich_console import create_rich_console
 from sec_nlp.types import ConfigData, ConfigValue, JsonObject, JsonValue
 
 # Custom style for questionary prompts
@@ -37,7 +37,7 @@ INTERACTIVE_STYLE: Style = Style(
     ]
 )
 
-CONSOLE: Console = get_rich_console(force_terminal=True, stderr=False)
+CONSOLE: Console = create_rich_console(force_terminal=True, stderr=False)
 
 DEFAULT_LLM_MODEL: str = "llama3.2:1b"
 DEFAULT_EMBEDDING_MODEL: str = "mxbai-embed-large"

@@ -1,11 +1,9 @@
 # src/sec_nlp/core/logger.py
 """Centralized logging configuration."""
 
-import io
 import logging
 import re
 import shutil
-import sys
 from datetime import datetime
 from pathlib import Path
 from types import TracebackType
@@ -15,7 +13,10 @@ from rich.text import Text
 from rich.traceback import Traceback
 from tqdm import tqdm
 
-from sec_nlp.core.infra.rich_console import get_rich_console
+from sec_nlp.core.infra.rich_console import (
+    create_rich_console,
+    get_rich_console,
+)
 
 
 class TqdmLoggingHandler(logging.StreamHandler[TextIO]):
@@ -110,7 +111,7 @@ class RichLogFormatter(logging.Formatter):
         datefmt: str | None = None,
     ) -> None:
         super().__init__(datefmt=datefmt)
-        self._console = get_rich_console(stderr=True)
+        self._console = create_rich_console(stderr=True)
         self._show_time = show_time
         self._show_name = show_name
 
@@ -246,34 +247,39 @@ def setup_logging(
     log_format = formats.get(format_type, formats["simple"])
     date_format = "%Y-%m-%d %H:%M:%S %z"
 
-    # Choose formatter based on output type
-    # Allow rich console output even when also writing to a file; disable for json
-    use_rich = enable_colors and format_type != "json"
-    if use_rich:
-        console_formatter = RichLogFormatter(
-            show_time=format_type != "simple",
-            show_name=format_type == "detailed",
-            datefmt=date_format,
-        )
-    else:
-        use_colors = enable_colors and format_type != "json"
-        if use_colors:
-            console_formatter = PaddedColoredFormatter(
-                log_format, datefmt=date_format
-            )
-        else:
-            console_formatter = PaddedFormatter(log_format, datefmt=date_format)
-
     # Configure root logger
     root_logger = logging.getLogger()
     root_logger.setLevel(logging.DEBUG)  # always capture full detail internally
     root_logger.handlers.clear()
 
-    # Console handler (always present). Use tqdm.write when available to avoid
-    # clobbering progress bars.
-    console_handler = TqdmLoggingHandler(sys.stderr)
-    console_handler.setLevel(level)
+    # Console handler — use a custom StreamHandler that writes to the Rich Console
+    # so that output automatically coordinates with any active Rich live displays
+    # (Progress, Status) instead of clobbering them. This is a key fix: writing
+    # directly to stderr bypasses Rich's coordination; console.print() respects it.
+    console_handler: logging.Handler
+    use_colors = enable_colors and format_type != "json"
+    if use_colors:
+        console_formatter = PaddedColoredFormatter(
+            log_format, datefmt=date_format
+        )
+    else:
+        console_formatter = PaddedFormatter(log_format, datefmt=date_format)
+
+    # Create a custom handler that writes via get_rich_console() to coordinate
+    # with live displays, but preserves the ColoredFormatter for readability.
+    class RichConsoleStreamHandler(logging.Handler):
+        """Stream handler that emits via Rich console for coordination."""
+
+        def emit(self, record: logging.LogRecord) -> None:
+            try:
+                msg = self.format(record)
+                get_rich_console().print(msg, highlight=False)
+            except Exception:
+                self.handleError(record)
+
+    console_handler = RichConsoleStreamHandler()
     console_handler.setFormatter(console_formatter)
+    console_handler.setLevel(level)
     # Suppress noisy third-party warning spam from console while keeping it in file logs
     console_handler.addFilter(
         lambda record: not str(record.name).startswith(
@@ -478,29 +484,21 @@ def divider_line(length: int = 70, color: str = "cyan") -> str:
 def log_divider(
     logger: logging.Logger, length: int = 70, color: str = "cyan"
 ) -> None:
-    """Log a divider without timestamp/metadata, surrounded by blank lines."""
-    line = divider_line(length=length, color=color)
-    raw_msg = f"\n{line}\n"
-    plain_msg = _sanitize_for_file(raw_msg)
+    """Render a divider via Rich (coordinates with live displays) and to log files."""
+    # Console: Rich rule — goes through the singleton Console so it
+    # will not corrupt an active Progress / Status bar.
+    console = get_rich_console()
+    console.rule(style=color)
 
-    target_handlers = logger.handlers or logging.getLogger().handlers
-
-    # Emit directly to handlers to avoid timestamps/metadata
-    for handler in target_handlers:
-        if not isinstance(handler, logging.StreamHandler):
-            continue
-        stream = handler.stream
-        if not isinstance(stream, io.TextIOBase):
-            continue
-        try:
-            if isinstance(handler, logging.FileHandler):
-                stream.write(plain_msg)
-            else:
-                stream.write(raw_msg)
-            stream.flush()
-        except Exception:
-            # Fall back to normal logging if direct write fails
-            logger.log(logging.INFO, raw_msg)
+    # File handlers: write a plain ASCII divider directly.
+    plain_line = f"\n{'-' * length}\n"
+    for handler in logger.handlers or logging.getLogger().handlers:
+        if isinstance(handler, logging.FileHandler):
+            try:
+                handler.stream.write(plain_line)
+                handler.stream.flush()
+            except Exception:
+                pass
 
 
 def add_padding_lines(lines: list[str], padding: int = 1) -> list[str]:

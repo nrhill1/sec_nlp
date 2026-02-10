@@ -420,7 +420,6 @@ class AnalyzePipeline(BasePipeline):
                 expand=False,
             )
             console.print(Align.center(panel))
-            console.print()  # Blank line for spacing
 
             output_set: set[Path] = set()
             metadata: ResultDict = {
@@ -430,8 +429,6 @@ class AnalyzePipeline(BasePipeline):
             }
             total_analyzed_chunks = 0
 
-            # Rich Progress bar for symbols (transient to avoid clutter)
-            console.print()
             with Progress(
                 SpinnerColumn(),
                 TextColumn("[bold cyan]{task.description}"),
@@ -461,7 +458,6 @@ class AnalyzePipeline(BasePipeline):
                     # SymbolRunMetadata is a TypedDict compatible with ResultValue
                     metadata[symbol_key] = symbol_meta  # type: ignore[assignment]
                     progress.advance(task)
-            console.print()  # Blank line after progress
 
             if len(self._symbol_profiles) > 1:
                 run_component = self.config.run_path_component()
@@ -527,8 +523,6 @@ class AnalyzePipeline(BasePipeline):
                 error=f"{type(e).__name__}: {e}",
             )
         finally:
-            console = get_rich_console()
-            console.print()
             log_divider(logger, color="green")
 
     def _log_chunk_stats_by_accession(
@@ -567,8 +561,9 @@ class AnalyzePipeline(BasePipeline):
 
     def _process_symbol(self, symbol: str) -> tuple[list[Path], ChunkStats]:
         """Process a single symbol through the full analysis pipeline."""
-        log_divider(logger, color="cyan")
-        logger.info("Processing symbol: %s \n", symbol)
+        # Log divider + symbol header
+        logger.info("\n" + "=" * 70)
+        logger.info("Processing symbol: %s", symbol)
         self._loader.add_symbol(symbol)
         timings: Timings = {}
 
@@ -883,16 +878,11 @@ class AnalyzePipeline(BasePipeline):
             docs_for_analysis, symbol=symbol, label="vector"
         )
 
-        # LLM analysis with status spinner
+        # LLM analysis (no nested spinner — Progress bar is already active)
         t0 = perf_counter()
-        console = get_rich_console()
-        with console.status(
-            f"[bold green]Running LLM analysis for {symbol}...[/bold green]",
-            spinner="dots",
-        ):
-            analysis_results = self._analysis_runner.analyze_chunks(
-                symbol, docs_for_analysis
-            )
+        analysis_results = self._analysis_runner.analyze_chunks(
+            symbol, docs_for_analysis
+        )
         timings["analyze"] = perf_counter() - t0
 
         return analysis_results, docs_for_analysis
