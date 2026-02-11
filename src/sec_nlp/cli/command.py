@@ -7,6 +7,8 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 
 from pydantic import BaseModel
+from rich.table import Table
+from rich.text import Text
 
 from sec_nlp.cli.formatting import (
     format_divider,
@@ -18,6 +20,7 @@ from sec_nlp.core.infra.logger import (
     color_text,
     logger,
 )
+from sec_nlp.core.infra.rich_console import get_rich_console
 from sec_nlp.pipelines.base import BasePipeline
 from sec_nlp.pipelines.base.config import BasePipelineSettings
 from sec_nlp.pipelines.base.result import BasePipelineResult
@@ -134,6 +137,7 @@ class BasePipelineCommand(BaseModel, ABC):
         return getattr(pipeline_cls, "description", "")
 
     def _log_config_details(self) -> None:
+        """Log pipeline config with enhanced Rich formatting for topics/keywords."""
         items: list[tuple[str, str | None]] = []
 
         symbols = getattr(self, "symbols", [])
@@ -151,6 +155,87 @@ class BasePipelineCommand(BaseModel, ABC):
         if items:
             for label, value in items:
                 logger.info(format_key_value(label, value))
+
+        # Enhanced visual display for analyze-specific config
+        self._log_analyze_config_panel()
+
+    def _log_analyze_config_panel(self) -> None:
+        """Log analyze config (topics, keywords, search) as a Rich Panel."""
+        topics: list[str] | None = getattr(self, "topics", None)
+        keywords: list[str] | None = getattr(self, "keywords", None)
+        search_config = getattr(self, "search", None)
+        vector_mode: str | None = getattr(self, "vector_mode", None)
+        confidence_threshold: float | None = getattr(
+            self, "confidence_threshold", None
+        )
+
+        # Only show panel if any content to display
+        has_topics = isinstance(topics, list) and any(t for t in topics if t)
+        has_keywords = isinstance(keywords, list) and any(
+            k for k in keywords if k
+        )
+        has_search = (
+            search_config is not None
+            and hasattr(search_config, "queries")
+            and isinstance(search_config.queries, list)
+            and len(search_config.queries) > 0
+        )
+        has_settings = (
+            vector_mode is not None or confidence_threshold is not None
+        )
+
+        if not (has_topics or has_keywords or has_search or has_settings):
+            return
+
+        console = get_rich_console()
+        table = Table(
+            title="[bold cyan]Configuration[/bold cyan]",
+            show_header=False,
+            box=None,
+        )
+        table.add_column("Key", style="dim cyan", width=20, justify="right")
+        table.add_column("Value", style="white")
+
+        # Topics as badges
+        if has_topics and topics is not None:
+            topics_text = Text()
+            for i, topic in enumerate(topics):
+                if i > 0:
+                    topics_text.append(" ")
+                topics_text.append(f"[{topic}]", style="green bold")
+            table.add_row("Topics", topics_text)
+
+        # Keywords as badges
+        if has_keywords and keywords is not None:
+            keywords_text = Text()
+            for i, kw in enumerate(keywords):
+                if i > 0:
+                    keywords_text.append(" ")
+                keywords_text.append(f"[{kw}]", style="blue bold")
+            table.add_row("Keywords", keywords_text)
+
+        # Search queries
+        if has_search and search_config is not None:
+            query_count = len(search_config.queries)
+            table.add_row(
+                "Search Queries",
+                f"[cyan]{query_count}[/cyan] configured",
+            )
+
+        # Vector mode and confidence threshold
+        if vector_mode is not None:
+            color = "yellow" if vector_mode == "off" else "green"
+            table.add_row(
+                "Vector Mode",
+                f"[{color} bold]{vector_mode.upper()}[/{color} bold]",
+            )
+        if confidence_threshold is not None:
+            table.add_row(
+                "Confidence Threshold",
+                f"[magenta]{confidence_threshold:.2f}[/magenta]",
+            )
+
+        console.print(table)
 
     def _validation_config(self) -> BasePipelineSettings:
         if isinstance(self, BasePipelineSettings):

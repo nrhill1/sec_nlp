@@ -949,7 +949,7 @@ class AnalyzePipeline(BasePipeline):
         relevant_results: list[AnalysisResultDict],
         error_results: list[AnalysisResultDict],
     ) -> None:
-        """Log analysis summary statistics."""
+        """Log analysis summary statistics with enhanced Rich formatting."""
         total_hits = len(analysis_results)
         relevant_hits = len(relevant_results)
         confidence_scores = [
@@ -960,9 +960,21 @@ class AnalyzePipeline(BasePipeline):
             if confidence_scores
             else None
         )
-        avg_conf_display = (
-            f"{avg_confidence:.2f}" if avg_confidence is not None else "n/a"
+        median_confidence = (
+            median(confidence_scores) if confidence_scores else None
         )
+
+        # Determine color for relevant hits based on threshold
+        relevance_ratio = relevant_hits / total_hits if total_hits > 0 else 0
+        if relevant_hits == 0:
+            relevant_color = "red"
+            relevant_icon = "✗"
+        elif relevance_ratio >= 0.5:
+            relevant_color = "green"
+            relevant_icon = "✓"
+        else:
+            relevant_color = "yellow"
+            relevant_icon = "◐"
 
         # Rich Table for analysis summary
         console = get_rich_console()
@@ -972,13 +984,37 @@ class AnalyzePipeline(BasePipeline):
             box=None,
         )
         table.add_column("Label", style="dim cyan", justify="right")
-        table.add_column("Value", style="bold white")
-        table.add_row("Total Chunks", str(total_hits))
-        table.add_row("Relevant", f"[green]{relevant_hits}[/green]")
-        table.add_row("Avg Confidence", avg_conf_display)
-        table.add_row("Threshold", f"{self.config.confidence_threshold:.2f}")
+        table.add_column("Value", style="white")
+
+        # Total chunks
+        table.add_row("Total Chunks", f"[dim]{total_hits}[/dim]")
+
+        # Relevant hits with icon and color
+        relevant_display = f"[{relevant_color} bold]{relevant_icon} {relevant_hits}[/{relevant_color} bold]"
+        if total_hits > 0:
+            relevant_display += f" [dim]({relevance_ratio:.0%})[/dim]"
+        table.add_row("Relevant", relevant_display)
+
+        # Confidence scores (avg and median)
+        if avg_confidence is not None:
+            avg_conf_display = f"[magenta]{avg_confidence:.2f}[/magenta]"
+            table.add_row("Avg Confidence", avg_conf_display)
+        if median_confidence is not None:
+            median_conf_display = f"[magenta]{median_confidence:.2f}[/magenta]"
+            table.add_row("Median Confidence", median_conf_display)
+
+        # Threshold
+        table.add_row(
+            "Threshold",
+            f"[dim]{self.config.confidence_threshold:.2f}[/dim]",
+        )
+
+        # Errors (if any)
         if error_results:
-            table.add_row("Errors", f"[red]{len(error_results)}[/red]")
+            table.add_row(
+                "Errors", f"[red bold]✗ {len(error_results)}[/red bold]"
+            )
+
         console.print(table)
 
         # Keep log for file output
