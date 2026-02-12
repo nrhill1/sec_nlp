@@ -256,14 +256,52 @@ class PipelineMetrics:
 
         return summary
 
+    @staticmethod
+    def format_duration(seconds: float) -> str:
+        """Format *seconds* into a human-readable string.
+
+        Examples:
+            0.045   -> "45ms"
+            3.2     -> "3s 200ms"
+            125.7   -> "2m 5s 700ms"
+            3661.05 -> "1h 1m 1s 50ms"
+            90061   -> "1d 1h 1m 1s"
+        """
+        if seconds < 0:
+            return f"{seconds:.2f}s"
+
+        total_ms = int(round(seconds * 1000))
+        days, remainder = divmod(total_ms, 86_400_000)
+        hours, remainder = divmod(remainder, 3_600_000)
+        minutes, remainder = divmod(remainder, 60_000)
+        secs, ms = divmod(remainder, 1000)
+
+        parts: list[str] = []
+        if days:
+            parts.append(f"{days}d")
+        if hours:
+            parts.append(f"{hours}h")
+        if minutes:
+            parts.append(f"{minutes}m")
+        if secs:
+            parts.append(f"{secs}s")
+        if ms and not days:
+            parts.append(f"{ms}ms")
+
+        return " ".join(parts) if parts else "0ms"
+
     def print_report(self) -> None:
         """Print formatted metrics report."""
         summary = self.get_summary()
+        fmt = self.format_duration
 
         logger.info("=" * 70)
         logger.info(f"Performance Metrics: {self.pipeline_name}")
         logger.info("=" * 70)
-        logger.info(f"Total Duration: {self.total_duration:.2f}s")
+        logger.info(
+            f"Total Duration: {fmt(self.total_duration)}"
+            f" ({self.total_duration:.2f}s)"
+        )
         logger.info("")
 
         # Counters
@@ -289,11 +327,11 @@ class PipelineMetrics:
             for name, stats in sorted(summary["timers"].items()):
                 logger.info(f"  {name}:")
                 logger.info(f"    Count: {stats['count']}")
-                logger.info(f"    Total: {stats['total']:.3f}s")
-                logger.info(f"    Mean: {stats['mean']:.3f}s")
-                logger.info(f"    Min: {stats['min_value']:.3f}s")
-                logger.info(f"    Max: {stats['max_value']:.3f}s")
-                logger.info(f"    P95: {stats['p95']:.3f}s")
+                logger.info(f"    Total: {fmt(stats['total'])}")
+                logger.info(f"    Mean: {fmt(stats['mean'])}")
+                logger.info(f"    Min: {fmt(stats['min_value'])}")
+                logger.info(f"    Max: {fmt(stats['max_value'])}")
+                logger.info(f"    P95: {fmt(stats['p95'])}")
             logger.info("")
 
         # Memory

@@ -134,12 +134,14 @@ class MetricsSummary(TypedDict):
 class AnalysisResultDict(TypedDict, total=False):
     """Result dict from LLM analysis of a document chunk."""
 
+    # Rank first so it appears first in serialised YAML/JSON output.
+    rank: int
+
     # Core fields
     is_relevant: bool
     confidence_score: float | None
     confidence_rationale: str
     yake_overlap: float | None
-    rank: int
     confidence_bucket: str
     summary: str | None
     key_points: list[str]
