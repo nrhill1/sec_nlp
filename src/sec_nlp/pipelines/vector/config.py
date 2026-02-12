@@ -181,11 +181,13 @@ class VectorConfig(BaseModel):
             )
 
     def setup_embedding_model(self) -> tuple[OllamaEmbeddings, int]:
-        """Initialize Ollama embedder and return its embedding dimension.
+        """Initialize Ollama embedder, probe dimension, and warmup.
 
         Returns:
             Tuple of (embedder, embedding_dimension).
         """
+        from time import perf_counter
+
         logger.info("Loading embedding model: %s", self.embedding_model)
 
         embedder = OllamaEmbeddings(
@@ -196,6 +198,22 @@ class VectorConfig(BaseModel):
         test_embedding: list[int | float] = embedder.embed_query("test")
         embedding_dim = len(test_embedding)
         logger.info("Embedding dimension: %d", embedding_dim)
+
+        # Warmup: run a small batch to ensure the model is fully
+        # resident in GPU/CPU memory before real work begins.
+        warmup_texts = [
+            "SEC filing annual report revenue",
+            "Risk factors and forward-looking statements",
+            "Executive compensation equity awards",
+        ]
+        t0 = perf_counter()
+        embedder.embed_documents(warmup_texts)
+        warmup_elapsed = perf_counter() - t0
+        logger.info(
+            "Embedding warmup: %d texts in %.1fs",
+            len(warmup_texts),
+            warmup_elapsed,
+        )
 
         return embedder, embedding_dim
 

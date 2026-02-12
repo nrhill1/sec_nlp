@@ -1,11 +1,13 @@
 # src/sec_nlp/pipelines/presets/analyze/pipeline.py
 """Generalized semantic search and confidence analysis pipeline for SEC filings."""
 
+import signal
 from collections import defaultdict
 from concurrent.futures import Future, ThreadPoolExecutor
 from pathlib import Path
 from statistics import mean, median
 from time import perf_counter
+from types import FrameType
 from typing import ClassVar, Literal
 
 from langchain_core.callbacks.base import BaseCallbackHandler
@@ -52,10 +54,7 @@ from sec_nlp.pipelines.types import (
 from sec_nlp.prompts import load_prompt_template
 from sec_nlp.types import JsonDict, ResultDict
 
-from . import (
-    confidence as confidence_utils,
-    efts as efts_utils,
-)
+from . import efts as efts_utils
 from .builders import (
     build_analysis_runner,
     build_output_formatter,
@@ -90,7 +89,13 @@ from .steps.analysis.instructions import AnalysisInstructionBuilder
 from .steps.indexing.vector_index import VectorIndexer
 from .steps.preprocess.preprocess import ChunkPreprocessor
 from .steps.search.efts_search import EFTSSearchResult
-from .types import ChunkStats, SymbolRunMetadata, Timings
+from .types import (
+    ChunkStats,
+    PrefetchedSymbolData,
+    SymbolRunMetadata,
+    Timings,
+    _abort_event,
+)
 
 type PromptInput = dict[
     str,
@@ -300,6 +305,11 @@ class AnalyzePipeline(BasePipeline):
                             qdrant_client.delete_collection(collection_name)
                             needs_recreate = True
                     except Exception:
+                        logger.debug(
+                            "Failed to inspect collection %s",
+                            collection_name,
+                            exc_info=True,
+                        )
                         needs_recreate = True
                 if (
                     not qdrant_client.collection_exists(collection_name)
@@ -405,6 +415,21 @@ class AnalyzePipeline(BasePipeline):
 
     def run(self) -> AnalyzeResult:
         """Execute the semantic search pipeline."""
+        # Reset abort flag and install a signal handler so the first
+        # Ctrl+C triggers a graceful stop and the second force-kills.
+        _abort_event.clear()
+        prev_handler = signal.getsignal(signal.SIGINT)
+
+        def _sigint_handler(signum: int, frame: FrameType | None) -> None:
+            if _abort_event.is_set():
+                # Second Ctrl+C — restore previous handler and re-raise.
+                signal.signal(signal.SIGINT, prev_handler)
+                raise KeyboardInterrupt
+            _abort_event.set()
+            logger.info("Interrupt received — finishing current work…")
+
+        signal.signal(signal.SIGINT, _sigint_handler)
+
         try:
             self.config.setup_paths()
 
@@ -453,16 +478,18 @@ class AnalyzePipeline(BasePipeline):
                 # Row 2: per-symbol phase detail (hidden until needed)
                 phase_task = progress.add_task("", total=None, visible=False)
                 symbols = self.config.symbols
-                prefetch_future: (
-                    Future[tuple[list[Document], set[str] | None, Timings]]
-                    | None
-                ) = None
+                prefetch_future: Future[PrefetchedSymbolData] | None = None
                 prefetch_executor = ThreadPoolExecutor(
                     max_workers=1, thread_name_prefix="prefetch"
                 )
 
                 try:
                     for idx, symbol in enumerate(symbols):
+                        if _abort_event.is_set():
+                            logger.info(
+                                "Abort requested — skipping remaining symbols"
+                            )
+                            break
                         progress.update(
                             overall_task,
                             description=f"Processing {symbol}",
@@ -470,14 +497,16 @@ class AnalyzePipeline(BasePipeline):
                         symbol_start = perf_counter()
 
                         # Collect prefetched data if available
-                        prefetched: (
-                            tuple[list[Document], set[str] | None, Timings]
-                            | None
-                        ) = None
+                        prefetched: PrefetchedSymbolData | None = None
                         if prefetch_future is not None:
                             try:
                                 prefetched = prefetch_future.result()
                             except Exception:
+                                logger.debug(
+                                    "Prefetch failed for %s",
+                                    symbol,
+                                    exc_info=True,
+                                )
                                 prefetched = None
                             prefetch_future = None
 
@@ -575,6 +604,13 @@ class AnalyzePipeline(BasePipeline):
                 metadata=metadata,
             )
 
+        except KeyboardInterrupt:
+            logger.info("Pipeline interrupted by user")
+            self.config.complete_run(success=False)
+            return AnalyzeResult(
+                success=False,
+                error="Interrupted by user",
+            )
         except Exception as e:
             logger.exception("Pipeline execution failed")
             self.config.complete_run(success=False)
@@ -583,6 +619,7 @@ class AnalyzePipeline(BasePipeline):
                 error=f"{type(e).__name__}: {e}",
             )
         finally:
+            signal.signal(signal.SIGINT, prev_handler)
             log_divider(logger, color="green")
 
     def _log_chunk_stats_by_accession(
@@ -619,17 +656,28 @@ class AnalyzePipeline(BasePipeline):
                 prefix_color="dim",
             )
 
-    def _prefetch_symbol(
-        self, symbol: str
-    ) -> tuple[list[Document], set[str] | None, Timings]:
-        """Prefetch EFTS + document loading for a symbol in a background thread.
+    def _prefetch_symbol(self, symbol: str) -> PrefetchedSymbolData:
+        """Prefetch EFTS + loading + preprocessing for a symbol.
 
-        This overlaps I/O with the LLM analysis of the previous symbol.
+        Runs in a background thread to overlap I/O-bound work with the
+        LLM analysis of the current symbol.  Indexing is deliberately
+        omitted because the SimHashDeduplicator is shared mutable state.
         """
         self._loader.add_symbol(symbol)
         timings: Timings = {}
         docs, allowed_accessions = self._run_efts_and_load_docs(symbol, timings)
-        return docs, allowed_accessions, timings
+
+        preprocessed = False
+        if docs:
+            docs = self._preprocess_documents(symbol, docs, timings)
+            preprocessed = True
+
+        return PrefetchedSymbolData(
+            docs=docs,
+            allowed_accessions=allowed_accessions,
+            timings=timings,
+            preprocessed=preprocessed,
+        )
 
     def _update_phase(
         self,
@@ -675,8 +723,7 @@ class AnalyzePipeline(BasePipeline):
         *,
         progress: Progress | None = None,
         phase_task: TaskID | None = None,
-        prefetched: tuple[list[Document], set[str] | None, Timings]
-        | None = None,
+        prefetched: PrefetchedSymbolData | None = None,
     ) -> tuple[list[Path], ChunkStats]:
         """Process a single symbol through the full analysis pipeline."""
         # Log divider + symbol header
@@ -686,20 +733,21 @@ class AnalyzePipeline(BasePipeline):
 
         # Phase 1: EFTS discovery and document loading (use prefetched if available)
         self._update_phase(progress, phase_task, symbol, "Loading")
+        already_preprocessed = False
         if prefetched is not None:
-            docs, allowed_accessions, prefetch_timings = prefetched
-            timings.update(prefetch_timings)
+            docs = prefetched["docs"]
+            timings.update(prefetched["timings"])
+            already_preprocessed = prefetched["preprocessed"]
         else:
             self._loader.add_symbol(symbol)
-            docs, allowed_accessions = self._run_efts_and_load_docs(
-                symbol, timings
-            )
+            docs, _allowed = self._run_efts_and_load_docs(symbol, timings)
         if not docs:
             return [], self._empty_chunk_stats(timings)
 
-        # Phase 2: Preprocessing
-        self._update_phase(progress, phase_task, symbol, "Preprocessing")
-        docs = self._preprocess_documents(symbol, docs, timings)
+        # Phase 2: Preprocessing (skip if already done during prefetch)
+        if not already_preprocessed:
+            self._update_phase(progress, phase_task, symbol, "Preprocessing")
+            docs = self._preprocess_documents(symbol, docs, timings)
         if not docs:
             return [], self._empty_chunk_stats(timings)
 
@@ -947,7 +995,7 @@ class AnalyzePipeline(BasePipeline):
 
         chunk_lengths = [len((doc.page_content or "").strip()) for doc in docs]
         stats: ChunkStats = {
-            "count": float(len(chunk_lengths)),
+            "count": len(chunk_lengths),
             "min_value": float(min(chunk_lengths)),
             "max_value": float(max(chunk_lengths)),
             "median": float(median(chunk_lengths)),
@@ -1061,12 +1109,6 @@ class AnalyzePipeline(BasePipeline):
                     "Market correlation failed for %s: %s", symbol, exc
                 )
 
-        # Confidence calibration
-        if self.config.confidence_mode == "calibrated":
-            confidence_utils.apply_confidence_derivation(
-                analysis_results, market_correlation
-            )
-
         # Log summary
         self._log_analysis_summary(
             symbol, analysis_results, relevant_results, error_results
@@ -1128,12 +1170,18 @@ class AnalyzePipeline(BasePipeline):
         table.add_row("Relevant", relevant_display)
 
         # Confidence scores (avg and median)
+        avg_conf_display = "N/A"
         if avg_confidence is not None:
-            avg_conf_display = f"[magenta]{avg_confidence:.2f}[/magenta]"
-            table.add_row("Avg Confidence", avg_conf_display)
+            avg_conf_display = f"{avg_confidence:.2f}"
+            table.add_row(
+                "Avg Confidence",
+                f"[magenta]{avg_conf_display}[/magenta]",
+            )
         if median_confidence is not None:
-            median_conf_display = f"[magenta]{median_confidence:.2f}[/magenta]"
-            table.add_row("Median Confidence", median_conf_display)
+            table.add_row(
+                "Median Confidence",
+                f"[magenta]{median_confidence:.2f}[/magenta]",
+            )
 
         # Threshold
         table.add_row(
@@ -1244,7 +1292,7 @@ class AnalyzePipeline(BasePipeline):
     def _empty_chunk_stats(timings: Timings) -> ChunkStats:
         """Return empty chunk stats for early returns."""
         return {
-            "count": 0.0,
+            "count": 0,
             "min_value": 0.0,
             "max_value": 0.0,
             "mean": 0.0,
@@ -1269,6 +1317,11 @@ class AnalyzePipeline(BasePipeline):
                 try:
                     filing_date = get_filing_date_from_dir(Path(source).parent)
                 except Exception:
+                    logger.debug(
+                        "Could not determine filing date from %s",
+                        source,
+                        exc_info=True,
+                    )
                     filing_date = None
                 if filing_date is not None:
                     iso_date = filing_date.isoformat()

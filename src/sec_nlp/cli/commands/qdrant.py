@@ -126,24 +126,21 @@ class QdrantList(QdrantBaseConfig):
                     logger.info(
                         f"\n  {color_text(collection.name, color='green')}"
                     )
-                    indexed_vectors_count = getattr(
-                        info, "indexed_vectors_count", None
-                    )
                     vectors_count = (
-                        indexed_vectors_count
-                        or getattr(info, "vectors_count", None)
-                        or 0
+                        info.indexed_vectors_count or info.vectors_count or 0
                     )
                     points_count = info.points_count or 0
                     logger.info(f"    Vectors: {vectors_count:,}")
                     logger.info(f"    Points: {points_count:,}")
                     if info.config.params:
                         vector_params = info.config.params.vectors
-                        size = getattr(vector_params, "size", None)
-                        distance = getattr(vector_params, "distance", None)
-                        if size is not None and distance is not None:
-                            logger.info(f"    Vector size: {size}")
-                            logger.info(f"    Distance: {distance.name}")
+                        if isinstance(vector_params, VectorParams):
+                            logger.info(
+                                f"    Vector size: {vector_params.size}"
+                            )
+                            logger.info(
+                                f"    Distance: {vector_params.distance.name}"
+                            )
                 else:
                     logger.info(
                         f"  • {color_text(collection.name, color='green')}"
@@ -190,14 +187,11 @@ class QdrantInfo(QdrantBaseConfig):
                 f"  Name: {color_text(self.collection_name, color='green')}"
             )
             logger.info(f"  Status: {info.status}")
-            indexed_vectors_count = getattr(info, "indexed_vectors_count", None)
             vectors_count = (
-                indexed_vectors_count
-                or getattr(info, "vectors_count", None)
-                or 0
+                info.indexed_vectors_count or info.vectors_count or 0
             )
             points_count = info.points_count or 0
-            indexed_count = indexed_vectors_count or 0
+            indexed_count = info.indexed_vectors_count or 0
             logger.info(f"  Vectors: {vectors_count:,}")
             logger.info(f"  Points: {points_count:,}")
             logger.info(f"  Indexed vectors: {indexed_count:,}")
@@ -207,11 +201,9 @@ class QdrantInfo(QdrantBaseConfig):
                 logger.info(
                     f"\n{color_text('Vector Configuration:', color='cyan')}"
                 )
-                size = getattr(vector_params, "size", None)
-                distance = getattr(vector_params, "distance", None)
-                if size is not None and distance is not None:
-                    logger.info(f"  Size: {size}")
-                    logger.info(f"  Distance: {distance.name}")
+                if isinstance(vector_params, VectorParams):
+                    logger.info(f"  Size: {vector_params.size}")
+                    logger.info(f"  Distance: {vector_params.distance.name}")
                 logger.info(
                     f"  On-disk payload: {info.config.params.on_disk_payload}"
                 )

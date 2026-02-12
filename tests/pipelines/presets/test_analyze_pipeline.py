@@ -23,7 +23,10 @@ from sec_nlp.pipelines.presets.analyze.runnables.search import (
     SearchQueryResults,
     SearchRunnable,
 )
-from sec_nlp.pipelines.presets.analyze.types import ChunkStats
+from sec_nlp.pipelines.presets.analyze.types import (
+    ChunkStats,
+    PrefetchedSymbolData,
+)
 from sec_nlp.pipelines.types import AnalysisResultDict, MetadataValue
 
 
@@ -71,8 +74,7 @@ class _CachedSearchPipeline(AnalyzePipeline):
         *,
         progress: Progress | None = None,
         phase_task: TaskID | None = None,
-        prefetched: tuple[list[Document], set[str] | None, dict[str, float]]
-        | None = None,
+        prefetched: PrefetchedSymbolData | None = None,
     ) -> tuple[list[Path], ChunkStats]:
         self._search_results_by_query = {
             "cached-query": SearchQueryResults(filtered=[], total=0)

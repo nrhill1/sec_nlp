@@ -25,6 +25,7 @@ from sec_nlp.pipelines.types import AnalysisResultDict, MetadataRecord
 from sec_nlp.types import JsonValue
 
 from ..models import AnalysisInput, AnalysisResult
+from ..types import is_abort_requested
 from ..utils import query_term_overlap, resolve_symbol_for_output
 
 NUMERIC_SIGNAL_RE = re.compile(r"[$€£]?\d")
@@ -144,6 +145,14 @@ class AnalyzerRunnable(
         analysis_start = perf_counter()
         processed = 0
         for i in range(0, total_chunks, effective_batch_size):
+            if is_abort_requested():
+                logger.info(
+                    "Abort requested — returning %d/%d partial results for %s",
+                    processed,
+                    total_chunks,
+                    symbol,
+                )
+                break
             batch = inputs[i : i + effective_batch_size]
             batch_docs = docs[i : i + effective_batch_size]
             batch_results = self._process_batch(batch, batch_docs)

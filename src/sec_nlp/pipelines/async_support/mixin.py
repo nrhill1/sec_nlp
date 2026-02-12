@@ -4,7 +4,7 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Coroutine
+from collections.abc import Callable, Coroutine
 from typing import Literal, TypeVar
 
 from sec_nlp.core.infra.logger import logger
@@ -139,7 +139,7 @@ class AsyncPipelineRunner:
             loop.close()
 
     @staticmethod
-    async def to_thread(func, *args, **kwargs) -> T:
+    async def to_thread(func: Callable[..., T], *args: T, **kwargs: T) -> T:
         """Run a sync function in a thread pool.
 
         This is a thin wrapper around asyncio.to_thread for
@@ -187,7 +187,7 @@ class AsyncSymbolProcessor:
     async def process_symbols(
         self,
         symbols: list[str],
-        process_func,
+        process_func: Callable[[str], Coroutine[None, None, T]],
     ) -> dict[str, T]:
         """Process multiple symbols concurrently.
 
