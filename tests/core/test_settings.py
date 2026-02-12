@@ -14,7 +14,7 @@ from sec_nlp.core.infra.settings import PathSecurityError
 def test_project_root_matches_repository() -> None:
     """PROJECT_ROOT should match the repository root derived from this test file."""
     expected_root = Path(__file__).resolve().parents[2]
-    assert settings.PROJECT_ROOT == expected_root
+    assert expected_root == settings.PROJECT_ROOT
     assert (settings.PROJECT_ROOT / "pyproject.toml").is_file()
 
 

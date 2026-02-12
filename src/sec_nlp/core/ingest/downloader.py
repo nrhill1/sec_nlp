@@ -452,9 +452,13 @@ def _find_primary_document(payload: JsonDict, accession: str) -> str | None:
     documents = table.get("primaryDocument")
     if isinstance(accessions, list) and isinstance(documents, list):
         for acc, doc in zip(accessions, documents, strict=False):
-            if isinstance(acc, str) and acc == accession:
-                if isinstance(doc, str) and doc:
-                    return doc
+            if (
+                isinstance(acc, str)
+                and acc == accession
+                and isinstance(doc, str)
+                and doc
+            ):
+                return doc
     return None
 
 
@@ -477,9 +481,13 @@ def _find_form_type(payload: JsonDict, accession: JsonValue) -> JsonValue:
     forms = table.get("form")
     if isinstance(accessions, list) and isinstance(forms, list):
         for acc, form_value in zip(accessions, forms, strict=False):
-            if isinstance(acc, str) and acc == accession:
-                if isinstance(form_value, str) and form_value:
-                    return form_value
+            if (
+                isinstance(acc, str)
+                and acc == accession
+                and isinstance(form_value, str)
+                and form_value
+            ):
+                return form_value
     return None
 
 

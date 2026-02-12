@@ -137,8 +137,8 @@ class PipelineProfiler(AbstractContextManager):
         finally:
             try:
                 tracemalloc.stop()
-            except Exception:
-                pass
+            except RuntimeError:
+                logger.debug("Failed to stop tracemalloc")
 
     # Reporting ----------------------------------------------------------------
     def to_metadata(self) -> JsonObject:

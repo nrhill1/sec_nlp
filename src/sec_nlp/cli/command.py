@@ -27,6 +27,7 @@ from sec_nlp.pipelines.base.result import BasePipelineResult
 from sec_nlp.pipelines.base.validation import validate_pipeline
 from sec_nlp.pipelines.observability.metrics import track_pipeline_metrics
 from sec_nlp.pipelines.observability.profiling import PipelineProfiler
+from sec_nlp.pipelines.presets.analyze.config import SearchConfig
 
 __all__ = ("BasePipelineCommand",)
 
@@ -175,9 +176,7 @@ class BasePipelineCommand(BaseModel, ABC):
             k for k in keywords if k
         )
         has_search = (
-            search_config is not None
-            and hasattr(search_config, "queries")
-            and isinstance(search_config.queries, list)
+            isinstance(search_config, SearchConfig)
             and len(search_config.queries) > 0
         )
         has_settings = (

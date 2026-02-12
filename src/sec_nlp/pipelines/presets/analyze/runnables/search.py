@@ -264,9 +264,7 @@ class SearchRunnable(
         hits = len(matched_terms)
         if min_hits > 0 and hits < min_hits:
             return False
-        if min_ratio > 0 and ratio < min_ratio:
-            return False
-        return True
+        return not (min_ratio > 0 and ratio < min_ratio)
 
     @staticmethod
     def _build_unique_hit_key(

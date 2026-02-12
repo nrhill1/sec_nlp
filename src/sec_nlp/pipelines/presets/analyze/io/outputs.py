@@ -223,10 +223,7 @@ class OutputFormatter:
     def _is_dict_list_map(value: MetadataMap) -> bool:
         if not value:
             return False
-        for item in value.values():
-            if isinstance(item, list):
-                return True
-        return False
+        return any(isinstance(item, list) for item in value.values())
 
     @staticmethod
     def _as_dict_scalar_map(

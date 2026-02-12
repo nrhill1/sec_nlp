@@ -21,9 +21,8 @@ class TestTimer:
         self, caplog: pytest.LogCaptureFixture
     ) -> None:
         """Test that timer accurately measures and logs execution time."""
-        with caplog.at_level(logging.INFO):
-            with timer("test_operation"):
-                time.sleep(0.1)  # Sleep for 100ms
+        with caplog.at_level(logging.INFO), timer("test_operation"):
+            time.sleep(0.1)  # Sleep for 100ms
 
         # Check that timing was logged
         assert len(caplog.records) == 1
@@ -40,9 +39,8 @@ class TestTimer:
         """Test that timer logs with the provided operation name."""
         operation_name = "custom_operation_name"
 
-        with caplog.at_level(logging.INFO):
-            with timer(operation_name):
-                pass
+        with caplog.at_level(logging.INFO), timer(operation_name):
+            pass
 
         assert operation_name in caplog.text
 
@@ -71,10 +69,9 @@ class TestTimer:
         self, caplog: pytest.LogCaptureFixture
     ) -> None:
         """Test that timer still logs timing even if exception occurs."""
-        with caplog.at_level(logging.INFO):
-            with pytest.raises(ValueError):
-                with timer("failing_operation"):
-                    raise ValueError("Test error")
+        with caplog.at_level(logging.INFO), pytest.raises(ValueError):
+            with timer("failing_operation"):
+                raise ValueError("Test error")
 
         # Timer should still log despite exception
         assert "failing_operation" in caplog.text
@@ -96,9 +93,8 @@ class TestTimer:
         self, caplog: pytest.LogCaptureFixture
     ) -> None:
         """Test that timer formats output with both seconds and milliseconds."""
-        with caplog.at_level(logging.INFO):
-            with timer("format_test"):
-                time.sleep(0.05)
+        with caplog.at_level(logging.INFO), timer("format_test"):
+            time.sleep(0.05)
 
         log_output = caplog.text
         # Should contain both formats: seconds (0.XXXs) and milliseconds (XXXms)
@@ -155,9 +151,8 @@ class TestProfiler:
         self, caplog: pytest.LogCaptureFixture
     ) -> None:
         """Test that Profiler doesn't print stats when print_stats=False."""
-        with caplog.at_level(logging.INFO):
-            with Profiler(print_stats=False):
-                sum(range(100))
+        with caplog.at_level(logging.INFO), Profiler(print_stats=False):
+            sum(range(100))
 
         # Should not contain profiling results (might have other logs)
         assert "Profiling Results" not in caplog.text

@@ -431,7 +431,7 @@ def _extract_subsidiaries(value: JsonValue) -> list[JsonDict]:
         lower = cleaned.lower()
         if "subsidiary" in lower and "jurisdiction" in lower:
             continue
-        if lower.startswith("exhibit") or lower.startswith("schedule"):
+        if lower.startswith(("exhibit", "schedule")):
             continue
         parts = [part.strip() for part in re.split(r"\t|\s{2,}", cleaned)]
         parts = [part for part in parts if part]
@@ -561,7 +561,7 @@ def _extract_press_release_headline(value: JsonValue) -> JsonValue:
         if not cleaned:
             continue
         lower = cleaned.lower()
-        if lower.startswith("exhibit") or lower.startswith("table of contents"):
+        if lower.startswith(("exhibit", "table of contents")):
             continue
         if 10 <= len(cleaned) <= 160:
             return cleaned

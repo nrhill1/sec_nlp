@@ -208,15 +208,15 @@ def build_market_enrichment(
     if config.limit and len(aggregated) > config.limit:
         aggregated = aggregated[-config.limit :]
 
-        return MarketEnrichment(
-            symbol=symbol,
-            ticker=ticker,
-            filing_date=filing_date,
-            window_start=window_start,
-            window_end=window_end,
-            granularity=config.granularity,
-            quotes=aggregated,
-        )
+    return MarketEnrichment(
+        symbol=symbol,
+        ticker=ticker,
+        filing_date=filing_date,
+        window_start=window_start,
+        window_end=window_end,
+        granularity=config.granularity,
+        quotes=aggregated,
+    )
 
 
 def _derive_date_range(

@@ -321,11 +321,12 @@ def annotate_efts_match(
                 if isinstance(item, dict):
                     filtered: dict[str, MetadataScalar] = {}
                     for key, value in item.items():
-                        if isinstance(key, str) and isinstance(
-                            value, (str, int, float, bool)
+                        if (
+                            isinstance(key, str)
+                            and isinstance(value, (str, int, float, bool))
+                            or isinstance(key, str)
+                            and value is None
                         ):
-                            filtered[key] = value
-                        elif isinstance(key, str) and value is None:
                             filtered[key] = value
                     if filtered:
                         cleaned.append(filtered)

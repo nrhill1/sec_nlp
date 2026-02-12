@@ -15,7 +15,7 @@ STUBS_DIR := $(REPO_ROOT)/types
 PROFILE_DIR := $(REPO_ROOT)/profiling
 PY_SCRIPTS_DIR := $(REPO_ROOT)/src/scripts
 
-PYTEST_FLAGS := -q --color=yes --basetemp $(REPO_ROOT)/.pytest_tmp --cache-clear
+PYTEST_FLAGS := -q --color=yes --basetemp $(REPO_ROOT)/.pytest_tmp
 STUBGEN_FLAGS := \
 	$(PYTHON_DIR)/sec_nlp \
 	$(TEST_DIR) \

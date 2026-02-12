@@ -179,9 +179,7 @@ def _is_info_table_file(path: Path) -> bool:
         return True
     if "info-table" in name:
         return True
-    if "13f" in name and "table" in name:
-        return True
-    return False
+    return "13f" in name and "table" in name
 
 
 class HoldingsParser:

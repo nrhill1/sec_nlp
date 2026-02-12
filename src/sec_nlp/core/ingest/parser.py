@@ -208,9 +208,12 @@ class HtmlProcessor:
                 case_insensitive=True,
             )
 
-            if self.keyword_mode == "any" and score.hits:
-                filtered.append(element)
-            elif self.keyword_mode == "all" and len(score.hits) == len(specs):
+            if (
+                self.keyword_mode == "any"
+                and score.hits
+                or self.keyword_mode == "all"
+                and len(score.hits) == len(specs)
+            ):
                 filtered.append(element)
 
         return filtered
@@ -233,9 +236,12 @@ class HtmlProcessor:
                 specs,
                 case_insensitive=True,
             )
-            if self.keyword_mode == "any" and score.hits:
-                filtered.append(doc)
-            elif self.keyword_mode == "all" and len(score.hits) == len(specs):
+            if (
+                self.keyword_mode == "any"
+                and score.hits
+                or self.keyword_mode == "all"
+                and len(score.hits) == len(specs)
+            ):
                 filtered.append(doc)
 
         return filtered

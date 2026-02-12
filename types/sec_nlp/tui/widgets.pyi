@@ -1,13 +1,13 @@
 from collections.abc import Callable
 from pathlib import Path
 
+from sec_nlp.tui.interfaces import FormSpec, SectionSpec
+from sec_nlp.tui.market import MarketSnapshot
+from sec_nlp.tui.specs import SegmentSpec
 from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.message import Message
 from textual.widgets import Checkbox, Input, Select, Static
 
-from sec_nlp.tui.interfaces import FormSpec, SectionSpec
-from sec_nlp.tui.market import MarketSnapshot
-from sec_nlp.tui.specs import SegmentSpec
 from sec_nlp.types import ConfigScalar
 
 type _FieldWidget = Input | Checkbox | Select

@@ -485,37 +485,33 @@ def _classify_tag(
         if year_data["warranty_payout"] is None:
             year_data["warranty_payout"] = val
         return "warranty_payout"
-    elif "warrantyclaimspaid" in tag:
+    if "warrantyclaimspaid" in tag:
         # Tags like StandardProductWarrantyAccrualWarrantyClaimsPaid
         if year_data["warranty_payout"] is None:
             year_data["warranty_payout"] = val
         return "warranty_payout"
     # Now handle liability/accrual tags (only if not a payment tag)
-    elif "standardproductwarrantyaccrual" in tag:
+    if "standardproductwarrantyaccrual" in tag:
         # StandardProductWarrantyAccrual = warranty liability
         if year_data["warranty_liability"] is None:
             year_data["warranty_liability"] = val
         return "warranty_liability"
-    elif "productwarrantyaccrual" in tag:
+    if "productwarrantyaccrual" in tag:
         # ProductWarrantyAccrual = warranty liability
         if year_data["warranty_liability"] is None:
             year_data["warranty_liability"] = val
         return "warranty_liability"
-    elif "warrantyaccrual" in tag:
+    if "warrantyaccrual" in tag:
         # WarrantyAccrual = warranty liability
         if year_data["warranty_liability"] is None:
             year_data["warranty_liability"] = val
         return "warranty_liability"
     # Revenue tags
-    elif "revenuefromcontractwithcustomer" in tag:
-        if year_data["net_revenue"] is None:
-            year_data["net_revenue"] = val
-        return "net_revenue"
-    elif tag in ("us-gaap:revenues", "revenues"):
-        if year_data["net_revenue"] is None:
-            year_data["net_revenue"] = val
-        return "net_revenue"
-    elif "salesrevenuenet" in tag:
+    if (
+        "revenuefromcontractwithcustomer" in tag
+        or tag in ("us-gaap:revenues", "revenues")
+        or "salesrevenuenet" in tag
+    ):
         if year_data["net_revenue"] is None:
             year_data["net_revenue"] = val
         return "net_revenue"

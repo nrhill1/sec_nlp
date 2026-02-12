@@ -273,7 +273,4 @@ def determine_async_mode(
         return True
     if num_files_estimate >= 10:
         return True
-    if has_multiple_queries and num_files_estimate >= 5:
-        return True
-
-    return False
+    return has_multiple_queries and num_files_estimate >= 5

@@ -21,8 +21,6 @@ class PipelineException(Exception):
     consumers to catch all pipeline errors with a single except clause.
     """
 
-    pass
-
 
 # ============================================================================
 # Validation Exceptions
@@ -32,19 +30,13 @@ class PipelineException(Exception):
 class InvalidEmailException(PipelineException):
     """Email address is invalid or missing."""
 
-    pass
-
 
 class InvalidSymbolException(PipelineException):
     """Ticker symbol is invalid or malformed."""
 
-    pass
-
 
 class InvalidDateException(PipelineException):
     """Date range is invalid (start >= end)."""
-
-    pass
 
 
 # ============================================================================
@@ -55,19 +47,13 @@ class InvalidDateException(PipelineException):
 class InvalidPathException(PipelineException):
     """Path is invalid, inaccessible, or not writable."""
 
-    pass
-
 
 class InvalidLLMException(PipelineException):
     """LLM configuration is invalid or incomplete."""
 
-    pass
-
 
 class InvalidVectorException(PipelineException):
     """Vector store configuration is invalid or inaccessible."""
-
-    pass
 
 
 # ============================================================================
@@ -78,19 +64,13 @@ class InvalidVectorException(PipelineException):
 class InsufficientDiskException(PipelineException):
     """Insufficient disk space to complete operation."""
 
-    pass
-
 
 class LLMUnavailableException(PipelineException):
     """LLM service (Ollama) is unavailable or unresponsive."""
 
-    pass
-
 
 class VectorUnavailableException(PipelineException):
     """Vector store service (Qdrant) is unavailable or unresponsive."""
-
-    pass
 
 
 # ============================================================================
@@ -101,13 +81,9 @@ class VectorUnavailableException(PipelineException):
 class MissingDependencyException(PipelineException):
     """Required library or package is not installed."""
 
-    pass
-
 
 class IncompatibleDependencyException(PipelineException):
     """Installed library version is incompatible or broken."""
-
-    pass
 
 
 # ============================================================================

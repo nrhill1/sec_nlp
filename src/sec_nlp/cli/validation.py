@@ -89,13 +89,13 @@ def _get_error_suggestion(field: str, err_type: str, msg: str) -> str:
 
     if err_type == "missing":
         return f"This field is required. Add {flag_name} <value>"
-    elif err_type == "string_type":
+    if err_type == "string_type":
         return "Expected a string value. Try quoting the value."
-    elif err_type == "int_parsing":
+    if err_type == "int_parsing":
         return "Expected an integer (e.g., 5, 10, 100)"
-    elif err_type == "float_parsing":
+    if err_type == "float_parsing":
         return "Expected a number (e.g., 0.5, 1.0)"
-    elif err_type == "greater_than_equal":
+    if err_type == "greater_than_equal":
         match = re.search(r"greater than or equal to (\d+)", msg)
         if match:
             min_val = match.group(1)
