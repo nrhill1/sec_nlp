@@ -4,6 +4,7 @@ from unittest.mock import Mock
 
 from langchain_core.documents import Document
 from langchain_core.runnables import Runnable, RunnableConfig
+from rich.progress import Progress, TaskID
 
 from sec_nlp.pipelines.presets.analyze import (
     AnalysisInput,
@@ -64,7 +65,15 @@ class _CachedSearchPipeline(AnalyzePipeline):
     def _build_components(self) -> None:
         self._search_runner = Mock(spec=SearchRunnable)
 
-    def _process_symbol(self, symbol: str) -> tuple[list[Path], ChunkStats]:
+    def _process_symbol(
+        self,
+        symbol: str,
+        *,
+        progress: Progress | None = None,
+        phase_task: TaskID | None = None,
+        prefetched: tuple[list[Document], set[str] | None, dict[str, float]]
+        | None = None,
+    ) -> tuple[list[Path], ChunkStats]:
         self._search_results_by_query = {
             "cached-query": SearchQueryResults(filtered=[], total=0)
         }

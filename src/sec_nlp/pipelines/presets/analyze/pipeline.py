@@ -2,6 +2,7 @@
 """Generalized semantic search and confidence analysis pipeline for SEC filings."""
 
 from collections import defaultdict
+from concurrent.futures import Future, ThreadPoolExecutor
 from pathlib import Path
 from statistics import mean, median
 from time import perf_counter
@@ -22,6 +23,7 @@ from rich.progress import (
     BarColumn,
     Progress,
     SpinnerColumn,
+    TaskID,
     TaskProgressColumn,
     TextColumn,
     TimeElapsedColumn,
@@ -155,6 +157,7 @@ class AnalyzePipeline(BasePipeline):
     )
     _symbol_profiles: dict[str, JsonDict] = PrivateAttr(default_factory=dict)
     _processing_state: ProcessingState | None = PrivateAttr(default=None)
+    _phase_start: float = PrivateAttr(default=0.0)
 
     @classmethod
     def config_model(cls) -> type[AnalyzeConfig]:
@@ -441,31 +444,80 @@ class AnalyzePipeline(BasePipeline):
                 TextColumn("[dim]·[/dim]"),
                 TimeRemainingColumn(),
                 console=console,
-                transient=True,  # Auto-hide after completion
+                transient=True,
             ) as progress:
-                task = progress.add_task(
+                overall_task = progress.add_task(
                     "Processing symbols",
                     total=len(self.config.symbols),
                 )
-                for _index, symbol in enumerate(self.config.symbols):
-                    progress.update(task, description=f"Processing {symbol}")
-                    symbol_start = perf_counter()
-                    symbol_outputs, chunk_stats = self._process_symbol(symbol)
-                    symbol_elapsed = perf_counter() - symbol_start
-                    logger.info("Completed %s in %.1fs", symbol, symbol_elapsed)
-                    symbol_output_set = set(symbol_outputs)
-                    output_set.update(symbol_output_set)
-                    total_analyzed_chunks += int(
-                        chunk_stats.get("analyzed_count", 0)
-                    )
-                    symbol_meta: SymbolRunMetadata = {
-                        "outputs": len(symbol_output_set),
-                        "chunk_stats": chunk_stats,
-                    }
-                    symbol_key = str(symbol)
-                    # SymbolRunMetadata is a TypedDict compatible with ResultValue
-                    metadata[symbol_key] = symbol_meta  # type: ignore[assignment]
-                    progress.advance(task)
+                # Row 2: per-symbol phase detail (hidden until needed)
+                phase_task = progress.add_task("", total=None, visible=False)
+                symbols = self.config.symbols
+                prefetch_future: (
+                    Future[tuple[list[Document], set[str] | None, Timings]]
+                    | None
+                ) = None
+                prefetch_executor = ThreadPoolExecutor(
+                    max_workers=1, thread_name_prefix="prefetch"
+                )
+
+                try:
+                    for idx, symbol in enumerate(symbols):
+                        progress.update(
+                            overall_task,
+                            description=f"Processing {symbol}",
+                        )
+                        symbol_start = perf_counter()
+
+                        # Collect prefetched data if available
+                        prefetched: (
+                            tuple[list[Document], set[str] | None, Timings]
+                            | None
+                        ) = None
+                        if prefetch_future is not None:
+                            try:
+                                prefetched = prefetch_future.result()
+                            except Exception:
+                                prefetched = None
+                            prefetch_future = None
+
+                        # Start prefetching next symbol's EFTS + docs
+                        next_symbol = (
+                            symbols[idx + 1] if idx + 1 < len(symbols) else None
+                        )
+                        if next_symbol is not None:
+                            prefetch_future = prefetch_executor.submit(
+                                self._prefetch_symbol, next_symbol
+                            )
+
+                        symbol_outputs, chunk_stats = self._process_symbol(
+                            symbol,
+                            progress=progress,
+                            phase_task=phase_task,
+                            prefetched=prefetched,
+                        )
+                        symbol_elapsed = perf_counter() - symbol_start
+                        logger.info(
+                            "Completed %s in %.1fs", symbol, symbol_elapsed
+                        )
+                        symbol_output_set = set(symbol_outputs)
+                        output_set.update(symbol_output_set)
+                        total_analyzed_chunks += int(
+                            chunk_stats.get("analyzed_count", 0)
+                        )
+                        symbol_meta: SymbolRunMetadata = {
+                            "outputs": len(symbol_output_set),
+                            "chunk_stats": chunk_stats,
+                        }
+                        symbol_key = str(symbol)
+                        metadata[symbol_key] = symbol_meta  # type: ignore[assignment]
+                        progress.update(phase_task, visible=False)
+                        self._phase_start = 0.0
+                        progress.advance(overall_task)
+                finally:
+                    if prefetch_future is not None:
+                        prefetch_future.cancel()
+                    prefetch_executor.shutdown(wait=False)
 
             if len(self._symbol_profiles) > 1:
                 run_component = self.config.run_path_component()
@@ -567,25 +619,92 @@ class AnalyzePipeline(BasePipeline):
                 prefix_color="dim",
             )
 
-    def _process_symbol(self, symbol: str) -> tuple[list[Path], ChunkStats]:
+    def _prefetch_symbol(
+        self, symbol: str
+    ) -> tuple[list[Document], set[str] | None, Timings]:
+        """Prefetch EFTS + document loading for a symbol in a background thread.
+
+        This overlaps I/O with the LLM analysis of the previous symbol.
+        """
+        self._loader.add_symbol(symbol)
+        timings: Timings = {}
+        docs, allowed_accessions = self._run_efts_and_load_docs(symbol, timings)
+        return docs, allowed_accessions, timings
+
+    def _update_phase(
+        self,
+        progress: Progress | None,
+        phase_task: TaskID | None,
+        symbol: str,
+        phase: str,
+        *,
+        total: int | None = None,
+    ) -> None:
+        """Update the phase sub-task description and optionally reset its total.
+
+        Tracks elapsed time per phase. When transitioning to a new phase,
+        the previous phase's elapsed time is appended to its description
+        before updating to the new phase.
+        """
+        now = perf_counter()
+
+        # Log elapsed for the previous phase (if any)
+        if self._phase_start > 0:
+            elapsed = now - self._phase_start
+            logger.debug("%s phase completed in %.1fs", symbol, elapsed)
+
+        self._phase_start = now
+
+        if progress is None or phase_task is None:
+            return
+        update_kwargs: dict[str, str | int | bool | None] = {
+            "description": f"  ├─ {symbol}: {phase}",
+            "visible": True,
+        }
+        if total is not None:
+            update_kwargs["total"] = total
+            update_kwargs["completed"] = 0
+        else:
+            update_kwargs["total"] = None
+            update_kwargs["completed"] = 0
+        progress.update(phase_task, **update_kwargs)  # type: ignore[arg-type]
+
+    def _process_symbol(
+        self,
+        symbol: str,
+        *,
+        progress: Progress | None = None,
+        phase_task: TaskID | None = None,
+        prefetched: tuple[list[Document], set[str] | None, Timings]
+        | None = None,
+    ) -> tuple[list[Path], ChunkStats]:
         """Process a single symbol through the full analysis pipeline."""
         # Log divider + symbol header
         logger.info("\n" + "=" * 70)
         logger.info("Processing symbol: %s", symbol)
-        self._loader.add_symbol(symbol)
         timings: Timings = {}
 
-        # Phase 1: EFTS discovery and document loading
-        docs, allowed_accessions = self._run_efts_and_load_docs(symbol, timings)
+        # Phase 1: EFTS discovery and document loading (use prefetched if available)
+        self._update_phase(progress, phase_task, symbol, "Loading")
+        if prefetched is not None:
+            docs, allowed_accessions, prefetch_timings = prefetched
+            timings.update(prefetch_timings)
+        else:
+            self._loader.add_symbol(symbol)
+            docs, allowed_accessions = self._run_efts_and_load_docs(
+                symbol, timings
+            )
         if not docs:
             return [], self._empty_chunk_stats(timings)
 
         # Phase 2: Preprocessing
+        self._update_phase(progress, phase_task, symbol, "Preprocessing")
         docs = self._preprocess_documents(symbol, docs, timings)
         if not docs:
             return [], self._empty_chunk_stats(timings)
 
         # Phase 3: Market enrichment and chunk stats
+        self._update_phase(progress, phase_task, symbol, "Indexing")
         stats, market_data, market_context = self._enrich_and_index(
             symbol, docs, timings
         )
@@ -593,16 +712,22 @@ class AnalyzePipeline(BasePipeline):
         # Phase 4: Vector search and LLM analysis
         search_queries = self.config.get_search_queries()
         analysis_results, docs_for_analysis = self._run_search_and_analysis(
-            symbol, search_queries, timings
+            symbol,
+            search_queries,
+            timings,
+            progress=progress,
+            phase_task=phase_task,
         )
         stats["analyzed_count"] = len(analysis_results)
 
         # Phase 5: Post-processing (confidence, correlation)
+        self._update_phase(progress, phase_task, symbol, "Post-processing")
         relevant_results, market_correlation = self._postprocess_results(
             symbol, analysis_results, market_data
         )
 
         # Phase 6: Write outputs
+        self._update_phase(progress, phase_task, symbol, "Writing")
         output_files = self._write_symbol_outputs(
             symbol=symbol,
             docs=docs,
@@ -850,6 +975,9 @@ class AnalyzePipeline(BasePipeline):
         symbol: str,
         search_queries: list[str] | None,
         timings: Timings,
+        *,
+        progress: Progress | None = None,
+        phase_task: TaskID | None = None,
     ) -> tuple[list[AnalysisResultDict], list[Document]]:
         """Run vector search and LLM analysis."""
         if not search_queries or not self._vector_store:
@@ -859,6 +987,7 @@ class AnalyzePipeline(BasePipeline):
             return [], []
 
         # Vector search
+        self._update_phase(progress, phase_task, symbol, "Searching")
         per_symbol_filters = dict(self.config.search.metadata_filters)
         per_symbol_filters["symbol"] = [symbol]
         search_runner = self._search_runner
@@ -886,10 +1015,13 @@ class AnalyzePipeline(BasePipeline):
             docs_for_analysis, symbol=symbol, label="vector"
         )
 
-        # LLM analysis (no nested spinner — Progress bar is already active)
+        # LLM analysis — phase_task is updated with chunk-level detail inside analyze_chunks
         t0 = perf_counter()
         analysis_results = self._analysis_runner.analyze_chunks(
-            symbol, docs_for_analysis
+            symbol,
+            docs_for_analysis,
+            progress=progress,
+            task_id=phase_task,
         )
         timings["analyze"] = perf_counter() - t0
 

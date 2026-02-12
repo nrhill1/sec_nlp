@@ -60,6 +60,21 @@ class LLMConfig(BaseModel):
         description="Require JSON-formatted output from LLM",
     )
 
+    keep_alive: int | str | None = Field(
+        default=-1,
+        description="How long to keep model in VRAM (-1 = forever, 0 = unload immediately, '5m' = 5 minutes)",
+    )
+
+    num_gpu: int | None = Field(
+        default=-1,
+        description="Number of GPU layers to offload (-1 = all layers)",
+    )
+
+    num_ctx: int | None = Field(
+        default=None,
+        description="Context window size in tokens (None = model default)",
+    )
+
     ollama_kwargs: OllamaKwargs = Field(
         default_factory=dict,
         description="Additional keyword arguments for Ollama LLM",
@@ -112,6 +127,15 @@ class LLMConfig(BaseModel):
 
             if "num_predict" not in ollama_kwargs:
                 ollama_kwargs["num_predict"] = self.max_new_tokens
+            if (
+                "keep_alive" not in ollama_kwargs
+                and self.keep_alive is not None
+            ):
+                ollama_kwargs["keep_alive"] = self.keep_alive
+            if "num_gpu" not in ollama_kwargs and self.num_gpu is not None:
+                ollama_kwargs["num_gpu"] = self.num_gpu
+            if "num_ctx" not in ollama_kwargs and self.num_ctx is not None:
+                ollama_kwargs["num_ctx"] = self.num_ctx
 
             return build_ollama_llm(
                 model_name=self._ollama_model_name,

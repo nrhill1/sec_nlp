@@ -56,6 +56,12 @@ def build_ollama_llm(
         "OLLAMA_BASE_URL", "http://localhost:11434"
     )
 
+    # Apply performance defaults: keep model resident and offload all layers to GPU
+    if "keep_alive" not in kwargs:
+        kwargs["keep_alive"] = -1
+    if "num_gpu" not in kwargs:
+        kwargs["num_gpu"] = -1
+
     ollama_llm = OllamaLLM(
         model=model_name,
         base_url=base_url,

@@ -6,6 +6,7 @@ from __future__ import annotations
 import asyncio
 import re
 import time
+from time import perf_counter
 from uuid import UUID
 
 from langchain_core.callbacks.base import BaseCallbackHandler
@@ -16,7 +17,7 @@ from langchain_core.runnables import (
     RunnableSerializable,
 )
 from pydantic import BaseModel, ConfigDict, Field
-from tqdm import tqdm
+from rich.progress import Progress, TaskID
 
 from sec_nlp.core.infra.logger import logger
 from sec_nlp.pipelines.metadata.accession import get_accession_from_metadata
@@ -66,6 +67,11 @@ class AnalyzerRunnable(
     confidence_mode: str = Field(default="basic")
     include_raw_chunks: bool = Field(default=False)
     batch_size: int = Field(default=8, ge=1)
+    adaptive_batch_token_budget: int = Field(
+        default=32000,
+        ge=1000,
+        description="Token budget for adaptive batch sizing (chars / 4)",
+    )
     query_term_min_len: int = Field(default=3, ge=1)
     run_id: UUID | None = None
 
@@ -83,9 +89,21 @@ class AnalyzerRunnable(
         return self.analyze_chunks(input.symbol, input.docs)
 
     def analyze_chunks(
-        self, symbol: str, docs: list[Document]
+        self,
+        symbol: str,
+        docs: list[Document],
+        *,
+        progress: Progress | None = None,
+        task_id: TaskID | None = None,
     ) -> list[AnalysisResultDict]:
-        """Analyze document chunks using the LLM graph."""
+        """Analyze document chunks using the LLM graph.
+
+        Args:
+            symbol: Ticker symbol being analyzed.
+            docs: Document chunks to analyze.
+            progress: Optional Rich Progress instance for unified progress display.
+            task_id: Optional task ID within the Progress to update per-chunk.
+        """
         if len(docs) == 0:
             raise ValueError("Cannot analyze empty docs list")
 
@@ -111,28 +129,58 @@ class AnalyzerRunnable(
             )
 
         results: list[AnalysisResultDict] = []
+        effective_batch_size = self._compute_adaptive_batch_size(inputs)
 
-        bar_format = (
-            "{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining},"
-            " {rate_fmt}]"
-        )
-        with tqdm(
-            total=len(inputs),
-            desc=f"Analyzing content for {symbol}",
-            unit="chunk",
-            colour="cyan",
-            leave=False,
-            bar_format=bar_format,
-        ) as pbar:
-            for i in range(0, len(inputs), self.batch_size):
-                batch = inputs[i : i + self.batch_size]
-                batch_docs = docs[i : i + self.batch_size]
-                batch_results = self._process_batch(batch, batch_docs)
-                results.extend(batch_results)
-                pbar.update(len(batch))
-                pbar.set_postfix({"last_batch": len(batch)})
+        # Update the shared Rich progress task if provided
+        total_chunks = len(inputs)
+        if progress is not None and task_id is not None:
+            progress.update(
+                task_id,
+                total=total_chunks,
+                completed=0,
+                description=f"  ├─ {symbol}: Analyzing [0/{total_chunks}]",
+            )
+
+        analysis_start = perf_counter()
+        processed = 0
+        for i in range(0, total_chunks, effective_batch_size):
+            batch = inputs[i : i + effective_batch_size]
+            batch_docs = docs[i : i + effective_batch_size]
+            batch_results = self._process_batch(batch, batch_docs)
+            results.extend(batch_results)
+            processed += len(batch)
+
+            if progress is not None and task_id is not None:
+                elapsed = perf_counter() - analysis_start
+                rate = processed / elapsed if elapsed > 0 else 0
+                avg_time = elapsed / processed if processed > 0 else 0
+                progress.update(
+                    task_id,
+                    completed=processed,
+                    description=(
+                        f"  ├─ {symbol}: Analyzing [{processed}/{total_chunks}]"
+                        f" · {rate:.1f} chunks/s"
+                        f" · {avg_time:.1f}s/chunk"
+                    ),
+                )
 
         return results
+
+    def _compute_adaptive_batch_size(self, inputs: list[AnalysisInput]) -> int:
+        """Compute batch size based on total token budget.
+
+        Smaller chunks allow larger batches for better GPU saturation;
+        larger chunks use smaller batches to stay within context limits.
+        """
+        if not inputs:
+            return self.batch_size
+        avg_chunk_chars = sum(len(inp.chunk) for inp in inputs) / len(inputs)
+        # Rough estimate: ~4 chars per token
+        avg_tokens = avg_chunk_chars / 4
+        if avg_tokens <= 0:
+            return self.batch_size
+        adaptive = max(1, int(self.adaptive_batch_token_budget / avg_tokens))
+        return min(adaptive, self.batch_size)
 
     def analyze_search_hits(
         self,

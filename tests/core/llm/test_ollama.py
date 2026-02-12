@@ -27,6 +27,8 @@ class TestBuildOllamaLLM:
             temperature=0.1,
             top_k=10,
             top_p=0.5,
+            keep_alive=-1,
+            num_gpu=-1,
         )
         assert llm == mock_instance
 
@@ -47,6 +49,8 @@ class TestBuildOllamaLLM:
             temperature=0.1,
             top_k=10,
             top_p=0.5,
+            keep_alive=-1,
+            num_gpu=-1,
         )
         assert llm == mock_instance
 
@@ -66,6 +70,8 @@ class TestBuildOllamaLLM:
             temperature=0.7,
             top_k=10,
             top_p=0.5,
+            keep_alive=-1,
+            num_gpu=-1,
         )
         assert llm == mock_instance
 
@@ -88,6 +94,8 @@ class TestBuildOllamaLLM:
             temperature=0.1,
             top_k=10,
             top_p=0.5,
+            keep_alive=-1,
+            num_gpu=-1,
         )
         assert llm == mock_instance
 
@@ -110,6 +118,8 @@ class TestBuildOllamaLLM:
             temperature=0.1,
             top_k=10,
             top_p=0.5,
+            keep_alive=-1,
+            num_gpu=-1,
         )
         assert llm == mock_instance
 
@@ -136,6 +146,8 @@ class TestBuildOllamaLLM:
             top_p=0.9,
             num_ctx=4096,
             repeat_penalty=1.1,
+            keep_alive=-1,
+            num_gpu=-1,
         )
         assert llm == mock_instance
 
