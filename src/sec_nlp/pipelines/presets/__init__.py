@@ -3,6 +3,7 @@
 
 from .analyze import AnalyzeConfig, AnalyzePipeline
 from .exb import ExhibitConfig, ExhibitPipeline
+from .financials import FinancialsPipeline, FinancialsSettings
 from .warranty import WarrantyConfig, WarrantyPipeline
 
 __all__: tuple[str, ...] = (
@@ -10,6 +11,8 @@ __all__: tuple[str, ...] = (
     "AnalyzePipeline",
     "ExhibitConfig",
     "ExhibitPipeline",
+    "FinancialsPipeline",
+    "FinancialsSettings",
     "WarrantyConfig",
     "WarrantyPipeline",
 )

@@ -91,16 +91,16 @@ Inherit `FinancialsSettings` and `BasePipelineCommand`. Register in `root.py`.
 
 ## Implementation Steps
 
-1. Create `financials/` directory with `__init__.py`, `config.py`, `models.py`.
-2. Implement `FinancialFact` and `FinancialStatement` Pydantic models (frozen, extra="forbid").
-3. Implement `download.py` step — thin adapter calling existing downloader.
-4. Implement `extract.py` step — call `crates/xbrl` wrapper, apply taxonomy mapping.
-5. Implement `aggregate.py` step — pivot, compute ratios.
-6. Implement `pipeline.py` — wire steps together following `BasePipeline` pattern.
-7. Implement CSV/JSON output formatters.
-8. Add CLI command in `sec_nlp/cli/commands/financials.py`.
-9. Register in `root.py`.
-10. Write tests: mock the XBRL crate, verify taxonomy mapping, verify ratio computation with known values. No network.
+- [x] Create `financials/` directory with `__init__.py`, `config.py`, `models.py`.
+- [x] Implement `FinancialFact` and `FinancialStatement` Pydantic models (frozen, extra="forbid").
+- [x] Implement `download.py` step — thin adapter calling existing downloader.
+- [x] Implement `extract.py` step — call `crates/xbrl` wrapper, apply taxonomy mapping.
+- [x] Implement `aggregate.py` step — pivot, compute ratios.
+- [x] Implement `pipeline.py` — wire steps together following `BasePipeline` pattern.
+- [x] Implement CSV/JSON output formatters.
+- [x] Add CLI command in `sec_nlp/cli/commands/financials.py`.
+- [x] Register in `root.py`.
+- [x] Write tests: mock the XBRL crate, verify taxonomy mapping, verify ratio computation with known values. No network.
 
 ## Dependencies
 

@@ -17,6 +17,7 @@ from .analyze import AnalyzeCommand
 from .clean import Clean
 from .efts import EFTS
 from .exb import Exb
+from .financials import Financials
 from .market import Market
 from .qdrant import Qdrant
 from .runs import Runs
@@ -47,6 +48,10 @@ class Root(BaseSettings):
     )
 
     exb: CliSubCommand[Exb] = Field(description="Run the exhibit pipeline")
+
+    financials: CliSubCommand[Financials] = Field(
+        description="Run the financial statement extraction pipeline"
+    )
 
     efts: CliSubCommand[EFTS] = Field(
         description="Search SEC EDGAR filings using Full-Text Search API"

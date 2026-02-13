@@ -9,6 +9,8 @@ New Rust crates and Python modules to extend the project beyond its current scop
 - [x] `analyze` `market_correlation.py` migrated for cumulative return, return series, volume spike, and volatility calculations (with fallback path)
 - [x] `crates/xbrl` scaffolded and integrated (`lib.rs`, `python.rs`, parser/context/unit hydration, root `Makefile` target, and tests)
 - [x] `sec_nlp/core/edgar/xbrl_facts.py` wrapper + native/typing stubs (`types/xbrl/__init__.pyi`, `types/sec_nlp/core/edgar/xbrl_facts.pyi`)
+- [x] `sec_nlp/pipelines/presets/financials/` scaffolded and wired end-to-end (download/extract/aggregate/output + tests)
+- [x] `financials` CLI command added and registered in root command routing
 - [ ] Remaining crates/modules/pipelines in this roadmap
 
 ---
