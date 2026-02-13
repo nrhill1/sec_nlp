@@ -11,6 +11,8 @@ New Rust crates and Python modules to extend the project beyond its current scop
 - [x] `sec_nlp/core/edgar/xbrl_facts.py` wrapper + native/typing stubs (`types/xbrl/__init__.pyi`, `types/sec_nlp/core/edgar/xbrl_facts.pyi`)
 - [x] `sec_nlp/pipelines/presets/financials/` scaffolded and wired end-to-end (download/extract/aggregate/output + tests)
 - [x] `financials` CLI command added and registered in root command routing
+- [x] `sec_nlp/pipelines/presets/insider/` scaffolded and wired end-to-end (download/parse/aggregate/correlate/output + tests)
+- [x] `insider` CLI command added and registered in root command routing
 - [ ] Remaining crates/modules/pipelines in this roadmap
 
 ---
@@ -157,7 +159,7 @@ Leverages the existing `insider_parser.py` to build a full pipeline for insider 
 4. `correlate` — Cross-reference insider transaction dates with filing dates and price movement using `crates/corr`; flag unusual clusters (e.g., multiple officers selling before an 8-K)
 5. `output` — Transaction ledger (CSV), insider summary (YAML/JSON), alert list
 
-**CLI:** `sec-nlp insider AAPL --lookback 12m --alert-threshold 3`
+**CLI:** `sec-nlp insider AAPL --lookback-months 12m --alert-cluster-threshold 3`
 
 **Depends on:** existing `insider_parser.py`, `crates/corr`, `sec_nlp.core.market`
 

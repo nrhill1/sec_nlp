@@ -10,6 +10,10 @@ from .financials import (
     FinancialsPipeline as FinancialsPipeline,
     FinancialsSettings as FinancialsSettings,
 )
+from .insider import (
+    InsiderPipeline as InsiderPipeline,
+    InsiderSettings as InsiderSettings,
+)
 from .warranty import (
     WarrantyConfig as WarrantyConfig,
     WarrantyPipeline as WarrantyPipeline,
@@ -22,6 +26,8 @@ __all__ = [
     "ExhibitPipeline",
     "FinancialsPipeline",
     "FinancialsSettings",
+    "InsiderPipeline",
+    "InsiderSettings",
     "WarrantyConfig",
     "WarrantyPipeline",
 ]

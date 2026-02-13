@@ -1,4 +1,3 @@
-
 from sec_nlp.core.edgar.xbrl_facts import XbrlParser as XbrlParser
 
 from ..models import FinancialFact as FinancialFact

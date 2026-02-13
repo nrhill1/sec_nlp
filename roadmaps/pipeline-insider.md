@@ -45,7 +45,7 @@ src/sec_nlp/pipelines/presets/insider/
 ## Pipeline Steps
 
 ### 1. `download`
-Fetch Forms 3, 4, 5 for the target symbol using existing download infrastructure. Accept `--lookback 12m` to control date range.
+Fetch Forms 3, 4, 5 for the target symbol using existing download infrastructure. Accept `--lookback-months 12m` to control date range.
 
 ### 2. `parse`
 Call `InsiderParser` on each downloaded filing. Extract transactions: reporting person, relationship (officer/director/10% owner), transaction type (buy/sell/grant), shares, price, date, post-transaction holdings.
@@ -84,20 +84,20 @@ class InsiderSettings(BasePipelineSettings):
 ## CLI Command
 
 ```
-sec-nlp insider AAPL --lookback 12m --alert-threshold 3
+sec-nlp insider AAPL --lookback-months 12m --alert-cluster-threshold 3
 ```
 
 ## Implementation Steps
 
-1. Create `insider/` directory with boilerplate.
-2. Implement Pydantic models: `InsiderTransaction`, `InsiderLedger`, `InsiderAlert` (frozen, extra="forbid").
-3. Implement `download.py` — fetch Form 3/4/5 filings.
-4. Implement `parse.py` — call existing `InsiderParser`, map to Pydantic models.
-5. Implement `aggregate.py` — per-insider ledger, cluster detection.
-6. Implement `correlate.py` — cross-ref with filings and market data.
-7. Implement output formatters.
-8. Add CLI command, register in `root.py`.
-9. Write tests: mock parser output, verify aggregation and alerting logic. No network.
+- [x] Create `insider/` directory with boilerplate.
+- [x] Implement Pydantic models: `InsiderTransaction`, `InsiderLedger`, `InsiderAlert` (frozen, extra="forbid").
+- [x] Implement `download.py` — fetch Form 3/4/5 filings.
+- [x] Implement `parse.py` — call existing `InsiderParser`, map to Pydantic models.
+- [x] Implement `aggregate.py` — per-insider ledger, cluster detection.
+- [x] Implement `correlate.py` — cross-ref with filings and market data.
+- [x] Implement output formatters.
+- [x] Add CLI command, register in `root.py`.
+- [x] Write tests: mock parser output, verify aggregation and alerting logic. No network.
 
 ## Dependencies
 

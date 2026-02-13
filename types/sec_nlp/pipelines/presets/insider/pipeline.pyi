@@ -1,0 +1,24 @@
+from pathlib import Path
+from typing import ClassVar, Literal
+
+from sec_nlp.core.edgar.insider_parser import InsiderParser as InsiderParser
+from sec_nlp.pipelines import BasePipeline as BasePipeline
+
+from .config import InsiderSettings as InsiderSettings
+from .models import InsiderResult as InsiderResult
+
+class InsiderPipeline(BasePipeline):
+    pipeline_type: ClassVar[Literal["insider"]]
+    description: ClassVar[str]
+    requires_llm: ClassVar[bool]
+    config: InsiderSettings
+    @classmethod
+    def config_model(cls) -> type[InsiderSettings]: ...
+    @classmethod
+    def result_model(cls) -> type[InsiderResult]: ...
+    def _build_components(self) -> None: ...
+    def _get_parser(self) -> InsiderParser: ...
+    def run(self) -> InsiderResult: ...
+    def _process_symbol(
+        self, symbol: str
+    ) -> tuple[list[Path], dict[str, int | float | str | None], int, int]: ...
