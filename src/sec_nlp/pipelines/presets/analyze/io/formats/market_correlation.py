@@ -3,8 +3,14 @@
 from __future__ import annotations
 
 from datetime import date, timedelta
-from statistics import pstdev
 
+from sec_nlp.core.stats.correlation import (
+    CorrExtensionError,
+    cumulative_return as corr_cumulative_return,
+    simple_returns as corr_simple_returns,
+    std_dev as corr_std_dev,
+    volume_spike as corr_volume_spike,
+)
 from sec_nlp.pipelines.serialization import round_score
 from sec_nlp.pipelines.types import AnalysisResultDict
 from sec_nlp.types import JsonDict
@@ -28,36 +34,61 @@ def _select_quotes_for_window(
 def _compute_cumulative_return(
     quotes: list[MarketQuoteSummary],
 ) -> float | None:
-    if len(quotes) < 2:
+    closes = [quote.average_close for quote in quotes]
+    if len(closes) < 2:
         return None
-    first = quotes[0].average_close
-    last = quotes[-1].average_close
-    if first == 0:
-        return None
-    return (last / first) - 1.0
+    try:
+        return corr_cumulative_return(closes)
+    except CorrExtensionError:
+        first = closes[0]
+        if first == 0:
+            return None
+        return (closes[-1] / first) - 1.0
 
 
 def _compute_returns(
     quotes: list[MarketQuoteSummary],
 ) -> list[float]:
-    returns: list[float] = []
-    for prev, curr in zip(quotes, quotes[1:], strict=False):
-        if prev.average_close == 0:
-            continue
-        returns.append((curr.average_close / prev.average_close) - 1.0)
-    return returns
+    closes = [quote.average_close for quote in quotes]
+    if len(closes) < 2:
+        return []
+    try:
+        return corr_simple_returns(closes)
+    except CorrExtensionError:
+        returns: list[float] = []
+        for prev, curr in zip(closes, closes[1:], strict=False):
+            if prev == 0:
+                continue
+            returns.append((curr / prev) - 1.0)
+        return returns
+
+
+def _compute_volatility(
+    returns: list[float],
+) -> float | None:
+    if len(returns) < 2:
+        return None
+    try:
+        return corr_std_dev(returns)
+    except CorrExtensionError:
+        avg = sum(returns) / len(returns)
+        variance = sum((value - avg) ** 2 for value in returns) / len(returns)
+        return variance**0.5
 
 
 def _compute_volume_spike(
     quotes: list[MarketQuoteSummary],
 ) -> float | None:
-    if not quotes:
-        return None
     volumes = [quote.average_volume for quote in quotes]
-    avg_volume = sum(volumes) / len(volumes)
-    if avg_volume == 0:
+    if not volumes:
         return None
-    return max(volumes) / avg_volume
+    try:
+        return corr_volume_spike(volumes)
+    except CorrExtensionError:
+        avg_volume = sum(volumes) / len(volumes)
+        if avg_volume == 0:
+            return None
+        return max(volumes) / avg_volume
 
 
 def _compute_net_sentiment(
@@ -121,10 +152,8 @@ def build_market_correlation(
 
         pre_returns = _compute_returns(pre_quotes)
         post_returns = _compute_returns(post30_quotes)
-        pre_volatility = pstdev(pre_returns) if len(pre_returns) >= 2 else None
-        post_volatility = (
-            pstdev(post_returns) if len(post_returns) >= 2 else None
-        )
+        pre_volatility = _compute_volatility(pre_returns)
+        post_volatility = _compute_volatility(post_returns)
         volatility_change = (
             (post_volatility - pre_volatility)
             if post_volatility is not None and pre_volatility is not None

@@ -42,6 +42,12 @@ def __getattr__(name: str) -> object:
         "FilingRelation": "relationships",
         "FilingRelationshipGraph": "relationships",
         "FilingRelationType": "relationships",
+        "XbrlExtensionError": "xbrl_facts",
+        "XbrlFact": "xbrl_facts",
+        "XbrlParser": "xbrl_facts",
+        "create_xbrl_parser": "xbrl_facts",
+        "extract_facts": "xbrl_facts",
+        "extract_facts_from_file": "xbrl_facts",
     }
 
     all_exports = {**efts_exports, **other_exports}
@@ -78,6 +84,12 @@ __all__ = (
     "parse_holdings_documents",
     "parse_insider_documents",
     "serialize_relationship_graph",
+    "XbrlExtensionError",
+    "XbrlFact",
+    "XbrlParser",
+    "create_xbrl_parser",
+    "extract_facts",
+    "extract_facts_from_file",
 )
 
 # Enable lazy loading via __getattr__

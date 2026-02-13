@@ -2,6 +2,15 @@
 
 New Rust crates and Python modules to extend the project beyond its current scope of filing analysis, exhibit indexing, and warranty extraction.
 
+## Progress Snapshot (as of February 13, 2026)
+
+- [x] `crates/corr` scaffolded with core PyO3 exports, root `Makefile` integration, and type stubs
+- [x] `sec_nlp/core/stats/` module foundation implemented (`correlation.py`, `event_study.py`, `sector.py`, `cross_filing.py`)
+- [x] `analyze` `market_correlation.py` migrated for cumulative return, return series, volume spike, and volatility calculations (with fallback path)
+- [x] `crates/xbrl` scaffolded and integrated (`lib.rs`, `python.rs`, parser/context/unit hydration, root `Makefile` target, and tests)
+- [x] `sec_nlp/core/edgar/xbrl_facts.py` wrapper + native/typing stubs (`types/xbrl/__init__.pyi`, `types/sec_nlp/core/edgar/xbrl_facts.pyi`)
+- [ ] Remaining crates/modules/pipelines in this roadmap
+
 ---
 
 ## Rust Crates

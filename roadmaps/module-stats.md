@@ -100,13 +100,13 @@ def cross_filing_trend(
 
 ## Implementation Steps
 
-1. Create `stats/` directory with `__init__.py`.
-2. Implement `correlation.py` — lazy import of `corr` module, thin wrappers.
-3. Implement `EventStudyResult` Pydantic model.
-4. Implement `event_study.py` — fetch market data, call `crates/corr` event_study function.
-5. Implement `sector.py` — SIC code grouping, correlation matrix computation.
-6. Implement `cross_filing.py` — trend detection from sequential filing analysis results.
-7. Write tests: mock `corr` module and market data. Verify orchestration logic. No network.
+- [x] Create `stats/` directory with `__init__.py`.
+- [x] Implement `correlation.py` — lazy import of `corr` module, thin wrappers.
+- [x] Implement `EventStudyResult` Pydantic model.
+- [x] Implement `event_study.py` — fetch market data, call `crates/corr` event_study function.
+- [x] Implement `sector.py` — SIC code grouping, correlation matrix computation.
+- [x] Implement `cross_filing.py` — trend detection from sequential filing analysis results.
+- [x] Write tests: mock `corr` module and market data. Verify orchestration logic. No network.
 
 ## Dependencies
 

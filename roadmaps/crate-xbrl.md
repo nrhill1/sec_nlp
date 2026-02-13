@@ -18,6 +18,8 @@ Replace and generalize the Python-side XBRL parsing currently embedded in the wa
 
 If `crabrl`'s API proves insufficient (e.g., missing iXBRL support or incomplete context resolution for SEC filings), fall back to the `quick-xml`-based custom parser as described below — but start with the wrapper approach.
 
+Current status (February 13, 2026): initial implementation is using the custom parser path with PyO3 bindings and wrapper integration. `crabrl` wrapping is still an optional optimization pass.
+
 ## Existing Code to Study
 
 - `src/sec_nlp/pipelines/presets/warranty/pipeline.py` — `_load_xbrl_for_filing()` method shows the inline XBRL regex parsing pattern and context resolution logic that this crate replaces.
@@ -106,8 +108,7 @@ impl PyXbrlParser {
 ```toml
 [dependencies]
 pyo3 = { version = "0.23", features = ["extension-module"] }
-crabrl = "0.1"          # Core XBRL parser — use as primary engine
-quick-xml = "0.37"      # Fallback / iXBRL-specific parsing if crabrl gaps exist
+quick-xml = "0.37"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 chrono = "0.4"
@@ -117,29 +118,18 @@ once_cell = "1.19"
 
 ## Implementation Steps
 
-1. **Scaffold the crate.** Copy `Cargo.toml`, `Makefile`, and `build.rs` from `crates/efts/`. Update the crate name to `xbrl`. Add the `#[pymodule]` definition in `lib.rs` with placeholder exports.
-
-2. **Implement context parsing** (`context.rs`). Parse `<xbrli:context>` elements from both iXBRL and instance documents. Resolve period (instant vs. duration) and entity identifiers. Write unit tests with inline XML fixtures.
-
-3. **Implement iXBRL parsing** (`parser.rs`). Use `quick-xml` to stream-parse HTML. Match `<ix:nonFraction>`, `<ix:nonNumeric>`, and `<ix:fraction>` elements. Extract `name`, `contextRef`, `unitRef`, `scale`, `decimals`, and text content. Resolve against parsed contexts.
-
-4. **Implement traditional instance parsing** (`parser.rs`). Parse `<xbrl>` root documents. Extract elements by namespace prefix (e.g., `us-gaap:`, `ifrs-full:`). Resolve `contextRef` and `unitRef`.
-
-5. **Implement taxonomy normalization** (`taxonomy.rs`). Map common tag variants to canonical names (e.g., `Revenues`, `SalesRevenueNet`, `RevenueFromContractWithCustomerExcludingAssessedTax` → `revenue`). Support US-GAAP and IFRS namespaces.
-
-6. **Implement fact extraction and scaling** (`facts.rs`). Apply `scale` attribute (multiply by 10^scale). Deduplicate facts with identical (tag, context, value) tuples. Expose `extract_facts(html_or_xml: &str) -> Vec<XbrlFact>`.
-
-7. **Implement calculation linkbase validation** (`linkbase.rs`). Optional: parse `<calculationLink>` to verify parent-child sum relationships. Emit warnings for mismatches.
-
-8. **Implement PyO3 wrappers** (`python.rs`). Wrap `XbrlFact` as `PyXbrlFact` with `#[pyclass]`. Implement `PyXbrlParser` with `parse_ixbrl()`, `parse_instance()`, and `parse_file()` methods. Register in `lib.rs`.
-
-9. **Add to root Makefile.** Add `XBRL_DIR`, `XBRL_MANIFEST` variables. Add `rs-xbrl-%` delegation target. Include `maturin develop -m crates/xbrl/Cargo.toml` in the `build-ext` target.
-
-10. **Write Python wrapper** (`src/sec_nlp/core/edgar/xbrl_facts.py`). Thin module that imports the `xbrl` extension, calls `PyXbrlParser`, and converts results to Pydantic models. Follow the pattern in `src/sec_nlp/core/market.py` (lazy import via `import_module`, error wrapping).
-
-11. **Add type stubs** (`types/xbrl/__init__.pyi`).
-
-12. **Write tests.** Rust: unit tests per module with XML/HTML fixture strings. Python: tests in `tests/` with mocked extension (no network). Verify parsing of real 10-K iXBRL excerpts.
+- [x] **Scaffold the crate.** Added `Cargo.toml`, `Makefile`, `build.rs`, and module layout under `crates/xbrl/src/`.
+- [x] **Implement context parsing** (`context.rs`). Added context + unit extraction helpers and date inference with unit tests.
+- [x] **Implement iXBRL parsing** (`parser.rs`). Added extraction for `ix:nonFraction`/`ix:nonNumeric`/`ix:fraction` with attribute handling, scaling, and context/unit hydration.
+- [x] **Implement traditional instance parsing** (`parser.rs`). Added namespace-tag fact extraction with structural-tag filtering and context/unit hydration.
+- [x] **Implement taxonomy normalization** (`taxonomy.rs`). Added namespace normalization and a baseline US-GAAP/IFRS tag map with tests.
+- [x] **Implement fact extraction and scaling** (`facts.rs`). Added numeric normalization, deduplication, context/unit hydration, and exported `extract_facts` APIs via PyO3.
+- [x] **Implement calculation linkbase validation** (`linkbase.rs`). Added placeholder validator hook and wired parser calls so warning logic can be expanded without API changes.
+- [x] **Implement PyO3 wrappers** (`python.rs`, `lib.rs`). Added `XbrlFact`, `PyXbrlParser`, `extract_facts()`, and `extract_facts_from_file()` exports.
+- [x] **Add to root Makefile.** Added `XBRL_DIR`/`XBRL_MANIFEST`, `rs-xbrl-%`, `build-ext` integration, and `verify-rs` coverage.
+- [x] **Write Python wrapper** (`src/sec_nlp/core/edgar/xbrl_facts.py`). Added lazy-loaded adapter with Pydantic models and convenience functions.
+- [x] **Add type stubs** (`types/xbrl/__init__.pyi`). Added native extension stubs and Python wrapper stubs.
+- [x] **Write tests.** Added Rust unit tests under `crates/xbrl/src/*` and Python wrapper tests in `tests/core/edgar/test_xbrl_facts.py`.
 
 ## Integration Points
 

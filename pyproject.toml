@@ -44,6 +44,8 @@ cache-keys = [
   {file = "pyproject.toml"},
   {file = "crates/market/Cargo.toml"},
   {file = "crates/efts/Cargo.toml"},
+  {file = "crates/corr/Cargo.toml"},
+  {file = "crates/xbrl/Cargo.toml"},
   {file = "**/*.rs"},
 ]
 

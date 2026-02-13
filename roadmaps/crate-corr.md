@@ -101,31 +101,19 @@ statrs = "0.18"    # Normal distribution, t-distribution for p-values
 
 ## Implementation Steps
 
-1. **Scaffold the crate.** Copy boilerplate from `crates/efts/`. `crate-type = ["cdylib"]`. Minimal `lib.rs` with `#[pymodule]`.
-
-2. **Implement `util.rs`.** Mean, variance, rank (for Spearman). Pure Rust, no dependencies beyond std.
-
-3. **Implement `correlation.rs`.** Pearson: standard formula using mean/variance. Spearman: rank the inputs, then apply Pearson to ranks. Return `Err` if series lengths differ or are < 2.
-
-4. **Implement `returns.rs`.** `simple_returns`: `(p[i] / p[i-1]) - 1.0`. `cumulative_return`: `(last / first) - 1.0`. `car`: difference of cumulative returns. `rolling_returns`: sliding window of cumulative returns.
-
-5. **Implement `volatility.rs`.** Population std dev. Garman-Klass estimator from OHLC data. Average true range.
-
-6. **Implement `beta.rs`.** OLS slope of asset returns regressed on benchmark returns: `cov(a, b) / var(b)`.
-
-7. **Implement `event_study.rs`.** Split price series into pre/post windows around an event timestamp. Compute CAR for each window. Run a two-sample t-test (using `statrs::distribution::StudentsT`) on pre vs. post returns. Return `EventStudyResult { car_pre, car_post, t_stat, p_value }`.
-
-8. **Register all functions in `lib.rs`.** Add `m.add_function(wrap_pyfunction!(...))` for each exported function.
-
-9. **Add to root Makefile.** `CORR_DIR`, `CORR_MANIFEST`, `rs-corr-%` target, include in `build-ext`.
-
-10. **Write Python wrapper** (`src/sec_nlp/core/stats/correlation.py`). Thin wrappers: `pearson()`, `spearman()`, `car()`, `beta()`, `event_study()`. Lazy-import the `corr` module. Follow the `_load_market_module()` pattern from `src/sec_nlp/core/market.py`.
-
-11. **Migrate `market_correlation.py`.** Replace `_compute_cumulative_return()`, `_compute_returns()`, `_compute_volume_spike()` with calls to the `corr` crate wrappers. Keep the Python functions as thin adapters.
-
-12. **Add type stubs** (`types/corr/__init__.pyi`).
-
-13. **Write tests.** Rust: known-answer tests (precomputed correlation values, returns). Python: mock the extension, test the wrapper layer. No network.
+- [x] **Scaffold the crate.** Copy boilerplate from `crates/efts/`. `crate-type = ["cdylib"]`. Minimal `lib.rs` with `#[pymodule]`.
+- [x] **Implement `util.rs`.** Mean, variance, rank (for Spearman). Pure Rust, no dependencies beyond std.
+- [x] **Implement `correlation.rs`.** Pearson: standard formula using mean/variance. Spearman: rank the inputs, then apply Pearson to ranks. Return `Err` if series lengths differ or are < 2.
+- [x] **Implement `returns.rs`.** `simple_returns`: `(p[i] / p[i-1]) - 1.0`. `cumulative_return`: `(last / first) - 1.0`. `car`: difference of cumulative returns. `rolling_returns`: sliding window of cumulative returns.
+- [x] **Implement `volatility.rs`.** Population std dev. Garman-Klass estimator from OHLC data. Average true range.
+- [x] **Implement `beta.rs`.** OLS slope of asset returns regressed on benchmark returns: `cov(a, b) / var(b)`.
+- [x] **Implement `event_study.rs`.** Split price series into pre/post windows around an event timestamp. Compute CAR for each window. Run a two-sample t-test (using `statrs::distribution::StudentsT`) on pre vs. post returns. Return `EventStudyResult { car_pre, car_post, t_stat, p_value }`.
+- [x] **Register all functions in `lib.rs`.** Add `m.add_function(wrap_pyfunction!(...))` for each exported function.
+- [x] **Add to root Makefile.** `CORR_DIR`, `CORR_MANIFEST`, `rs-corr-%` target, include in `build-ext`.
+- [x] **Write Python wrapper** (`src/sec_nlp/core/stats/correlation.py`). Thin wrappers: `pearson()`, `spearman()`, `car()`, `beta()`, `event_study()`. Lazy-import the `corr` module. Follow the `_load_market_module()` pattern from `src/sec_nlp/core/market.py`.
+- [x] **Complete `market_correlation.py` migration.** `_compute_cumulative_return()`, `_compute_returns()`, `_compute_volume_spike()`, and volatility now delegate to `sec_nlp.core.stats.correlation` with fallback behavior.
+- [x] **Add type stubs** (`types/corr/__init__.pyi`).
+- [x] **Expand tests.** Rust unit tests and Python tests now cover market-correlation migration and wrapper forwarding/error behavior.
 
 ## Testing Strategy
 

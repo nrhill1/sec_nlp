@@ -19,6 +19,10 @@ RUST_DIR := $(ROOT_DIR)/crates/market
 MARKET_MANIFEST := $(RUST_DIR)/Cargo.toml
 EFTS_DIR := $(ROOT_DIR)/crates/efts
 EFTS_MANIFEST := $(EFTS_DIR)/Cargo.toml
+CORR_DIR := $(ROOT_DIR)/crates/corr
+CORR_MANIFEST := $(CORR_DIR)/Cargo.toml
+XBRL_DIR := $(ROOT_DIR)/crates/xbrl
+XBRL_MANIFEST := $(XBRL_DIR)/Cargo.toml
 
 # Maturin
 MATURIN_FLAGS ?=
@@ -63,18 +67,22 @@ help:
 	@echo "  py-<target>            Run Python target (e.g., py-lint, py-test)"
 	@echo "  rs-m-<target>          Run Rust target for market (e.g., rs-m-dev)"
 	@echo "  rs-sg-<target>         Run Rust target for efts (e.g., rs-sg-dev)"
+	@echo "  rs-corr-<target>       Run Rust target for corr (e.g., rs-corr-dev)"
+	@echo "  rs-xbrl-<target>       Run Rust target for xbrl (e.g., rs-xbrl-dev)"
 	@echo "  rs-clean               Clean Rust build artifacts"
 	@echo "  rs-clean-all           Clean Rust artifacts + sccache"
 	@echo "  rs-clean-sccache       Clear sccache cache"
 	@echo "  maturin-dev            Build + install Rust extension via maturin"
 	@echo "  maturin-build          Build release wheels via maturin"
 	@echo "  maturin-sdist          Build a source distribution via maturin"
-	@echo "  build-ext              Build + install Rust extensions (market + efts)"
+	@echo "  build-ext              Build + install Rust extensions (market + efts + corr + xbrl)"
 	@echo ""
 	@echo "For detailed help on each subsystem, run:"
 	@echo "  make -C src help       # Python commands"
 	@echo "  make -C crates/market help  # Market (Rust) commands"
 	@echo "  make -C crates/efts help  # efts (Rust) commands"
+	@echo "  make -C crates/corr help  # corr (Rust) commands"
+	@echo "  make -C crates/xbrl help  # xbrl (Rust) commands"
 	@echo ""
 	@echo "CI/CD:"
 	@echo "  ci                     Full CI pipeline"
@@ -154,6 +162,14 @@ rs-m-%:
 rs-sg-%:
 	@$(MAKE) -C $(EFTS_DIR) $*
 
+.PHONY: rs-corr-%
+rs-corr-%:
+	@$(MAKE) -C $(CORR_DIR) $*
+
+.PHONY: rs-xbrl-%
+rs-xbrl-%:
+	@$(MAKE) -C $(XBRL_DIR) $*
+
 # =========================================================================
 # Maturin Targets
 # =========================================================================
@@ -175,6 +191,8 @@ build-ext: ready
 	@echo "==> Building Rust extensions..."
 	@RUSTFLAGS="$(RUSTFLAGS_DEV)" maturin develop -m $(MARKET_MANIFEST) $(MATURIN_FLAGS)
 	@RUSTFLAGS="$(RUSTFLAGS_DEV)" maturin develop -m $(EFTS_MANIFEST) $(MATURIN_FLAGS)
+	@RUSTFLAGS="$(RUSTFLAGS_DEV)" maturin develop -m $(CORR_MANIFEST) $(MATURIN_FLAGS)
+	@RUSTFLAGS="$(RUSTFLAGS_DEV)" maturin develop -m $(XBRL_MANIFEST) $(MATURIN_FLAGS)
 	@echo "✓ Rust extensions built"
 	@echo ""
 
@@ -220,6 +238,8 @@ verify-py: ready
 verify-rs: ready
 	@$(MAKE) rs-m-test
 	@$(MAKE) rs-sg-test
+	@$(MAKE) rs-corr-test
+	@$(MAKE) rs-xbrl-test
 
 .PHONY: verify-all
 verify-all: ready
