@@ -6,9 +6,20 @@ from pathlib import Path
 from typing import ClassVar, Literal
 
 from pydantic import PrivateAttr
+from rich.progress import (
+    BarColumn,
+    Progress,
+    SpinnerColumn,
+    TaskID,
+    TaskProgressColumn,
+    TextColumn,
+    TimeElapsedColumn,
+    TimeRemainingColumn,
+)
 
 from sec_nlp.core.edgar.insider_parser import InsiderParser
 from sec_nlp.core.infra.logger import logger
+from sec_nlp.core.infra.rich_console import get_rich_console
 from sec_nlp.pipelines import BasePipeline
 from sec_nlp.pipelines.output_io import build_run_file_stem
 from sec_nlp.types import ResultDict
@@ -77,14 +88,46 @@ class InsiderPipeline(BasePipeline):
             total_transactions = 0
             total_alerts = 0
 
-            for symbol in self.config.symbols:
-                symbol_outputs, symbol_meta, tx_count, alert_count = (
-                    self._process_symbol(symbol.upper())
+            console = get_rich_console()
+            with Progress(
+                SpinnerColumn(),
+                TextColumn("[bold cyan]{task.description}"),
+                BarColumn(complete_style="green", finished_style="bold green"),
+                TaskProgressColumn(),
+                TimeElapsedColumn(),
+                TextColumn("[dim]·[/dim]"),
+                TimeRemainingColumn(),
+                console=console,
+                transient=True,
+            ) as progress:
+                overall_task = progress.add_task(
+                    "Processing symbols",
+                    total=len(self.config.symbols),
                 )
-                outputs.extend(symbol_outputs)
-                metadata[symbol.upper()] = symbol_meta
-                total_transactions += tx_count
-                total_alerts += alert_count
+                phase_task = progress.add_task("", total=None, visible=False)
+
+                for symbol in self.config.symbols:
+                    normalized_symbol = symbol.upper()
+                    progress.update(
+                        overall_task,
+                        description=f"Processing {normalized_symbol}",
+                    )
+
+                    symbol_outputs, symbol_meta, tx_count, alert_count = (
+                        self._process_symbol(
+                            normalized_symbol,
+                            progress=progress,
+                            phase_task=phase_task,
+                        )
+                    )
+
+                    outputs.extend(symbol_outputs)
+                    metadata[normalized_symbol] = symbol_meta
+                    total_transactions += tx_count
+                    total_alerts += alert_count
+
+                    progress.update(phase_task, visible=False)
+                    progress.advance(overall_task)
 
             self.config.complete_run(success=True, metadata=metadata)
             return InsiderResult(
@@ -104,11 +147,23 @@ class InsiderPipeline(BasePipeline):
             )
 
     def _process_symbol(
-        self, symbol: str
+        self,
+        symbol: str,
+        *,
+        progress: Progress | None = None,
+        phase_task: TaskID | None = None,
     ) -> tuple[list[Path], dict[str, int | float | str | None], int, int]:
+        self._update_phase(progress, phase_task, symbol, "Downloading")
         filings = download_insider_filings(symbol=symbol, settings=self.config)
         parser = self._get_parser()
 
+        self._update_phase(
+            progress,
+            phase_task,
+            symbol,
+            "Parsing",
+            total=len(filings),
+        )
         transactions: list[InsiderTransaction] = []
         for filing in filings:
             transactions.extend(
@@ -118,7 +173,10 @@ class InsiderPipeline(BasePipeline):
                     parser=parser,
                 )
             )
+            if progress is not None and phase_task is not None:
+                progress.advance(phase_task)
 
+        self._update_phase(progress, phase_task, symbol, "Aggregating")
         ledgers = build_insider_ledgers(transactions)
         clusters = find_trade_clusters(
             transactions,
@@ -127,6 +185,7 @@ class InsiderPipeline(BasePipeline):
         )
         net_buy_ratio = compute_net_buy_ratio(transactions)
 
+        self._update_phase(progress, phase_task, symbol, "Correlating")
         alerts, correlation_meta = correlate_insider_activity(
             symbol=symbol,
             transactions=transactions,
@@ -134,6 +193,7 @@ class InsiderPipeline(BasePipeline):
             settings=self.config,
         )
 
+        self._update_phase(progress, phase_task, symbol, "Writing")
         outputs = self._write_outputs(
             symbol=symbol,
             filings_processed=len(filings),
@@ -161,6 +221,29 @@ class InsiderPipeline(BasePipeline):
         }
 
         return outputs, metadata, len(transactions), len(alerts)
+
+    def _update_phase(
+        self,
+        progress: Progress | None,
+        phase_task: TaskID | None,
+        symbol: str,
+        phase: str,
+        *,
+        total: int | None = None,
+    ) -> None:
+        if progress is None or phase_task is None:
+            return
+        update_kwargs: dict[str, str | int | bool | None] = {
+            "description": f"  ├─ {symbol}: {phase}",
+            "visible": True,
+        }
+        if total is None:
+            update_kwargs["total"] = None
+            update_kwargs["completed"] = 0
+        else:
+            update_kwargs["total"] = total
+            update_kwargs["completed"] = 0
+        progress.update(phase_task, **update_kwargs)
 
     def _write_outputs(
         self,

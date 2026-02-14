@@ -1,6 +1,11 @@
 from pathlib import Path
 from typing import ClassVar, Literal
 
+from rich.progress import (
+    Progress as Progress,
+    TaskID as TaskID,
+)
+
 from sec_nlp.core.edgar.insider_parser import InsiderParser as InsiderParser
 from sec_nlp.pipelines import BasePipeline as BasePipeline
 
@@ -20,5 +25,18 @@ class InsiderPipeline(BasePipeline):
     def _get_parser(self) -> InsiderParser: ...
     def run(self) -> InsiderResult: ...
     def _process_symbol(
-        self, symbol: str
+        self,
+        symbol: str,
+        *,
+        progress: Progress | None = None,
+        phase_task: TaskID | None = None,
     ) -> tuple[list[Path], dict[str, int | float | str | None], int, int]: ...
+    def _update_phase(
+        self,
+        progress: Progress | None,
+        phase_task: TaskID | None,
+        symbol: str,
+        phase: str,
+        *,
+        total: int | None = None,
+    ) -> None: ...
