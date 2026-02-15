@@ -4,6 +4,7 @@
 from .analyze import AnalyzeConfig, AnalyzePipeline
 from .exb import ExhibitConfig, ExhibitPipeline
 from .financials import FinancialsPipeline, FinancialsSettings
+from .holdings import HoldingsPipeline, HoldingsSettings
 from .insider import InsiderPipeline, InsiderSettings
 from .warranty import WarrantyConfig, WarrantyPipeline
 
@@ -14,6 +15,8 @@ __all__: tuple[str, ...] = (
     "ExhibitPipeline",
     "FinancialsPipeline",
     "FinancialsSettings",
+    "HoldingsPipeline",
+    "HoldingsSettings",
     "InsiderPipeline",
     "InsiderSettings",
     "WarrantyConfig",

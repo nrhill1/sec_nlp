@@ -9,6 +9,10 @@ from ...models import (
 )
 
 class InsiderSummaryPayload(BaseModel):
+    run_timestamp: str
+    run_short_id: int | None
+    run_id: str
+    run_short_id_display: str
     symbol: str
     filings_processed: int
     transactions: list[InsiderTransaction]
@@ -17,6 +21,10 @@ class InsiderSummaryPayload(BaseModel):
     metadata: dict[str, JsonValue]
 
 class InsiderAlertsPayload(BaseModel):
+    run_timestamp: str
+    run_short_id: int | None
+    run_id: str
+    run_short_id_display: str
     symbol: str
     alerts: list[InsiderAlert]
 

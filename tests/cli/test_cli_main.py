@@ -196,6 +196,32 @@ class TestNormalizeCliArgs:
             "21",
         ]
 
+    def test_expands_forms_multi_value_flag(self) -> None:
+        """Holdings forms flag should support space-separated values."""
+        from sec_nlp.cli.__main__ import _normalize_cli_args
+
+        argv = [
+            "holdings",
+            "AAPL",
+            "--forms",
+            "13F-HR",
+            "13F-HR/A",
+            "--quarters",
+            "2",
+        ]
+        normalized = _normalize_cli_args(argv)
+
+        assert normalized == [
+            "holdings",
+            "AAPL",
+            "--forms",
+            "13F-HR",
+            "--forms",
+            "13F-HR/A",
+            "--quarters",
+            "2",
+        ]
+
     def test_coerces_falsey_booleans(self) -> None:
         """Convert '--flag false' into '--no-flag' for boolean options."""
         from sec_nlp.cli.__main__ import _normalize_cli_args
@@ -210,3 +236,33 @@ class TestNormalizeCliArgs:
 
         assert "--no-search.export-results" in normalized
         assert "--no-verbose" in normalized
+
+    def test_quotes_numeric_symbol_positionals_for_symbol_commands(
+        self,
+    ) -> None:
+        """Numeric CIK-like positional symbols should remain strings."""
+        from sec_nlp.cli.__main__ import _normalize_cli_args
+
+        argv = [
+            "holdings",
+            "0000102909",
+            "--email",
+            "you@example.com",
+        ]
+        normalized = _normalize_cli_args(argv)
+
+        assert normalized[0] == "holdings"
+        assert normalized[1] == '"0000102909"'
+
+    def test_leaves_numeric_positionals_for_non_symbol_commands(self) -> None:
+        """Non-symbol commands should not rewrite numeric positionals."""
+        from sec_nlp.cli.__main__ import _normalize_cli_args
+
+        argv = [
+            "runs",
+            "delete",
+            "123",
+        ]
+        normalized = _normalize_cli_args(argv)
+
+        assert normalized == argv

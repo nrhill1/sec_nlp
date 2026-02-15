@@ -15,6 +15,10 @@ class InsiderSummaryPayload(BaseModel):
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
+    run_timestamp: str
+    run_short_id: int | None = None
+    run_id: str
+    run_short_id_display: str
     symbol: str
     filings_processed: int
     transactions: list[InsiderTransaction] = Field(default_factory=list)
@@ -28,6 +32,10 @@ class InsiderAlertsPayload(BaseModel):
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
+    run_timestamp: str
+    run_short_id: int | None = None
+    run_id: str
+    run_short_id_display: str
     symbol: str
     alerts: list[InsiderAlert] = Field(default_factory=list)
 

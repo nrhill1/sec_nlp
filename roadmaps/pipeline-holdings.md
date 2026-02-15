@@ -92,15 +92,15 @@ sec-nlp holdings AAPL --quarters 4 --top-holders 20
 
 ## Implementation Steps
 
-1. Create `holdings/` directory with boilerplate.
-2. Implement Pydantic models: `HoldingPosition`, `HoldingsDiff`, `OwnershipSummary` (frozen, extra="forbid").
-3. Implement `download.py` — fetch 13F-HR filings. Support both by-filer and by-CUSIP modes.
-4. Implement `parse.py` — call existing `HoldingsParser`, map to Pydantic models.
-5. Implement `diff.py` — quarter-over-quarter comparison. Key by (filer_cik, cusip) to detect adds/exits/changes.
-6. Implement `aggregate.py` — compute top holders, HHI, total ownership.
-7. Implement output formatters.
-8. Add CLI command, register in `root.py`.
-9. Write tests: mock parser output, verify diff logic (add/exit/increase/decrease), verify HHI computation. No network.
+- [x] Create `holdings/` directory with boilerplate.
+- [x] Implement Pydantic models: `HoldingPosition`, `HoldingsDiff`, `OwnershipSummary` (frozen, extra="forbid").
+- [x] Implement `download.py` — fetch 13F-HR filings.
+- [x] Implement `parse.py` — call existing `HoldingsParser`, map to Pydantic models.
+- [x] Implement `diff.py` — quarter-over-quarter comparison (adds/exits/increases/decreases).
+- [x] Implement `aggregate.py` — compute top holdings, concentration HHI, and totals.
+- [x] Implement output formatters.
+- [x] Add CLI command, register in `root.py`.
+- [x] Write tests: mock parser output, verify diff logic (add/exit/increase/decrease), verify HHI computation. No network.
 
 ## Dependencies
 

@@ -8,6 +8,10 @@ from ...models import FinancialStatement as FinancialStatement
 from ...steps.aggregate import FinancialDelta as FinancialDelta
 
 class FinancialsOutputPayload(BaseModel):
+    run_timestamp: str
+    run_short_id: int | None
+    run_id: str
+    run_short_id_display: str
     symbol: str
     filings_processed: int
     periods: list[FinancialStatement]

@@ -18,6 +18,7 @@ from .clean import Clean
 from .efts import EFTS
 from .exb import Exb
 from .financials import Financials
+from .holdings import Holdings
 from .insider import Insider
 from .market import Market
 from .qdrant import Qdrant
@@ -52,6 +53,10 @@ class Root(BaseSettings):
 
     financials: CliSubCommand[Financials] = Field(
         description="Run the financial statement extraction pipeline"
+    )
+
+    holdings: CliSubCommand[Holdings] = Field(
+        description="Run the institutional holdings analysis pipeline"
     )
 
     insider: CliSubCommand[Insider] = Field(

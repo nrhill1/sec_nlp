@@ -200,11 +200,13 @@ class RegulatoryExposureOutput(BaseModel):
 
 ## Implementation Steps (All Runnables)
 
-1. Create each runnable file in `src/sec_nlp/pipelines/presets/analyze/runnables/`.
-2. Define input/output Pydantic models (frozen, extra="forbid").
-3. Implement the `RunnableSerializable` subclass with `invoke()` method.
-4. Register in the runnables `__init__.py` for discoverability.
-5. Write tests for each: mock crate wrappers and market data, verify computation logic. No network.
+- [x] Implement `sector_correlation.py` with typed input/output models and strongest-pair selection.
+- [x] Implement `filing_sentiment_diff.py` with per-topic sentiment deltas and risk-factor set diffing.
+- [ ] Implement `earnings_surprise.py`.
+- [ ] Implement `supply_chain_map.py`.
+- [ ] Implement `regulatory_exposure.py`.
+- [x] Register implemented runnables in `src/sec_nlp/pipelines/presets/analyze/runnables/__init__.py`.
+- [x] Add runnable tests (no network) for sector correlation and filing sentiment diff.
 
 ## Testing Strategy
 

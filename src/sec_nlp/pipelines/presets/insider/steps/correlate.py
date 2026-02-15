@@ -42,14 +42,14 @@ def _parse_iso_date(value: str | None) -> date | None:
 def _owner_name(transaction: InsiderTransaction) -> str:
     if transaction.owner_name:
         return transaction.owner_name
-    if transaction.owner_cik:
-        return transaction.owner_cik
+    if transaction.owner_cik is not None:
+        return str(transaction.owner_cik)
     return "unknown"
 
 
 def _owner_key(transaction: InsiderTransaction) -> str:
-    if transaction.owner_cik:
-        return transaction.owner_cik
+    if transaction.owner_cik is not None:
+        return str(transaction.owner_cik)
     if transaction.owner_name:
         return transaction.owner_name.strip().lower()
     return "unknown"

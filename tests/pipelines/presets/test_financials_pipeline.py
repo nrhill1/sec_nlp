@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from datetime import date
 from pathlib import Path
 from types import SimpleNamespace
@@ -233,3 +234,17 @@ def test_pipeline_run_writes_outputs_with_mocked_steps(
     assert len(result.outputs) == 3
     for output_path in result.outputs:
         assert output_path.exists()
+
+    json_path = next(path for path in result.outputs if path.suffix == ".json")
+    payload = json.loads(json_path.read_text())
+    expected_short_id = config.short_id if config.short_id > 0 else None
+    assert payload["run_id"] == str(config.run_id)
+    assert payload["run_short_id"] == expected_short_id
+    assert isinstance(payload["run_timestamp"], str)
+
+    csv_path = next(path for path in result.outputs if path.suffix == ".csv")
+    lines = csv_path.read_text().splitlines()
+    assert lines[0].startswith("# run_timestamp:")
+    assert lines[1].startswith("# run_short_id:")
+    assert lines[2].startswith("# run_id:")
+    assert lines[3].startswith("# run_short_id_display:")

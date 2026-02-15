@@ -1,9 +1,13 @@
 from pathlib import Path
 from typing import ClassVar, Literal
 
+from rich.progress import (
+    Progress as Progress,
+    TaskID as TaskID,
+)
+
 from sec_nlp.core.edgar.xbrl_facts import XbrlParser as XbrlParser
 from sec_nlp.pipelines import BasePipeline as BasePipeline
-from sec_nlp.types import ResultDict as ResultDict
 
 from .config import FinancialsSettings as FinancialsSettings
 from .models import FinancialsResult as FinancialsResult
@@ -21,5 +25,18 @@ class FinancialsPipeline(BasePipeline):
     def _get_parser(self) -> XbrlParser: ...
     def run(self) -> FinancialsResult: ...
     def _process_symbol(
-        self, symbol: str
-    ) -> tuple[list[Path], ResultDict, int]: ...
+        self,
+        symbol: str,
+        *,
+        progress: Progress | None = None,
+        phase_task: TaskID | None = None,
+    ) -> tuple[list[Path], dict[str, int | str], int]: ...
+    def _update_phase(
+        self,
+        progress: Progress | None,
+        phase_task: TaskID | None,
+        symbol: str,
+        phase: str,
+        *,
+        total: int | None = None,
+    ) -> None: ...

@@ -105,7 +105,7 @@ def _map_document(
         transaction_index=_coerce_int(metadata.get("transaction_index")),
         transaction_date=_tx_date(metadata),
         owner_name=_coerce_str(metadata.get("reporting_owner_name")),
-        owner_cik=_coerce_str(metadata.get("reporting_owner_cik")),
+        owner_cik=_coerce_int(metadata.get("reporting_owner_cik")),
         relationship_roles=_coerce_roles(
             metadata.get("relationship_to_issuer")
         ),

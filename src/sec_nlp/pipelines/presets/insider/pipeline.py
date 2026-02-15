@@ -21,7 +21,10 @@ from sec_nlp.core.edgar.insider_parser import InsiderParser
 from sec_nlp.core.infra.logger import logger
 from sec_nlp.core.infra.rich_console import get_rich_console
 from sec_nlp.pipelines import BasePipeline
-from sec_nlp.pipelines.output_io import build_run_file_stem
+from sec_nlp.pipelines.output_io import (
+    build_run_file_stem,
+    build_run_header_fields,
+)
 from sec_nlp.types import ResultDict
 
 from .config import InsiderSettings
@@ -259,8 +262,14 @@ class InsiderPipeline(BasePipeline):
     ) -> list[Path]:
         symbol_out = self.config.get_symbol_output_dir(symbol)
         base_stem = build_run_file_stem(symbol, "insider", self.config.run_id)
+        run_header = build_run_header_fields(
+            run_timestamp=self.config.run_timestamp,
+            run_id=self.config.run_id,
+            run_short_id=self.config.short_id,
+        )
 
         summary_payload = InsiderSummaryPayload(
+            **run_header,
             symbol=symbol,
             filings_processed=filings_processed,
             transactions=transactions,
@@ -273,13 +282,21 @@ class InsiderPipeline(BasePipeline):
                 **correlation_meta,
             },
         )
-        alerts_payload = InsiderAlertsPayload(symbol=symbol, alerts=alerts)
+        alerts_payload = InsiderAlertsPayload(
+            **run_header,
+            symbol=symbol,
+            alerts=alerts,
+        )
 
         outputs: list[Path] = []
 
         if self.config.output_format in ("csv", "all"):
             ledger_path = symbol_out / f"{base_stem}_ledger.csv"
-            write_insider_ledger_csv(ledger_path, transactions)
+            write_insider_ledger_csv(
+                ledger_path,
+                transactions,
+                header_fields=run_header,
+            )
             outputs.append(ledger_path)
 
         if self.config.output_format in ("json", "all"):

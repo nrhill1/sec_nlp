@@ -14,7 +14,7 @@ class InsiderTransaction(BaseModel):
     transaction_index: int | None
     transaction_date: str | None
     owner_name: str | None
-    owner_cik: str | None
+    owner_cik: int | None
     relationship_roles: list[str]
     officer_title: str | None
     security_title: str | None
@@ -32,7 +32,7 @@ class InsiderTransaction(BaseModel):
 class InsiderLedger(BaseModel):
     owner_key: str
     owner_name: str | None
-    owner_cik: str | None
+    owner_cik: int | None
     total_transactions: int
     buy_transactions: int
     sell_transactions: int

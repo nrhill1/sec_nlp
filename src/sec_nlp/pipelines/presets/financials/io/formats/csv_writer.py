@@ -3,7 +3,11 @@
 from __future__ import annotations
 
 import csv
+from collections.abc import Mapping
 from pathlib import Path
+
+from sec_nlp.pipelines.output_io import write_csv_metadata_comments
+from sec_nlp.types import JsonValue
 
 from ...models import FinancialStatement
 
@@ -32,10 +36,14 @@ CSV_COLUMNS: tuple[str, ...] = (
 
 
 def write_financials_csv(
-    path: Path, statements: list[FinancialStatement]
+    path: Path,
+    statements: list[FinancialStatement],
+    *,
+    header_fields: Mapping[str, JsonValue] | None = None,
 ) -> None:
     """Write per-period financial statement rows to CSV."""
     with open(path, "w", encoding="utf-8", newline="") as handle:
+        write_csv_metadata_comments(handle, header_fields)
         writer = csv.DictWriter(handle, fieldnames=list(CSV_COLUMNS))
         writer.writeheader()
         for statement in statements:

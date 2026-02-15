@@ -13,6 +13,9 @@ New Rust crates and Python modules to extend the project beyond its current scop
 - [x] `financials` CLI command added and registered in root command routing
 - [x] `sec_nlp/pipelines/presets/insider/` scaffolded and wired end-to-end (download/parse/aggregate/correlate/output + tests)
 - [x] `insider` CLI command added and registered in root command routing
+- [x] `sec_nlp/pipelines/presets/holdings/` scaffolded and wired end-to-end (download/parse/diff/aggregate/output + tests)
+- [x] `holdings` CLI command added and registered in root command routing
+- [x] Analyze runnables `SectorCorrelationRunnable` + `FilingSentimentDiffRunnable` implemented and tested
 - [ ] Remaining crates/modules/pipelines in this roadmap
 
 ---

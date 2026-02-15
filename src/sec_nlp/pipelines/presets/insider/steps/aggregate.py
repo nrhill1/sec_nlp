@@ -23,7 +23,7 @@ class TradeCluster:
 @dataclass
 class _OwnerAccumulator:
     owner_name: str | None
-    owner_cik: str | None
+    owner_cik: int | None
     total_transactions: int = 0
     buy_transactions: int = 0
     sell_transactions: int = 0
@@ -42,8 +42,8 @@ def _parse_iso_date(value: str | None) -> date | None:
 
 
 def _owner_key(transaction: InsiderTransaction) -> str:
-    if transaction.owner_cik:
-        return transaction.owner_cik
+    if transaction.owner_cik is not None:
+        return str(transaction.owner_cik)
     if transaction.owner_name:
         return transaction.owner_name.strip().lower()
     return "unknown"
@@ -100,7 +100,7 @@ def build_insider_ledgers(
 
         if row.owner_name is None and transaction.owner_name:
             row.owner_name = transaction.owner_name
-        if row.owner_cik is None and transaction.owner_cik:
+        if row.owner_cik is None and transaction.owner_cik is not None:
             row.owner_cik = transaction.owner_cik
 
     ledger_rows: list[InsiderLedger] = []

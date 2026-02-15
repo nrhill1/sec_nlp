@@ -3,7 +3,11 @@
 from __future__ import annotations
 
 import csv
+from collections.abc import Mapping
 from pathlib import Path
+
+from sec_nlp.pipelines.output_io import write_csv_metadata_comments
+from sec_nlp.types import JsonValue
 
 from ...models import InsiderTransaction
 
@@ -33,10 +37,14 @@ LEDGER_COLUMNS: tuple[str, ...] = (
 
 
 def write_insider_ledger_csv(
-    path: Path, transactions: list[InsiderTransaction]
+    path: Path,
+    transactions: list[InsiderTransaction],
+    *,
+    header_fields: Mapping[str, JsonValue] | None = None,
 ) -> None:
     """Write one CSV row per insider transaction."""
     with open(path, "w", encoding="utf-8", newline="") as handle:
+        write_csv_metadata_comments(handle, header_fields)
         writer = csv.DictWriter(handle, fieldnames=list(LEDGER_COLUMNS))
         writer.writeheader()
         for transaction in transactions:

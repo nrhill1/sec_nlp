@@ -4,7 +4,10 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping
+from datetime import UTC, datetime
 from pathlib import Path
+from typing import TextIO
 from uuid import UUID
 
 from pydantic import BaseModel
@@ -47,6 +50,48 @@ def build_accession_file_stem(
     safe_acc = format_accession(accession)
     run_component = f"_{run_id}" if run_id is not None else ""
     return f"{symbol.lower()}_{suffix}_{safe_acc}{run_component}"
+
+
+def build_run_header_fields(
+    *,
+    run_timestamp: datetime,
+    run_id: UUID | str,
+    run_short_id: int | None,
+) -> dict[str, JsonValue]:
+    """Build a standard run header payload for output files."""
+    short_id = (
+        run_short_id
+        if isinstance(run_short_id, int) and run_short_id > 0
+        else None
+    )
+    run_id_text = str(run_id)
+    return {
+        "run_timestamp": run_timestamp.astimezone(UTC).isoformat(),
+        "run_short_id": short_id,
+        "run_id": run_id_text,
+        "run_short_id_display": f"#{short_id}"
+        if short_id is not None
+        else run_id_text,
+    }
+
+
+def write_csv_metadata_comments(
+    handle: TextIO,
+    header_fields: Mapping[str, JsonValue] | None = None,
+) -> None:
+    """Write metadata as commented CSV preamble lines.
+
+    The emitted `# key: value` lines keep the tabular data unchanged while
+    preserving run-level provenance in the file.
+    """
+    if not header_fields:
+        return
+    for key, value in header_fields.items():
+        if value is None:
+            rendered = ""
+        else:
+            rendered = str(value)
+        handle.write(f"# {key}: {rendered}\n")
 
 
 def write_json(

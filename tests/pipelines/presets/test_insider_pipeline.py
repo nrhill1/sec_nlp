@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from datetime import date
 from pathlib import Path
 
@@ -28,7 +29,7 @@ from sec_nlp.pipelines.presets.insider.steps.download import (
 def _transaction(
     *,
     owner_name: str,
-    owner_cik: str,
+    owner_cik: int,
     tx_id: str,
     tx_date: str,
     ownership_type: str,
@@ -56,7 +57,7 @@ def test_build_insider_ledgers_and_net_buy_ratio() -> None:
     transactions = [
         _transaction(
             owner_name="Jane Doe",
-            owner_cik="0001111111",
+            owner_cik=1111111,
             tx_id="t1",
             tx_date="2024-01-10",
             ownership_type="A",
@@ -65,7 +66,7 @@ def test_build_insider_ledgers_and_net_buy_ratio() -> None:
         ),
         _transaction(
             owner_name="Jane Doe",
-            owner_cik="0001111111",
+            owner_cik=1111111,
             tx_id="t2",
             tx_date="2024-01-15",
             ownership_type="D",
@@ -74,7 +75,7 @@ def test_build_insider_ledgers_and_net_buy_ratio() -> None:
         ),
         _transaction(
             owner_name="John Roe",
-            owner_cik="0002222222",
+            owner_cik=2222222,
             tx_id="t3",
             tx_date="2024-01-16",
             ownership_type="A",
@@ -86,9 +87,7 @@ def test_build_insider_ledgers_and_net_buy_ratio() -> None:
     ledgers = build_insider_ledgers(transactions)
     assert len(ledgers) == 2
 
-    jane = next(
-        ledger for ledger in ledgers if ledger.owner_cik == "0001111111"
-    )
+    jane = next(ledger for ledger in ledgers if ledger.owner_cik == 1111111)
     assert jane.total_transactions == 2
     assert jane.buy_transactions == 1
     assert jane.sell_transactions == 1
@@ -103,7 +102,7 @@ def test_find_trade_clusters_detects_short_window_activity() -> None:
     transactions = [
         _transaction(
             owner_name="Jane Doe",
-            owner_cik="0001111111",
+            owner_cik=1111111,
             tx_id="t1",
             tx_date="2024-01-10",
             ownership_type="A",
@@ -112,7 +111,7 @@ def test_find_trade_clusters_detects_short_window_activity() -> None:
         ),
         _transaction(
             owner_name="John Roe",
-            owner_cik="0002222222",
+            owner_cik=2222222,
             tx_id="t2",
             tx_date="2024-01-12",
             ownership_type="D",
@@ -121,7 +120,7 @@ def test_find_trade_clusters_detects_short_window_activity() -> None:
         ),
         _transaction(
             owner_name="Ava Poe",
-            owner_cik="0003333333",
+            owner_cik=3333333,
             tx_id="t3",
             tx_date="2024-01-13",
             ownership_type="A",
@@ -147,7 +146,7 @@ def test_correlate_insider_activity_generates_large_and_prefiling_alerts(
     transactions = [
         _transaction(
             owner_name="Jane Doe",
-            owner_cik="0001111111",
+            owner_cik=1111111,
             tx_id="t1",
             tx_date="2024-01-10",
             ownership_type="D",
@@ -156,7 +155,7 @@ def test_correlate_insider_activity_generates_large_and_prefiling_alerts(
         ),
         _transaction(
             owner_name="John Roe",
-            owner_cik="0002222222",
+            owner_cik=2222222,
             tx_id="t2",
             tx_date="2024-01-11",
             ownership_type="D",
@@ -235,7 +234,7 @@ def test_pipeline_run_writes_outputs_with_mocked_steps(
 
     transaction = _transaction(
         owner_name="Jane Doe",
-        owner_cik="0001111111",
+        owner_cik=1111111,
         tx_id="t1",
         tx_date="2024-01-10",
         ownership_type="A",
@@ -282,3 +281,21 @@ def test_pipeline_run_writes_outputs_with_mocked_steps(
     assert len(result.outputs) == 5
     for output_path in result.outputs:
         assert output_path.exists()
+
+    summary_json_path = next(
+        path for path in result.outputs if path.name.endswith("_summary.json")
+    )
+    summary_payload = json.loads(summary_json_path.read_text())
+    expected_short_id = config.short_id if config.short_id > 0 else None
+    assert summary_payload["run_id"] == str(config.run_id)
+    assert summary_payload["run_short_id"] == expected_short_id
+    assert isinstance(summary_payload["run_timestamp"], str)
+
+    ledger_csv_path = next(
+        path for path in result.outputs if path.name.endswith("_ledger.csv")
+    )
+    lines = ledger_csv_path.read_text().splitlines()
+    assert lines[0].startswith("# run_timestamp:")
+    assert lines[1].startswith("# run_short_id:")
+    assert lines[2].startswith("# run_id:")
+    assert lines[3].startswith("# run_short_id_display:")

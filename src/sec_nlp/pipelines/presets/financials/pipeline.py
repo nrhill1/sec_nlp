@@ -6,11 +6,25 @@ from pathlib import Path
 from typing import ClassVar, Literal
 
 from pydantic import PrivateAttr
+from rich.progress import (
+    BarColumn,
+    Progress,
+    SpinnerColumn,
+    TaskID,
+    TaskProgressColumn,
+    TextColumn,
+    TimeElapsedColumn,
+    TimeRemainingColumn,
+)
 
 from sec_nlp.core.edgar.xbrl_facts import XbrlParser, create_xbrl_parser
 from sec_nlp.core.infra.logger import logger
+from sec_nlp.core.infra.rich_console import get_rich_console
 from sec_nlp.pipelines import BasePipeline
-from sec_nlp.pipelines.output_io import build_run_file_stem
+from sec_nlp.pipelines.output_io import (
+    build_run_file_stem,
+    build_run_header_fields,
+)
 from sec_nlp.types import ResultDict
 
 from .config import FinancialsSettings
@@ -65,13 +79,44 @@ class FinancialsPipeline(BasePipeline):
             metadata: ResultDict = {}
             periods_generated = 0
 
-            for symbol in self.config.symbols:
-                symbol_outputs, symbol_meta, symbol_periods = (
-                    self._process_symbol(symbol.upper())
+            console = get_rich_console()
+            with Progress(
+                SpinnerColumn(),
+                TextColumn("[bold cyan]{task.description}"),
+                BarColumn(complete_style="green", finished_style="bold green"),
+                TaskProgressColumn(),
+                TimeElapsedColumn(),
+                TextColumn("[dim]·[/dim]"),
+                TimeRemainingColumn(),
+                console=console,
+                transient=True,
+            ) as progress:
+                overall_task = progress.add_task(
+                    "Processing symbols",
+                    total=len(self.config.symbols),
                 )
-                outputs.extend(symbol_outputs)
-                metadata[symbol.upper()] = symbol_meta
-                periods_generated += symbol_periods
+                phase_task = progress.add_task("", total=None, visible=False)
+
+                for symbol in self.config.symbols:
+                    normalized_symbol = symbol.upper()
+                    progress.update(
+                        overall_task,
+                        description=f"Processing {normalized_symbol}",
+                    )
+
+                    symbol_outputs, symbol_meta, symbol_periods = (
+                        self._process_symbol(
+                            normalized_symbol,
+                            progress=progress,
+                            phase_task=phase_task,
+                        )
+                    )
+                    outputs.extend(symbol_outputs)
+                    metadata[normalized_symbol] = symbol_meta
+                    periods_generated += symbol_periods
+
+                    progress.update(phase_task, visible=False)
+                    progress.advance(overall_task)
 
             self.config.complete_run(success=True, metadata=metadata)
             return FinancialsResult(
@@ -89,13 +134,25 @@ class FinancialsPipeline(BasePipeline):
             )
 
     def _process_symbol(
-        self, symbol: str
+        self,
+        symbol: str,
+        *,
+        progress: Progress | None = None,
+        phase_task: TaskID | None = None,
     ) -> tuple[list[Path], dict[str, int | str], int]:
+        self._update_phase(progress, phase_task, symbol, "Downloading")
         filings = download_financial_filings(
             symbol=symbol, settings=self.config
         )
         parser = self._get_parser()
 
+        self._update_phase(
+            progress,
+            phase_task,
+            symbol,
+            "Extracting",
+            total=len(filings),
+        )
         all_facts = []
         for filing in filings:
             all_facts.extend(
@@ -103,16 +160,21 @@ class FinancialsPipeline(BasePipeline):
                     symbol=symbol, filing=filing, parser=parser
                 )
             )
+            if progress is not None and phase_task is not None:
+                progress.advance(phase_task)
 
+        self._update_phase(progress, phase_task, symbol, "Aggregating")
         statements = aggregate_financials(
             all_facts, compute_ratios=self.config.compute_ratios
         )
+        self._update_phase(progress, phase_task, symbol, "Delta report")
         delta_report = (
             build_delta_report(statements)
             if self.config.include_delta_report
             else {}
         )
 
+        self._update_phase(progress, phase_task, symbol, "Writing")
         outputs = self._write_outputs(
             symbol=symbol,
             filings_processed=len(filings),
@@ -127,6 +189,30 @@ class FinancialsPipeline(BasePipeline):
         }
         return outputs, metadata, len(statements)
 
+    def _update_phase(
+        self,
+        progress: Progress | None,
+        phase_task: TaskID | None,
+        symbol: str,
+        phase: str,
+        *,
+        total: int | None = None,
+    ) -> None:
+        if progress is None or phase_task is None:
+            return
+
+        update_kwargs: dict[str, str | int | bool | None] = {
+            "description": f"  ├─ {symbol}: {phase}",
+            "visible": True,
+        }
+        if total is None:
+            update_kwargs["total"] = None
+            update_kwargs["completed"] = 0
+        else:
+            update_kwargs["total"] = total
+            update_kwargs["completed"] = 0
+        progress.update(phase_task, **update_kwargs)
+
     def _write_outputs(
         self,
         *,
@@ -139,8 +225,14 @@ class FinancialsPipeline(BasePipeline):
         base_stem = build_run_file_stem(
             symbol, "financials", self.config.run_id
         )
+        run_header = build_run_header_fields(
+            run_timestamp=self.config.run_timestamp,
+            run_id=self.config.run_id,
+            run_short_id=self.config.short_id,
+        )
 
         payload = FinancialsOutputPayload(
+            **run_header,
             symbol=symbol,
             filings_processed=filings_processed,
             periods=statements,
@@ -154,7 +246,11 @@ class FinancialsPipeline(BasePipeline):
         outputs: list[Path] = []
         if self.config.output_format in ("csv", "all"):
             csv_path = symbol_out / f"{base_stem}.csv"
-            write_financials_csv(csv_path, statements)
+            write_financials_csv(
+                csv_path,
+                statements,
+                header_fields=run_header,
+            )
             outputs.append(csv_path)
         if self.config.output_format in ("json", "all"):
             json_path = symbol_out / f"{base_stem}.json"

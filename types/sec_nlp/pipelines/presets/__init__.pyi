@@ -10,6 +10,10 @@ from .financials import (
     FinancialsPipeline as FinancialsPipeline,
     FinancialsSettings as FinancialsSettings,
 )
+from .holdings import (
+    HoldingsPipeline as HoldingsPipeline,
+    HoldingsSettings as HoldingsSettings,
+)
 from .insider import (
     InsiderPipeline as InsiderPipeline,
     InsiderSettings as InsiderSettings,
@@ -26,6 +30,8 @@ __all__ = [
     "ExhibitPipeline",
     "FinancialsPipeline",
     "FinancialsSettings",
+    "HoldingsPipeline",
+    "HoldingsSettings",
     "InsiderPipeline",
     "InsiderSettings",
     "WarrantyConfig",

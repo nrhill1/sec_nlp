@@ -1,4 +1,8 @@
+from collections.abc import Mapping
+from datetime import datetime
 from pathlib import Path
+from typing import TextIO
+from uuid import UUID
 
 from pydantic import BaseModel
 
@@ -13,6 +17,12 @@ def build_run_file_stem(
 def build_accession_file_stem(
     symbol: str, suffix: str, accession: str | None, run_id: int | str | None
 ) -> str: ...
+def build_run_header_fields(
+    *, run_timestamp: datetime, run_id: UUID | str, run_short_id: int | None
+) -> dict[str, JsonValue]: ...
+def write_csv_metadata_comments(
+    handle: TextIO, header_fields: Mapping[str, JsonValue] | None = None
+) -> None: ...
 def write_json(
     path: Path,
     data: JsonValue | BaseModel,
