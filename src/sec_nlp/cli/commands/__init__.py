@@ -4,6 +4,7 @@ from .financials import Financials
 from .holdings import Holdings
 from .insider import Insider
 from .market import Market
+from .news import News
 from .qdrant import Qdrant
 from .root import Root
 from .runs import Runs
@@ -15,6 +16,7 @@ __all__: tuple[str, ...] = (
     "Holdings",
     "Insider",
     "Market",
+    "News",
     "Qdrant",
     "Root",
     "Runs",

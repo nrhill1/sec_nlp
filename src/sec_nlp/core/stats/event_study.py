@@ -4,12 +4,12 @@ from __future__ import annotations
 
 from datetime import UTC, date, datetime, time, timedelta
 from types import SimpleNamespace
+from typing import Protocol
 
 from pydantic import BaseModel, ConfigDict
 
 from sec_nlp.core.market import (
     MarketQuote,
-    MarketRetriever,
     create_market_retriever,
 )
 
@@ -17,6 +17,16 @@ from .correlation import (
     event_study as corr_event_study,
     volume_spike as corr_volume_spike,
 )
+
+
+class MarketRangeRetriever(Protocol):
+    """Duck-typed market retriever dependency used by event-study helpers."""
+
+    def retrieve_range(
+        self,
+        ticker: str,
+        date_range: tuple[date, date],
+    ) -> list[MarketQuote]: ...
 
 
 class EventStudyResult(BaseModel):
@@ -77,7 +87,7 @@ def run_event_study(
     benchmark: str = "SPY",
     pre_window: int = 5,
     post_window: int = 30,
-    retriever: MarketRetriever | None = None,
+    retriever: MarketRangeRetriever | None = None,
 ) -> EventStudyResult:
     """Run event-study metrics for a symbol using a benchmark-normalized series."""
     if pre_window < 0 or post_window < 0:

@@ -30,6 +30,7 @@ from sec_nlp.pipelines.presets.analyze.runnables.supply_chain_map import (
     SupplyChainMapInput,
     SupplyChainMapRunnable,
 )
+from sec_nlp.pipelines.types import AnalysisResultDict
 
 
 def test_sector_correlation_runnable_identifies_strongest_pair(
@@ -96,7 +97,7 @@ def test_sector_correlation_runnable_handles_empty_result(
 
 def test_filing_sentiment_diff_runnable_computes_deltas() -> None:
     """Runnable should compute topic deltas and risk-factor changes."""
-    previous_results = [
+    previous_results: list[AnalysisResultDict] = [
         {
             "sentiment": "negative",
             "tags": ["supply_chain", "risk_management"],
@@ -110,7 +111,7 @@ def test_filing_sentiment_diff_runnable_computes_deltas() -> None:
             "source_metadata": {},
         },
     ]
-    current_results = [
+    current_results: list[AnalysisResultDict] = [
         {
             "sentiment": "positive",
             "tags": ["supply_chain"],

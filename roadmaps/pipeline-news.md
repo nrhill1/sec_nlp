@@ -71,14 +71,14 @@ sec-nlp news AAPL --topics "supply chain" recall --days 90
 
 ## Implementation Steps
 
-1. Create `news/` directory with config, models, pipeline boilerplate.
-2. Implement `NewsItem` and `NewsTimeline` Pydantic models.
-3. Implement `fetch.py` — call `crates/newswatch` wrapper. Default feed list: SEC RSS, PR Newswire, BusinessWire.
-4. Implement `match.py` — relevance scoring against topic keywords.
-5. Implement `correlate.py` — align with filings and market data, compute correlation.
-6. Implement timeline output formatter.
-7. Add CLI command, register in `root.py`.
-8. Write tests: mock newswatch crate, mock market data. Verify correlation logic with deterministic timestamps. No network.
+- [x] Create `news/` directory with config, models, pipeline boilerplate.
+- [x] Implement `NewsItem` and `NewsTimeline` Pydantic models.
+- [x] Implement `fetch.py` — call `crates/newswatch` wrapper. Default feed list: SEC RSS and PR Newswire; custom feed overrides supported.
+- [x] Implement `match.py` — relevance scoring against topic keywords (EFTS score with deterministic fallback).
+- [x] Implement `correlate.py` — align with filings and market data, compute correlation.
+- [x] Implement timeline output formatter.
+- [x] Add CLI command, register in `root.py`.
+- [x] Write tests: mock newswatch crate, mock market data, and verify deterministic correlation/timeline behavior.
 
 ## Dependencies
 

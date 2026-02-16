@@ -7,9 +7,11 @@ import sys
 from datetime import date
 from pathlib import Path
 from types import SimpleNamespace
+from typing import cast
 
 from langchain_core.documents import Document
 
+from sec_nlp.core.edgar.holdings_parser import HoldingsParser
 from sec_nlp.pipelines.presets.holdings.config import HoldingsSettings
 from sec_nlp.pipelines.presets.holdings.models import HoldingPosition
 from sec_nlp.pipelines.presets.holdings.pipeline import HoldingsPipeline
@@ -82,7 +84,7 @@ def test_parse_holding_positions_maps_parser_documents() -> None:
     positions = parse_holding_positions(
         symbol="ABC",
         filing=filing,
-        parser=parser,
+        parser=cast(HoldingsParser, parser),
         cusip_filter="000000000",
     )
 

@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from types import SimpleNamespace
+from types import ModuleType, SimpleNamespace
+from typing import cast
 
 import pytest
 
@@ -79,5 +80,7 @@ def test_news_retriever_fetch_maps_native_items(
 def test_news_retriever_requires_non_empty_feeds() -> None:
     with pytest.raises(ValueError, match="feeds must be non-empty"):
         client.NewsRetriever(
-            [], "SEC NLP Tool (you@example.com)", module=SimpleNamespace()
+            [],
+            "SEC NLP Tool (you@example.com)",
+            module=cast(ModuleType, SimpleNamespace()),
         )

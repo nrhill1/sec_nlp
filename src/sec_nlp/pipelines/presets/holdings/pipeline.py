@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import ClassVar, Literal
+from typing import ClassVar, Literal, cast
 
 from pydantic import PrivateAttr
 from rich.progress import (
@@ -25,7 +25,7 @@ from sec_nlp.pipelines.output_io import (
     build_run_file_stem,
     build_run_header_fields,
 )
-from sec_nlp.types import ResultDict
+from sec_nlp.types import JsonDict, ResultDict
 
 from .config import HoldingsSettings
 from .io import (
@@ -130,7 +130,10 @@ class HoldingsPipeline(BasePipeline):
                     progress.update(phase_task, visible=False)
                     progress.advance(overall_task)
 
-            self.config.complete_run(success=True, metadata=metadata)
+            self.config.complete_run(
+                success=True,
+                metadata=cast(JsonDict, metadata),
+            )
             return HoldingsResult(
                 success=True,
                 outputs=outputs,
@@ -220,17 +223,22 @@ class HoldingsPipeline(BasePipeline):
     ) -> None:
         if progress is None or phase_task is None:
             return
-        update_kwargs: dict[str, str | int | bool | None] = {
-            "description": f"  ├─ {symbol}: {phase}",
-            "visible": True,
-        }
         if total is None:
-            update_kwargs["total"] = None
-            update_kwargs["completed"] = 0
+            progress.update(
+                phase_task,
+                description=f"  ├─ {symbol}: {phase}",
+                visible=True,
+                total=None,
+                completed=0,
+            )
         else:
-            update_kwargs["total"] = total
-            update_kwargs["completed"] = 0
-        progress.update(phase_task, **update_kwargs)
+            progress.update(
+                phase_task,
+                description=f"  ├─ {symbol}: {phase}",
+                visible=True,
+                total=total,
+                completed=0,
+            )
 
     def _write_outputs(
         self,
@@ -248,9 +256,16 @@ class HoldingsPipeline(BasePipeline):
             run_id=self.config.run_id,
             run_short_id=self.config.short_id,
         )
+        run_short_id_raw = run_header.get("run_short_id")
+        run_short_id = (
+            run_short_id_raw if isinstance(run_short_id_raw, int) else None
+        )
 
         summary_payload = HoldingsSummaryPayload(
-            **run_header,
+            run_timestamp=str(run_header["run_timestamp"]),
+            run_short_id=run_short_id,
+            run_id=str(run_header["run_id"]),
+            run_short_id_display=str(run_header["run_short_id_display"]),
             symbol=symbol,
             filings_processed=filings_processed,
             positions=positions,
@@ -263,7 +278,10 @@ class HoldingsPipeline(BasePipeline):
             },
         )
         diff_payload = HoldingsDiffPayload(
-            **run_header,
+            run_timestamp=str(run_header["run_timestamp"]),
+            run_short_id=run_short_id,
+            run_id=str(run_header["run_id"]),
+            run_short_id_display=str(run_header["run_short_id_display"]),
             symbol=symbol,
             diffs=diffs,
         )

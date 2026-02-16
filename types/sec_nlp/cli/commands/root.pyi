@@ -12,6 +12,7 @@ from .exb import Exb as Exb
 from .financials import Financials as Financials
 from .holdings import Holdings as Holdings
 from .insider import Insider as Insider
+from .news import News as News
 from .qdrant import Qdrant as Qdrant
 from .runs import Runs as Runs
 from .version import Version as Version
@@ -25,6 +26,7 @@ class Root(BaseSettings):
     financials: CliSubCommand[Financials]
     holdings: CliSubCommand[Holdings]
     insider: CliSubCommand[Insider]
+    news: CliSubCommand[News]
     clean: CliSubCommand[Clean]
     qdrant: CliSubCommand[Qdrant]
     runs: CliSubCommand[Runs]

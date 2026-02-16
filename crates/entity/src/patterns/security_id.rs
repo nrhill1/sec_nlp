@@ -94,7 +94,7 @@ fn is_valid_isin(value: &str) -> bool {
     }
 
     let mut sum: u32 = 0;
-    let mut double = true;
+    let mut double = false;
     for digit_char in expanded.chars().rev() {
         let Some(mut digit) = digit_char.to_digit(10) else {
             return false;

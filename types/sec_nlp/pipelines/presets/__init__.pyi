@@ -18,6 +18,10 @@ from .insider import (
     InsiderPipeline as InsiderPipeline,
     InsiderSettings as InsiderSettings,
 )
+from .news import (
+    NewsPipeline as NewsPipeline,
+    NewsSettings as NewsSettings,
+)
 from .warranty import (
     WarrantyConfig as WarrantyConfig,
     WarrantyPipeline as WarrantyPipeline,
@@ -34,6 +38,8 @@ __all__ = [
     "HoldingsSettings",
     "InsiderPipeline",
     "InsiderSettings",
+    "NewsPipeline",
+    "NewsSettings",
     "WarrantyConfig",
     "WarrantyPipeline",
 ]

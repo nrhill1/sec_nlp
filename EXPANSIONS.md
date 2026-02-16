@@ -21,6 +21,8 @@ New Rust crates and Python modules to extend the project beyond its current scop
 - [x] `sec_nlp/core/text/entity_extraction.py` wrapper implemented with lazy `entity` loading, document enrichment helpers, native stubs, and tests
 - [x] `crates/newswatch` scaffolded with feed parsing, JSON adapter support, keyword filtering, SimHash deduplication, PyO3 client exports, and root `Makefile` integration
 - [x] `sec_nlp/core/news/client.py` wrapper + native/typing stubs (`types/newswatch/__init__.pyi`, `types/sec_nlp/core/news/client.pyi`) implemented with tests
+- [x] `sec_nlp/pipelines/presets/news/` scaffolded and wired end-to-end (fetch/match/correlate/output + tests)
+- [x] `news` CLI command added and registered in root command routing
 - [ ] Remaining crates/modules/pipelines in this roadmap
 
 ---

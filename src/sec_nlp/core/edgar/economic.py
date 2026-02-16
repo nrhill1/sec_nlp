@@ -9,12 +9,12 @@ from importlib import import_module
 from math import isfinite, sqrt
 from statistics import NormalDist
 from types import ModuleType
+from typing import Protocol
 
 from pydantic import BaseModel, ConfigDict
 
 from sec_nlp.core.market import (
     MarketQuote,
-    MarketRetriever,
     create_market_retriever,
 )
 from sec_nlp.core.stats.correlation import (
@@ -71,6 +71,16 @@ _SERIES_FIELD_MAP: dict[str, str] = {
 }
 
 
+class MarketRangeRetriever(Protocol):
+    """Duck-typed retriever required for macro-sensitivity calculations."""
+
+    def retrieve_range(
+        self,
+        ticker: str,
+        date_range: tuple[date, date],
+    ) -> list[MarketQuote]: ...
+
+
 def _load_fred_module() -> ModuleType:
     try:
         return import_module("fredapi")
@@ -112,15 +122,46 @@ def _normalize_observation_date(value: object) -> str | None:
 
 
 def _normalize_observation_value(value: object) -> float | None:
-    if value is None:
+    if isinstance(value, bool) or value is None:
         return None
-    try:
+    if isinstance(value, (int, float)):
         numeric = float(value)
-    except (TypeError, ValueError):
+    elif isinstance(value, str):
+        cleaned = value.strip()
+        if not cleaned:
+            return None
+        try:
+            numeric = float(cleaned)
+        except ValueError:
+            return None
+    else:
         return None
     if not isfinite(numeric):
         return None
     return numeric
+
+
+def _macro_context_from_series(
+    *,
+    filing_date: str,
+    series_id: str,
+    value: float | None,
+) -> MacroContext:
+    if value is None:
+        return MacroContext(filing_date=filing_date)
+
+    normalized_series_id = series_id.upper()
+    if normalized_series_id == "GDP":
+        return MacroContext(filing_date=filing_date, gdp_growth=value)
+    if normalized_series_id == "CPIAUCSL":
+        return MacroContext(filing_date=filing_date, cpi_yoy=value)
+    if normalized_series_id == "UNRATE":
+        return MacroContext(filing_date=filing_date, unemployment_rate=value)
+    if normalized_series_id == "FEDFUNDS":
+        return MacroContext(filing_date=filing_date, fed_funds_rate=value)
+    if normalized_series_id == "T10Y2Y":
+        return MacroContext(filing_date=filing_date, yield_spread_10y_2y=value)
+    return MacroContext(filing_date=filing_date)
 
 
 def fetch_series(
@@ -191,18 +232,18 @@ def align_to_filings(
     contexts: list[MacroContext] = []
     for filing_date_text in filing_dates:
         filing_day = _coerce_date(filing_date_text)
-        context_kwargs: dict[str, str | float] = {
-            "filing_date": filing_day.isoformat()
-        }
         nearest_value = _nearest_observation_value(
             filing_day,
             observation_dates,
             observation_values,
         )
-        target_field = _SERIES_FIELD_MAP.get(series.series_id.upper())
-        if target_field is not None and nearest_value is not None:
-            context_kwargs[target_field] = nearest_value
-        contexts.append(MacroContext(**context_kwargs))
+        contexts.append(
+            _macro_context_from_series(
+                filing_date=filing_day.isoformat(),
+                series_id=series.series_id,
+                value=nearest_value,
+            )
+        )
 
     return contexts
 
@@ -237,7 +278,7 @@ def compute_macro_sensitivity(
     indicator_id: str,
     window_days: int = 252,
     *,
-    retriever: MarketRetriever | None = None,
+    retriever: MarketRangeRetriever | None = None,
 ) -> MacroSensitivity:
     """Compute return/indicator correlation over an aligned trailing window."""
     normalized_symbol = symbol.strip().upper()

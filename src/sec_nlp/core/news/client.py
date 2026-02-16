@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from functools import lru_cache
 from importlib import import_module
 from types import ModuleType
-from typing import Any
+from typing import Any, cast
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -39,8 +40,8 @@ def _load_newswatch_module() -> ModuleType:
 
 
 def _field(raw_item: object, name: str) -> Any:
-    if isinstance(raw_item, dict):
-        return raw_item.get(name)
+    if isinstance(raw_item, Mapping):
+        return cast("Mapping[str, Any]", raw_item).get(name)
     return getattr(raw_item, name, None)
 
 

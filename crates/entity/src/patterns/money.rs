@@ -9,6 +9,8 @@ static MONEY_PATTERN: Lazy<Regex> = Lazy::new(|| {
         (
             (?:USD\s*)?\$\s*(?P<dollar_num>-?\d[\d,]*(?:\.\d+)?)\s*(?P<dollar_unit>thousand|million|billion|k|m|b)?
             |
+            USD\s*(?P<usd_num>-?\d[\d,]*(?:\.\d+)?)\s*(?P<usd_unit>thousand|million|billion|k|m|b)?
+            |
             (?P<plain_num>-?\d[\d,]*(?:\.\d+)?)\s*(?P<plain_unit>thousand|million|billion|k|m|b)
         )",
     )
@@ -28,6 +30,14 @@ pub fn extract(text: &str) -> Vec<Entity> {
                 number_match.as_str(),
                 captures
                     .name("dollar_unit")
+                    .map(|m| m.as_str())
+                    .unwrap_or(""),
+            )
+        } else if let Some(number_match) = captures.name("usd_num") {
+            (
+                number_match.as_str(),
+                captures
+                    .name("usd_unit")
                     .map(|m| m.as_str())
                     .unwrap_or(""),
             )

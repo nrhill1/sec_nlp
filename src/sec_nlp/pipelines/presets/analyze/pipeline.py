@@ -545,7 +545,7 @@ class AnalyzePipeline(BasePipeline):
                             "chunk_stats": chunk_stats,
                         }
                         symbol_key = str(symbol)
-                        metadata[symbol_key] = symbol_meta  # type: ignore[assignment]
+                        metadata[symbol_key] = symbol_meta
                         progress.update(phase_task, visible=False)
                         self._phase_start = 0.0
                         progress.advance(overall_task)

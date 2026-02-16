@@ -21,6 +21,7 @@ from .financials import Financials
 from .holdings import Holdings
 from .insider import Insider
 from .market import Market
+from .news import News
 from .qdrant import Qdrant
 from .runs import Runs
 from .version import Version
@@ -61,6 +62,10 @@ class Root(BaseSettings):
 
     insider: CliSubCommand[Insider] = Field(
         description="Run the insider trading analysis pipeline"
+    )
+
+    news: CliSubCommand[News] = Field(
+        description="Run the news monitoring and correlation pipeline"
     )
 
     efts: CliSubCommand[EFTS] = Field(

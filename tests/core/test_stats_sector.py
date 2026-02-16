@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import UTC, date, datetime
+from typing import cast
 
 import pytest
 
@@ -67,7 +68,7 @@ def test_sector_correlation_groups_symbols_by_sic() -> None:
         days=10,
         as_of=date(2024, 1, 4),
         symbol_to_sic={"AAA": "3571", "BBB": "3571", "CCC": "2834"},
-        retriever=retriever,
+        retriever=cast(sector_module.MarketRangeRetriever, retriever),
     )
 
     assert len(result) == 2
@@ -112,7 +113,7 @@ def test_sector_correlation_uses_fallback_when_corr_missing(
         days=10,
         as_of=date(2024, 1, 4),
         symbol_to_sic={"AAA": "3571", "BBB": "3571"},
-        retriever=retriever,
+        retriever=cast(sector_module.MarketRangeRetriever, retriever),
     )
 
     assert len(result) == 1

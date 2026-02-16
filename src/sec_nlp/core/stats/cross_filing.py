@@ -181,12 +181,9 @@ def cross_filing_trend(
 
     ordered_accessions = sorted(
         grouped,
-        key=lambda accession: (
-            0 if date_by_accession.get(accession) is not None else 1,
-            date_by_accession.get(accession).isoformat()
-            if date_by_accession.get(accession) is not None
-            else accession,
+        key=lambda accession: _accession_sort_key(
             accession,
+            date_by_accession,
         ),
     )
 
@@ -209,3 +206,13 @@ def cross_filing_trend(
         trend_direction=_trend_direction(scores),
         inflection_points=_inflection_points(scores),
     )
+
+
+def _accession_sort_key(
+    accession: str,
+    date_by_accession: dict[str, date | None],
+) -> tuple[int, str, str]:
+    filing_date = date_by_accession.get(accession)
+    if filing_date is None:
+        return (1, accession, accession)
+    return (0, filing_date.isoformat(), accession)

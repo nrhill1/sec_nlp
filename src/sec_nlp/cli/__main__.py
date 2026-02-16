@@ -64,6 +64,7 @@ _MULTI_VALUE_FLAGS: set[str] = {
     "--material-keywords",
     "--exhibit-numbers",
     "--forms",
+    "--feeds",
     "--filer-ciks",
 }
 
@@ -78,6 +79,7 @@ _SYMBOL_POSITIONAL_COMMANDS: set[str] = {
     "financials",
     "holdings",
     "insider",
+    "news",
 }
 
 _FALSEY: set[str] = {"false", "0", "no", "off", "n"}

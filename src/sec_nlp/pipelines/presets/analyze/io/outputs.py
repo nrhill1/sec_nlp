@@ -161,7 +161,9 @@ class OutputFormatter:
             updated = dict(item)
             score = updated.get("score")
             if isinstance(score, (int, float)):
-                updated["score"] = round_score(score)
+                rounded_score = round_score(score)
+                if rounded_score is not None:
+                    updated["score"] = rounded_score
             rounded.append(updated)
         return rounded
 

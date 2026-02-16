@@ -6,7 +6,9 @@ import json
 from datetime import date
 from pathlib import Path
 from types import SimpleNamespace
+from typing import cast
 
+from sec_nlp.core.edgar.xbrl_facts import XbrlParser
 from sec_nlp.pipelines.presets.financials.config import FinancialsSettings
 from sec_nlp.pipelines.presets.financials.models import FinancialFact
 from sec_nlp.pipelines.presets.financials.pipeline import FinancialsPipeline
@@ -57,7 +59,11 @@ def test_extract_financial_facts_dedupes_and_filters(tmp_path: Path) -> None:
     )
     parser = SimpleNamespace(parse_file=lambda _path: [duplicate, duplicate])
 
-    facts = extract_financial_facts(symbol="ABC", filing=filing, parser=parser)
+    facts = extract_financial_facts(
+        symbol="ABC",
+        filing=filing,
+        parser=cast(XbrlParser, parser),
+    )
     assert len(facts) == 1
     assert facts[0].concept == "revenue"
     assert facts[0].accession_number == filing.accession_number

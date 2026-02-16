@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from collections import defaultdict
+from collections import Counter, defaultdict
 from collections.abc import Callable
 
 from langchain_core.documents import Document
@@ -20,7 +20,10 @@ RegulationExtractor = Callable[[str], list[str]]
 
 _REGULATION_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
     ("Rule 10b-5", re.compile(r"\bRule\s+10b-5\b", re.IGNORECASE)),
-    ("Section 13(a)", re.compile(r"\bSection\s+13\s*\(a\)", re.IGNORECASE)),
+    (
+        "Section 13(a)",
+        re.compile(r"\bSection\s+13(?:\s*\(a\))?\b", re.IGNORECASE),
+    ),
     ("Section 16", re.compile(r"\bSection\s+16\b", re.IGNORECASE)),
     ("Dodd-Frank", re.compile(r"\bDodd[-\s]Frank\b", re.IGNORECASE)),
     (
@@ -184,10 +187,31 @@ class RegulatoryExposureRunnable(
                     extracted.append(normalized)
             return extracted
 
-        extension_extracted = self._extract_regulations_from_extension(text)
-        if extension_extracted is not None:
+        extension_extracted = (
+            self._extract_regulations_from_extension(text) or []
+        )
+        pattern_extracted = self._extract_regulations_from_patterns(text)
+
+        if not extension_extracted:
+            return pattern_extracted
+        if not pattern_extracted:
             return extension_extracted
 
+        extension_counts = Counter(extension_extracted)
+        pattern_counts = Counter(pattern_extracted)
+        merged: list[str] = []
+        for regulation in sorted(set(extension_counts) | set(pattern_counts)):
+            merged.extend(
+                [regulation]
+                * max(
+                    extension_counts.get(regulation, 0),
+                    pattern_counts.get(regulation, 0),
+                )
+            )
+        return merged
+
+    @staticmethod
+    def _extract_regulations_from_patterns(text: str) -> list[str]:
         extracted: list[str] = []
         for regulation, pattern in _REGULATION_PATTERNS:
             for _ in pattern.finditer(text):
@@ -217,6 +241,9 @@ class RegulatoryExposureRunnable(
         cleaned = " ".join(regulation.strip().split())
         if not cleaned:
             return None
+        for canonical, pattern in _REGULATION_PATTERNS:
+            if pattern.search(cleaned):
+                return canonical
         return cleaned
 
     @staticmethod

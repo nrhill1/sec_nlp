@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import date
+from typing import cast
 
 from sec_nlp.pipelines.presets.analyze.io.formats import (
     market_correlation as formatter,
@@ -12,6 +13,7 @@ from sec_nlp.pipelines.presets.analyze.market import (
     MarketGranularity,
     MarketQuoteSummary,
 )
+from sec_nlp.pipelines.types import AnalysisResultDict
 
 
 def _build_market_data() -> MarketEnrichment:
@@ -103,7 +105,10 @@ def test_build_market_correlation_uses_stats_wrapper(
     monkeypatch,
 ) -> None:
     market_data = _build_market_data()
-    results = [{"sentiment": "positive"}, {"sentiment": "negative"}]
+    results: list[AnalysisResultDict] = [
+        {"sentiment": "positive"},
+        {"sentiment": "negative"},
+    ]
 
     calls: dict[str, list[list[float]]] = {
         "cumulative": [],
@@ -154,14 +159,19 @@ def test_build_market_correlation_uses_stats_wrapper(
     payload = formatter.build_market_correlation(market_data, results)
 
     assert payload is not None
-    metrics = payload["metrics"]
+    assert isinstance(payload, dict)
+    metrics_raw = payload["metrics"]
+    assert isinstance(metrics_raw, dict)
+    metrics = cast(dict[str, float | None], metrics_raw)
     assert metrics["car_pre5"] == 0.11
     assert metrics["car_post5"] == 0.22
     assert metrics["car_post30"] == 0.33
     assert metrics["volatility_change"] == 0.5
     assert metrics["volume_spike"] == 1.25
 
-    signal = payload["signal_correlations"]
+    signal_raw = payload["signal_correlations"]
+    assert isinstance(signal_raw, dict)
+    signal = cast(dict[str, float | None], signal_raw)
     assert signal["sentiment_score"] == 0.0
 
     assert len(calls["cumulative"]) == 3
@@ -174,7 +184,10 @@ def test_build_market_correlation_falls_back_without_extension(
     monkeypatch,
 ) -> None:
     market_data = _build_market_data()
-    results = [{"sentiment": "positive"}, {"sentiment": "negative"}]
+    results: list[AnalysisResultDict] = [
+        {"sentiment": "positive"},
+        {"sentiment": "negative"},
+    ]
 
     def raise_corr_error(*_args, **_kwargs):
         raise formatter.CorrExtensionError("missing extension")
@@ -187,7 +200,10 @@ def test_build_market_correlation_falls_back_without_extension(
     payload = formatter.build_market_correlation(market_data, results)
 
     assert payload is not None
-    metrics = payload["metrics"]
+    assert isinstance(payload, dict)
+    metrics_raw = payload["metrics"]
+    assert isinstance(metrics_raw, dict)
+    metrics = cast(dict[str, float | None], metrics_raw)
     assert metrics["car_pre5"] == 0.01
     assert metrics["car_post5"] == 0.03
     assert metrics["car_post30"] == 0.05

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date
+from typing import Literal
 
 from ..models import HoldingPosition, HoldingsDiff
 
@@ -56,7 +57,9 @@ def _snapshot_for_accession(
     return snapshot
 
 
-def _diff_status(previous: int, current: int) -> str:
+def _diff_status(
+    previous: int, current: int
+) -> Literal["increase", "decrease", "unchanged"]:
     if current > previous:
         return "increase"
     if current < previous:

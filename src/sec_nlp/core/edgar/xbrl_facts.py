@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from functools import lru_cache
 from importlib import import_module
 from pathlib import Path
 from types import ModuleType
-from typing import Any
+from typing import Any, cast
 
 from pydantic import BaseModel, ConfigDict
 
@@ -48,8 +49,8 @@ def _load_xbrl_module() -> ModuleType:
 
 
 def _field(raw_fact: object, name: str) -> Any:
-    if isinstance(raw_fact, dict):
-        return raw_fact.get(name)
+    if isinstance(raw_fact, Mapping):
+        return cast("Mapping[str, Any]", raw_fact).get(name)
     return getattr(raw_fact, name, None)
 
 

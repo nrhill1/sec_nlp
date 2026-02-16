@@ -323,16 +323,32 @@ def test_build_macro_context_when_enabled(tmp_path: Path, monkeypatch) -> None:
         filing_dates: list[str],
     ) -> list[MacroContext]:
         filing_date = filing_dates[0]
-        kwargs = {"filing_date": filing_date}
-        mapping = {
-            "GDP": "gdp_growth",
-            "CPIAUCSL": "cpi_yoy",
-            "UNRATE": "unemployment_rate",
-            "FEDFUNDS": "fed_funds_rate",
-            "T10Y2Y": "yield_spread_10y_2y",
-        }
-        kwargs[mapping[series.series_id]] = 1.23
-        return [MacroContext(**kwargs)]
+        if series.series_id == "GDP":
+            return [MacroContext(filing_date=filing_date, gdp_growth=1.23)]
+        if series.series_id == "CPIAUCSL":
+            return [MacroContext(filing_date=filing_date, cpi_yoy=1.23)]
+        if series.series_id == "UNRATE":
+            return [
+                MacroContext(
+                    filing_date=filing_date,
+                    unemployment_rate=1.23,
+                )
+            ]
+        if series.series_id == "FEDFUNDS":
+            return [
+                MacroContext(
+                    filing_date=filing_date,
+                    fed_funds_rate=1.23,
+                )
+            ]
+        if series.series_id == "T10Y2Y":
+            return [
+                MacroContext(
+                    filing_date=filing_date,
+                    yield_spread_10y_2y=1.23,
+                )
+            ]
+        return [MacroContext(filing_date=filing_date)]
 
     monkeypatch.setattr(pipeline_module, "fetch_series", _mock_fetch_series)
     monkeypatch.setattr(

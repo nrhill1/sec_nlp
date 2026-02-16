@@ -1,11 +1,10 @@
-"""Pipeline for extracting normalized financial statement data."""
+"""Pipeline for monitoring company-centric financial news."""
 
 from __future__ import annotations
 
 from pathlib import Path
 from typing import ClassVar, Literal, cast
 
-from pydantic import PrivateAttr
 from rich.progress import (
     BarColumn,
     Progress,
@@ -17,7 +16,6 @@ from rich.progress import (
     TimeRemainingColumn,
 )
 
-from sec_nlp.core.edgar.xbrl_facts import XbrlParser, create_xbrl_parser
 from sec_nlp.core.infra.logger import logger
 from sec_nlp.core.infra.rich_console import get_rich_console
 from sec_nlp.pipelines import BasePipeline
@@ -27,57 +25,47 @@ from sec_nlp.pipelines.output_io import (
 )
 from sec_nlp.types import JsonDict, ResultDict
 
-from .config import FinancialsSettings
+from .config import NewsSettings
 from .io import (
-    FinancialsOutputPayload,
-    write_financials_csv,
-    write_financials_json,
-    write_financials_yaml,
+    NewsTimelinePayload,
+    write_news_timeline_csv,
+    write_news_timeline_json,
+    write_news_timeline_yaml,
 )
-from .models import FinancialsResult
-from .steps import (
-    aggregate_financials,
-    build_delta_report,
-    download_financial_filings,
-    extract_financial_facts,
-)
+from .models import NewsCorrelation, NewsHeadline, NewsResult, NewsTimelineEntry
+from .steps import correlate_news_items, fetch_news_items, match_news_items
 
 
-class FinancialsPipeline(BasePipeline):
-    """Extract financial line items and derived ratios from filing XBRL."""
+class NewsPipeline(BasePipeline):
+    """Fetch, score, correlate, and export financial news timelines."""
 
-    pipeline_type: ClassVar[Literal["financials"]] = "financials"
+    pipeline_type: ClassVar[Literal["news"]] = "news"
     description: ClassVar[str] = (
-        "Extract normalized financial statement line items from 10-K/10-Q XBRL"
+        "Monitor financial news, score topic relevance, and correlate with filings and market moves"
     )
     requires_llm: ClassVar[bool] = False
 
-    config: FinancialsSettings
-
-    _parser: XbrlParser | None = PrivateAttr(default=None)
+    config: NewsSettings
 
     @classmethod
-    def config_model(cls) -> type[FinancialsSettings]:
-        return FinancialsSettings
+    def config_model(cls) -> type[NewsSettings]:
+        return NewsSettings
 
     @classmethod
-    def result_model(cls) -> type[FinancialsResult]:
-        return FinancialsResult
+    def result_model(cls) -> type[NewsResult]:
+        return NewsResult
 
     def _build_components(self) -> None:
-        self._parser = None
+        return
 
-    def _get_parser(self) -> XbrlParser:
-        if self._parser is None:
-            self._parser = create_xbrl_parser()
-        return self._parser
-
-    def run(self) -> FinancialsResult:
+    def run(self) -> NewsResult:
         try:
             self.config.setup_paths()
             outputs: list[Path] = []
             metadata: ResultDict = {}
-            periods_generated = 0
+            items_fetched = 0
+            items_emitted = 0
+            clusters_detected = 0
 
             console = get_rich_console()
             with Progress(
@@ -104,16 +92,23 @@ class FinancialsPipeline(BasePipeline):
                         description=f"Processing {normalized_symbol}",
                     )
 
-                    symbol_outputs, symbol_meta, symbol_periods = (
-                        self._process_symbol(
-                            normalized_symbol,
-                            progress=progress,
-                            phase_task=phase_task,
-                        )
+                    (
+                        symbol_outputs,
+                        symbol_meta,
+                        fetched_count,
+                        emitted_count,
+                        cluster_count,
+                    ) = self._process_symbol(
+                        normalized_symbol,
+                        progress=progress,
+                        phase_task=phase_task,
                     )
+
                     outputs.extend(symbol_outputs)
                     metadata[normalized_symbol] = symbol_meta
-                    periods_generated += symbol_periods
+                    items_fetched += fetched_count
+                    items_emitted += emitted_count
+                    clusters_detected += cluster_count
 
                     progress.update(phase_task, visible=False)
                     progress.advance(overall_task)
@@ -122,18 +117,21 @@ class FinancialsPipeline(BasePipeline):
                 success=True,
                 metadata=cast(JsonDict, metadata),
             )
-            return FinancialsResult(
+            return NewsResult(
                 success=True,
                 outputs=outputs,
                 metadata=metadata,
                 symbols_processed=len(self.config.symbols),
-                periods_generated=periods_generated,
+                items_fetched=items_fetched,
+                items_emitted=items_emitted,
+                clusters_detected=clusters_detected,
             )
         except Exception as exc:
-            logger.exception("Financials pipeline failed")
+            logger.exception("News pipeline failed")
             self.config.complete_run(success=False)
-            return FinancialsResult(
-                success=False, error=f"{type(exc).__name__}: {exc}"
+            return NewsResult(
+                success=False,
+                error=f"{type(exc).__name__}: {exc}",
             )
 
     def _process_symbol(
@@ -142,55 +140,49 @@ class FinancialsPipeline(BasePipeline):
         *,
         progress: Progress | None = None,
         phase_task: TaskID | None = None,
-    ) -> tuple[list[Path], dict[str, int | str], int]:
-        self._update_phase(progress, phase_task, symbol, "Downloading")
-        filings = download_financial_filings(
-            symbol=symbol, settings=self.config
-        )
-        parser = self._get_parser()
+    ) -> tuple[list[Path], dict[str, int | float | str | None], int, int, int]:
+        self._update_phase(progress, phase_task, symbol, "Fetching")
+        fetched_items = fetch_news_items(symbol=symbol, settings=self.config)
 
-        self._update_phase(
-            progress,
-            phase_task,
-            symbol,
-            "Extracting",
-            total=len(filings),
+        self._update_phase(progress, phase_task, symbol, "Matching")
+        matched_items = match_news_items(
+            items=fetched_items,
+            topics=self.config.topics,
+            min_relevance=self.config.min_relevance,
         )
-        all_facts = []
-        for filing in filings:
-            all_facts.extend(
-                extract_financial_facts(
-                    symbol=symbol, filing=filing, parser=parser
-                )
-            )
-            if progress is not None and phase_task is not None:
-                progress.advance(phase_task)
 
-        self._update_phase(progress, phase_task, symbol, "Aggregating")
-        statements = aggregate_financials(
-            all_facts, compute_ratios=self.config.compute_ratios
-        )
-        self._update_phase(progress, phase_task, symbol, "Delta report")
-        delta_report = (
-            build_delta_report(statements)
-            if self.config.include_delta_report
-            else {}
+        self._update_phase(progress, phase_task, symbol, "Correlating")
+        correlated_items, timeline, correlation = correlate_news_items(
+            symbol=symbol,
+            items=matched_items,
+            settings=self.config,
         )
 
         self._update_phase(progress, phase_task, symbol, "Writing")
         outputs = self._write_outputs(
             symbol=symbol,
-            filings_processed=len(filings),
-            statements=statements,
-            delta_report=delta_report,
+            items=correlated_items,
+            timeline=timeline,
+            correlation=correlation,
         )
 
-        metadata = {
-            "filings_processed": len(filings),
-            "facts_extracted": len(all_facts),
-            "periods_generated": len(statements),
+        metadata: dict[str, int | float | str | None] = {
+            "items_fetched": len(fetched_items),
+            "items_emitted": len(correlated_items),
+            "timeline_days": len(timeline),
+            "days_compared": correlation.days_compared,
+            "news_to_return_correlation": correlation.news_to_return_correlation,
+            "filings_linked": correlation.filings_linked,
+            "clusters_detected": len(correlation.clusters),
         }
-        return outputs, metadata, len(statements)
+
+        return (
+            outputs,
+            metadata,
+            len(fetched_items),
+            len(correlated_items),
+            len(correlation.clusters),
+        )
 
     def _update_phase(
         self,
@@ -225,14 +217,12 @@ class FinancialsPipeline(BasePipeline):
         self,
         *,
         symbol: str,
-        filings_processed: int,
-        statements,
-        delta_report,
+        items: list[NewsHeadline],
+        timeline: list[NewsTimelineEntry],
+        correlation: NewsCorrelation,
     ) -> list[Path]:
         symbol_out = self.config.get_symbol_output_dir(symbol)
-        base_stem = build_run_file_stem(
-            symbol, "financials", self.config.run_id
-        )
+        base_stem = build_run_file_stem(symbol, "news", self.config.run_id)
         run_header = build_run_header_fields(
             run_timestamp=self.config.run_timestamp,
             run_id=self.config.run_id,
@@ -243,37 +233,44 @@ class FinancialsPipeline(BasePipeline):
             run_short_id_raw if isinstance(run_short_id_raw, int) else None
         )
 
-        payload = FinancialsOutputPayload(
+        payload = NewsTimelinePayload(
             run_timestamp=str(run_header["run_timestamp"]),
             run_short_id=run_short_id,
             run_id=str(run_header["run_id"]),
             run_short_id_display=str(run_header["run_short_id_display"]),
             symbol=symbol,
-            filings_processed=filings_processed,
-            periods=statements,
-            delta_report=delta_report,
+            topics=self.config.topics,
+            items=items,
+            timeline=timeline,
+            correlation=correlation,
             metadata={
-                "form_types": self.config.form_types,
-                "compute_ratios": self.config.compute_ratios,
+                "days": self.config.days,
+                "forms": self.config.forms or ["8-K", "10-K", "10-Q"],
+                "feeds": self.config.feeds,
+                "min_relevance": self.config.min_relevance,
+                "max_results": self.config.max_results,
+                "include_market_context": self.config.include_market_context,
             },
         )
 
         outputs: list[Path] = []
         if self.config.output_format in ("csv", "all"):
-            csv_path = symbol_out / f"{base_stem}.csv"
-            write_financials_csv(
+            csv_path = symbol_out / f"{base_stem}_timeline.csv"
+            write_news_timeline_csv(
                 csv_path,
-                statements,
+                items,
                 header_fields=run_header,
             )
             outputs.append(csv_path)
+
         if self.config.output_format in ("json", "all"):
-            json_path = symbol_out / f"{base_stem}.json"
-            write_financials_json(json_path, payload)
+            json_path = symbol_out / f"{base_stem}_summary.json"
+            write_news_timeline_json(json_path, payload)
             outputs.append(json_path)
+
         if self.config.output_format in ("yaml", "all"):
-            yaml_path = symbol_out / f"{base_stem}.yaml"
-            write_financials_yaml(yaml_path, payload)
+            yaml_path = symbol_out / f"{base_stem}_summary.yaml"
+            write_news_timeline_yaml(yaml_path, payload)
             outputs.append(yaml_path)
 
         return outputs

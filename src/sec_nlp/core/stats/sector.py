@@ -4,16 +4,26 @@ from __future__ import annotations
 
 from collections.abc import Callable, Mapping, Sequence
 from datetime import UTC, date, datetime, timedelta
+from typing import Protocol, cast
 
 from pydantic import BaseModel, ConfigDict
 
 from sec_nlp.core.market import (
     MarketQuote,
-    MarketRetriever,
     create_market_retriever,
 )
 
 from .correlation import CorrExtensionError, pearson, simple_returns
+
+
+class MarketRangeRetriever(Protocol):
+    """Duck-typed market retriever dependency used by sector helpers."""
+
+    def retrieve_range(
+        self,
+        ticker: str,
+        date_range: Sequence[date | datetime],
+    ) -> list[MarketQuote]: ...
 
 
 def _coerce_as_of(value: date | datetime | None) -> date:
@@ -31,7 +41,8 @@ def _resolve_sic(
     if symbol_to_sic is None:
         return "UNKNOWN"
     if isinstance(symbol_to_sic, Mapping):
-        raw_value = symbol_to_sic.get(symbol.upper())
+        mapping = cast("Mapping[str, str]", symbol_to_sic)
+        raw_value = mapping.get(symbol.upper())
     else:
         raw_value = symbol_to_sic(symbol)
     if isinstance(raw_value, str):
@@ -135,7 +146,7 @@ def sector_correlation(
     symbol_to_sic: Mapping[str, str]
     | Callable[[str], str | None]
     | None = None,
-    retriever: MarketRetriever | None = None,
+    retriever: MarketRangeRetriever | None = None,
 ) -> list[SectorCorrelation]:
     """Compute sector-wise pairwise correlation matrices.
 

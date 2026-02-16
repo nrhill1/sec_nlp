@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import UTC, date, datetime
 from types import SimpleNamespace
+from typing import cast
 
 import pytest
 
@@ -83,7 +84,7 @@ def test_run_event_study_returns_normalized_metrics(monkeypatch) -> None:
         benchmark="SPY",
         pre_window=1,
         post_window=2,
-        retriever=retriever,
+        retriever=cast(event_study_module.MarketRangeRetriever, retriever),
     )
 
     assert result.symbol == "ACME"
@@ -126,7 +127,10 @@ def test_run_event_study_requires_overlapping_quotes() -> None:
             benchmark="SPY",
             pre_window=1,
             post_window=1,
-            retriever=retriever,
+            retriever=cast(
+                event_study_module.MarketRangeRetriever,
+                retriever,
+            ),
         )
 
 

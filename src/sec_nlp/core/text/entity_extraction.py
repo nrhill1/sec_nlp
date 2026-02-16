@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from functools import lru_cache
 from importlib import import_module
 from types import ModuleType
-from typing import Any
+from typing import Any, cast
 
 from langchain_core.documents import Document
 from pydantic import BaseModel, ConfigDict
@@ -56,8 +57,8 @@ def _get_entity_tagger() -> Any:
 
 
 def _field(raw: object, name: str) -> Any:
-    if isinstance(raw, dict):
-        return raw.get(name)
+    if isinstance(raw, Mapping):
+        return cast("Mapping[str, Any]", raw).get(name)
     return getattr(raw, name, None)
 
 
