@@ -269,6 +269,23 @@ class TestNormalizeCliArgs:
         assert normalized[0] == "news"
         assert normalized[1] == '"0000102909"'
 
+    def test_quotes_numeric_symbol_positionals_for_analyze_search_command(
+        self,
+    ) -> None:
+        """Analyze-search should preserve numeric positionals as strings."""
+        from sec_nlp.cli.__main__ import _normalize_cli_args
+
+        argv = [
+            "analyze-search",
+            "0000102909",
+            "--email",
+            "you@example.com",
+        ]
+        normalized = _normalize_cli_args(argv)
+
+        assert normalized[0] == "analyze-search"
+        assert normalized[1] == '"0000102909"'
+
     def test_leaves_numeric_positionals_for_non_symbol_commands(self) -> None:
         """Non-symbol commands should not rewrite numeric positionals."""
         from sec_nlp.cli.__main__ import _normalize_cli_args

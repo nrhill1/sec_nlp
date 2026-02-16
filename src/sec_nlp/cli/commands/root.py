@@ -14,6 +14,11 @@ from pydantic_settings import (
 from sec_nlp.core.infra.logger import logger
 
 from .analyze import AnalyzeCommand
+from .analyze_runnables import (
+    AnalyzeAnalysisCommand,
+    AnalyzeMarketCorrelationCommand,
+    AnalyzeSearchCommand,
+)
 from .clean import Clean
 from .efts import EFTS
 from .exb import Exb
@@ -44,6 +49,22 @@ class Root(BaseSettings):
 
     analyze: CliSubCommand[AnalyzeCommand] = Field(
         description="Analyze SEC filings with configurable filtering and LLM"
+    )
+
+    analyze_search: CliSubCommand[AnalyzeSearchCommand] = Field(
+        description="Run analyze pipeline search runnable and export results"
+    )
+
+    analyze_analysis: CliSubCommand[AnalyzeAnalysisCommand] = Field(
+        description="Run analyze pipeline search + analysis runnables"
+    )
+
+    analyze_market_correlation: CliSubCommand[
+        AnalyzeMarketCorrelationCommand
+    ] = Field(
+        description=(
+            "Run analyze pipeline with market-correlation runnable enabled"
+        )
     )
 
     warranty: CliSubCommand[Warranty] = Field(
