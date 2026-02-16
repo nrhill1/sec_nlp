@@ -25,6 +25,8 @@ XBRL_DIR := $(ROOT_DIR)/crates/xbrl
 XBRL_MANIFEST := $(XBRL_DIR)/Cargo.toml
 ENTITY_DIR := $(ROOT_DIR)/crates/entity
 ENTITY_MANIFEST := $(ENTITY_DIR)/Cargo.toml
+NEWSWATCH_DIR := $(ROOT_DIR)/crates/newswatch
+NEWSWATCH_MANIFEST := $(NEWSWATCH_DIR)/Cargo.toml
 
 # Maturin
 MATURIN_FLAGS ?=
@@ -72,13 +74,14 @@ help:
 	@echo "  rs-corr-<target>       Run Rust target for corr (e.g., rs-corr-dev)"
 	@echo "  rs-xbrl-<target>       Run Rust target for xbrl (e.g., rs-xbrl-dev)"
 	@echo "  rs-ent-<target>        Run Rust target for entity (e.g., rs-ent-dev)"
+	@echo "  rs-nw-<target>         Run Rust target for newswatch (e.g., rs-nw-dev)"
 	@echo "  rs-clean               Clean Rust build artifacts"
 	@echo "  rs-clean-all           Clean Rust artifacts + sccache"
 	@echo "  rs-clean-sccache       Clear sccache cache"
 	@echo "  maturin-dev            Build + install Rust extension via maturin"
 	@echo "  maturin-build          Build release wheels via maturin"
 	@echo "  maturin-sdist          Build a source distribution via maturin"
-	@echo "  build-ext              Build + install Rust extensions (market + efts + corr + xbrl + entity)"
+	@echo "  build-ext              Build + install Rust extensions (market + efts + corr + xbrl + entity + newswatch)"
 	@echo ""
 	@echo "For detailed help on each subsystem, run:"
 	@echo "  make -C src help       # Python commands"
@@ -87,6 +90,7 @@ help:
 	@echo "  make -C crates/corr help  # corr (Rust) commands"
 	@echo "  make -C crates/xbrl help  # xbrl (Rust) commands"
 	@echo "  make -C crates/entity help  # entity (Rust) commands"
+	@echo "  make -C crates/newswatch help  # newswatch (Rust) commands"
 	@echo ""
 	@echo "CI/CD:"
 	@echo "  ci                     Full CI pipeline"
@@ -178,6 +182,10 @@ rs-xbrl-%:
 rs-ent-%:
 	@$(MAKE) -C $(ENTITY_DIR) $*
 
+.PHONY: rs-nw-%
+rs-nw-%:
+	@$(MAKE) -C $(NEWSWATCH_DIR) $*
+
 # =========================================================================
 # Maturin Targets
 # =========================================================================
@@ -202,6 +210,7 @@ build-ext: ready
 	@RUSTFLAGS="$(RUSTFLAGS_DEV)" maturin develop -m $(CORR_MANIFEST) $(MATURIN_FLAGS)
 	@RUSTFLAGS="$(RUSTFLAGS_DEV)" maturin develop -m $(XBRL_MANIFEST) $(MATURIN_FLAGS)
 	@RUSTFLAGS="$(RUSTFLAGS_DEV)" maturin develop -m $(ENTITY_MANIFEST) $(MATURIN_FLAGS)
+	@RUSTFLAGS="$(RUSTFLAGS_DEV)" maturin develop -m $(NEWSWATCH_MANIFEST) $(MATURIN_FLAGS)
 	@echo "✓ Rust extensions built"
 	@echo ""
 
@@ -250,6 +259,7 @@ verify-rs: ready
 	@$(MAKE) rs-corr-test
 	@$(MAKE) rs-xbrl-test
 	@$(MAKE) rs-ent-test
+	@$(MAKE) rs-nw-test
 
 .PHONY: verify-all
 verify-all: ready

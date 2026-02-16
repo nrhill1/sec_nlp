@@ -48,6 +48,7 @@ cache-keys = [
   {file = "crates/corr/Cargo.toml"},
   {file = "crates/xbrl/Cargo.toml"},
   {file = "crates/entity/Cargo.toml"},
+  {file = "crates/newswatch/Cargo.toml"},
   {file = "**/*.rs"},
 ]
 

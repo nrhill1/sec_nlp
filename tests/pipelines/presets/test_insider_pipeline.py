@@ -299,3 +299,15 @@ def test_pipeline_run_writes_outputs_with_mocked_steps(
     assert lines[1].startswith("# run_short_id:")
     assert lines[2].startswith("# run_id:")
     assert lines[3].startswith("# run_short_id_display:")
+
+
+def test_insider_alert_dedupes_related_transaction_ids() -> None:
+    alert = InsiderAlert(
+        symbol="ABC",
+        alert_type="cluster_activity",
+        severity="medium",
+        message="test",
+        related_transaction_ids=["tx-1", "tx-1", " tx-2 ", "", "tx-2"],
+    )
+
+    assert alert.related_transaction_ids == ["tx-1", "tx-2"]

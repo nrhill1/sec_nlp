@@ -114,31 +114,19 @@ chrono = "0.4"
 
 ## Implementation Steps
 
-1. **Scaffold the crate.** Boilerplate from `crates/efts/`.
-
-2. **Implement `models.rs`.** Define `NewsItem`, `FeedConfig`, `FeedType`. Derive `Serialize` and `#[pyclass]` on `NewsItem`.
-
-3. **Implement `http.rs`.** Async reqwest client with configurable rate limit delay between requests (use `tokio::time::sleep`). Retry logic (copy pattern from `crates/efts/src/http.rs`). Accept `User-Agent` header.
-
-4. **Implement RSS parser** (`feeds/rss.rs`). Use `quick-xml` to parse `<channel><item>` elements. Extract `<title>`, `<link>`, `<pubDate>`, `<description>`. Parse dates to ISO 8601 using `chrono`.
-
-5. **Implement JSON API adapter** (`feeds/json_api.rs`). Handle NewsAPI format (`articles[].title`, `.url`, `.publishedAt`, `.description`). Support API key via environment variable. Polygon format as a second variant.
-
-6. **Implement keyword filter** (`filter.rs`). Compile keyword list into a `regex::RegexSet` (case-insensitive). For each `NewsItem`, check title + snippet against the set. Populate `matched_keywords` with the matching terms.
-
-7. **Implement deduplication** (`dedup.rs`). SimHash on lowercased title tokens (reuse the concept from `crates/efts/src/ranking.rs`). Configurable Hamming distance threshold (default 3). Filter out near-duplicate headlines.
-
-8. **Implement `client.rs`.** Orchestrate: iterate feeds → fetch → parse → filter → dedupe → return sorted by `published_at` descending. Cap at `max_results`.
-
-9. **Implement `python.rs`.** `NewsClient` PyO3 class with `fetch()` (blocking) and `fetch_async()` (uses `pyo3-async-runtimes`). Register in `lib.rs`.
-
-10. **Add to root Makefile.** `NEWSWATCH_DIR`, `NEWSWATCH_MANIFEST`, `rs-nw-%` target, include in `build-ext`.
-
-11. **Write Python wrapper** (`src/sec_nlp/core/news/client.py`). Lazy-import pattern. `NewsRetriever` class wrapping the Rust `NewsClient`. Convert `NewsItem` to Pydantic models.
-
-12. **Add type stubs** (`types/newswatch/__init__.pyi`).
-
-13. **Write tests.** Rust: parse fixture RSS/JSON files, filter/dedup unit tests. Python: mock the extension. No real HTTP calls in any test.
+- [x] **Scaffold the crate.** Boilerplate from `crates/efts/`.
+- [x] **Implement `models.rs`.** Define `NewsItem`, `FeedConfig`, `FeedType`. Derive `Serialize` and `#[pyclass]` on `NewsItem`.
+- [x] **Implement `http.rs`.** Async reqwest client with configurable rate limit delay between requests (use `tokio::time::sleep`). Retry logic (copy pattern from `crates/efts/src/http.rs`). Accept `User-Agent` header.
+- [x] **Implement RSS parser** (`feeds/rss.rs`). Parse RSS/Atom entries via `feed-rs`, extract title/link/date/summary, and normalize publication timestamps to ISO text.
+- [x] **Implement JSON API adapter** (`feeds/json_api.rs`). Handle NewsAPI format (`articles[].title`, `.url`, `.publishedAt`, `.description`) and Polygon-style (`results[]`) payloads.
+- [x] **Implement keyword filter** (`filter.rs`). Compile keyword list into a `regex::RegexSet` (case-insensitive). For each `NewsItem`, check title + snippet against the set. Populate `matched_keywords` with the matching terms.
+- [x] **Implement deduplication** (`dedup.rs`). SimHash on lowercased title tokens (reuse the concept from `crates/efts/src/ranking.rs`). Configurable Hamming distance threshold (default 3). Filter out near-duplicate headlines.
+- [x] **Implement `client.rs`.** Orchestrate: iterate feeds → fetch → parse → filter → dedupe → return sorted by `published_at` descending. Cap at `max_results`.
+- [x] **Implement `python.rs`.** `NewsClient` PyO3 class with `fetch()` (blocking) and `fetch_async()` (uses `pyo3-async-runtimes`). Register in `lib.rs`.
+- [x] **Add to root Makefile.** `NEWSWATCH_DIR`, `NEWSWATCH_MANIFEST`, `rs-nw-%` target, include in `build-ext`.
+- [x] **Write Python wrapper** (`src/sec_nlp/core/news/client.py`). Lazy-import pattern. `NewsRetriever` class wrapping the Rust `NewsClient`. Convert `NewsItem` to Pydantic models.
+- [x] **Add type stubs** (`types/newswatch/__init__.pyi`).
+- [x] **Write tests.** Rust: parse fixture RSS/JSON files, filter/dedup unit tests. Python: mock the extension. No real HTTP calls in any test.
 
 ## Testing Strategy
 

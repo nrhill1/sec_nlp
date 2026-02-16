@@ -10,6 +10,12 @@ from .ingest.exhibit_downloader import (
     create_exhibit_downloader as create_exhibit_downloader,
 )
 from .ingest.loader import Loader as Loader
+from .news import (
+    NewsItem as NewsItem,
+    NewsRetriever as NewsRetriever,
+    NewswatchExtensionError as NewswatchExtensionError,
+    create_news_retriever as create_news_retriever,
+)
 from .text.filters import (
     HOLDINGS_SECTION_PATTERNS as HOLDINGS_SECTION_PATTERNS,
     PROXY_SECTION_PATTERNS as PROXY_SECTION_PATTERNS,
@@ -54,4 +60,8 @@ __all__ = [
     "LogContext",
     "logger",
     "setup_logging",
+    "NewswatchExtensionError",
+    "NewsItem",
+    "NewsRetriever",
+    "create_news_retriever",
 ]

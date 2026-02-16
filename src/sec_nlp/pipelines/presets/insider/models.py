@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import ClassVar, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from sec_nlp.pipelines import BasePipelineResult
 from sec_nlp.types import JsonValue
@@ -73,6 +73,28 @@ class InsiderAlert(BaseModel):
     accession_number: str | None = None
     owner_names: list[str] = Field(default_factory=list)
     related_transaction_ids: list[str] = Field(default_factory=list)
+
+    @field_validator("related_transaction_ids", mode="before")
+    @classmethod
+    def _dedupe_related_transaction_ids(cls, value: object) -> list[str]:
+        if value is None:
+            return []
+        if isinstance(value, str):
+            candidates: list[object] = [value]
+        elif isinstance(value, (list, tuple, set)):
+            candidates = list(value)
+        else:
+            candidates = [value]
+
+        deduped: list[str] = []
+        seen: set[str] = set()
+        for candidate in candidates:
+            text = str(candidate).strip()
+            if not text or text in seen:
+                continue
+            seen.add(text)
+            deduped.append(text)
+        return deduped
 
 
 class InsiderResult(BasePipelineResult):

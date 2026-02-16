@@ -19,6 +19,8 @@ New Rust crates and Python modules to extend the project beyond its current scop
 - [x] `sec_nlp/core/edgar/economic.py` implemented for FRED series fetch, filing-date alignment, and macro-sensitivity correlation, including analyze `--macro-context` wiring
 - [x] `crates/entity` scaffolded with PyO3 exports, pattern modules (money/date/regulation/person/security-id), dictionary matcher, event detection, and root `Makefile` integration
 - [x] `sec_nlp/core/text/entity_extraction.py` wrapper implemented with lazy `entity` loading, document enrichment helpers, native stubs, and tests
+- [x] `crates/newswatch` scaffolded with feed parsing, JSON adapter support, keyword filtering, SimHash deduplication, PyO3 client exports, and root `Makefile` integration
+- [x] `sec_nlp/core/news/client.py` wrapper + native/typing stubs (`types/newswatch/__init__.pyi`, `types/sec_nlp/core/news/client.pyi`) implemented with tests
 - [ ] Remaining crates/modules/pipelines in this roadmap
 
 ---

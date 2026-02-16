@@ -15,6 +15,12 @@ from .market import (
     MarketRetriever,
     create_market_retriever,
 )
+from .news import (
+    NewsItem,
+    NewsRetriever,
+    NewswatchExtensionError,
+    create_news_retriever,
+)
 from .text.filters import (
     SectionFilter,
     SectionPattern,
@@ -74,4 +80,9 @@ __all__: tuple[str, ...] = (
     "MarketQuote",
     "MarketRetriever",
     "create_market_retriever",
+    # News
+    "NewswatchExtensionError",
+    "NewsItem",
+    "NewsRetriever",
+    "create_news_retriever",
 )
