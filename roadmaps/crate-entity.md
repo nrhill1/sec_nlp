@@ -102,35 +102,21 @@ once_cell = "1.19"
 
 ## Implementation Steps
 
-1. **Scaffold the crate.** Boilerplate from `crates/efts/`.
-
-2. **Implement `models.rs`.** Define `Entity`, `EntityType` (enum), `EventMention`, `Span`. Derive `#[pyclass]` on output types.
-
-3. **Implement money patterns** (`patterns/money.rs`). Regex for: `$1.5 million`, `$1,500,000`, `$1.5B`, `USD 1.5 million`, etc. Normalize to a float value. Handle negative amounts.
-
-4. **Implement regulation patterns** (`patterns/regulation.rs`). Regex for: `Section \d+(\([a-z]\))?` of the Exchange/Securities Act, `Rule \d+[a-z]-\d+`, `Regulation [A-Z](-[A-Z])?`, `Item \d+[A-Z]?`. Return the matched regulatory reference.
-
-5. **Implement date patterns** (`patterns/date.rs`). ISO dates, US dates (MM/DD/YYYY), fiscal references ("fiscal year 2024", "FY2024", "three months ended March 31, 2024"). Normalize to ISO format.
-
-6. **Implement person patterns** (`patterns/person.rs`). Title patterns: "Mr./Ms./Dr. LastName", "FirstName LastName, (CEO|CFO|President|Director)". Context-dependent — look for surrounding officer/director title keywords.
-
-7. **Implement security ID patterns** (`patterns/security_id.rs`). CUSIP: 9 alphanumeric characters with check digit validation. ISIN: 2-letter country + 9 chars + check digit.
-
-8. **Implement dictionary matcher** (`dictionary.rs`). Load a company/ticker dictionary (JSON lines: `{"name": "Apple Inc.", "ticker": "AAPL", "cik": "0000320193"}`). Build an `AhoCorasick` automaton. Match against text, emit `ORG` entities with the matched company name and metadata.
-
-9. **Implement event detection** (`events.rs`). Phrase list per event type (merger: "merger", "acquisition", "acquir", "business combination"; bankruptcy: "bankruptcy", "Chapter 11", "insolvency"; restatement: "restatement", "restate", "material weakness"; etc.). Build a `RegexSet` for each category. Score by specificity (exact phrase > partial match). Return `EventMention` with confidence.
-
-10. **Implement `tagger.rs`.** Orchestrate all pattern modules and dictionary. Single-pass where possible (run all regex sets, then Aho-Corasick, then merge/deduplicate overlapping spans). Sort results by start offset.
-
-11. **Implement `python.rs`.** `EntityTagger` PyO3 class. `tag_text()`, `detect_events()`, `tag_and_detect()`. Register in `lib.rs`.
-
-12. **Add to root Makefile.** `ENTITY_DIR`, `ENTITY_MANIFEST`, `rs-ent-%` target, include in `build-ext`.
-
-13. **Write Python wrapper** (`src/sec_nlp/core/text/entity_extraction.py`).
-
-14. **Add type stubs** (`types/entity/__init__.pyi`).
-
-15. **Write tests.** Rust: per-pattern tests with known SEC filing excerpts. Python: mock extension. No network.
+- [x] **Scaffold the crate.** Boilerplate from `crates/efts/`.
+- [x] **Implement `models.rs`.** Define `Entity`, `EntityType` (enum), `EventMention`, `Span`. Derive `#[pyclass]` on output types.
+- [x] **Implement money patterns** (`patterns/money.rs`). Regex for: `$1.5 million`, `$1,500,000`, `$1.5B`, `USD 1.5 million`, etc. Normalize to a float value. Handle negative amounts.
+- [x] **Implement regulation patterns** (`patterns/regulation.rs`). Regex for: `Section \d+(\([a-z]\))?` of the Exchange/Securities Act, `Rule \d+[a-z]-\d+`, `Regulation [A-Z](-[A-Z])?`, `Item \d+[A-Z]?`. Return the matched regulatory reference.
+- [x] **Implement date patterns** (`patterns/date.rs`). ISO dates, US dates (MM/DD/YYYY), fiscal references ("fiscal year 2024", "FY2024", "three months ended March 31, 2024"). Normalize to ISO format.
+- [x] **Implement person patterns** (`patterns/person.rs`). Title patterns: "Mr./Ms./Dr. LastName", "FirstName LastName, (CEO|CFO|President|Director)". Context-dependent — look for surrounding officer/director title keywords.
+- [x] **Implement security ID patterns** (`patterns/security_id.rs`). CUSIP: 9 alphanumeric characters with check digit validation. ISIN: 2-letter country + 9 chars + check digit.
+- [x] **Implement dictionary matcher** (`dictionary.rs`). Load a company/ticker dictionary (JSON lines: `{"name": "Apple Inc.", "ticker": "AAPL", "cik": "0000320193"}`). Build an `AhoCorasick` automaton. Match against text, emit `ORG` entities with the matched company name and metadata.
+- [x] **Implement event detection** (`events.rs`). Phrase list per event type (merger: "merger", "acquisition", "acquir", "business combination"; bankruptcy: "bankruptcy", "Chapter 11", "insolvency"; restatement: "restatement", "restate", "material weakness"; etc.). Build a `RegexSet` for each category. Score by specificity (exact phrase > partial match). Return `EventMention` with confidence.
+- [x] **Implement `tagger.rs`.** Orchestrate all pattern modules and dictionary. Single-pass where possible (run all regex sets, then Aho-Corasick, then merge/deduplicate overlapping spans). Sort results by start offset.
+- [x] **Implement `python.rs`.** `EntityTagger` PyO3 class. `tag_text()`, `detect_events()`, `tag_and_detect()`. Register in `lib.rs`.
+- [x] **Add to root Makefile.** `ENTITY_DIR`, `ENTITY_MANIFEST`, `rs-ent-%` target, include in `build-ext`.
+- [x] **Write Python wrapper** (`src/sec_nlp/core/text/entity_extraction.py`).
+- [x] **Add type stubs** (`types/entity/__init__.pyi`).
+- [x] **Write tests.** Rust: per-pattern tests with known SEC filing excerpts. Python: mock extension. No network.
 
 ## Testing Strategy
 
