@@ -98,3 +98,13 @@ def test_llm_defaults_when_not_provided(tmp_path: Path) -> None:
     # Should have default prompt_file
     assert config.llm.prompt_file is not None
     assert config.llm.prompt_file.exists()
+
+
+def test_macro_context_flag_can_be_enabled(tmp_path: Path) -> None:
+    config = AnalyzeConfig(
+        symbols=["AAPL"],
+        out_path=tmp_path,
+        dl_path=tmp_path,
+        macro_context=True,
+    )
+    assert config.macro_context is True

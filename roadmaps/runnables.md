@@ -202,11 +202,11 @@ class RegulatoryExposureOutput(BaseModel):
 
 - [x] Implement `sector_correlation.py` with typed input/output models and strongest-pair selection.
 - [x] Implement `filing_sentiment_diff.py` with per-topic sentiment deltas and risk-factor set diffing.
-- [ ] Implement `earnings_surprise.py`.
-- [ ] Implement `supply_chain_map.py`.
-- [ ] Implement `regulatory_exposure.py`.
+- [x] Implement `earnings_surprise.py`.
+- [x] Implement `supply_chain_map.py`.
+- [x] Implement `regulatory_exposure.py`.
 - [x] Register implemented runnables in `src/sec_nlp/pipelines/presets/analyze/runnables/__init__.py`.
-- [x] Add runnable tests (no network) for sector correlation and filing sentiment diff.
+- [x] Add runnable tests (no network) for sector correlation, filing sentiment diff, earnings surprise, supply chain map, and regulatory exposure.
 
 ## Testing Strategy
 

@@ -403,6 +403,18 @@ class AnalyzeConfig(BasePipelineSettings):
             }
         },
     )
+    macro_context: bool = Field(
+        default=False,
+        description=(
+            "Include macroeconomic context from FRED indicators in per-symbol "
+            "analysis metadata when available."
+        ),
+        json_schema_extra={
+            "cli_args": {
+                "aliases": ["--macro-context"],
+            }
+        },
+    )
 
     @model_validator(mode="before")
     @classmethod

@@ -1,6 +1,11 @@
 """Runnable components for the analyze pipeline."""
 
 from .analysis import AnalysisBatchInput, AnalyzerRunnable
+from .earnings_surprise import (
+    EarningsSurpriseInput,
+    EarningsSurpriseOutput,
+    EarningsSurpriseRunnable,
+)
 from .efts import EFTSSearchInput, EFTSSearchRunnable
 from .filing_sentiment_diff import (
     FilingSentimentDiffInput,
@@ -10,6 +15,12 @@ from .filing_sentiment_diff import (
 from .market_correlation import (
     MarketCorrelationInput,
     MarketCorrelationRunnable,
+)
+from .regulatory_exposure import (
+    RegulatoryExposureInput,
+    RegulatoryExposureOutput,
+    RegulatoryExposureRunnable,
+    RegulatoryReference,
 )
 from .search import (
     SearchQueryResults,
@@ -22,10 +33,19 @@ from .sector_correlation import (
     SectorCorrelationOutput,
     SectorCorrelationRunnable,
 )
+from .supply_chain_map import (
+    RelatedEntity,
+    SupplyChainMapInput,
+    SupplyChainMapOutput,
+    SupplyChainMapRunnable,
+)
 
 __all__: tuple[str, ...] = (
     "AnalysisBatchInput",
     "AnalyzerRunnable",
+    "EarningsSurpriseInput",
+    "EarningsSurpriseOutput",
+    "EarningsSurpriseRunnable",
     "EFTSSearchInput",
     "EFTSSearchRunnable",
     "FilingSentimentDiffInput",
@@ -33,6 +53,10 @@ __all__: tuple[str, ...] = (
     "FilingSentimentDiffRunnable",
     "MarketCorrelationInput",
     "MarketCorrelationRunnable",
+    "RegulatoryExposureInput",
+    "RegulatoryExposureOutput",
+    "RegulatoryExposureRunnable",
+    "RegulatoryReference",
     "SearchQueryResults",
     "SearchResultsByQuery",
     "SearchRetrieveInput",
@@ -40,4 +64,8 @@ __all__: tuple[str, ...] = (
     "SectorCorrelationInput",
     "SectorCorrelationOutput",
     "SectorCorrelationRunnable",
+    "RelatedEntity",
+    "SupplyChainMapInput",
+    "SupplyChainMapOutput",
+    "SupplyChainMapRunnable",
 )

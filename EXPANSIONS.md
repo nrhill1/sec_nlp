@@ -15,7 +15,9 @@ New Rust crates and Python modules to extend the project beyond its current scop
 - [x] `insider` CLI command added and registered in root command routing
 - [x] `sec_nlp/pipelines/presets/holdings/` scaffolded and wired end-to-end (download/parse/diff/aggregate/output + tests)
 - [x] `holdings` CLI command added and registered in root command routing
-- [x] Analyze runnables `SectorCorrelationRunnable` + `FilingSentimentDiffRunnable` implemented and tested
+- [x] Analyze runnables `SectorCorrelationRunnable`, `FilingSentimentDiffRunnable`, `EarningsSurpriseRunnable`, `SupplyChainMapRunnable`, and `RegulatoryExposureRunnable` implemented and tested
+- [x] `sec_nlp/core/edgar/economic.py` implemented for FRED series fetch, filing-date alignment, and macro-sensitivity correlation, including analyze `--macro-context` wiring
+- [x] `sec_nlp/core/text/entity_extraction.py` wrapper implemented with lazy `entity` loading, document enrichment helpers, native stubs, and tests
 - [ ] Remaining crates/modules/pipelines in this roadmap
 
 ---

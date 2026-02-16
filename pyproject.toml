@@ -31,6 +31,7 @@ dependencies = [
   "unstructured>=0.18.20",
   "pyahocorasick>=2.2.0",
   "pandas>=2.3.3",
+  "fredapi>=0.5.2",
   "rich>=13.8.0",
 ]
 

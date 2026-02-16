@@ -3,6 +3,14 @@ from .deduplication import (
     SimHashConfig as SimHashConfig,
     SimHashDeduplicator as SimHashDeduplicator,
 )
+from .entity_extraction import (
+    Entity as Entity,
+    EntityExtensionError as EntityExtensionError,
+    EventMention as EventMention,
+    detect_events as detect_events,
+    enrich_documents as enrich_documents,
+    extract_entities as extract_entities,
+)
 from .filters import (
     HOLDINGS_SECTION_PATTERNS as HOLDINGS_SECTION_PATTERNS,
     PROXY_SECTION_PATTERNS as PROXY_SECTION_PATTERNS,
@@ -37,6 +45,12 @@ __all__ = [
     "SectionFilter",
     "SectionPattern",
     "SectionType",
+    "EntityExtensionError",
+    "Entity",
+    "EventMention",
+    "extract_entities",
+    "detect_events",
+    "enrich_documents",
     "create_default_section_filter",
     "create_exhibit_filter",
     "create_holdings_filter",

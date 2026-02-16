@@ -79,13 +79,13 @@ def compute_macro_sensitivity(
 
 ## Implementation Steps
 
-1. Add `fredapi` to `pyproject.toml` dependencies.
-2. Implement `EconomicSeries`, `MacroContext`, `MacroSensitivity` Pydantic models.
-3. Implement `fetch_series()` — wrap fredapi, convert to plain types.
-4. Implement `align_to_filings()` — binary search alignment.
-5. Implement `compute_macro_sensitivity()` — fetch data, compute correlation.
-6. Add `--macro-context` flag to the analyze pipeline config.
-7. Write tests: mock `fredapi.Fred`, verify alignment logic and correlation pass-through. No network.
+- [x] Add `fredapi` to `pyproject.toml` dependencies.
+- [x] Implement `EconomicSeries`, `MacroContext`, `MacroSensitivity` Pydantic models.
+- [x] Implement `fetch_series()` — wrap fredapi, convert to plain types.
+- [x] Implement `align_to_filings()` — binary search alignment.
+- [x] Implement `compute_macro_sensitivity()` — fetch data, compute correlation.
+- [x] Add `--macro-context` flag to the analyze pipeline config.
+- [x] Write tests: mock `fredapi.Fred`, verify alignment logic and correlation pass-through. No network.
 
 ## Dependencies
 

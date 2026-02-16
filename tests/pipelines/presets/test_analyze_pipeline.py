@@ -6,6 +6,7 @@ from langchain_core.documents import Document
 from langchain_core.runnables import Runnable, RunnableConfig
 from rich.progress import Progress, TaskID
 
+from sec_nlp.core.edgar.economic import EconomicSeries, MacroContext
 from sec_nlp.pipelines.presets.analyze import (
     AnalysisInput,
     AnalysisResult,
@@ -136,6 +137,7 @@ def _make_config(
     batch_size: int = 2,
     min_chunk_length: int = 10,
     deduplicate_chunks: bool = False,
+    macro_context: bool = False,
 ) -> AnalyzeConfig:
     return AnalyzeConfig(
         symbols=["AAPL"],
@@ -152,6 +154,7 @@ def _make_config(
         batch_size=batch_size,
         min_chunk_length=min_chunk_length,
         deduplicate_chunks=deduplicate_chunks,
+        macro_context=macro_context,
     )
 
 
@@ -165,6 +168,7 @@ def _make_pipeline(
     batch_size: int = 2,
     min_chunk_length: int = 10,
     deduplicate_chunks: bool = False,
+    macro_context: bool = False,
 ) -> AnalyzePipeline:
     config = _make_config(
         tmp_path,
@@ -175,6 +179,7 @@ def _make_pipeline(
         batch_size=batch_size,
         min_chunk_length=min_chunk_length,
         deduplicate_chunks=deduplicate_chunks,
+        macro_context=macro_context,
     )
     return _TestAnalyzePipeline(config=config)
 
@@ -287,3 +292,56 @@ def test_run_uses_cached_search_results(tmp_path: Path) -> None:
     call = runner.export_results.call_args
     assert call.kwargs.get("cached") is True
     assert call.kwargs.get("queries") == ["cached-query"]
+
+
+def test_build_macro_context_when_enabled(tmp_path: Path, monkeypatch) -> None:
+    pipeline = _make_pipeline(tmp_path, macro_context=True)
+    docs = [
+        Document(
+            page_content="macro doc",
+            metadata={"filing_date": "2024-03-15"},
+        )
+    ]
+
+    from sec_nlp.pipelines.presets.analyze import pipeline as pipeline_module
+
+    def _mock_fetch_series(
+        series_id: str,
+        start_date: str = "",
+        end_date: str = "",
+    ) -> EconomicSeries:
+        _ = start_date
+        _ = end_date
+        return EconomicSeries(
+            series_id=series_id,
+            description=series_id,
+            observations=[("2024-03-01", 1.23)],
+        )
+
+    def _mock_align_to_filings(
+        series: EconomicSeries,
+        filing_dates: list[str],
+    ) -> list[MacroContext]:
+        filing_date = filing_dates[0]
+        kwargs = {"filing_date": filing_date}
+        mapping = {
+            "GDP": "gdp_growth",
+            "CPIAUCSL": "cpi_yoy",
+            "UNRATE": "unemployment_rate",
+            "FEDFUNDS": "fed_funds_rate",
+            "T10Y2Y": "yield_spread_10y_2y",
+        }
+        kwargs[mapping[series.series_id]] = 1.23
+        return [MacroContext(**kwargs)]
+
+    monkeypatch.setattr(pipeline_module, "fetch_series", _mock_fetch_series)
+    monkeypatch.setattr(
+        pipeline_module, "align_to_filings", _mock_align_to_filings
+    )
+
+    context = pipeline._build_macro_context(docs)
+
+    assert context is not None
+    assert "macro near 2024-03-15" in context
+    assert "GDP=1.23" in context
+    assert "UNRATE=1.23" in context

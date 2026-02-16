@@ -69,13 +69,13 @@ def enrich_documents(docs: list[Document]) -> list[Document]:
 
 ## Implementation Steps
 
-1. Implement `Entity` and `EventMention` Pydantic models (frozen, extra="forbid").
-2. Implement lazy-loading wrapper for the `entity` Rust module.
-3. Implement `extract_entities()` — call `EntityTagger.tag_text()`, convert to `Entity` list.
-4. Implement `detect_events()` — call `EntityTagger.detect_events()`, convert to `EventMention` list.
-5. Implement `enrich_documents()` — batch enrichment of document metadata.
-6. Add type stubs for `crates/entity` in `types/entity/__init__.pyi`.
-7. Write tests: mock the `entity` module, verify model mapping and document enrichment. No network.
+- [x] Implement `Entity` and `EventMention` Pydantic models (frozen, extra="forbid").
+- [x] Implement lazy-loading wrapper for the `entity` Rust module.
+- [x] Implement `extract_entities()` — call `EntityTagger.tag_text()`, convert to `Entity` list.
+- [x] Implement `detect_events()` — call `EntityTagger.detect_events()`, convert to `EventMention` list.
+- [x] Implement `enrich_documents()` — batch enrichment of document metadata.
+- [x] Add type stubs for `crates/entity` in `types/entity/__init__.pyi`.
+- [x] Write tests: mock the `entity` module, verify model mapping and document enrichment. No network.
 
 ## Dependencies
 

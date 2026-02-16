@@ -3,6 +3,14 @@
 
 from .chunking import SentenceSplitter
 from .deduplication import SimHashConfig, SimHashDeduplicator
+from .entity_extraction import (
+    Entity,
+    EntityExtensionError,
+    EventMention,
+    detect_events,
+    enrich_documents,
+    extract_entities,
+)
 from .filters import (
     SectionFilter,
     SectionPattern,
@@ -47,6 +55,12 @@ __all__ = (
     "SectionFilter",
     "SectionPattern",
     "SectionType",
+    "EntityExtensionError",
+    "Entity",
+    "EventMention",
+    "extract_entities",
+    "detect_events",
+    "enrich_documents",
     "create_default_section_filter",
     "create_exhibit_filter",
     "create_holdings_filter",
