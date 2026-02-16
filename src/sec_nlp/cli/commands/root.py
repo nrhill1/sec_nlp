@@ -51,20 +51,16 @@ class Root(BaseSettings):
         description="Analyze SEC filings with configurable filtering and LLM"
     )
 
-    analyze_search: CliSubCommand[AnalyzeSearchCommand] = Field(
-        description="Run analyze pipeline search runnable and export results"
+    scan: CliSubCommand[AnalyzeSearchCommand] = Field(
+        description="Run analyze search runnable and export results"
     )
 
-    analyze_analysis: CliSubCommand[AnalyzeAnalysisCommand] = Field(
-        description="Run analyze pipeline search + analysis runnables"
+    brief: CliSubCommand[AnalyzeAnalysisCommand] = Field(
+        description="Run analyze search + analysis runnables"
     )
 
-    analyze_market_correlation: CliSubCommand[
-        AnalyzeMarketCorrelationCommand
-    ] = Field(
-        description=(
-            "Run analyze pipeline with market-correlation runnable enabled"
-        )
+    pulse: CliSubCommand[AnalyzeMarketCorrelationCommand] = Field(
+        description="Run analyze pipeline with market-correlation enabled"
     )
 
     warranty: CliSubCommand[Warranty] = Field(

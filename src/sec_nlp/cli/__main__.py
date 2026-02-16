@@ -74,9 +74,9 @@ _MULTI_VALUE_FLAGS: set[str] = {
 # before handing argv to CliApp so they remain strings (e.g. "0000102909").
 _SYMBOL_POSITIONAL_COMMANDS: set[str] = {
     "analyze",
-    "analyze-search",
-    "analyze-analysis",
-    "analyze-market-correlation",
+    "scan",
+    "brief",
+    "pulse",
     "warranty",
     "exb",
     "financials",

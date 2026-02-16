@@ -34,7 +34,7 @@ def test_analyze_search_cli_sets_expected_runnables(
 
     sys.argv = [
         "cli",
-        "analyze-search",
+        "scan",
         "AAPL",
         "--email",
         "test@example.com",
@@ -78,7 +78,7 @@ def test_analyze_analysis_cli_sets_expected_runnables(
 
     sys.argv = [
         "cli",
-        "analyze-analysis",
+        "brief",
         "MSFT",
         "--email",
         "test@example.com",
@@ -124,7 +124,7 @@ def test_analyze_market_correlation_cli_sets_expected_defaults(
 
     sys.argv = [
         "cli",
-        "analyze-market-correlation",
+        "pulse",
         "CDE",
         "--email",
         "test@example.com",

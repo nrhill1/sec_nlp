@@ -28,9 +28,9 @@ from .warranty import Warranty as Warranty
 class Root(BaseSettings):
     model_config: Incomplete
     analyze: CliSubCommand[AnalyzeCommand]
-    analyze_search: CliSubCommand[AnalyzeSearchCommand]
-    analyze_analysis: CliSubCommand[AnalyzeAnalysisCommand]
-    analyze_market_correlation: CliSubCommand[AnalyzeMarketCorrelationCommand]
+    scan: CliSubCommand[AnalyzeSearchCommand]
+    brief: CliSubCommand[AnalyzeAnalysisCommand]
+    pulse: CliSubCommand[AnalyzeMarketCorrelationCommand]
     warranty: CliSubCommand[Warranty]
     exb: CliSubCommand[Exb]
     financials: CliSubCommand[Financials]
