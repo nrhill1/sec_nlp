@@ -313,3 +313,33 @@ class TestNormalizeCliArgs:
         normalized = _normalize_cli_args(argv)
 
         assert normalized == argv
+
+    def test_rewrites_queries_flag_for_analyze_command(self) -> None:
+        """Analyze should map --queries to nested --search.queries."""
+        from sec_nlp.cli.__main__ import _normalize_cli_args
+
+        argv = [
+            "analyze",
+            "AAPL",
+            "--queries",
+            "warranty",
+        ]
+        normalized = _normalize_cli_args(argv)
+
+        assert "--search.queries" in normalized
+        assert "--queries" not in normalized
+
+    def test_does_not_rewrite_queries_flag_for_retrieve_command(self) -> None:
+        """Retrieve should preserve --queries for RetrieveSettings parsing."""
+        from sec_nlp.cli.__main__ import _normalize_cli_args
+
+        argv = [
+            "retrieve",
+            "AAPL",
+            "--queries",
+            "warranty",
+        ]
+        normalized = _normalize_cli_args(argv)
+
+        assert "--queries" in normalized
+        assert "--search.queries" not in normalized

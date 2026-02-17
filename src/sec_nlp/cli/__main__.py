@@ -166,9 +166,12 @@ def _normalize_cli_args(argv: list[str]) -> list[str]:
         normalized.append(arg)
         i += 1
 
+    command_name = normalized[0] if normalized else ""
+    rewrite_queries = command_name in {"analyze", "exb"}
+
     rewritten: list[str] = []
     for token in normalized:
-        if token == "--queries":
+        if rewrite_queries and token == "--queries":
             rewritten.append("--search.queries")
         else:
             rewritten.append(token)

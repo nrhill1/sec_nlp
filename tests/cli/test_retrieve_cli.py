@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
+from typing import cast
 from unittest.mock import Mock, patch
 
 from sec_nlp.cli.commands.retrieve import Retrieve
@@ -34,6 +35,24 @@ def test_retrieve_basic_configuration(tmp_path: Path) -> None:
     assert cmd.queries == ["supply chain", "warranty"]
     assert cmd.top_k == 25
     assert cmd.output_format == "yaml"
+
+
+def test_retrieve_normalizes_numeric_sections(tmp_path: Path) -> None:
+    dl_path = tmp_path / "downloads"
+    out_path = tmp_path / "outputs"
+    dl_path.mkdir()
+    out_path.mkdir()
+
+    cmd = Retrieve(
+        email="test@example.com",
+        dl_path=dl_path,
+        out_path=out_path,
+        symbols=["aapl"],
+        queries=["risk"],
+        sections=cast(list[str], [7, "item 1a"]),
+    )
+
+    assert cmd.sections == ["7", "1A"]
 
 
 @patch("sec_nlp.cli.command.BasePipelineCommand._run_pipeline")

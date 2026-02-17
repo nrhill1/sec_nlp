@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+from uuid import NAMESPACE_URL, uuid5
 
 from qdrant_client.models import Distance, PointStruct, VectorParams
 
@@ -25,7 +26,8 @@ def _point_id(symbol: str, hit: RetrievalHit) -> str:
         f"{symbol}|{hit.query}|{hit.accession_number}|{hit.chunk_index}|"
         f"{hit.section_number}|{hit.filed_date}"
     )
-    return hashlib.sha1(raw.encode("utf-8")).hexdigest()
+    digest = hashlib.sha1(raw.encode("utf-8")).hexdigest()
+    return str(uuid5(NAMESPACE_URL, digest))
 
 
 def _payload(

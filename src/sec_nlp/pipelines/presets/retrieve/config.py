@@ -111,16 +111,22 @@ class RetrieveSettings(BasePipelineSettings):
 
     @field_validator("queries", mode="before")
     @classmethod
-    def normalize_queries(cls, value: list[str] | str | None) -> list[str]:
+    def normalize_queries(
+        cls, value: list[str | int | float] | str | int | float | None
+    ) -> list[str]:
         if value is None:
             return []
+        if isinstance(value, (int, float)):
+            value = [str(value)]
         if isinstance(value, str):
             value = [part.strip() for part in value.split("||") if part.strip()]
 
         normalized: list[str] = []
         seen: set[str] = set()
         for raw in value:
-            cleaned = raw.strip()
+            if isinstance(raw, bool) or raw is None:
+                continue
+            cleaned = str(raw).strip()
             if not cleaned:
                 continue
             key = cleaned.casefold()
@@ -132,16 +138,22 @@ class RetrieveSettings(BasePipelineSettings):
 
     @field_validator("sections", mode="before")
     @classmethod
-    def normalize_sections(cls, value: list[str] | str | None) -> list[str]:
+    def normalize_sections(
+        cls, value: list[str | int | float] | str | int | float | None
+    ) -> list[str]:
         if value is None:
             return []
+        if isinstance(value, (int, float)):
+            value = [str(value)]
         if isinstance(value, str):
             value = [part for part in value.replace(",", " ").split() if part]
 
         normalized: list[str] = []
         seen: set[str] = set()
         for raw in value:
-            cleaned = raw.strip().upper()
+            if isinstance(raw, bool) or raw is None:
+                continue
+            cleaned = str(raw).strip().upper()
             if not cleaned:
                 continue
             if cleaned.startswith("ITEM"):
