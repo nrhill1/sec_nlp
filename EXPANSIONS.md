@@ -28,7 +28,7 @@ New Rust crates and Python modules to extend the project beyond its current scop
 - [x] `events` CLI command added and registered in root command routing
 - [x] `sec_nlp/pipelines/presets/retrieve/` scaffolded and wired for EFTS-first ranked retrieval output (candidate search + filing chunk hydration + embedding rerank + optional Qdrant indexing + run metadata exports)
 - [x] `retrieve` CLI command added and registered in root command routing
-- [ ] Remaining crates/modules/pipelines in this roadmap
+- [x] Current crates/modules/pipelines in this roadmap implemented (future optimization work can track in follow-on documents)
 
 ---
 
