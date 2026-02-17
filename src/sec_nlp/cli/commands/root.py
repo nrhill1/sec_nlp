@@ -24,6 +24,7 @@ from .insider import Insider
 from .market import Market
 from .news import News
 from .qdrant import Qdrant
+from .retrieve import Retrieve
 from .runs import Runs
 from .version import Version
 from .warranty import Warranty
@@ -67,6 +68,10 @@ class Root(BaseSettings):
 
     news: CliSubCommand[News] = Field(
         description="Run the news monitoring and correlation pipeline"
+    )
+
+    retrieve: CliSubCommand[Retrieve] = Field(
+        description="Run the EFTS-first retrieval pipeline"
     )
 
     events: CliSubCommand[Events] = Field(

@@ -81,6 +81,7 @@ _SYMBOL_POSITIONAL_COMMANDS: set[str] = {
     "insider",
     "news",
     "events",
+    "retrieve",
 }
 
 _FALSEY: set[str] = {"false", "0", "no", "off", "n"}

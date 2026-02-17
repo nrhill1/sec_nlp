@@ -17,6 +17,7 @@ from .insider import Insider as Insider
 from .market import Market as Market
 from .news import News as News
 from .qdrant import Qdrant as Qdrant
+from .retrieve import Retrieve as Retrieve
 from .runs import Runs as Runs
 from .version import Version as Version
 from .warranty import Warranty as Warranty
@@ -30,6 +31,7 @@ class Root(BaseSettings):
     holdings: CliSubCommand[Holdings]
     insider: CliSubCommand[Insider]
     news: CliSubCommand[News]
+    retrieve: CliSubCommand[Retrieve]
     events: CliSubCommand[Events]
     efts: CliSubCommand[EFTS]
     clean: CliSubCommand[Clean]

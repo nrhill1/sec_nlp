@@ -10,6 +10,7 @@ from .insider import Insider
 from .market import Market
 from .news import News
 from .qdrant import Qdrant
+from .retrieve import Retrieve
 from .root import Root
 from .runs import Runs
 from .version import Version
@@ -26,6 +27,7 @@ __all__: tuple[str, ...] = (
     "Market",
     "News",
     "Qdrant",
+    "Retrieve",
     "Root",
     "Runs",
     "Version",

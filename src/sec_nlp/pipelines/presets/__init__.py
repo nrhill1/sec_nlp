@@ -8,6 +8,7 @@ from .financials import FinancialsPipeline, FinancialsSettings
 from .holdings import HoldingsPipeline, HoldingsSettings
 from .insider import InsiderPipeline, InsiderSettings
 from .news import NewsPipeline, NewsSettings
+from .retrieve import RetrievePipeline, RetrieveSettings
 from .warranty import WarrantyConfig, WarrantyPipeline
 
 __all__: tuple[str, ...] = (
@@ -25,6 +26,8 @@ __all__: tuple[str, ...] = (
     "InsiderSettings",
     "NewsPipeline",
     "NewsSettings",
+    "RetrievePipeline",
+    "RetrieveSettings",
     "WarrantyConfig",
     "WarrantyPipeline",
 )

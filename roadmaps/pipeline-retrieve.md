@@ -101,16 +101,16 @@ sec-nlp retrieve "supply chain disruption" --tickers AAPL MSFT --forms 10-K 10-Q
 
 ## Implementation Steps
 
-1. Create `retrieve/` directory with boilerplate.
-2. Implement `RetrievalHit` and `RetrievalResult` Pydantic models.
-3. Implement `candidate_search.py` — wrap EFTS batch_search_async.
-4. Implement `download_chunk.py` — download + chunk, respecting section filters.
-5. Implement `embed.py` — call `crates/embed` wrapper, skip already-indexed chunks.
-6. Implement `index.py` — Qdrant upsert with payload metadata.
-7. Implement `query.py` — embed query, ANN search, assemble results.
-8. Implement pipeline orchestration.
-9. Add CLI command, register in `root.py`.
-10. Write tests: mock EFTS, embed, and Qdrant. Verify candidate filtering, idempotent indexing, and query ranking. No network.
+- [x] Create `retrieve/` directory with boilerplate.
+- [x] Implement `RetrievalHit` and `RetrievalResult` Pydantic models.
+- [x] Implement `candidate_search.py` — wrap EFTS batch search flow.
+- [ ] Implement `download_chunk.py` — download + chunk, respecting section filters. (currently passthrough placeholder)
+- [ ] Implement `embed.py` — call `crates/embed` wrapper, skip already-indexed chunks. (currently passthrough placeholder)
+- [ ] Implement `index.py` — Qdrant upsert with payload metadata. (currently passthrough placeholder)
+- [x] Implement `query.py` ranking step and top-k assembly from EFTS candidates.
+- [x] Implement pipeline orchestration and output writing (JSON/YAML/CSV + run metadata headers).
+- [x] Add `retrieve` CLI command, register in `root.py` and `__main__.py` arg normalization.
+- [x] Write tests with mocked search/pipeline wiring and ranking behavior (no network).
 
 ## Dependencies
 

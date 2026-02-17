@@ -9,6 +9,7 @@ from .insider import Insider as Insider
 from .market import Market as Market
 from .news import News as News
 from .qdrant import Qdrant as Qdrant
+from .retrieve import Retrieve as Retrieve
 from .root import Root as Root
 from .runs import Runs as Runs
 from .version import Version as Version
@@ -28,4 +29,5 @@ __all__ = [
     "Holdings",
     "Insider",
     "News",
+    "Retrieve",
 ]

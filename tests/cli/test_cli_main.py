@@ -284,6 +284,23 @@ class TestNormalizeCliArgs:
         assert normalized[0] == "events"
         assert normalized[1] == '"0000102909"'
 
+    def test_quotes_numeric_symbol_positionals_for_retrieve_command(
+        self,
+    ) -> None:
+        """Numeric CIK-like values should stay quoted for retrieve positional symbol."""
+        from sec_nlp.cli.__main__ import _normalize_cli_args
+
+        argv = [
+            "retrieve",
+            "0000102909",
+            "--email",
+            "you@example.com",
+        ]
+        normalized = _normalize_cli_args(argv)
+
+        assert normalized[0] == "retrieve"
+        assert normalized[1] == '"0000102909"'
+
     def test_leaves_numeric_positionals_for_non_symbol_commands(self) -> None:
         """Non-symbol commands should not rewrite numeric positionals."""
         from sec_nlp.cli.__main__ import _normalize_cli_args
