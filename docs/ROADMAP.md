@@ -52,7 +52,8 @@ Potential next steps and new features for sec-nlp.
   - ~~Implementation: `retrieve` indexing now checks existing Qdrant point IDs and skips already-indexed hits before embedding/upsert.~~
 - **Multi-model ensemble**: Run multiple LLMs and aggregate/vote on results for higher confidence
 - **RAG pipeline with chat interface**: Interactive Q&A over indexed filings
-- **Caching layer**: Cache LLM responses for repeated queries on same content
+- ~~**Caching layer**: Cache LLM responses for repeated queries on same content~~
+  - ~~Implementation: analyze now supports optional persistent LLM response caching (`--llm-response-cache`) keyed by normalized `AnalysisInput` + model/prompt namespace with configurable cache file/max entries.~~
 
 ## Output & Integration
 - **Alerting system**: Notify when specific signals appear (e.g., new risk factor, warranty spike)

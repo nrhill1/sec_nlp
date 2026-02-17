@@ -4,8 +4,11 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import json
 import re
 import time
+from pathlib import Path
 from time import perf_counter
 from uuid import UUID
 
@@ -16,7 +19,7 @@ from langchain_core.runnables import (
     RunnableConfig,
     RunnableSerializable,
 )
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, PrivateAttr
 from rich.progress import Progress, TaskID
 
 from sec_nlp.core.infra.logger import logger
@@ -29,6 +32,7 @@ from ..types import is_abort_requested
 from ..utils import query_term_overlap, resolve_symbol_for_output
 
 NUMERIC_SIGNAL_RE = re.compile(r"[$€£]?\d")
+_LLM_CACHE_SCHEMA_VERSION = 1
 
 
 class AnalysisBatchInput(BaseModel):
@@ -75,6 +79,16 @@ class AnalyzerRunnable(
     )
     query_term_min_len: int = Field(default=3, ge=1)
     run_id: UUID | None = None
+    llm_cache_enabled: bool = Field(default=False)
+    llm_cache_file: Path | None = None
+    llm_cache_max_entries: int = Field(default=20000, ge=100)
+    llm_cache_namespace: str = Field(default="")
+
+    _cache_loaded: bool = PrivateAttr(default=False)
+    _cache_dirty: bool = PrivateAttr(default=False)
+    _cache_entries: dict[str, dict[str, JsonValue]] = PrivateAttr(
+        default_factory=dict
+    )
 
     def invoke(
         self,
@@ -173,6 +187,7 @@ class AnalyzerRunnable(
                     ),
                 )
 
+        self._flush_cache()
         return results
 
     def _compute_adaptive_batch_size(self, inputs: list[AnalysisInput]) -> int:
@@ -190,6 +205,123 @@ class AnalyzerRunnable(
             return self.batch_size
         adaptive = max(1, int(self.adaptive_batch_token_budget / avg_tokens))
         return min(adaptive, self.batch_size)
+
+    def _cache_path(self) -> Path | None:
+        if not self.llm_cache_enabled:
+            return None
+        return self.llm_cache_file
+
+    def _ensure_cache_loaded(self) -> None:
+        cache_path = self._cache_path()
+        if self._cache_loaded or cache_path is None:
+            return
+        self._cache_loaded = True
+        self._cache_entries = {}
+        if not cache_path.exists():
+            return
+        try:
+            payload = json.loads(cache_path.read_text(encoding="utf-8"))
+        except Exception as exc:
+            logger.debug(
+                "Failed to read LLM response cache %s: %s", cache_path, exc
+            )
+            return
+
+        if not isinstance(payload, dict):
+            return
+        entries_raw = payload.get("entries")
+        if not isinstance(entries_raw, dict):
+            return
+
+        loaded: dict[str, dict[str, JsonValue]] = {}
+        for key, raw in entries_raw.items():
+            if not isinstance(key, str) or not isinstance(raw, dict):
+                continue
+            try:
+                # Validate payload shape up-front.
+                parsed = AnalysisResult.model_validate(raw)
+                loaded[key] = parsed.model_dump(mode="json", exclude_none=True)
+            except Exception:
+                continue
+        self._cache_entries = loaded
+
+    def _cache_key(self, item: AnalysisInput) -> str:
+        payload = {
+            "namespace": self.llm_cache_namespace,
+            "input": item.model_dump(mode="json", exclude_none=True),
+        }
+        encoded = json.dumps(
+            payload,
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=True,
+        ).encode("utf-8")
+        return hashlib.sha256(encoded).hexdigest()
+
+    def _lookup_cached_result(
+        self, item: AnalysisInput
+    ) -> AnalysisResult | None:
+        self._ensure_cache_loaded()
+        key = self._cache_key(item)
+        raw = self._cache_entries.get(key)
+        if raw is None:
+            return None
+        if not isinstance(raw, dict):
+            self._cache_entries.pop(key, None)
+            self._cache_dirty = True
+            return None
+        try:
+            return AnalysisResult.model_validate(raw)
+        except Exception:
+            self._cache_entries.pop(key, None)
+            self._cache_dirty = True
+            return None
+
+    def _store_cached_result(
+        self,
+        *,
+        item: AnalysisInput,
+        result: AnalysisResult,
+    ) -> None:
+        self._ensure_cache_loaded()
+        key = self._cache_key(item)
+        self._cache_entries[key] = result.model_dump(
+            mode="json",
+            exclude_none=True,
+        )
+        self._cache_dirty = True
+
+    def _flush_cache(self) -> None:
+        if not self._cache_dirty:
+            return
+        cache_path = self._cache_path()
+        if cache_path is None:
+            self._cache_dirty = False
+            return
+        entries = self._cache_entries
+        if (
+            self.llm_cache_max_entries > 0
+            and len(entries) > self.llm_cache_max_entries
+        ):
+            overflow = len(entries) - self.llm_cache_max_entries
+            for key in list(entries.keys())[:overflow]:
+                entries.pop(key, None)
+
+        payload = {
+            "version": _LLM_CACHE_SCHEMA_VERSION,
+            "entries": entries,
+        }
+        try:
+            cache_path.parent.mkdir(parents=True, exist_ok=True)
+            cache_path.write_text(
+                json.dumps(payload, separators=(",", ":"), ensure_ascii=True),
+                encoding="utf-8",
+            )
+            self._cache_dirty = False
+        except Exception as exc:
+            logger.debug(
+                "Failed to write LLM response cache %s: %s", cache_path, exc
+            )
 
     def analyze_search_hits(
         self,
@@ -237,7 +369,9 @@ class AnalyzerRunnable(
             )
             docs.append(doc)
 
-        return self._process_batch(inputs, docs)
+        analyzed_results = self._process_batch(inputs, docs)
+        self._flush_cache()
+        return analyzed_results
 
     def _process_batch(
         self, batch: list[AnalysisInput], docs: list[Document]
@@ -250,22 +384,56 @@ class AnalyzerRunnable(
                 f"Batch size mismatch: {len(batch)} inputs vs {len(docs)} docs"
             )
 
-        config_callbacks = self._build_runnable_config(include_run_id=False)
+        cache_path = self._cache_path()
+        if cache_path is None:
+            model_results = self._invoke_batch_models(batch)
+            return self._format_model_results(batch, docs, model_results)
 
+        formatted_results: list[AnalysisResultDict | None] = [None] * len(batch)
+        missing_indices: list[int] = []
+        missing_items: list[AnalysisInput] = []
+        missing_docs: list[Document] = []
+
+        for idx, (item, doc) in enumerate(zip(batch, docs, strict=True)):
+            cached_result = self._lookup_cached_result(item)
+            if cached_result is None:
+                missing_indices.append(idx)
+                missing_items.append(item)
+                missing_docs.append(doc)
+                continue
+            formatted_results[idx] = self._format_result(cached_result, doc)
+
+        if missing_items:
+            model_results = self._invoke_batch_models(missing_items)
+            freshly_formatted = self._format_model_results(
+                missing_items,
+                missing_docs,
+                model_results,
+                cache_items=missing_items,
+            )
+            for idx, payload in zip(
+                missing_indices, freshly_formatted, strict=True
+            ):
+                formatted_results[idx] = payload
+
+        return [item for item in formatted_results if item is not None]
+
+    def _invoke_batch_models(
+        self, batch: list[AnalysisInput]
+    ) -> list[AnalysisResult | Exception]:
+        config_callbacks = self._build_runnable_config(include_run_id=False)
         attempts = self.llm_retry_attempts + 1
         backoff = self.llm_retry_backoff
 
         for attempt in range(attempts):
             try:
-                results: list[AnalysisResult] = self.graph.batch(
-                    batch, config=config_callbacks
-                )
-                formatted_results: list[AnalysisResultDict] = []
-
-                for result, doc in zip(results, docs, strict=True):
-                    formatted_results.append(self._format_result(result, doc))
-
-                return formatted_results
+                results = self.graph.batch(batch, config=config_callbacks)
+                if len(results) != len(batch):
+                    raise RuntimeError(
+                        "LLM batch result length mismatch: "
+                        f"{len(results)} results for {len(batch)} inputs"
+                    )
+                return list(results)
             except Exception as e:
                 if attempt < attempts - 1:
                     logger.warning(
@@ -280,7 +448,7 @@ class AnalyzerRunnable(
                     except RuntimeError:
                         loop = None
                     if loop is not None and loop.is_running():
-                        # Inside an async context — yield to the event loop
+                        # Inside an async context — yield to the event loop.
                         import concurrent.futures
 
                         with concurrent.futures.ThreadPoolExecutor(
@@ -296,26 +464,52 @@ class AnalyzerRunnable(
                     attempts,
                     e,
                 )
-                return [
-                    self._process_single_item(item, doc)
-                    for item, doc in zip(batch, docs, strict=True)
-                ]
+                return [self._invoke_single_model(item) for item in batch]
         return []
+
+    def _format_model_results(
+        self,
+        batch: list[AnalysisInput],
+        docs: list[Document],
+        results: list[AnalysisResult | Exception],
+        *,
+        cache_items: list[AnalysisInput] | None = None,
+    ) -> list[AnalysisResultDict]:
+        formatted_results: list[AnalysisResultDict] = []
+        cache_candidates = cache_items if cache_items is not None else []
+        for idx, (item, doc, result) in enumerate(
+            zip(batch, docs, results, strict=True)
+        ):
+            if isinstance(result, Exception):
+                formatted_results.append(
+                    self._create_error_result(item, doc, result)
+                )
+                continue
+            if cache_candidates:
+                self._store_cached_result(
+                    item=cache_candidates[idx], result=result
+                )
+            formatted_results.append(self._format_result(result, doc))
+        return formatted_results
 
     def _process_single_item(
         self, item: AnalysisInput, doc: Document
     ) -> AnalysisResultDict:
         """Process a single item."""
+        result = self._invoke_single_model(item)
+        if isinstance(result, Exception):
+            return self._create_error_result(item, doc, result)
+        return self._format_result(result, doc)
+
+    def _invoke_single_model(
+        self, item: AnalysisInput
+    ) -> AnalysisResult | Exception:
         try:
             config_callbacks = self._build_runnable_config(include_run_id=True)
-            result: AnalysisResult = self.graph.invoke(
-                item, config=config_callbacks
-            )
-            return self._format_result(result, doc)
-
+            return self.graph.invoke(item, config=config_callbacks)
         except Exception as e:
             logger.error("Item processing failed: %s", e)
-            return self._create_error_result(item, doc, e)
+            return e
 
     @staticmethod
     def _build_context(doc: Document) -> str | None:

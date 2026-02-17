@@ -1,6 +1,7 @@
 # src/sec_nlp/pipelines/presets/analyze/config.py
 """Configuration for generalized document analysis pipeline."""
 
+from pathlib import Path
 from typing import ClassVar, Literal, Self
 
 from pydantic import (
@@ -797,6 +798,20 @@ class AnalyzeConfig(BasePipelineSettings):
         ge=0.0,
         description="Initial backoff (seconds) for LLM retry; doubles each attempt",
     )
+    llm_response_cache: bool = Field(
+        default=False,
+        description="Cache successful LLM chunk-analysis responses across runs.",
+    )
+    llm_response_cache_file: Path = Field(
+        default=Path(".analyze_llm_cache.json"),
+        description="LLM response cache filename or absolute path.",
+    )
+    llm_response_cache_max_entries: int = Field(
+        default=20000,
+        ge=100,
+        le=500000,
+        description="Maximum number of cached LLM responses to retain.",
+    )
 
     analysis_fields: list[str] = Field(
         default_factory=lambda: [
@@ -905,6 +920,12 @@ class AnalyzeConfig(BasePipelineSettings):
         default=True,
         description="Collect and report performance metrics",
     )
+
+    def llm_response_cache_path(self) -> Path:
+        cache_file = self.llm_response_cache_file
+        if cache_file.is_absolute():
+            return cache_file
+        return self.dl_path / cache_file
 
     def pipeline_label(self) -> str:
         return "Analyze"
