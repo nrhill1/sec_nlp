@@ -2,6 +2,7 @@
 from .analyze import AnalyzeCommand
 from .clean import Clean
 from .efts import EFTS
+from .events import Events
 from .exb import Exb
 from .financials import Financials
 from .holdings import Holdings
@@ -17,6 +18,7 @@ __all__: tuple[str, ...] = (
     "AnalyzeCommand",
     "Clean",
     "EFTS",
+    "Events",
     "Exb",
     "Financials",
     "Holdings",

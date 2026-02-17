@@ -81,14 +81,14 @@ sec-nlp events AAPL --lookback 2y --event-types merger restatement executive
 
 ## Implementation Steps
 
-1. Create `events/` directory with boilerplate.
-2. Implement Pydantic models: `DetectedEvent`, `EventTimeline`, `EventImpact` (frozen, extra="forbid").
-3. Implement `scan.py` — fetch 8-K filings, extract item numbers, call entity tagger.
-4. Implement `enrich.py` — call newswatch wrapper, fetch market data.
-5. Implement `score.py` — call corr event_study, compute CAR and volume spikes.
-6. Implement timeline output formatter.
-7. Add CLI command, register in `root.py`.
-8. Write tests: mock entity tagger, newswatch, market data. Verify event classification and scoring with deterministic data. No network.
+- [x] Create `events/` directory with boilerplate.
+- [x] Implement Pydantic models: `DetectedEvent`, `EventTimeline`, `EventImpact` (frozen, extra="forbid").
+- [x] Implement `scan.py` — fetch 8-K filings, extract item numbers, call entity tagger.
+- [x] Implement `enrich.py` — call newswatch wrapper, fetch market data.
+- [x] Implement `score.py` — call corr event_study, compute CAR and volume spikes.
+- [x] Implement timeline output formatter.
+- [x] Add CLI command, register in `root.py`.
+- [x] Write tests: mock entity tagger, newswatch, market data. Verify event classification and scoring with deterministic data. No network.
 
 ## Dependencies
 

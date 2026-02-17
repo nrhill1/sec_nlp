@@ -6,6 +6,7 @@ import re
 from datetime import UTC, datetime
 from email.utils import parsedate_to_datetime
 from functools import lru_cache
+from typing import Protocol
 from urllib.parse import urlparse
 
 from sec_nlp.core.infra.logger import logger
@@ -31,6 +32,10 @@ _CORPORATE_SUFFIXES: set[str] = {
     "holdings",
     "group",
 }
+
+
+class _HasEmail(Protocol):
+    email: str
 
 
 def _infer_feed_type(url: str) -> str:
@@ -163,7 +168,7 @@ def _resolve_company_name(symbol: str, email: str) -> str | None:
         return None
 
 
-def resolve_symbol_aliases(*, symbol: str, settings: NewsSettings) -> list[str]:
+def resolve_symbol_aliases(*, symbol: str, settings: _HasEmail) -> list[str]:
     """Resolve symbol/company aliases used for fetch + relevance anchoring."""
 
     normalized_symbol = symbol.strip().upper()

@@ -16,6 +16,7 @@ from sec_nlp.core.infra.logger import logger
 from .analyze import AnalyzeCommand
 from .clean import Clean
 from .efts import EFTS
+from .events import Events
 from .exb import Exb
 from .financials import Financials
 from .holdings import Holdings
@@ -66,6 +67,10 @@ class Root(BaseSettings):
 
     news: CliSubCommand[News] = Field(
         description="Run the news monitoring and correlation pipeline"
+    )
+
+    events: CliSubCommand[Events] = Field(
+        description="Run the event detection and timeline pipeline"
     )
 
     efts: CliSubCommand[EFTS] = Field(

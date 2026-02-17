@@ -9,6 +9,7 @@ from sec_nlp.core.infra.logger import logger as logger
 from .analyze import AnalyzeCommand as AnalyzeCommand
 from .clean import Clean as Clean
 from .efts import EFTS as EFTS
+from .events import Events as Events
 from .exb import Exb as Exb
 from .financials import Financials as Financials
 from .holdings import Holdings as Holdings
@@ -29,6 +30,7 @@ class Root(BaseSettings):
     holdings: CliSubCommand[Holdings]
     insider: CliSubCommand[Insider]
     news: CliSubCommand[News]
+    events: CliSubCommand[Events]
     efts: CliSubCommand[EFTS]
     clean: CliSubCommand[Clean]
     qdrant: CliSubCommand[Qdrant]

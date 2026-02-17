@@ -2,6 +2,10 @@ from .analyze import (
     AnalyzeConfig as AnalyzeConfig,
     AnalyzePipeline as AnalyzePipeline,
 )
+from .events import (
+    EventsPipeline as EventsPipeline,
+    EventsSettings as EventsSettings,
+)
 from .exb import (
     ExhibitConfig as ExhibitConfig,
     ExhibitPipeline as ExhibitPipeline,
@@ -30,6 +34,8 @@ from .warranty import (
 __all__ = [
     "AnalyzeConfig",
     "AnalyzePipeline",
+    "EventsPipeline",
+    "EventsSettings",
     "ExhibitConfig",
     "ExhibitPipeline",
     "FinancialsPipeline",

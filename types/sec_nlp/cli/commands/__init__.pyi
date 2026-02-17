@@ -1,6 +1,7 @@
 from .analyze import AnalyzeCommand as AnalyzeCommand
 from .clean import Clean as Clean
 from .efts import EFTS as EFTS
+from .events import Events as Events
 from .exb import Exb as Exb
 from .financials import Financials as Financials
 from .holdings import Holdings as Holdings
@@ -16,6 +17,7 @@ __all__ = [
     "AnalyzeCommand",
     "Clean",
     "EFTS",
+    "Events",
     "Exb",
     "Market",
     "Version",

@@ -23,6 +23,8 @@ New Rust crates and Python modules to extend the project beyond its current scop
 - [x] `sec_nlp/core/news/client.py` wrapper + native/typing stubs (`types/newswatch/__init__.pyi`, `types/sec_nlp/core/news/client.pyi`) implemented with tests
 - [x] `sec_nlp/pipelines/presets/news/` scaffolded and wired end-to-end (fetch/match/correlate/output + tests)
 - [x] `news` CLI command added and registered in root command routing
+- [x] `sec_nlp/pipelines/presets/events/` scaffolded and wired end-to-end (scan/enrich/score/output + tests)
+- [x] `events` CLI command added and registered in root command routing
 - [ ] Remaining crates/modules/pipelines in this roadmap
 
 ---
