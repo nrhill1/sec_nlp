@@ -70,15 +70,17 @@ class BasePipelineCommand(BaseModel, ABC):
 
     def cli_cmd(self) -> None:
         """Execute the configured pipeline."""
+        symbols_required = self._symbols_required()
         if (
             self._supports_interactive()
+            and symbols_required
             and not self._has_symbols()
             and sys.stdin.isatty()
         ):
             self._run_interactive()
             return
 
-        if not self._has_symbols():
+        if symbols_required and not self._has_symbols():
             self._handle_missing_symbols()
             return
 
@@ -119,6 +121,9 @@ class BasePipelineCommand(BaseModel, ABC):
     def _has_symbols(self) -> bool:
         symbols = getattr(self, "symbols", [])
         return bool(symbols)
+
+    def _symbols_required(self) -> bool:
+        return not bool(getattr(self, "symbols_optional", False))
 
     def _log_header(self) -> None:
         title = (

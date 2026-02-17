@@ -70,6 +70,7 @@ def test_retrieve_cli_cmd_execution(
         out_path=out_path,
         queries=["supply chain"],
     )
+    assert cmd.symbols == []
     cmd.cli_cmd()
     mock_run_pipeline.assert_called_once()
 
@@ -114,3 +115,38 @@ def test_retrieve_cli_integration(
     assert config.queries == ["supply chain disruption", "warranty accrual"]
     assert config.top_k == 15
     assert config.output_format == "json"
+
+
+@patch("sec_nlp.cli.command.BasePipelineCommand._run_pipeline", autospec=True)
+def test_retrieve_cli_integration_without_symbol(
+    mock_run_pipeline: Mock, tmp_path: Path
+) -> None:
+    from pydantic_settings import CliApp
+
+    from sec_nlp.cli.commands import Root
+
+    dl_path = tmp_path / "downloads"
+    out_path = tmp_path / "outputs"
+    dl_path.mkdir()
+    out_path.mkdir()
+
+    sys.argv = [
+        "cli",
+        "retrieve",
+        "--email",
+        "test@example.com",
+        "--dl-path",
+        str(dl_path),
+        "--out-path",
+        str(out_path),
+        "--queries",
+        "supply chain disruption",
+        "--output-format",
+        "json",
+    ]
+
+    CliApp.run(Root)
+    assert mock_run_pipeline.called
+    config = mock_run_pipeline.call_args[0][0]
+    assert config.symbols == []
+    assert config.queries == ["supply chain disruption"]

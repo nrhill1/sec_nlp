@@ -238,6 +238,60 @@ def test_retrieve_pipeline_run_writes_outputs_with_mocked_search(
     assert lines[4].startswith("symbol,query")
 
 
+def test_retrieve_pipeline_runs_unscoped_without_symbols(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    config = RetrieveSettings(
+        email="test@example.com",
+        symbols=[],
+        queries=["mine expansion"],
+        dl_path=tmp_path / "downloads",
+        out_path=tmp_path / "outputs",
+        output_format="json",
+        top_k=5,
+        download_missing=False,
+    )
+
+    observed: dict[str, object] = {}
+
+    def _fake_candidate_search(
+        *,
+        symbol,
+        queries,
+        settings,
+    ):
+        observed["symbol"] = symbol
+        observed["queries"] = list(queries)
+        return {
+            "mine expansion": [
+                _efts_hit(
+                    accession="0001801368-25-000009",
+                    filed=date(2025, 2, 20),
+                    score=0.93,
+                    company="MP Materials Corp. (MP)",
+                )
+            ]
+        }
+
+    monkeypatch.setattr(
+        "sec_nlp.pipelines.presets.retrieve.pipeline.run_candidate_search",
+        _fake_candidate_search,
+    )
+
+    pipeline = RetrievePipeline(config=config)
+    result = pipeline.run()
+
+    assert result.success is True
+    assert result.symbols_processed == 1
+    assert result.queries_processed == 1
+    assert result.hits_returned == 1
+    assert observed["symbol"] is None
+    assert observed["queries"] == ["mine expansion"]
+    assert len(result.outputs) == 1
+    assert "ALL" in str(result.outputs[0])
+
+
 def test_download_and_chunk_hits_enriches_snippet_and_chunk_metadata(
     tmp_path: Path,
     monkeypatch,

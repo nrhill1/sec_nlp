@@ -18,8 +18,11 @@ class Retrieve(RetrieveSettings, BasePipelineCommand):
         return RetrievePipeline
 
     symbols: CliPositionalArg[list[str]] = Field(
-        default_factory=lambda: ["AAPL"],
-        description="Ticker symbols to process (e.g., AAPL MSFT).",
+        default_factory=list,
+        description=(
+            "Optional ticker symbols to process (e.g., AAPL MSFT). "
+            "Omit to run unscoped retrieval."
+        ),
     )
 
     def _get_header_subtitle(self) -> str:

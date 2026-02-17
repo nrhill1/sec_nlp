@@ -35,6 +35,7 @@ class BasePipelineSettings(BaseSettings, ABC):
     """
 
     pipeline_type: ClassVar[str] = _CLASSVAR_UNSET
+    symbols_optional: ClassVar[bool] = False
 
     model_config = SettingsConfigDict(
         extra="ignore",

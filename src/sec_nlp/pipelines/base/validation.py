@@ -264,6 +264,17 @@ class PipelineValidator(BaseModel):
             InvalidSymbolException: If symbol list is empty or invalid
         """
         if not self.config.symbols:
+            if getattr(self.config, "symbols_optional", False):
+                self.report.add_check(
+                    ValidationResult(
+                        passed=True,
+                        check_name="Symbols",
+                        message="No symbols provided (unscoped mode enabled)",
+                        severity="info",
+                        details={"symbols": []},
+                    )
+                )
+                return
             msg = "No symbols provided"
             self.report.add_check(
                 ValidationResult(

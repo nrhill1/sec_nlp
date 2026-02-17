@@ -19,6 +19,7 @@ class RetrieveSettings(BasePipelineSettings):
     model_config = SettingsConfigDict(env_prefix="SEC_NLP_RETRIEVE_")
 
     pipeline_type: ClassVar[Literal["retrieve"]] = "retrieve"
+    symbols_optional: ClassVar[bool] = True
 
     mode: FilingMode = Field(
         default=FilingMode.annual,

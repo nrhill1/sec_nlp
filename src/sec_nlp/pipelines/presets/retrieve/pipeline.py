@@ -76,6 +76,14 @@ class RetrievePipeline(BasePipeline):
             metadata: ResultDict = {}
             total_queries = 0
             total_hits = 0
+            symbol_targets: list[tuple[str | None, str]]
+            if self.config.symbols:
+                symbol_targets = [
+                    (symbol.upper(), symbol.upper())
+                    for symbol in self.config.symbols
+                ]
+            else:
+                symbol_targets = [(None, "ALL")]
 
             console = get_rich_console()
             with Progress(
@@ -91,15 +99,14 @@ class RetrievePipeline(BasePipeline):
             ) as progress:
                 overall_task = progress.add_task(
                     "Processing symbols",
-                    total=len(self.config.symbols),
+                    total=len(symbol_targets),
                 )
                 phase_task = progress.add_task("", total=None, visible=False)
 
-                for symbol in self.config.symbols:
-                    normalized_symbol = symbol.upper()
+                for search_symbol, output_symbol in symbol_targets:
                     progress.update(
                         overall_task,
-                        description=f"Processing {normalized_symbol}",
+                        description=f"Processing {output_symbol}",
                     )
 
                     (
@@ -108,13 +115,14 @@ class RetrievePipeline(BasePipeline):
                         queries_processed,
                         hits_count,
                     ) = self._process_symbol(
-                        normalized_symbol,
+                        search_symbol=search_symbol,
+                        output_symbol=output_symbol,
                         progress=progress,
                         phase_task=phase_task,
                     )
 
                     outputs.extend(symbol_outputs)
-                    metadata[normalized_symbol] = symbol_meta
+                    metadata[output_symbol] = symbol_meta
                     total_queries += queries_processed
                     total_hits += hits_count
 
@@ -129,7 +137,7 @@ class RetrievePipeline(BasePipeline):
                 success=True,
                 outputs=outputs,
                 metadata=metadata,
-                symbols_processed=len(self.config.symbols),
+                symbols_processed=len(symbol_targets),
                 queries_processed=total_queries,
                 hits_returned=total_hits,
             )
@@ -143,14 +151,20 @@ class RetrievePipeline(BasePipeline):
 
     def _process_symbol(
         self,
-        symbol: str,
         *,
+        search_symbol: str | None,
+        output_symbol: str,
         progress: Progress | None = None,
         phase_task: TaskID | None = None,
     ) -> tuple[list[Path], dict[str, int | float | str | None], int, int]:
-        self._update_phase(progress, phase_task, symbol, "Candidate search")
+        self._update_phase(
+            progress,
+            phase_task,
+            output_symbol,
+            "Candidate search",
+        )
         candidates_by_query = run_candidate_search(
-            symbol=symbol,
+            symbol=search_symbol,
             queries=self.config.queries,
             settings=self.config,
         )
@@ -159,16 +173,16 @@ class RetrievePipeline(BasePipeline):
             len(hits) for hits in candidates_by_query.values()
         )
 
-        self._update_phase(progress, phase_task, symbol, "Ranking")
+        self._update_phase(progress, phase_task, output_symbol, "Ranking")
         ranked_hits = rank_retrieval_hits(
-            symbol=symbol,
+            symbol=output_symbol,
             candidates_by_query=candidates_by_query,
             top_k=self.config.top_k,
         )
 
         # Keep the stage boundaries explicit for future retrieve pipeline expansion.
         ranked_hits = download_and_chunk_hits(
-            symbol=symbol,
+            symbol=output_symbol,
             hits=ranked_hits,
             settings=self.config,
         )
@@ -177,14 +191,14 @@ class RetrievePipeline(BasePipeline):
             settings=self.config,
         )
         ranked_hits = index_retrieval_hits(
-            symbol=symbol,
+            symbol=output_symbol,
             hits=ranked_hits,
             settings=self.config,
         )
 
-        self._update_phase(progress, phase_task, symbol, "Writing")
+        self._update_phase(progress, phase_task, output_symbol, "Writing")
         outputs = self._write_outputs(
-            symbol=symbol,
+            symbol=output_symbol,
             hits=ranked_hits,
         )
 
