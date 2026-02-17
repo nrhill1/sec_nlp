@@ -100,13 +100,13 @@ def parse_proxy(filing_html: str, accession_number: str, filing_date: str) -> Pr
 
 ## Implementation Steps
 
-1. Implement all Pydantic models (frozen, extra="forbid").
-2. Implement compensation table finder and parser.
-3. Implement proposal extractor.
-4. Implement board composition extractor.
-5. Implement say-on-pay detector.
-6. Wire into `parse_proxy()` top-level function.
-7. Write tests: use fixture HTML files (sanitized excerpts from real proxy statements). Verify extraction accuracy against known values. No network.
+- [x] Implement all Pydantic models (frozen, extra="forbid").
+- [x] Implement compensation table finder and parser.
+- [x] Implement proposal extractor.
+- [x] Implement board composition extractor.
+- [x] Implement say-on-pay detector.
+- [x] Wire into `parse_proxy()` top-level function.
+- [x] Write tests: use fixture HTML files (sanitized excerpts from real proxy statements). Verify extraction accuracy against known values. No network.
 
 ## Dependencies
 

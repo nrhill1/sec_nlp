@@ -8,6 +8,14 @@ from .economic import (
     fetch_series as fetch_series,
 )
 from .filing_mode import FilingMode as FilingMode
+from .proxy import (
+    BoardMember as BoardMember,
+    ExecutiveCompensation as ExecutiveCompensation,
+    ProxyData as ProxyData,
+    SayOnPayResult as SayOnPayResult,
+    ShareholderProposal as ShareholderProposal,
+    parse_proxy as parse_proxy,
+)
 from .xbrl_facts import (
     XbrlExtensionError as XbrlExtensionError,
     XbrlFact as XbrlFact,
@@ -20,9 +28,14 @@ from .xbrl_facts import (
 __all__ = [
     "EconomicDataError",
     "EconomicSeries",
+    "ExecutiveCompensation",
     "FilingMode",
     "MacroContext",
     "MacroSensitivity",
+    "BoardMember",
+    "ProxyData",
+    "SayOnPayResult",
+    "ShareholderProposal",
     "XbrlExtensionError",
     "XbrlFact",
     "XbrlParser",
@@ -32,4 +45,5 @@ __all__ = [
     "extract_facts",
     "extract_facts_from_file",
     "fetch_series",
+    "parse_proxy",
 ]
