@@ -13,6 +13,7 @@ from sec_nlp.types import JsonValue
 
 from ..config import RetrieveSettings
 from ..models import RetrievalHit
+from .embed import embed_texts_with_cache
 
 
 def _resolve_collection_name(settings: RetrieveSettings) -> str:
@@ -134,10 +135,11 @@ def index_retrieval_hits(
                 on_disk_payload=settings.vdb.qdrant_on_disk_payload,
             )
 
-        vectors = settings.vdb.batch_embed_documents(
-            embedder,
-            [hit.snippet or "" for hit, _ in keyed_hits],
-            show_progress=False,
+        vectors = embed_texts_with_cache(
+            texts=[hit.snippet or "" for hit, _ in keyed_hits],
+            settings=settings,
+            embedder=embedder,
+            cache_prefix="snippet",
         )
 
         points: list[PointStruct] = []

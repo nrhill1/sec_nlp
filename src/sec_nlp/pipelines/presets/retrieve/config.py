@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import ClassVar, Literal
 
 from pydantic import Field, field_validator, model_validator
@@ -67,6 +68,20 @@ class RetrieveSettings(BasePipelineSettings):
     index_results: bool = Field(
         default=False,
         description="Upsert retrieved snippets into Qdrant for reuse.",
+    )
+    embedding_cache: bool = Field(
+        default=True,
+        description="Cache snippet embeddings across runs for rerank/index.",
+    )
+    embedding_cache_file: Path = Field(
+        default=Path(".retrieve_embedding_cache.json"),
+        description="Embedding cache filename or absolute path.",
+    )
+    embedding_cache_max_entries: int = Field(
+        default=20000,
+        ge=100,
+        le=500000,
+        description="Maximum number of cached embedding vectors to retain.",
     )
     download_missing: bool = Field(
         default=True,
@@ -170,6 +185,12 @@ class RetrieveSettings(BasePipelineSettings):
         if self.chunk_overlap >= self.chunk_size:
             raise ValueError("chunk_overlap must be smaller than chunk_size")
         return self
+
+    def embedding_cache_path(self) -> Path:
+        cache_file = self.embedding_cache_file
+        if cache_file.is_absolute():
+            return cache_file
+        return self.dl_path / cache_file
 
     def pipeline_label(self) -> str:
         return "Retrieve"

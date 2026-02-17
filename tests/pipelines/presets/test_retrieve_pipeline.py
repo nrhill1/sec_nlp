@@ -16,6 +16,7 @@ from sec_nlp.pipelines.presets.retrieve import (
 )
 from sec_nlp.pipelines.presets.retrieve.models import RetrievalHit
 from sec_nlp.pipelines.presets.retrieve.steps import (
+    candidate_search as candidate_search_steps,
     download_and_chunk_hits,
     index_retrieval_hits,
     rank_retrieval_hits,
@@ -72,6 +73,105 @@ def test_rank_retrieval_hits_sorts_and_dedupes() -> None:
     assert len(ranked) == 2
     assert ranked[0].score == 0.9
     assert ranked[0].accession_number == "0000123456-26-000001"
+
+
+def test_candidate_search_filters_cross_symbol_hits() -> None:
+    hits = [
+        EFTSHit(
+            accession_number="0001326801-26-000001",
+            cik="0001326801",
+            company_name="MP Materials Corp. (MP) (CIK 0001326801)",
+            tickers=["MP"],
+            form_type="10-K",
+            filed_date=date(2026, 2, 1),
+            score=9.1,
+        ),
+        EFTSHit(
+            accession_number="0000915913-26-000018",
+            cik="0000915913",
+            company_name="ALBEMARLE CORP (ALB) (CIK 0000915913)",
+            tickers=["ALB"],
+            form_type="10-K",
+            filed_date=date(2026, 2, 11),
+            score=9.2,
+        ),
+    ]
+
+    filtered = candidate_search_steps._filter_hits_for_symbol(
+        hits=hits,
+        symbol="MP",
+        symbol_cik="0001326801",
+    )
+
+    assert len(filtered) == 1
+    assert filtered[0].cik == "0001326801"
+
+
+def test_candidate_search_keeps_hits_when_cik_matches_without_ticker() -> None:
+    hits = [
+        EFTSHit(
+            accession_number="0001326801-26-000001",
+            cik="0001326801",
+            company_name="MP Materials Corp.",
+            tickers=[],
+            form_type="10-K",
+            filed_date=date(2026, 2, 1),
+            score=9.1,
+        ),
+        EFTSHit(
+            accession_number="0000215466-24-000008",
+            cik="0000215466",
+            company_name="Coeur Mining, Inc. (CDE) (CIK 0000215466)",
+            tickers=[],
+            form_type="10-K",
+            filed_date=date(2024, 2, 21),
+            score=8.7,
+        ),
+    ]
+
+    filtered = candidate_search_steps._filter_hits_for_symbol(
+        hits=hits,
+        symbol="MP",
+        symbol_cik="0001326801",
+    )
+
+    assert len(filtered) == 1
+    assert filtered[0].accession_number == "0001326801-26-000001"
+
+
+def test_candidate_search_allows_unscoped_hits_when_symbol_missing() -> None:
+    hits = [
+        EFTSHit(
+            accession_number="0001326801-26-000001",
+            cik="0001326801",
+            company_name="MP Materials Corp. (MP) (CIK 0001326801)",
+            tickers=["MP"],
+            form_type="10-K",
+            filed_date=date(2026, 2, 1),
+            score=9.1,
+        ),
+        EFTSHit(
+            accession_number="0000215466-24-000008",
+            cik="0000215466",
+            company_name="Coeur Mining, Inc. (CDE) (CIK 0000215466)",
+            tickers=["CDE"],
+            form_type="10-K",
+            filed_date=date(2024, 2, 21),
+            score=8.7,
+        ),
+    ]
+
+    filtered = candidate_search_steps._filter_hits_for_symbol(
+        hits=hits,
+        symbol="",
+        symbol_cik=None,
+    )
+
+    assert len(filtered) == 2
+    assert {hit.accession_number for hit in filtered} == {
+        "0001326801-26-000001",
+        "0000215466-24-000008",
+    }
 
 
 def test_retrieve_pipeline_run_writes_outputs_with_mocked_search(
