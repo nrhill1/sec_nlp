@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import ClassVar, Literal
 
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import SettingsConfigDict
 
 from sec_nlp.core.edgar.filing_mode import FilingMode
@@ -52,6 +52,34 @@ class RetrieveSettings(BasePipelineSettings):
         ge=1,
         le=1000,
         description="Maximum EFTS candidates fetched per query.",
+    )
+    download_missing: bool = Field(
+        default=True,
+        description="Download missing accessions before chunk extraction.",
+    )
+    chunk_size: int = Field(
+        default=10,
+        ge=1,
+        le=100,
+        description="Sentence chunks per section chunk during retrieve hydration.",
+    )
+    chunk_overlap: int = Field(
+        default=2,
+        ge=0,
+        le=20,
+        description="Sentence overlap used during retrieve chunk extraction.",
+    )
+    max_chunks_per_accession: int = Field(
+        default=40,
+        ge=1,
+        le=500,
+        description="Maximum chunks loaded per accession for query matching.",
+    )
+    snippet_chars: int = Field(
+        default=500,
+        ge=80,
+        le=4000,
+        description="Maximum characters stored in per-hit snippet output.",
     )
     output_format: Literal["csv", "json", "yaml", "all"] = Field(
         default="json",
@@ -101,6 +129,12 @@ class RetrieveSettings(BasePipelineSettings):
             seen.add(key)
             normalized.append(cleaned)
         return normalized
+
+    @model_validator(mode="after")
+    def validate_chunk_settings(self) -> RetrieveSettings:
+        if self.chunk_overlap >= self.chunk_size:
+            raise ValueError("chunk_overlap must be smaller than chunk_size")
+        return self
 
     def pipeline_label(self) -> str:
         return "Retrieve"

@@ -25,6 +25,9 @@ class RetrievalHit(BaseModel):
     score: float
     edgar_url: str
     snippet: str | None = None
+    section_type: str | None = None
+    section_number: str | None = None
+    chunk_index: int | None = None
 
 
 class RetrieveResult(BasePipelineResult):

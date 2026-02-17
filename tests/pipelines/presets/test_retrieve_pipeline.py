@@ -6,12 +6,18 @@ import json
 from datetime import date
 from pathlib import Path
 
+from langchain_core.documents import Document
+
 from sec_nlp.core.edgar.efts_models import EFTSHit
 from sec_nlp.pipelines.presets.retrieve import (
     RetrievePipeline,
     RetrieveSettings,
 )
-from sec_nlp.pipelines.presets.retrieve.steps import rank_retrieval_hits
+from sec_nlp.pipelines.presets.retrieve.models import RetrievalHit
+from sec_nlp.pipelines.presets.retrieve.steps import (
+    download_and_chunk_hits,
+    rank_retrieval_hits,
+)
 
 
 def _efts_hit(
@@ -77,6 +83,7 @@ def test_retrieve_pipeline_run_writes_outputs_with_mocked_search(
         out_path=tmp_path / "outputs",
         output_format="all",
         top_k=5,
+        download_missing=False,
     )
 
     candidates = {
@@ -126,3 +133,135 @@ def test_retrieve_pipeline_run_writes_outputs_with_mocked_search(
     assert lines[2].startswith("# run_id:")
     assert lines[3].startswith("# run_short_id_display:")
     assert lines[4].startswith("symbol,query")
+
+
+def test_download_and_chunk_hits_enriches_snippet_and_chunk_metadata(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    settings = RetrieveSettings(
+        email="test@example.com",
+        symbols=["ABC"],
+        queries=["supply chain"],
+        sections=["1A"],
+        dl_path=tmp_path / "downloads",
+        out_path=tmp_path / "outputs",
+        download_missing=False,
+        snippet_chars=120,
+    )
+    html_path = (
+        settings.dl_path
+        / "sec-edgar-filings"
+        / "ABC"
+        / "10-K"
+        / "0000123456-26-000100"
+        / "doc.html"
+    )
+    html_path.parent.mkdir(parents=True, exist_ok=True)
+    html_path.write_text("<html><body>placeholder</body></html>")
+
+    hit = RetrievalHit(
+        symbol="ABC",
+        query="supply chain disruption",
+        accession_number="0000123456-26-000100",
+        form_type="10-K",
+        filed_date="2026-02-10",
+        company_name="ABC Corp",
+        cik="0000123456",
+        score=0.91,
+        edgar_url="https://example.com",
+        snippet="original snippet",
+    )
+
+    monkeypatch.setattr(
+        "sec_nlp.pipelines.presets.retrieve.steps.download_chunk._find_html_for_accession",
+        lambda **kwargs: html_path,
+    )
+
+    captured: dict[str, object] = {}
+
+    def _fake_transform_html(
+        self,
+        html_path: Path,
+        *,
+        section_filter=None,
+        **kwargs,
+    ) -> list[Document]:
+        captured["section_filter"] = section_filter
+        return [
+            Document(
+                page_content="General operations and governance update.",
+                metadata={"section_number": "1", "chunk_index": 0},
+            ),
+            Document(
+                page_content=(
+                    "Supply chain disruption and vendor lead-time risk in core components."
+                ),
+                metadata={
+                    "section_type": "item",
+                    "section_number": "1A",
+                    "chunk_index": 1,
+                },
+            ),
+        ]
+
+    monkeypatch.setattr(
+        "sec_nlp.pipelines.presets.retrieve.steps.download_chunk.Loader.transform_html",
+        _fake_transform_html,
+    )
+
+    enriched = download_and_chunk_hits(
+        symbol="ABC",
+        hits=[hit],
+        settings=settings,
+    )
+
+    assert len(enriched) == 1
+    assert enriched[0].snippet is not None
+    assert "Supply chain disruption" in enriched[0].snippet
+    assert enriched[0].section_type == "item"
+    assert enriched[0].section_number == "1A"
+    assert enriched[0].chunk_index == 1
+    assert captured["section_filter"] is not None
+
+
+def test_download_and_chunk_hits_preserves_efts_snippet_when_no_html(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    settings = RetrieveSettings(
+        email="test@example.com",
+        symbols=["ABC"],
+        queries=["warranty"],
+        dl_path=tmp_path / "downloads",
+        out_path=tmp_path / "outputs",
+        download_missing=False,
+    )
+    hit = RetrievalHit(
+        symbol="ABC",
+        query="warranty accrual",
+        accession_number="0000123456-26-000101",
+        form_type="10-K",
+        filed_date="2026-02-11",
+        company_name="ABC Corp",
+        cik="0000123456",
+        score=0.73,
+        edgar_url="https://example.com",
+        snippet="efts snippet text",
+    )
+
+    monkeypatch.setattr(
+        "sec_nlp.pipelines.presets.retrieve.steps.download_chunk._find_html_for_accession",
+        lambda **kwargs: None,
+    )
+
+    enriched = download_and_chunk_hits(
+        symbol="ABC",
+        hits=[hit],
+        settings=settings,
+    )
+
+    assert len(enriched) == 1
+    assert enriched[0].snippet == "efts snippet text"
+    assert enriched[0].section_number is None
+    assert enriched[0].chunk_index is None

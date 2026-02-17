@@ -34,7 +34,7 @@ from .io import (
 )
 from .models import RetrievalHit, RetrieveResult
 from .steps import (
-    passthrough_download_chunk,
+    download_and_chunk_hits,
     passthrough_embed,
     passthrough_index,
     rank_retrieval_hits,
@@ -167,7 +167,11 @@ class RetrievePipeline(BasePipeline):
         )
 
         # Keep the stage boundaries explicit for future retrieve pipeline expansion.
-        ranked_hits = passthrough_download_chunk(ranked_hits)
+        ranked_hits = download_and_chunk_hits(
+            symbol=symbol,
+            hits=ranked_hits,
+            settings=self.config,
+        )
         ranked_hits = passthrough_embed(ranked_hits)
         ranked_hits = passthrough_index(ranked_hits)
 
@@ -181,6 +185,9 @@ class RetrievePipeline(BasePipeline):
             "queries_processed": len(self.config.queries),
             "candidate_hits": candidate_count,
             "ranked_hits": len(ranked_hits),
+            "chunk_snippets": sum(
+                1 for hit in ranked_hits if hit.chunk_index is not None
+            ),
             "top_k": self.config.top_k,
             "efts_candidates": self.config.efts_candidates,
         }
@@ -236,6 +243,10 @@ class RetrievePipeline(BasePipeline):
                 "sections": self.config.sections,
                 "top_k": self.config.top_k,
                 "efts_candidates": self.config.efts_candidates,
+                "download_missing": self.config.download_missing,
+                "chunk_size": self.config.chunk_size,
+                "chunk_overlap": self.config.chunk_overlap,
+                "max_chunks_per_accession": self.config.max_chunks_per_accession,
             },
         )
 
