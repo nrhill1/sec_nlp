@@ -79,6 +79,11 @@ class AnalyzerRunnable(
     )
     query_term_min_len: int = Field(default=3, ge=1)
     run_id: UUID | None = None
+    ensemble_graphs: list[Runnable[AnalysisInput, AnalysisResult]] = Field(
+        default_factory=list,
+        description="Additional model graphs used for ensemble voting.",
+    )
+    ensemble_model_names: list[str] = Field(default_factory=list)
     llm_cache_enabled: bool = Field(default=False)
     llm_cache_file: Path | None = None
     llm_cache_max_entries: int = Field(default=20000, ge=100)
@@ -421,23 +426,62 @@ class AnalyzerRunnable(
     def _invoke_batch_models(
         self, batch: list[AnalysisInput]
     ) -> list[AnalysisResult | Exception]:
+        if not self.ensemble_graphs:
+            return self._invoke_batch_for_graph(
+                graph=self.graph,
+                batch=batch,
+                label="primary",
+            )
+
+        per_model_results: list[list[AnalysisResult | Exception]] = []
+        per_model_results.append(
+            self._invoke_batch_for_graph(
+                graph=self.graph,
+                batch=batch,
+                label="primary",
+            )
+        )
+        for idx, ensemble_graph in enumerate(self.ensemble_graphs):
+            label = (
+                self.ensemble_model_names[idx]
+                if idx < len(self.ensemble_model_names)
+                else f"ensemble-{idx + 1}"
+            )
+            per_model_results.append(
+                self._invoke_batch_for_graph(
+                    graph=ensemble_graph,
+                    batch=batch,
+                    label=label,
+                )
+            )
+
+        return self._aggregate_ensemble_results(per_model_results)
+
+    def _invoke_batch_for_graph(
+        self,
+        *,
+        graph: Runnable[AnalysisInput, AnalysisResult],
+        batch: list[AnalysisInput],
+        label: str,
+    ) -> list[AnalysisResult | Exception]:
         config_callbacks = self._build_runnable_config(include_run_id=False)
         attempts = self.llm_retry_attempts + 1
         backoff = self.llm_retry_backoff
 
         for attempt in range(attempts):
             try:
-                results = self.graph.batch(batch, config=config_callbacks)
+                results = graph.batch(batch, config=config_callbacks)
                 if len(results) != len(batch):
                     raise RuntimeError(
-                        "LLM batch result length mismatch: "
+                        f"{label} batch result length mismatch: "
                         f"{len(results)} results for {len(batch)} inputs"
                     )
                 return list(results)
             except Exception as e:
                 if attempt < attempts - 1:
                     logger.warning(
-                        "Batch processing failed (attempt %d/%d): %s. Retrying after %.1fs...",
+                        "%s batch failed (attempt %d/%d): %s. Retrying after %.1fs...",
+                        label,
                         attempt + 1,
                         attempts,
                         e,
@@ -460,12 +504,92 @@ class AnalyzerRunnable(
                     backoff *= 2
                     continue
                 logger.warning(
-                    "Batch processing failed after %d attempts: %s. Processing items individually...",
+                    "%s batch failed after %d attempts: %s. Processing items individually...",
+                    label,
                     attempts,
                     e,
                 )
-                return [self._invoke_single_model(item) for item in batch]
+                return [
+                    self._invoke_single_model_for_graph(
+                        item,
+                        graph=graph,
+                        label=label,
+                    )
+                    for item in batch
+                ]
         return []
+
+    def _aggregate_ensemble_results(
+        self,
+        per_model_results: list[list[AnalysisResult | Exception]],
+    ) -> list[AnalysisResult | Exception]:
+        if not per_model_results:
+            return []
+
+        size = len(per_model_results[0])
+        aggregated: list[AnalysisResult | Exception] = []
+        for idx in range(size):
+            successful: list[AnalysisResult] = []
+            first_error: Exception | None = None
+            for model_results in per_model_results:
+                payload = model_results[idx]
+                if isinstance(payload, Exception):
+                    if first_error is None:
+                        first_error = payload
+                    continue
+                successful.append(payload)
+
+            if not successful:
+                aggregated.append(
+                    first_error
+                    if first_error is not None
+                    else RuntimeError("All ensemble models failed")
+                )
+                continue
+
+            anchor = self._select_anchor_result(successful)
+            relevant_votes = sum(1 for item in successful if item.is_relevant)
+            total_votes = len(successful)
+            majority_is_relevant = relevant_votes >= (total_votes / 2.0)
+            confidence_values = [
+                float(item.confidence_score)
+                for item in successful
+                if item.confidence_score is not None
+            ]
+            confidence = (
+                sum(confidence_values) / len(confidence_values)
+                if confidence_values
+                else anchor.confidence_score
+            )
+            aggregated.append(
+                anchor.model_copy(
+                    update={
+                        "is_relevant": majority_is_relevant,
+                        "confidence_score": confidence,
+                    }
+                )
+            )
+
+        return aggregated
+
+    @staticmethod
+    def _select_anchor_result(results: list[AnalysisResult]) -> AnalysisResult:
+        anchor = results[0]
+        anchor_score = (
+            float(anchor.confidence_score)
+            if anchor.confidence_score is not None
+            else -1.0
+        )
+        for result in results[1:]:
+            score = (
+                float(result.confidence_score)
+                if result.confidence_score is not None
+                else -1.0
+            )
+            if score > anchor_score:
+                anchor = result
+                anchor_score = score
+        return anchor
 
     def _format_model_results(
         self,
@@ -504,11 +628,24 @@ class AnalyzerRunnable(
     def _invoke_single_model(
         self, item: AnalysisInput
     ) -> AnalysisResult | Exception:
+        return self._invoke_single_model_for_graph(
+            item,
+            graph=self.graph,
+            label="primary",
+        )
+
+    def _invoke_single_model_for_graph(
+        self,
+        item: AnalysisInput,
+        *,
+        graph: Runnable[AnalysisInput, AnalysisResult],
+        label: str,
+    ) -> AnalysisResult | Exception:
         try:
             config_callbacks = self._build_runnable_config(include_run_id=True)
-            return self.graph.invoke(item, config=config_callbacks)
+            return graph.invoke(item, config=config_callbacks)
         except Exception as e:
-            logger.error("Item processing failed: %s", e)
+            logger.error("%s item processing failed: %s", label, e)
             return e
 
     @staticmethod

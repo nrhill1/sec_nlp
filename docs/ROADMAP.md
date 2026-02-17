@@ -50,7 +50,8 @@ Potential next steps and new features for sec-nlp.
 ## Technical Improvements
 - ~~**Incremental indexing**: Detect new filings and add only deltas to vector store~~
   - ~~Implementation: `retrieve` indexing now checks existing Qdrant point IDs and skips already-indexed hits before embedding/upsert.~~
-- **Multi-model ensemble**: Run multiple LLMs and aggregate/vote on results for higher confidence
+- ~~**Multi-model ensemble**: Run multiple LLMs and aggregate/vote on results for higher confidence~~
+  - ~~Implementation: analyze supports `--ensemble-models` (`llm_ensemble_models`) and runs additional model graphs with per-chunk majority voting on relevance + averaged confidence.~~
 - **RAG pipeline with chat interface**: Interactive Q&A over indexed filings
 - ~~**Caching layer**: Cache LLM responses for repeated queries on same content~~
   - ~~Implementation: analyze now supports optional persistent LLM response caching (`--llm-response-cache`) keyed by normalized `AnalysisInput` + model/prompt namespace with configurable cache file/max entries.~~

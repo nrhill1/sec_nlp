@@ -263,6 +263,20 @@ class AnalyzeConfig(BasePipelineSettings):
         ),
         description="LLM configuration for document analysis",
     )
+    llm_ensemble_models: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Optional additional model names for analyze ensemble voting. "
+            "Base model still comes from llm.model_name."
+        ),
+        json_schema_extra={
+            "cli_args": {
+                "nargs": "+",
+                "action": "extend",
+                "aliases": ["--ensemble-models", "--llm-ensemble-models"],
+            }
+        },
+    )
     prompt: Literal["default", "market_correlation"] | None = Field(
         default=None,
         description="Select the prompt profile for analysis output.",
@@ -650,6 +664,29 @@ class AnalyzeConfig(BasePipelineSettings):
         if v is None:
             return []
         return [str(item) for item in v]
+
+    @field_validator("llm_ensemble_models", mode="before")
+    @classmethod
+    def _normalize_llm_ensemble_models(
+        cls, value: list[str] | str | None
+    ) -> list[str]:
+        if value is None:
+            return []
+        if isinstance(value, str):
+            value = [part.strip() for part in value.split(",") if part.strip()]
+
+        normalized: list[str] = []
+        seen: set[str] = set()
+        for model in value:
+            cleaned = model.strip()
+            if not cleaned:
+                continue
+            key = cleaned.casefold()
+            if key in seen:
+                continue
+            seen.add(key)
+            normalized.append(cleaned)
+        return normalized
 
     custom_section_pattern: str | None = Field(
         default=None,

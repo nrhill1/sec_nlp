@@ -73,6 +73,9 @@ def build_analysis_runner(
     graph: Runnable[AnalysisInput, AnalysisResult],
     callbacks: list[BaseCallbackHandler],
     analysis_instructions: str,
+    ensemble_graphs: list[Runnable[AnalysisInput, AnalysisResult]]
+    | None = None,
+    ensemble_model_names: list[str] | None = None,
 ) -> AnalyzerRunnable:
     prompt_ref = (
         str(config.llm.prompt_file)
@@ -105,6 +108,8 @@ def build_analysis_runner(
         ),
         llm_cache_max_entries=config.llm_response_cache_max_entries,
         llm_cache_namespace=cache_namespace,
+        ensemble_graphs=ensemble_graphs or [],
+        ensemble_model_names=ensemble_model_names or [],
     )
 
 

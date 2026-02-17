@@ -108,3 +108,19 @@ def test_macro_context_flag_can_be_enabled(tmp_path: Path) -> None:
         macro_context=True,
     )
     assert config.macro_context is True
+
+
+def test_llm_ensemble_models_are_normalized(tmp_path: Path) -> None:
+    config = AnalyzeConfig.model_validate(
+        {
+            "symbols": ["AAPL"],
+            "out_path": str(tmp_path),
+            "dl_path": str(tmp_path),
+            "llm_ensemble_models": [
+                "llama3.2:3b",
+                "llama3.2:3b",
+                "qwen2.5:7b",
+            ],
+        }
+    )
+    assert config.llm_ensemble_models == ["llama3.2:3b", "qwen2.5:7b"]

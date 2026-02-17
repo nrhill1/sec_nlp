@@ -358,6 +358,38 @@ class AnalyzePipeline(BasePipeline):
             )
             logger.info("Built LLM processing graph")
 
+            ensemble_graphs: list[Runnable[AnalysisInput, AnalysisResult]] = []
+            ensemble_model_names: list[str] = []
+            seen_models = {self.config.llm.model_name.casefold()}
+            for model_name in self.config.llm_ensemble_models:
+                normalized_model = model_name.strip()
+                if not normalized_model:
+                    continue
+                model_key = normalized_model.casefold()
+                if model_key in seen_models:
+                    continue
+                seen_models.add(model_key)
+                ensemble_llm_config = self.config.llm.model_copy(
+                    update={"model_name": normalized_model}
+                )
+                ensemble_llm = ensemble_llm_config.setup_ollama_model()
+                ensemble_graph = build_runnable(
+                    prompt=self._prompt,
+                    llm=ensemble_llm,
+                    input_model=AnalysisInput,
+                    output_model=AnalysisResult,
+                    require_json=self.config.llm.require_json,
+                )
+                ensemble_graphs.append(ensemble_graph)
+                ensemble_model_names.append(normalized_model)
+
+            if ensemble_model_names:
+                logger.info(
+                    "Enabled analyze ensemble with %d additional model(s): %s",
+                    len(ensemble_model_names),
+                    ", ".join(ensemble_model_names),
+                )
+
         except Exception as e:
             raise RuntimeError(
                 f"{type(e).__name__}: Failed to build LLM graph: {e}\n"
@@ -393,6 +425,8 @@ class AnalyzePipeline(BasePipeline):
             graph=self._graph,
             callbacks=self._callbacks,
             analysis_instructions=self._analysis_instructions,
+            ensemble_graphs=ensemble_graphs,
+            ensemble_model_names=ensemble_model_names,
         )
         self._search_runner = build_search_runner(
             config=self.config,
