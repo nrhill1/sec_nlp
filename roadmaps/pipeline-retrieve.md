@@ -106,7 +106,7 @@ sec-nlp retrieve "supply chain disruption" --tickers AAPL MSFT --forms 10-K 10-Q
 - [x] Implement `candidate_search.py` — wrap EFTS batch search flow.
 - [x] Implement `download_chunk.py` — hydrate ranked hits with filing chunks (local cache first, optional accession download fallback), respecting section filters.
 - [x] Implement `embed.py` rerank stage (query/snippet embedding similarity with graceful fallback when embedding backend is unavailable).
-- [x] Implement `index.py` Qdrant upsert with payload metadata (optional via `--index-results`, skipped in `dry_run`).
+- [x] Implement `index.py` Qdrant upsert with payload metadata (optional via `--index-results`, skipped in `dry_run`, and incremental mode skips already-indexed point IDs before embedding).
 - [x] Implement `query.py` ranking step and top-k assembly from EFTS candidates.
 - [x] Implement pipeline orchestration and output writing (JSON/YAML/CSV + run metadata headers).
 - [x] Add `retrieve` CLI command, register in `root.py` and `__main__.py` arg normalization.

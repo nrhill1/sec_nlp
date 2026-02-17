@@ -48,7 +48,8 @@ Potential next steps and new features for sec-nlp.
   - ~~Implementation: Executive comp summaries include YoY deltas and peer benchmark rollups.~~
 
 ## Technical Improvements
-- **Incremental indexing**: Detect new filings and add only deltas to vector store
+- ~~**Incremental indexing**: Detect new filings and add only deltas to vector store~~
+  - ~~Implementation: `retrieve` indexing now checks existing Qdrant point IDs and skips already-indexed hits before embedding/upsert.~~
 - **Multi-model ensemble**: Run multiple LLMs and aggregate/vote on results for higher confidence
 - **RAG pipeline with chat interface**: Interactive Q&A over indexed filings
 - **Caching layer**: Cache LLM responses for repeated queries on same content
