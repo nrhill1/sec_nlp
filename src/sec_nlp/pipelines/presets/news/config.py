@@ -50,6 +50,12 @@ class NewsSettings(BasePipelineSettings):
         le=1.0,
         description="Minimum topic relevance score required to keep a headline.",
     )
+    require_symbol_match: bool = Field(
+        default=True,
+        description=(
+            "Require headline text to include the target symbol in addition to topic matches."
+        ),
+    )
     max_results: int = Field(
         default=250,
         ge=1,

@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import ClassVar, Literal
+from typing import ClassVar, Literal, cast
 from unittest.mock import Mock
 
 from langchain_core.documents import Document
@@ -361,3 +361,50 @@ def test_build_macro_context_when_enabled(tmp_path: Path, monkeypatch) -> None:
     assert "macro near 2024-03-15" in context
     assert "GDP=1.23" in context
     assert "UNRATE=1.23" in context
+
+
+def test_run_search_and_analysis_skips_llm_when_search_analyze_disabled(
+    tmp_path: Path, monkeypatch
+) -> None:
+    from sec_nlp.pipelines.presets.analyze.runnables.analysis import (
+        AnalyzerRunnable,
+    )
+
+    config = AnalyzeConfig(
+        symbols=["AAPL"],
+        out_path=tmp_path,
+        dl_path=tmp_path,
+        vector_mode="read",
+        export_format="json",
+        search=SearchConfig(queries=["warranty"], analyze=False),
+        collect_metrics=False,
+    )
+    pipe = _TestAnalyzePipeline(config=config)
+    pipe._vector_store = Mock()
+    search_runner = cast(Mock, pipe._search_runner)
+    search_runner.metadata_filters = {"symbol": ["AAPL"]}
+    sample_docs = [
+        Document(
+            page_content="Sample filing text",
+            metadata={
+                "symbol": "AAPL",
+                "accession_number": "0000000000-26-000001",
+            },
+        )
+    ]
+    search_runner.retrieve_hits_with_results.return_value = (
+        sample_docs,
+        {"warranty": SearchQueryResults(filtered=[], total=1)},
+    )
+    analyze_chunks = Mock(return_value=[])
+    monkeypatch.setattr(AnalyzerRunnable, "analyze_chunks", analyze_chunks)
+
+    analysis_results, docs_for_analysis = pipe._run_search_and_analysis(
+        "AAPL",
+        ["warranty"],
+        {},
+    )
+
+    assert analysis_results == []
+    assert docs_for_analysis == sample_docs
+    analyze_chunks.assert_not_called()

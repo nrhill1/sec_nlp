@@ -33,7 +33,12 @@ from .io import (
     write_news_timeline_yaml,
 )
 from .models import NewsCorrelation, NewsHeadline, NewsResult, NewsTimelineEntry
-from .steps import correlate_news_items, fetch_news_items, match_news_items
+from .steps import (
+    correlate_news_items,
+    fetch_news_items,
+    match_news_items,
+    resolve_symbol_aliases,
+)
 
 
 class NewsPipeline(BasePipeline):
@@ -141,14 +146,22 @@ class NewsPipeline(BasePipeline):
         progress: Progress | None = None,
         phase_task: TaskID | None = None,
     ) -> tuple[list[Path], dict[str, int | float | str | None], int, int, int]:
+        symbol_aliases = resolve_symbol_aliases(
+            symbol=symbol,
+            settings=self.config,
+        )
+
         self._update_phase(progress, phase_task, symbol, "Fetching")
         fetched_items = fetch_news_items(symbol=symbol, settings=self.config)
 
         self._update_phase(progress, phase_task, symbol, "Matching")
         matched_items = match_news_items(
             items=fetched_items,
+            symbol=symbol,
             topics=self.config.topics,
             min_relevance=self.config.min_relevance,
+            require_symbol_match=self.config.require_symbol_match,
+            symbol_aliases=symbol_aliases,
         )
 
         self._update_phase(progress, phase_task, symbol, "Correlating")
@@ -164,6 +177,7 @@ class NewsPipeline(BasePipeline):
             items=correlated_items,
             timeline=timeline,
             correlation=correlation,
+            symbol_aliases=symbol_aliases,
         )
 
         metadata: dict[str, int | float | str | None] = {
@@ -174,6 +188,7 @@ class NewsPipeline(BasePipeline):
             "news_to_return_correlation": correlation.news_to_return_correlation,
             "filings_linked": correlation.filings_linked,
             "clusters_detected": len(correlation.clusters),
+            "symbol_alias_count": len(symbol_aliases),
         }
 
         return (
@@ -220,6 +235,7 @@ class NewsPipeline(BasePipeline):
         items: list[NewsHeadline],
         timeline: list[NewsTimelineEntry],
         correlation: NewsCorrelation,
+        symbol_aliases: list[str],
     ) -> list[Path]:
         symbol_out = self.config.get_symbol_output_dir(symbol)
         base_stem = build_run_file_stem(symbol, "news", self.config.run_id)
@@ -248,6 +264,8 @@ class NewsPipeline(BasePipeline):
                 "forms": self.config.forms or ["8-K", "10-K", "10-Q"],
                 "feeds": self.config.feeds,
                 "min_relevance": self.config.min_relevance,
+                "require_symbol_match": self.config.require_symbol_match,
+                "symbol_aliases": symbol_aliases,
                 "max_results": self.config.max_results,
                 "include_market_context": self.config.include_market_context,
             },

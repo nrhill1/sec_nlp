@@ -7,11 +7,6 @@ from pydantic_settings import (
 from sec_nlp.core.infra.logger import logger as logger
 
 from .analyze import AnalyzeCommand as AnalyzeCommand
-from .analyze_runnables import (
-    AnalyzeAnalysisCommand as AnalyzeAnalysisCommand,
-    AnalyzeMarketCorrelationCommand as AnalyzeMarketCorrelationCommand,
-    AnalyzeSearchCommand as AnalyzeSearchCommand,
-)
 from .clean import Clean as Clean
 from .efts import EFTS as EFTS
 from .exb import Exb as Exb
@@ -28,9 +23,6 @@ from .warranty import Warranty as Warranty
 class Root(BaseSettings):
     model_config: Incomplete
     analyze: CliSubCommand[AnalyzeCommand]
-    scan: CliSubCommand[AnalyzeSearchCommand]
-    brief: CliSubCommand[AnalyzeAnalysisCommand]
-    pulse: CliSubCommand[AnalyzeMarketCorrelationCommand]
     warranty: CliSubCommand[Warranty]
     exb: CliSubCommand[Exb]
     financials: CliSubCommand[Financials]

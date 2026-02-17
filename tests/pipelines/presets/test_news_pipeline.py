@@ -15,7 +15,10 @@ from sec_nlp.pipelines.presets.news.models import (
 )
 from sec_nlp.pipelines.presets.news.pipeline import NewsPipeline
 from sec_nlp.pipelines.presets.news.steps.correlate import correlate_news_items
-from sec_nlp.pipelines.presets.news.steps.fetch import parse_feed_specs
+from sec_nlp.pipelines.presets.news.steps.fetch import (
+    parse_feed_specs,
+    resolve_symbol_aliases,
+)
 from sec_nlp.pipelines.presets.news.steps.match import match_news_items
 
 
@@ -87,6 +90,7 @@ def test_match_news_items_filters_on_min_relevance(monkeypatch) -> None:
 
     matched = match_news_items(
         items=items,
+        symbol="ABC",
         topics=["supply", "recall"],
         min_relevance=0.5,
     )
@@ -94,6 +98,128 @@ def test_match_news_items_filters_on_min_relevance(monkeypatch) -> None:
     assert len(matched) == 1
     assert matched[0].title == "ABC supply chain update"
     assert matched[0].relevance_score == 0.5
+
+
+def test_match_news_items_requires_symbol_match_by_default(
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(
+        "sec_nlp.pipelines.presets.news.steps.match._efts_score",
+        lambda text, topics: (
+            [topic for topic in topics if topic.lower() in text.lower()],
+            (
+                len(
+                    [topic for topic in topics if topic.lower() in text.lower()]
+                )
+                / len(topics)
+            ),
+        ),
+    )
+
+    items = [
+        NewsHeadline(
+            symbol="ABC",
+            title="Industry production update",
+            url="https://example.com/industry",
+            source="SampleFeed",
+            published_at="2026-02-14T12:00:00+00:00",
+            published_date="2026-02-14",
+            snippet="General commentary unrelated to issuer.",
+            matched_keywords=["production"],
+        ),
+        NewsHeadline(
+            symbol="ABC",
+            title="ABC production guidance update",
+            url="https://example.com/abc",
+            source="SampleFeed",
+            published_at="2026-02-14T11:00:00+00:00",
+            published_date="2026-02-14",
+            snippet="Issuer guidance",
+            matched_keywords=["ABC", "production"],
+        ),
+    ]
+
+    matched = match_news_items(
+        items=items,
+        symbol="ABC",
+        topics=["production", "guidance"],
+        min_relevance=0.5,
+    )
+
+    assert len(matched) == 1
+    assert matched[0].title == "ABC production guidance update"
+
+
+def test_match_news_items_accepts_company_alias_anchor(
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(
+        "sec_nlp.pipelines.presets.news.steps.match._efts_score",
+        lambda text, topics: (
+            [topic for topic in topics if topic.lower() in text.lower()],
+            (
+                len(
+                    [topic for topic in topics if topic.lower() in text.lower()]
+                )
+                / len(topics)
+            ),
+        ),
+    )
+
+    items = [
+        NewsHeadline(
+            symbol="CDE",
+            title="Coeur Mining raises production guidance",
+            url="https://example.com/coeur",
+            source="SampleFeed",
+            published_at="2026-02-14T11:00:00+00:00",
+            published_date="2026-02-14",
+            snippet="Company update",
+            matched_keywords=["Coeur Mining", "production", "guidance"],
+        ),
+        NewsHeadline(
+            symbol="CDE",
+            title="Industry production guidance update",
+            url="https://example.com/industry",
+            source="SampleFeed",
+            published_at="2026-02-14T10:00:00+00:00",
+            published_date="2026-02-14",
+            snippet="Generic commentary",
+            matched_keywords=["production", "guidance"],
+        ),
+    ]
+
+    matched = match_news_items(
+        items=items,
+        symbol="CDE",
+        topics=["production", "guidance"],
+        min_relevance=1.0,
+        symbol_aliases=["CDE", "Coeur Mining"],
+    )
+
+    assert len(matched) == 1
+    assert matched[0].title == "Coeur Mining raises production guidance"
+
+
+def test_resolve_symbol_aliases_adds_company_name_variants(
+    monkeypatch,
+) -> None:
+    settings = NewsSettings(
+        email="alias-test@example.com",
+        symbols=["CDE"],
+    )
+    monkeypatch.setattr(
+        "sec_nlp.pipelines.presets.news.steps.fetch.get_company_name_for_ticker",
+        lambda **_: "Coeur Mining, Inc.",
+    )
+
+    aliases = resolve_symbol_aliases(symbol="CDE", settings=settings)
+
+    assert aliases[0] == "CDE"
+    assert "$CDE" in aliases
+    assert "Coeur Mining, Inc." in aliases
+    assert "Coeur Mining" in aliases
+    assert "Coeur" in aliases
 
 
 def test_correlate_news_items_links_filings_and_market(
@@ -218,8 +344,17 @@ def test_pipeline_run_writes_outputs_with_mocked_steps(
         lambda symbol, settings: fetched_items,
     )
     monkeypatch.setattr(
+        "sec_nlp.pipelines.presets.news.pipeline.resolve_symbol_aliases",
+        lambda symbol, settings: ["ABC", "$ABC"],
+    )
+    monkeypatch.setattr(
         "sec_nlp.pipelines.presets.news.pipeline.match_news_items",
-        lambda items, topics, min_relevance: matched_items,
+        lambda items,
+        symbol,
+        topics,
+        min_relevance,
+        require_symbol_match,
+        symbol_aliases: matched_items,
     )
     monkeypatch.setattr(
         "sec_nlp.pipelines.presets.news.pipeline.correlate_news_items",

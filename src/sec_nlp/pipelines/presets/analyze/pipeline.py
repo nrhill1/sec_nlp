@@ -774,6 +774,15 @@ class AnalyzePipeline(BasePipeline):
         )
         stats["analyzed_count"] = len(analysis_results)
 
+        if not self.config.search.analyze:
+            logger.info(
+                "Analysis disabled for %s (--search.analyze=false); "
+                "exporting search results only",
+                symbol,
+            )
+            timings["total"] = sum(timings.values())
+            return [], stats
+
         # Phase 5: Post-processing (confidence, correlation)
         self._update_phase(progress, phase_task, symbol, "Post-processing")
         relevant_results, market_correlation = self._postprocess_results(
@@ -1063,6 +1072,13 @@ class AnalyzePipeline(BasePipeline):
                 "No vector search hits for %s; skipping analysis step", symbol
             )
             return [], []
+
+        if not self.config.search.analyze:
+            logger.info(
+                "Search analysis disabled; skipping LLM analysis for %s",
+                symbol,
+            )
+            return [], docs_for_analysis
 
         logger.info(
             "Analyzing %d retrieved chunks for %s (from vector search)",

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+
 from sec_nlp.core.infra.logger import logger
 from sec_nlp.core.text.ranking import score_document
 
@@ -47,11 +49,64 @@ def _efts_score(text: str, topics: list[str]) -> tuple[list[str], float]:
     return matched, score
 
 
+def _normalized_symbol_aliases(
+    symbol: str, symbol_aliases: list[str] | None
+) -> list[str]:
+    aliases: list[str] = [symbol]
+    if symbol_aliases:
+        aliases.extend(symbol_aliases)
+
+    deduped: list[str] = []
+    seen: set[str] = set()
+    for alias in aliases:
+        cleaned = alias.strip()
+        if len(cleaned) < 2:
+            continue
+        key = cleaned.casefold()
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(cleaned)
+    return deduped
+
+
+def _has_symbol_anchor(
+    item: NewsHeadline,
+    symbol: str,
+    symbol_aliases: list[str] | None = None,
+) -> bool:
+    aliases = _normalized_symbol_aliases(symbol, symbol_aliases)
+    if not aliases:
+        return True
+
+    keyword_hits = {
+        keyword.strip().casefold()
+        for keyword in item.matched_keywords
+        if keyword.strip()
+    }
+    for alias in aliases:
+        if alias.casefold() in keyword_hits:
+            return True
+
+    text = " ".join(part for part in (item.title, item.snippet or "") if part)
+    if not text:
+        return False
+
+    for alias in aliases:
+        pattern = re.compile(rf"(?<!\w){re.escape(alias)}(?!\w)", re.IGNORECASE)
+        if pattern.search(text):
+            return True
+    return False
+
+
 def match_news_items(
     *,
     items: list[NewsHeadline],
+    symbol: str,
     topics: list[str],
     min_relevance: float,
+    require_symbol_match: bool = True,
+    symbol_aliases: list[str] | None = None,
 ) -> list[NewsHeadline]:
     """Score and filter headlines by topic relevance."""
 
@@ -62,6 +117,12 @@ def match_news_items(
     if not normalized_topics:
         passthrough: list[NewsHeadline] = []
         for item in items:
+            if require_symbol_match and not _has_symbol_anchor(
+                item,
+                symbol,
+                symbol_aliases=symbol_aliases,
+            ):
+                continue
             passthrough.append(
                 item.model_copy(
                     update={
@@ -93,6 +154,12 @@ def match_news_items(
         else:
             matched_topics, relevance = _simple_score(text, normalized_topics)
 
+        if require_symbol_match and not _has_symbol_anchor(
+            item,
+            symbol,
+            symbol_aliases=symbol_aliases,
+        ):
+            continue
         if relevance < min_relevance:
             continue
 

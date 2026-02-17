@@ -2,17 +2,35 @@
 
 from __future__ import annotations
 
+import re
 from datetime import UTC, datetime
 from email.utils import parsedate_to_datetime
+from functools import lru_cache
 from urllib.parse import urlparse
 
 from sec_nlp.core.infra.logger import logger
+from sec_nlp.core.ingest.filings import get_company_name_for_ticker
 from sec_nlp.core.news.client import create_news_retriever
 
 from ..config import NewsSettings
 from ..models import NewsHeadline
 
 FeedTuple = tuple[str, str, str]
+
+_CORPORATE_SUFFIXES: set[str] = {
+    "inc",
+    "incorporated",
+    "corp",
+    "corporation",
+    "co",
+    "company",
+    "ltd",
+    "limited",
+    "llc",
+    "plc",
+    "holdings",
+    "group",
+}
 
 
 def _infer_feed_type(url: str) -> str:
@@ -95,8 +113,93 @@ def _normalize_topics(topics: list[str]) -> list[str]:
     return list(dict.fromkeys(normalized))
 
 
-def _default_keywords(symbol: str, topics: list[str]) -> list[str]:
-    base = [symbol.strip().upper()]
+def _company_aliases(company_name: str) -> list[str]:
+    compact = re.sub(r"\s+", " ", company_name.strip())
+    if not compact:
+        return []
+
+    aliases = [compact]
+    without_parens = re.sub(r"\s*\([^)]*\)\s*$", "", compact).strip()
+    if without_parens and without_parens.casefold() != compact.casefold():
+        aliases.append(without_parens)
+
+    tokens = [
+        token.strip(".,")
+        for token in without_parens.split()
+        if token.strip(".,")
+    ]
+    core_tokens = [
+        token for token in tokens if token.casefold() not in _CORPORATE_SUFFIXES
+    ]
+    if len(core_tokens) >= 2:
+        aliases.append(" ".join(core_tokens))
+    if core_tokens and len(core_tokens[0]) >= 4:
+        aliases.append(core_tokens[0])
+
+    deduped: list[str] = []
+    seen: set[str] = set()
+    for alias in aliases:
+        normalized = re.sub(r"\s+", " ", alias).strip()
+        if not normalized:
+            continue
+        key = normalized.casefold()
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(normalized)
+    return deduped
+
+
+@lru_cache(maxsize=256)
+def _resolve_company_name(symbol: str, email: str) -> str | None:
+    try:
+        return get_company_name_for_ticker(
+            ticker=symbol,
+            company_name="SEC NLP Tool",
+            email=email,
+        )
+    except Exception as exc:  # pragma: no cover - best effort lookup
+        logger.debug("Company-name lookup failed for %s: %s", symbol, exc)
+        return None
+
+
+def resolve_symbol_aliases(*, symbol: str, settings: NewsSettings) -> list[str]:
+    """Resolve symbol/company aliases used for fetch + relevance anchoring."""
+
+    normalized_symbol = symbol.strip().upper()
+    if not normalized_symbol:
+        return []
+
+    aliases: list[str] = [normalized_symbol, f"${normalized_symbol}"]
+    company_name = _resolve_company_name(normalized_symbol, settings.email)
+    if company_name:
+        aliases.extend(_company_aliases(company_name))
+
+    deduped: list[str] = []
+    seen: set[str] = set()
+    for alias in aliases:
+        cleaned = alias.strip()
+        if not cleaned:
+            continue
+        key = cleaned.casefold()
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(cleaned)
+    return deduped
+
+
+def _default_keywords(
+    symbol: str,
+    topics: list[str],
+    *,
+    symbol_aliases: list[str],
+) -> list[str]:
+    base: list[str] = [
+        alias for alias in symbol_aliases if alias and not alias.startswith("$")
+    ]
+    if not base:
+        base = [symbol.strip().upper()]
     base.extend(_normalize_topics(topics))
     return list(dict.fromkeys(item for item in base if item))
 
@@ -108,7 +211,12 @@ def fetch_news_items(
 ) -> list[NewsHeadline]:
     """Fetch and normalize headlines for a symbol."""
 
-    keywords = _default_keywords(symbol, settings.topics)
+    symbol_aliases = resolve_symbol_aliases(symbol=symbol, settings=settings)
+    keywords = _default_keywords(
+        symbol,
+        settings.topics,
+        symbol_aliases=symbol_aliases,
+    )
     feed_tuples = parse_feed_specs(settings.feeds)
 
     retriever = create_news_retriever(
