@@ -9,6 +9,7 @@ from pydantic_settings import SettingsConfigDict
 
 from sec_nlp.core.edgar.filing_mode import FilingMode
 from sec_nlp.pipelines.base.config import BasePipelineSettings
+from sec_nlp.pipelines.vector.config import VectorConfig
 
 
 class RetrieveSettings(BasePipelineSettings):
@@ -53,6 +54,20 @@ class RetrieveSettings(BasePipelineSettings):
         le=1000,
         description="Maximum EFTS candidates fetched per query.",
     )
+    rerank_with_embeddings: bool = Field(
+        default=False,
+        description="Enable snippet embedding rerank after chunk hydration.",
+    )
+    embedding_weight: float = Field(
+        default=0.35,
+        ge=0.0,
+        le=1.0,
+        description="Weight applied to embedding similarity when reranking.",
+    )
+    index_results: bool = Field(
+        default=False,
+        description="Upsert retrieved snippets into Qdrant for reuse.",
+    )
     download_missing: bool = Field(
         default=True,
         description="Download missing accessions before chunk extraction.",
@@ -80,6 +95,14 @@ class RetrieveSettings(BasePipelineSettings):
         ge=80,
         le=4000,
         description="Maximum characters stored in per-hit snippet output.",
+    )
+    vdb: VectorConfig = Field(
+        default_factory=lambda: VectorConfig(
+            collection_name="retrieve",
+            search_type="similarity",
+            vector_size=1024,
+        ),
+        description="Vector store configuration used for optional rerank/index.",
     )
     output_format: Literal["csv", "json", "yaml", "all"] = Field(
         default="json",

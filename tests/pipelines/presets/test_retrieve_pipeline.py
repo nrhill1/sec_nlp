@@ -16,7 +16,9 @@ from sec_nlp.pipelines.presets.retrieve import (
 from sec_nlp.pipelines.presets.retrieve.models import RetrievalHit
 from sec_nlp.pipelines.presets.retrieve.steps import (
     download_and_chunk_hits,
+    index_retrieval_hits,
     rank_retrieval_hits,
+    rerank_with_embeddings,
 )
 
 
@@ -265,3 +267,142 @@ def test_download_and_chunk_hits_preserves_efts_snippet_when_no_html(
     assert enriched[0].snippet == "efts snippet text"
     assert enriched[0].section_number is None
     assert enriched[0].chunk_index is None
+
+
+def test_rerank_with_embeddings_reorders_hits_with_fake_vectors(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    settings = RetrieveSettings(
+        email="test@example.com",
+        symbols=["ABC"],
+        queries=["supply chain", "warranty"],
+        dl_path=tmp_path / "downloads",
+        out_path=tmp_path / "outputs",
+        rerank_with_embeddings=True,
+        embedding_weight=1.0,
+    )
+    hits = [
+        RetrievalHit(
+            symbol="ABC",
+            query="supply chain",
+            accession_number="0000123456-26-000110",
+            form_type="10-K",
+            filed_date="2026-02-12",
+            company_name="ABC Corp",
+            cik="0000123456",
+            score=0.10,
+            edgar_url="https://example.com/1",
+            snippet="supply chain bottleneck risk",
+        ),
+        RetrievalHit(
+            symbol="ABC",
+            query="supply chain",
+            accession_number="0000123456-26-000111",
+            form_type="10-K",
+            filed_date="2026-02-12",
+            company_name="ABC Corp",
+            cik="0000123456",
+            score=0.90,
+            edgar_url="https://example.com/2",
+            snippet="executive compensation details",
+        ),
+    ]
+
+    class _FakeEmbedder:
+        def embed_query(self, query: str) -> list[float]:
+            if "supply" in query:
+                return [1.0, 0.0]
+            return [0.0, 1.0]
+
+    monkeypatch.setattr(
+        "sec_nlp.pipelines.vector.config.VectorConfig.setup_embedding_model",
+        lambda self: (_FakeEmbedder(), 2),
+    )
+    monkeypatch.setattr(
+        "sec_nlp.pipelines.vector.config.VectorConfig.batch_embed_documents",
+        lambda self, embedder, texts, show_progress=False: [
+            [1.0, 0.0] if "supply" in text else [0.0, 1.0] for text in texts
+        ],
+    )
+
+    reranked = rerank_with_embeddings(hits=hits, settings=settings)
+
+    assert len(reranked) == 2
+    assert reranked[0].accession_number == "0000123456-26-000110"
+    assert reranked[0].score > reranked[1].score
+
+
+def test_index_retrieval_hits_upserts_points_with_mock_client(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    settings = RetrieveSettings(
+        email="test@example.com",
+        symbols=["ABC"],
+        queries=["supply chain"],
+        dl_path=tmp_path / "downloads",
+        out_path=tmp_path / "outputs",
+        index_results=True,
+        dry_run=False,
+    )
+    hits = [
+        RetrievalHit(
+            symbol="ABC",
+            query="supply chain",
+            accession_number="0000123456-26-000120",
+            form_type="10-K",
+            filed_date="2026-02-13",
+            company_name="ABC Corp",
+            cik="0000123456",
+            score=0.44,
+            edgar_url="https://example.com/3",
+            snippet="supply chain vendor concentration",
+            section_type="item",
+            section_number="1A",
+            chunk_index=2,
+        )
+    ]
+
+    class _FakeEmbedder:
+        def embed_query(self, query: str) -> list[float]:
+            return [1.0, 0.0]
+
+    class _FakeQdrant:
+        def __init__(self) -> None:
+            self.created = False
+            self.upserted_points = 0
+
+        def collection_exists(self, collection_name: str) -> bool:
+            return False
+
+        def create_collection(self, **kwargs) -> None:
+            self.created = True
+
+        def upsert(self, *, collection_name: str, points, wait: bool) -> None:
+            self.upserted_points = len(points)
+
+    fake_client = _FakeQdrant()
+
+    monkeypatch.setattr(
+        "sec_nlp.pipelines.vector.config.VectorConfig.setup_embedding_model",
+        lambda self: (_FakeEmbedder(), 2),
+    )
+    monkeypatch.setattr(
+        "sec_nlp.pipelines.vector.config.VectorConfig.batch_embed_documents",
+        lambda self, embedder, texts, show_progress=False: [[1.0, 0.0]],
+    )
+    monkeypatch.setattr(
+        "sec_nlp.pipelines.vector.config.VectorConfig.setup_qdrant_client",
+        lambda self: fake_client,
+    )
+
+    indexed = index_retrieval_hits(
+        symbol="ABC",
+        hits=hits,
+        settings=settings,
+    )
+
+    assert indexed == hits
+    assert fake_client.created is True
+    assert fake_client.upserted_points == 1

@@ -35,9 +35,9 @@ from .io import (
 from .models import RetrievalHit, RetrieveResult
 from .steps import (
     download_and_chunk_hits,
-    passthrough_embed,
-    passthrough_index,
+    index_retrieval_hits,
     rank_retrieval_hits,
+    rerank_with_embeddings,
     run_candidate_search,
 )
 
@@ -172,8 +172,15 @@ class RetrievePipeline(BasePipeline):
             hits=ranked_hits,
             settings=self.config,
         )
-        ranked_hits = passthrough_embed(ranked_hits)
-        ranked_hits = passthrough_index(ranked_hits)
+        ranked_hits = rerank_with_embeddings(
+            hits=ranked_hits,
+            settings=self.config,
+        )
+        ranked_hits = index_retrieval_hits(
+            symbol=symbol,
+            hits=ranked_hits,
+            settings=self.config,
+        )
 
         self._update_phase(progress, phase_task, symbol, "Writing")
         outputs = self._write_outputs(
@@ -244,6 +251,9 @@ class RetrievePipeline(BasePipeline):
                 "top_k": self.config.top_k,
                 "efts_candidates": self.config.efts_candidates,
                 "download_missing": self.config.download_missing,
+                "rerank_with_embeddings": self.config.rerank_with_embeddings,
+                "embedding_weight": self.config.embedding_weight,
+                "index_results": self.config.index_results,
                 "chunk_size": self.config.chunk_size,
                 "chunk_overlap": self.config.chunk_overlap,
                 "max_chunks_per_accession": self.config.max_chunks_per_accession,
