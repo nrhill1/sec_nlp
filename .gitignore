@@ -171,6 +171,8 @@ data/
 *.dat
 **runs.db
 qdrant_storage/
+.qdrant/
+.qdrant/**
 
 ## Profiling Output
 profiling/
