@@ -8,19 +8,32 @@ import logging
 import sqlite3
 import uuid
 from abc import ABC, abstractmethod
+from collections.abc import Mapping
 from datetime import UTC, date, datetime, timedelta
 from functools import cached_property
 from pathlib import Path
 from typing import ClassVar, Literal, Self
 from uuid import UUID
 
-from pydantic import Field, PrivateAttr, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    Field,
+    PrivateAttr,
+    field_validator,
+    model_validator,
+)
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from sec_nlp.core.edgar.filing_mode import FilingMode
 from sec_nlp.core.infra.logger import logger
 from sec_nlp.pipelines.utils import is_valid_email
-from sec_nlp.types import InitSubclassKwargs, JsonDict, JsonObject, JsonValue
+from sec_nlp.types import (
+    ConfigValue,
+    InitSubclassKwargs,
+    JsonDict,
+    JsonObject,
+    JsonValue,
+)
 
 _CLASSVAR_UNSET = "__UNSET__"
 
@@ -150,6 +163,47 @@ class BasePipelineSettings(BaseSettings, ABC):
             raise TypeError(
                 f"{cls.__name__} must not override frozen=True from BasePipelineSettings"
             )
+
+    @model_validator(mode="before")
+    @classmethod
+    def _merge_partial_nested_configs(
+        cls,
+        values: Mapping[str, ConfigValue | BaseModel] | BaseModel,
+    ) -> Mapping[str, ConfigValue | BaseModel] | BaseModel:
+        """Preserve pipeline-specific nested defaults during partial overrides.
+
+        CLI dotted args (for example, ``--llm.model-name`` or
+        ``--vdb.qdrant-location``) provide partial dictionaries for nested
+        config fields. Without an explicit merge, those partial dictionaries can
+        replace the entire default nested model and drop pipeline-specific
+        defaults.
+        """
+        if not isinstance(values, Mapping):
+            return values
+
+        merged_values: dict[str, ConfigValue | BaseModel] = dict(values)
+        for field_name, field_info in cls.model_fields.items():
+            raw_value = merged_values.get(field_name)
+            if not isinstance(raw_value, Mapping):
+                continue
+
+            annotation = field_info.annotation
+            if not isinstance(annotation, type):
+                continue
+            if not issubclass(annotation, BaseModel):
+                continue
+
+            default_value = field_info.get_default(call_default_factory=True)
+            if not isinstance(default_value, BaseModel):
+                continue
+
+            default_payload = default_value.model_dump(mode="python")
+            default_payload.update(dict(raw_value))
+            merged_values[field_name] = annotation.model_validate(
+                default_payload
+            )
+
+        return merged_values
 
     def model_post_init(self, __context: JsonObject | None) -> None:
         """Register the run after validation completes."""

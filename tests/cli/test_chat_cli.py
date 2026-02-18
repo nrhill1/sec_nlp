@@ -152,3 +152,40 @@ def test_chat_cli_integration_without_symbol(
     config = mock_run_pipeline.call_args[0][0]
     assert config.symbols == []
     assert config.question == "Which filings mention refinancing risk?"
+
+
+@patch("sec_nlp.cli.command.BasePipelineCommand._run_pipeline", autospec=True)
+def test_chat_cli_llm_override_preserves_pipeline_defaults(
+    mock_run_pipeline: Mock, tmp_path: Path
+) -> None:
+    from pydantic_settings import CliApp
+
+    from sec_nlp.cli.commands import Root
+
+    dl_path = tmp_path / "downloads"
+    out_path = tmp_path / "outputs"
+    dl_path.mkdir()
+    out_path.mkdir()
+
+    sys.argv = [
+        "cli",
+        "chat",
+        "MP",
+        "--email",
+        "test@example.com",
+        "--dl-path",
+        str(dl_path),
+        "--out-path",
+        str(out_path),
+        "--question",
+        "What changed?",
+        "--llm.model-name",
+        "ministral-3:3b",
+    ]
+
+    CliApp.run(Root)
+    assert mock_run_pipeline.called
+    config = mock_run_pipeline.call_args[0][0]
+    assert config.llm.model_name == "ministral-3:3b"
+    assert config.llm.require_json is False
+    assert config.llm.temperature == 0.1
