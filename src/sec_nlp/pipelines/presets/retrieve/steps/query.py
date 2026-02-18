@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import heapq
 from datetime import date
 
 from sec_nlp.core.edgar.efts_models import EFTSHit
@@ -9,9 +10,14 @@ from sec_nlp.core.edgar.efts_models import EFTSHit
 from ..models import RetrievalHit
 
 
-def _sort_key(hit: RetrievalHit) -> tuple[float, date, str, str]:
-    parsed_date = date.fromisoformat(hit.filed_date)
-    return (hit.score, parsed_date, hit.query.casefold(), hit.accession_number)
+def _rank_key(
+    *,
+    score: float,
+    filed_date: date,
+    query: str,
+    accession: str,
+) -> tuple[float, date, str, str]:
+    return (score, filed_date, query.casefold(), accession)
 
 
 def rank_retrieval_hits(
@@ -22,7 +28,10 @@ def rank_retrieval_hits(
 ) -> list[RetrievalHit]:
     """Rank flattened EFTS candidates and return top K rows."""
 
-    ranked: list[RetrievalHit] = []
+    if top_k <= 0:
+        return []
+
+    ranked_heap: list[tuple[tuple[float, date, str, str], RetrievalHit]] = []
     seen: set[tuple[str, str]] = set()
 
     for query, hits in candidates_by_query.items():
@@ -31,20 +40,31 @@ def rank_retrieval_hits(
             if key in seen:
                 continue
             seen.add(key)
-            ranked.append(
-                RetrievalHit(
-                    symbol=symbol,
-                    query=query,
-                    accession_number=hit.accession_number,
-                    form_type=hit.form_type,
-                    filed_date=hit.filed_date.isoformat(),
-                    company_name=hit.company_name,
-                    cik=hit.cik,
-                    score=float(hit.score),
-                    edgar_url=hit.edgar_url,
-                    snippet=hit.snippet or None,
-                )
+            retrieval_hit = RetrievalHit(
+                symbol=symbol,
+                query=query,
+                accession_number=hit.accession_number,
+                form_type=hit.form_type,
+                filed_date=hit.filed_date.isoformat(),
+                company_name=hit.company_name,
+                cik=hit.cik,
+                score=float(hit.score),
+                edgar_url=hit.edgar_url,
+                snippet=hit.snippet or None,
+            )
+            rank_key = _rank_key(
+                score=float(hit.score),
+                filed_date=hit.filed_date,
+                query=query,
+                accession=hit.accession_number,
             )
 
-    ranked.sort(key=_sort_key, reverse=True)
-    return ranked[:top_k]
+            if len(ranked_heap) < top_k:
+                heapq.heappush(ranked_heap, (rank_key, retrieval_hit))
+                continue
+
+            if rank_key > ranked_heap[0][0]:
+                heapq.heapreplace(ranked_heap, (rank_key, retrieval_hit))
+
+    ranked_heap.sort(key=lambda item: item[0], reverse=True)
+    return [hit for _, hit in ranked_heap]

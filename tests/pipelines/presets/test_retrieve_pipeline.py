@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import sqlite3
 from datetime import date
 from pathlib import Path
 from types import SimpleNamespace
@@ -20,6 +21,7 @@ from sec_nlp.pipelines.presets.retrieve.steps import (
     candidate_search as candidate_search_steps,
     download_and_chunk_hits,
     download_chunk as download_chunk_steps,
+    embed as embed_steps,
     index_retrieval_hits,
     rank_retrieval_hits,
     rerank_with_embeddings,
@@ -75,6 +77,116 @@ def test_rank_retrieval_hits_sorts_and_dedupes() -> None:
     assert len(ranked) == 2
     assert ranked[0].score == 0.9
     assert ranked[0].accession_number == "0000123456-26-000001"
+
+
+def test_embed_texts_with_cache_uses_sqlite_cache(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    settings = RetrieveSettings(
+        email="test@example.com",
+        symbols=["ABC"],
+        queries=["supply chain"],
+        dl_path=tmp_path / "downloads",
+        out_path=tmp_path / "outputs",
+        embedding_cache=True,
+        embedding_cache_file=Path(".retrieve_embedding_cache.json"),
+    )
+
+    calls: list[list[str]] = []
+
+    def _fake_batch_embed_documents(
+        self,
+        embedder,
+        texts: list[str],
+        show_progress: bool = False,
+    ) -> list[list[float]]:
+        calls.append(list(texts))
+        return [[float(len(text))] for text in texts]
+
+    monkeypatch.setattr(
+        "sec_nlp.pipelines.vector.config.VectorConfig.batch_embed_documents",
+        _fake_batch_embed_documents,
+    )
+
+    first = embed_steps.embed_texts_with_cache(
+        texts=["alpha", "beta"],
+        settings=settings,
+        embedder=object(),
+        cache_prefix="snippet",
+    )
+    second = embed_steps.embed_texts_with_cache(
+        texts=["beta", "alpha"],
+        settings=settings,
+        embedder=object(),
+        cache_prefix="snippet",
+    )
+
+    assert first == [[5.0], [4.0]]
+    assert second == [[4.0], [5.0]]
+    assert calls == [["alpha", "beta"]]
+    assert settings.embedding_cache_path().with_suffix(".sqlite3").exists()
+
+
+def test_embed_texts_with_cache_migrates_legacy_json_cache(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    settings = RetrieveSettings(
+        email="test@example.com",
+        symbols=["ABC"],
+        queries=["supply chain"],
+        dl_path=tmp_path / "downloads",
+        out_path=tmp_path / "outputs",
+        embedding_cache=True,
+        embedding_cache_file=Path(".retrieve_embedding_cache.json"),
+    )
+    text = "legacy snippet"
+    key = embed_steps._cache_key(
+        model_name=settings.vdb.embedding_model,
+        text=text,
+        prefix="snippet",
+    )
+    legacy_path = settings.embedding_cache_path()
+    legacy_path.parent.mkdir(parents=True, exist_ok=True)
+    legacy_path.write_text(
+        json.dumps({"version": 1, "entries": {key: [0.25, 0.75]}}),
+        encoding="utf-8",
+    )
+
+    calls: list[list[str]] = []
+
+    def _fake_batch_embed_documents(
+        self,
+        embedder,
+        texts: list[str],
+        show_progress: bool = False,
+    ) -> list[list[float]]:
+        calls.append(list(texts))
+        return [[0.0]]
+
+    monkeypatch.setattr(
+        "sec_nlp.pipelines.vector.config.VectorConfig.batch_embed_documents",
+        _fake_batch_embed_documents,
+    )
+
+    vectors = embed_steps.embed_texts_with_cache(
+        texts=[text],
+        settings=settings,
+        embedder=object(),
+        cache_prefix="snippet",
+    )
+
+    assert vectors == [[0.25, 0.75]]
+    assert calls == []
+
+    db_path = settings.embedding_cache_path().with_suffix(".sqlite3")
+    with sqlite3.connect(db_path) as conn:
+        row = conn.execute(
+            "SELECT vector_json FROM embeddings WHERE cache_key = ?",
+            (key,),
+        ).fetchone()
+    assert row is not None
 
 
 def test_mode_for_form_maps_6_k_to_current() -> None:

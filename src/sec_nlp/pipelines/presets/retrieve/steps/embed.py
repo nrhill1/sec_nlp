@@ -5,7 +5,9 @@ from __future__ import annotations
 import hashlib
 import json
 import math
-from collections.abc import Sequence
+import sqlite3
+import time
+from collections.abc import Iterable, Iterator, Sequence
 from pathlib import Path
 from typing import Any
 
@@ -14,7 +16,7 @@ from sec_nlp.core.infra.logger import logger
 from ..config import RetrieveSettings
 from ..models import RetrievalHit
 
-_CACHE_SCHEMA_VERSION = 1
+_CACHE_BATCH_SIZE = 400
 
 
 def _cache_key(
@@ -27,18 +29,76 @@ def _cache_key(
     return hashlib.sha1(payload.encode("utf-8")).hexdigest()
 
 
-def _normalize_vector(value: object) -> list[float] | None:
-    if not isinstance(value, list):
+def _coerce_vector(value: object) -> list[float] | None:
+    if value is None or isinstance(value, (str, bytes, bytearray)):
         return None
+    if not isinstance(value, Iterable):
+        return None
+
+    iterator = iter(value)
     vector: list[float] = []
-    for item in value:
+    for item in iterator:
         if isinstance(item, bool) or not isinstance(item, (int, float)):
             return None
         vector.append(float(item))
     return vector
 
 
-def _load_cache(path: Path) -> dict[str, list[float]]:
+def _embed_documents(
+    *,
+    texts: Sequence[str],
+    settings: RetrieveSettings,
+    embedder: Any,
+) -> list[list[float]]:
+    raw_vectors = settings.vdb.batch_embed_documents(
+        embedder,
+        list(texts),
+        show_progress=False,
+    )
+    vectors: list[list[float]] = []
+    for raw_vector in raw_vectors:
+        vector = _coerce_vector(raw_vector)
+        vectors.append(vector or [])
+    if len(vectors) < len(texts):
+        vectors.extend([[] for _ in range(len(texts) - len(vectors))])
+    return vectors[: len(texts)]
+
+
+def _cache_db_path(path: Path) -> Path:
+    if path.suffix.casefold() == ".json":
+        return path.with_suffix(".sqlite3")
+    return path
+
+
+def _open_cache_db(path: Path) -> sqlite3.Connection:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(path)
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA synchronous=NORMAL")
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS embeddings (
+            cache_key TEXT PRIMARY KEY,
+            vector_json TEXT NOT NULL,
+            updated_at INTEGER NOT NULL
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_embeddings_updated_at
+        ON embeddings(updated_at)
+        """
+    )
+    return conn
+
+
+def _chunked_keys(keys: Sequence[str]) -> Iterator[Sequence[str]]:
+    for idx in range(0, len(keys), _CACHE_BATCH_SIZE):
+        yield keys[idx : idx + _CACHE_BATCH_SIZE]
+
+
+def _legacy_json_entries(path: Path) -> dict[str, list[float]]:
     if not path.exists():
         return {}
 
@@ -46,7 +106,9 @@ def _load_cache(path: Path) -> dict[str, list[float]]:
         payload = json.loads(path.read_text(encoding="utf-8"))
     except Exception as exc:
         logger.debug(
-            "Failed to read retrieve embedding cache %s: %s", path, exc
+            "Failed to read legacy retrieve embedding cache %s: %s",
+            path,
+            exc,
         )
         return {}
 
@@ -61,32 +123,125 @@ def _load_cache(path: Path) -> dict[str, list[float]]:
     for key, raw_vector in entries_raw.items():
         if not isinstance(key, str):
             continue
-        vector = _normalize_vector(raw_vector)
-        if vector is None:
-            continue
-        entries[key] = vector
+        vector = _coerce_vector(raw_vector)
+        if vector is not None:
+            entries[key] = vector
     return entries
 
 
-def _save_cache(
+def _cache_read(
     *,
-    path: Path,
+    conn: sqlite3.Connection,
+    keys: Sequence[str],
+) -> dict[str, list[float]]:
+    if not keys:
+        return {}
+
+    found: dict[str, list[float]] = {}
+    for batch in _chunked_keys(keys):
+        placeholders = ",".join("?" for _ in batch)
+        query = f"SELECT cache_key, vector_json FROM embeddings WHERE cache_key IN ({placeholders})"
+        for key, vector_json in conn.execute(query, tuple(batch)).fetchall():
+            try:
+                parsed = json.loads(vector_json)
+            except Exception:
+                continue
+            vector = _coerce_vector(parsed)
+            if vector is not None:
+                found[key] = vector
+    return found
+
+
+def _cache_touch(
+    *,
+    conn: sqlite3.Connection,
+    keys: Sequence[str],
+    updated_at: int,
+) -> None:
+    if not keys:
+        return
+    conn.executemany(
+        "UPDATE embeddings SET updated_at = ? WHERE cache_key = ?",
+        [(updated_at, key) for key in keys],
+    )
+
+
+def _cache_upsert(
+    *,
+    conn: sqlite3.Connection,
     entries: dict[str, list[float]],
+    updated_at: int,
+) -> None:
+    if not entries:
+        return
+    conn.executemany(
+        """
+        INSERT INTO embeddings (cache_key, vector_json, updated_at)
+        VALUES (?, ?, ?)
+        ON CONFLICT(cache_key)
+        DO UPDATE SET
+            vector_json = excluded.vector_json,
+            updated_at = excluded.updated_at
+        """,
+        [
+            (
+                key,
+                json.dumps(vector, separators=(",", ":"), sort_keys=False),
+                updated_at,
+            )
+            for key, vector in entries.items()
+        ],
+    )
+
+
+def _cache_prune(
+    *,
+    conn: sqlite3.Connection,
     max_entries: int,
 ) -> None:
-    if max_entries > 0 and len(entries) > max_entries:
-        overflow = len(entries) - max_entries
-        for key in list(entries.keys())[:overflow]:
-            entries.pop(key, None)
+    if max_entries <= 0:
+        return
+    row = conn.execute("SELECT COUNT(*) FROM embeddings").fetchone()
+    count = int(row[0]) if row else 0
+    overflow = count - max_entries
+    if overflow <= 0:
+        return
+    conn.execute(
+        """
+        DELETE FROM embeddings
+        WHERE cache_key IN (
+            SELECT cache_key
+            FROM embeddings
+            ORDER BY updated_at ASC, cache_key ASC
+            LIMIT ?
+        )
+        """,
+        (overflow,),
+    )
 
-    payload = {
-        "version": _CACHE_SCHEMA_VERSION,
-        "entries": entries,
-    }
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(
-        json.dumps(payload, separators=(",", ":"), sort_keys=False),
-        encoding="utf-8",
+
+def _migrate_legacy_json_cache(
+    *,
+    conn: sqlite3.Connection,
+    legacy_path: Path,
+) -> None:
+    if not legacy_path.exists():
+        return
+    row = conn.execute("SELECT COUNT(*) FROM embeddings").fetchone()
+    count = int(row[0]) if row else 0
+    if count > 0:
+        return
+
+    entries = _legacy_json_entries(legacy_path)
+    if not entries:
+        return
+
+    updated_at = int(time.time())
+    _cache_upsert(conn=conn, entries=entries, updated_at=updated_at)
+    logger.info(
+        "Migrated %s retrieve embedding cache entries from %s",
+        len(entries),
+        legacy_path,
     )
 
 
@@ -101,67 +256,108 @@ def _cached_text_embeddings(
         return []
 
     if not settings.embedding_cache:
-        return settings.vdb.batch_embed_documents(
-            embedder,
-            list(texts),
-            show_progress=False,
+        return _embed_documents(
+            texts=texts,
+            settings=settings,
+            embedder=embedder,
         )
 
-    cache_path = settings.embedding_cache_path()
-    entries = _load_cache(cache_path)
+    cache_file = settings.embedding_cache_path()
+    cache_db = _cache_db_path(cache_file)
     model_name = settings.vdb.embedding_model
 
-    vectors: list[list[float]] = [[] for _ in texts]
-    missing_indices: list[int] = []
-    missing_texts: list[str] = []
-    missing_keys: list[str] = []
+    try:
+        conn = _open_cache_db(cache_db)
+    except Exception as exc:
+        logger.debug(
+            "Failed to open retrieve embedding cache DB %s: %s",
+            cache_db,
+            exc,
+        )
+        return _embed_documents(
+            texts=texts,
+            settings=settings,
+            embedder=embedder,
+        )
 
-    for idx, text in enumerate(texts):
-        key = _cache_key(
+    text_keys = [
+        _cache_key(
             model_name=model_name,
             text=text,
             prefix=cache_prefix,
         )
-        cached = entries.get(key)
-        if cached is not None:
-            # Touch key to retain most-recently used vectors when pruning.
-            entries.pop(key, None)
-            entries[key] = cached
-            vectors[idx] = cached
-            continue
+        for text in texts
+    ]
 
-        missing_indices.append(idx)
-        missing_texts.append(text)
-        missing_keys.append(key)
+    try:
+        with conn:
+            if cache_file != cache_db:
+                _migrate_legacy_json_cache(conn=conn, legacy_path=cache_file)
 
-    if missing_texts:
-        generated = settings.vdb.batch_embed_documents(
-            embedder,
-            missing_texts,
-            show_progress=False,
-        )
-        for idx, key, raw_vector in zip(
-            missing_indices, missing_keys, generated, strict=False
-        ):
-            vector = [float(x) for x in raw_vector] if raw_vector else []
-            vectors[idx] = vector
-            if vector:
-                entries[key] = vector
+            cached_vectors = _cache_read(conn=conn, keys=text_keys)
+            touched: list[str] = []
+            missing_indices: list[int] = []
+            missing_keys: list[str] = []
+            missing_texts: list[str] = []
+            vectors: list[list[float]] = [[] for _ in texts]
 
-        try:
-            _save_cache(
-                path=cache_path,
-                entries=entries,
+            for idx, key in enumerate(text_keys):
+                cached = cached_vectors.get(key)
+                if cached is not None:
+                    vectors[idx] = cached
+                    touched.append(key)
+                    continue
+                missing_indices.append(idx)
+                missing_keys.append(key)
+                missing_texts.append(texts[idx])
+
+            now = int(time.time())
+            _cache_touch(conn=conn, keys=touched, updated_at=now)
+
+            if missing_texts:
+                generated = _embed_documents(
+                    texts=missing_texts,
+                    settings=settings,
+                    embedder=embedder,
+                )
+                fresh_entries: dict[str, list[float]] = {}
+                for idx, key, vector in zip(
+                    missing_indices,
+                    missing_keys,
+                    generated,
+                    strict=False,
+                ):
+                    vectors[idx] = vector
+                    if vector:
+                        fresh_entries[key] = vector
+
+                _cache_upsert(
+                    conn=conn,
+                    entries=fresh_entries,
+                    updated_at=now,
+                )
+
+            _cache_prune(
+                conn=conn,
                 max_entries=settings.embedding_cache_max_entries,
             )
-        except Exception as exc:
-            logger.debug(
-                "Failed to write retrieve embedding cache %s: %s",
-                cache_path,
-                exc,
-            )
-
-    return vectors
+            return vectors
+    except Exception as exc:
+        logger.debug(
+            "Failed to use retrieve embedding cache DB %s: %s",
+            cache_db,
+            exc,
+        )
+        return _embed_documents(
+            texts=texts,
+            settings=settings,
+            embedder=embedder,
+        )
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
 
 
 def _cosine_similarity(
