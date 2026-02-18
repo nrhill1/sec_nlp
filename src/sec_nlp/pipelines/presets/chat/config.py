@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import date
 from typing import ClassVar, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -39,8 +40,16 @@ class ChatSettings(BasePipelineSettings):
         description="Default filing mode when forms are not explicitly set.",
     )
     forms: list[str] | None = Field(
-        default_factory=lambda: ["10-K", "10-Q", "8-K"],
-        description="Forms used for optional metadata filtering.",
+        default=None,
+        description="Optional form filters applied to retrieved chunks (e.g., 10-K, 10-Q, 8-K, 6-K).",
+    )
+    start_date: date | None = Field(
+        default=None,
+        description="Optional lower bound for filing date filter (inclusive).",
+    )
+    end_date: date | None = Field(
+        default=None,
+        description="Optional upper bound for filing date filter (inclusive).",
     )
     question: str | None = Field(
         default=None,

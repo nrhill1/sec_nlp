@@ -4,10 +4,16 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from datetime import date
 from pathlib import Path
 from typing import ClassVar, Literal, cast
 
-from qdrant_client.http.models import FieldCondition, Filter, MatchValue
+from qdrant_client.http.models import (
+    Condition,
+    FieldCondition,
+    Filter,
+    MatchValue,
+)
 
 from sec_nlp.core.infra.logger import logger
 from sec_nlp.pipelines import BasePipeline
@@ -27,6 +33,8 @@ from .models import ChatCitation, ChatResult, ChatTranscriptPayload, ChatTurn
 
 _CITATION_RE = re.compile(r"\[(C\d+)\]")
 _WHITESPACE_RE = re.compile(r"\s+")
+_FILTER_FETCH_MULTIPLIER = 4
+_FILTER_FETCH_MAX_POINTS = 200
 
 
 @dataclass(frozen=True)
@@ -92,6 +100,17 @@ class ChatPipeline(BasePipeline):
                 "citations_returned": len(used_citation_ids),
                 "strict_citations": self.config.strict_citations,
                 "symbol_scope": self.config.symbols,
+                "forms_filter": self.config.forms or [],
+                "filed_after": (
+                    self.config.start_date.isoformat()
+                    if self.config.start_date
+                    else None
+                ),
+                "filed_before": (
+                    self.config.end_date.isoformat()
+                    if self.config.end_date
+                    else None
+                ),
             }
 
             if self.config.transcript_autosave:
@@ -130,7 +149,23 @@ class ChatPipeline(BasePipeline):
         query_vector = list(embedder.embed_query(question))
         qdrant = self.config.vdb.setup_qdrant_client()
 
-        symbol = self.config.symbols[0].upper() if self.config.symbols else None
+        symbols = [
+            symbol.upper() for symbol in self.config.symbols if symbol.strip()
+        ]
+        allowed_forms = self._normalized_form_filters(self.config.forms)
+        filed_after = self.config.start_date
+        filed_before = self.config.end_date
+        apply_post_filters = bool(allowed_forms or filed_after or filed_before)
+        query_limit = self.config.top_k
+        if apply_post_filters:
+            query_limit = min(
+                _FILTER_FETCH_MAX_POINTS,
+                max(
+                    self.config.top_k,
+                    self.config.top_k * _FILTER_FETCH_MULTIPLIER,
+                ),
+            )
+
         combined: list[_RetrievedChunk] = []
 
         for collection in self.config.collections:
@@ -141,12 +176,12 @@ class ChatPipeline(BasePipeline):
                 logger.debug("Skipping missing collection '%s'", name)
                 continue
 
-            query_filter = self._build_symbol_filter(symbol)
+            query_filter = self._build_symbol_filter(symbols)
             response = qdrant.query_points(
                 collection_name=name,
                 query=query_vector,
                 query_filter=query_filter,
-                limit=self.config.top_k,
+                limit=query_limit,
                 with_payload=True,
                 with_vectors=False,
                 score_threshold=self.config.min_score,
@@ -154,8 +189,16 @@ class ChatPipeline(BasePipeline):
             points = getattr(response, "points", [])
             for point in points:
                 chunk = self._point_to_chunk(collection=name, point=point)
-                if chunk is not None:
-                    combined.append(chunk)
+                if chunk is None:
+                    continue
+                if not self._chunk_matches_filters(
+                    chunk,
+                    forms=allowed_forms,
+                    filed_after=filed_after,
+                    filed_before=filed_before,
+                ):
+                    continue
+                combined.append(chunk)
 
         combined.sort(key=lambda chunk: chunk.score, reverse=True)
         deduped: list[_RetrievedChunk] = []
@@ -176,23 +219,93 @@ class ChatPipeline(BasePipeline):
 
         return deduped
 
-    def _build_symbol_filter(self, symbol: str | None) -> Filter | None:
-        if not symbol:
+    def _build_symbol_filter(self, symbols: list[str]) -> Filter | None:
+        if not symbols:
             return None
 
-        symbol_conditions = [
-            FieldCondition(key="symbol", match=MatchValue(value=symbol)),
-            FieldCondition(key="ticker", match=MatchValue(value=symbol)),
-            FieldCondition(
-                key="metadata.symbol",
-                match=MatchValue(value=symbol),
-            ),
-            FieldCondition(
-                key="metadata.ticker",
-                match=MatchValue(value=symbol),
-            ),
-        ]
+        symbol_conditions: list[Condition] = []
+        for symbol in symbols:
+            symbol_conditions.extend(
+                [
+                    FieldCondition(
+                        key="symbol", match=MatchValue(value=symbol)
+                    ),
+                    FieldCondition(
+                        key="ticker", match=MatchValue(value=symbol)
+                    ),
+                    FieldCondition(
+                        key="metadata.symbol",
+                        match=MatchValue(value=symbol),
+                    ),
+                    FieldCondition(
+                        key="metadata.ticker",
+                        match=MatchValue(value=symbol),
+                    ),
+                ]
+            )
         return Filter(should=symbol_conditions)
+
+    @staticmethod
+    def _normalized_form_filters(forms: list[str] | None) -> set[str]:
+        if not forms:
+            return set()
+
+        normalized: set[str] = set()
+        for raw in forms:
+            cleaned = raw.strip().upper()
+            if cleaned in {"10K", "10Q", "8K", "6K"}:
+                cleaned = cleaned[:-1] + "-" + cleaned[-1]
+            base = cleaned[:-2] if cleaned.endswith("/A") else cleaned
+            if base:
+                normalized.add(base)
+        return normalized
+
+    @staticmethod
+    def _parse_filed_date(value: str | None) -> date | None:
+        if value is None:
+            return None
+        cleaned = value.strip()
+        if not cleaned:
+            return None
+        if "T" in cleaned:
+            cleaned = cleaned.split("T", 1)[0]
+        if len(cleaned) == 8 and cleaned.isdigit():
+            try:
+                return date(
+                    int(cleaned[:4]),
+                    int(cleaned[4:6]),
+                    int(cleaned[6:8]),
+                )
+            except ValueError:
+                return None
+        try:
+            return date.fromisoformat(cleaned)
+        except ValueError:
+            return None
+
+    @classmethod
+    def _chunk_matches_filters(
+        cls,
+        chunk: _RetrievedChunk,
+        *,
+        forms: set[str],
+        filed_after: date | None,
+        filed_before: date | None,
+    ) -> bool:
+        if forms:
+            chunk_form = cls._normalized_form_filters([chunk.form_type or ""])
+            if not chunk_form.intersection(forms):
+                return False
+
+        if filed_after is None and filed_before is None:
+            return True
+
+        filing_date = cls._parse_filed_date(chunk.filed_date)
+        if filing_date is None:
+            return False
+        if filed_after is not None and filing_date < filed_after:
+            return False
+        return filed_before is None or filing_date <= filed_before
 
     def _point_to_chunk(
         self,
@@ -472,6 +585,17 @@ class ChatPipeline(BasePipeline):
                 "strict_citations": self.config.strict_citations,
                 "include_history": self.config.include_history,
                 "history_turns": self.config.history_turns,
+                "forms_filter": self.config.forms or [],
+                "filed_after": (
+                    self.config.start_date.isoformat()
+                    if self.config.start_date
+                    else None
+                ),
+                "filed_before": (
+                    self.config.end_date.isoformat()
+                    if self.config.end_date
+                    else None
+                ),
             },
         )
 

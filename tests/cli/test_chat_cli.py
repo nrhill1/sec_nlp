@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sys
+from datetime import date
 from pathlib import Path
 from unittest.mock import Mock, patch
 
@@ -86,6 +87,12 @@ def test_chat_cli_integration_with_symbol(
         "retrieve",
         "--collections",
         "analyze",
+        "--forms",
+        "6-K",
+        "--start-date",
+        "2024-01-01",
+        "--end-date",
+        "2024-12-31",
         "--top-k",
         "7",
     ]
@@ -96,6 +103,9 @@ def test_chat_cli_integration_with_symbol(
     assert config.symbols == ["CDE"]
     assert config.question == "What changed in liquidity risk?"
     assert config.collections == ["retrieve", "analyze"]
+    assert config.forms == ["6-K"]
+    assert config.start_date == date(2024, 1, 1)
+    assert config.end_date == date(2024, 12, 31)
     assert config.top_k == 7
 
 
