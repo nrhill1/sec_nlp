@@ -1,55 +1,67 @@
 # Architecture Overview
 
-This project blends Python pipeline orchestration with Rust-powered compute (EFTS, market, etc.). The primary goal is to ingest SEC filings, retrieve relevant chunks, and produce structured analyses and summaries at scale.
+`sec-nlp` is a Python-first orchestration system with Rust extensions for performance-critical integration points (EFTS and market data). It supports both LLM-driven and deterministic SEC/market workflows behind one CLI.
 
-## High-level Layout
+## Code Layout
+- `src/sec_nlp/cli/` - command models, argument normalization, and command dispatch.
+- `src/sec_nlp/pipelines/base/` - shared pipeline lifecycle, config, validation, and result models.
+- `src/sec_nlp/pipelines/presets/` - production pipeline implementations (`analyze`, `exb`, `warranty`, `financials`, `holdings`, `insider`, `news`, `events`, `retrieve`, `chat`).
+- `src/sec_nlp/core/` - EDGAR ingestion, text processing, stats, market/news helpers, and infra services.
+- `src/sec_nlp/pipelines/observability/` - run registry + metrics/profiling.
+- `crates/` - Rust crates (`efts`, `market`, `xbrl`, `corr`, `entity`, `newswatch`).
 
-- `src/sec_nlp/` – Python application and pipeline orchestration.
-  - `pipelines/` – Shared pipeline infrastructure and presets.
-  - `pipelines/presets/analyze/` – Analyze pipeline (EFTS, vector search, LLM analysis, market correlation).
-  - `pipelines/metadata/` – Metadata helpers and normalization.
-  - `pipelines/output_io.py` – JSON/YAML IO helpers.
-  - `pipelines/serialization.py` – Shared rounding + serialization utilities.
-- `crates/` – Rust crates for performance-sensitive operations.
-- `docs/` – Documentation, pipelines, and output schema references.
+## Runtime Layers
+1. CLI layer: parses/normalizes args and instantiates command config.
+2. Pipeline config layer: immutable Pydantic settings merged from CLI/env/.env.
+3. Pipeline execution layer: per-symbol phase execution with run metadata.
+4. IO/export layer: run-scoped artifacts written in CSV/JSON/YAML.
+5. Observability layer: run registry (SQLite) + optional metrics/tracing.
 
-## Data Flow (Analyze)
+## Pipeline Families
+- LLM-centric: `analyze`, `chat`
+- Retrieval/indexing: `retrieve`, `exb`
+- Deterministic SEC extraction: `warranty`, `financials`, `holdings`, `insider`
+- Timeline/correlation: `news`, `events`
 
-1. **Load filings** from EDGAR (or local cache).
-2. **Chunk & preprocess** (filters, topics, dedup).
-3. **Vector search** to find relevant chunks.
-4. **LLM analysis** on retrieved chunks.
-5. **Optional market correlation** on relevant results.
-6. **Export outputs** (analysis + search summaries).
+## Analyze Flow
+1. Load filings (optionally with EFTS expansion).
+2. Chunk/filter/dedupe content.
+3. Optional vector indexing/search retrieval.
+4. LLM analysis for retrieved chunks.
+5. Aggregate, enrich (market correlation optional), and export.
 
-See `docs/pipelines/analyze/README.md` for the step-by-step flow.
+Reference: `docs/pipelines/analyze/README.md`
 
-## Output Layout
+## Deterministic Pipeline Pattern
+Most non-LLM presets follow:
+1. Download filings or external source records.
+2. Parse/normalize structured entities.
+3. Compute diffs, clusters, correlations, or timeline rollups.
+4. Export symbol-scoped run artifacts.
 
-Outputs are run-scoped:
+## Output Conventions
+All pipelines use run-scoped output roots:
 
+```text
+outputs/<run_timestamp>/<pipeline_type>/<SYMBOL>/...
 ```
-outputs/<run_timestamp>/<pipeline>/<SYMBOL>/<accession>/analysis.yaml
-outputs/<run_timestamp>/<pipeline>/<SYMBOL>/search/summary.yaml
+
+File names usually include `<run_id>` and pipeline-specific suffixes (for example: `_summary`, `_timeline`, `_ledger`, `_snapshot`, `_ranked`).
+
+Analyze keeps per-accession directories:
+
+```text
+outputs/<run_timestamp>/analyze/<SYMBOL>/<accession>/analysis.{yaml,json,csv}
+outputs/<run_timestamp>/analyze/<SYMBOL>/search/summary.yaml
 ```
 
-See:
-- `docs/OUTPUTS_ANALYZE.md`
-- `docs/OUTPUTS_SEARCH_SUMMARY.md`
+## Run Registry
+- SQLite registry path: `.cache/sec-nlp/runs.db`
+- Tracks run id, short id, pipeline type, status, timestamps, and metadata
+- Managed via `sec-nlp runs ...`
 
-## Serialization & Rounding
-
-All rounding and serialization go through shared helpers in:
-
-```
-src/sec_nlp/pipelines/serialization.py
-```
-
-This keeps output formatting consistent across JSON/YAML/CSV.
-
-## Key Design Goals
-
-- **Deterministic, reproducible outputs**
-- **Memory-aware chunk processing**
-- **Centralized formatting/normalization**
-- **Well-documented outputs and contracts**
+## Design Priorities
+- Repeatable run-scoped outputs with provenance fields.
+- Clear separation between config, execution, and serialization.
+- Fast-path native integrations through Rust extensions.
+- Optional infrastructure dependencies (Qdrant, Docker) instead of mandatory services.

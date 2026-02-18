@@ -127,8 +127,8 @@ Code: `src/sec_nlp/pipelines/presets/analyze/runnables/market_correlation.py`
 Paths are created by `AnalyzeConfig.get_symbol_output_dir` and `OutputFormatter.export`.
 
 See also:
-- `docs/OUTPUTS_ANALYZE.md`
-- `docs/OUTPUTS_SEARCH_SUMMARY.md`
+- `docs/pipelines/analyze/OUTPUTS_ANALYZE.md`
+- `docs/pipelines/analyze/OUTPUTS_SEARCH_SUMMARY.md`
 
 ## Key Config Gates
 
