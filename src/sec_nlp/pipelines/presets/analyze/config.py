@@ -883,6 +883,19 @@ class AnalyzeConfig(BasePipelineSettings):
         ],
         description="Fields to extract from LLM analysis",
     )
+    analysis_instruction_style: Literal["full", "compact"] = Field(
+        default="full",
+        description=(
+            "Verbosity of field instructions embedded in the analysis prompt. "
+            "'compact' reduces prompt token usage and latency."
+        ),
+        json_schema_extra={
+            "cli_args": {
+                "choices": ["full", "compact"],
+                "aliases": ["--analysis-instruction-style"],
+            }
+        },
+    )
     compact_result_output: bool = Field(
         default=False,
         description=(

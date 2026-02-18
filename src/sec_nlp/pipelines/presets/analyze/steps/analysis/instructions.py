@@ -3,6 +3,8 @@
 
 from __future__ import annotations
 
+from typing import Literal
+
 from pydantic import BaseModel
 
 from sec_nlp.core.infra.logger import logger
@@ -109,6 +111,76 @@ ANALYSIS_FIELD_DESCRIPTIONS: dict[str, str] = {
     ),
 }
 
+ANALYSIS_FIELD_DESCRIPTIONS_COMPACT: dict[str, str] = {
+    "is_relevant": (
+        "**is_relevant** (boolean): True only when the chunk materially addresses a query/topic."
+    ),
+    "confidence_score": (
+        "**confidence_score** (0.0-1.0): Confidence in the relevance judgment."
+    ),
+    "summary": (
+        "**summary** (string | null): 1-2 factual sentences tied to the query/topic; null if not relevant."
+    ),
+    "key_points": (
+        "**key_points** (list[string]): Up to 3 concise evidence bullets; [] when not relevant."
+    ),
+    "reasoning": (
+        "**reasoning** (string): Brief rationale tied to explicit evidence or non-relevance."
+    ),
+    "query_match_terms": (
+        "**query_match_terms** (list[string]): Query terms present in text."
+    ),
+    "missing_query_terms": (
+        "**missing_query_terms** (list[string]): Important query terms absent from text."
+    ),
+    "binding_status": (
+        '**binding_status** (string | null): "binding", "non_binding", "conditional", "terminated", or "unknown".'
+    ),
+    "contingencies": (
+        "**contingencies** (list[string]): Explicit conditions/approvals required."
+    ),
+    "impact_channels": (
+        "**impact_channels** (list[string]): Main financial channels affected."
+    ),
+    "impact_direction": (
+        '**impact_direction** (string | null): "positive", "negative", "mixed", "neutral", or "unclear".'
+    ),
+    "impact_magnitude": (
+        '**impact_magnitude** (string | null): "low", "medium", "high", "none", or "unclear".'
+    ),
+    "impact_horizon": (
+        '**impact_horizon** (string | null): "near_term", "mid_term", "long_term", or "unclear".'
+    ),
+    "impact_confidence": (
+        "**impact_confidence** (0.0-1.0 | null): Confidence in impact assessment."
+    ),
+    "impact_rationale": (
+        "**impact_rationale** (string | null): Short link between text and impact."
+    ),
+    "extracted_entities": (
+        "**extracted_entities** (object): Entities grouped by type (companies, people, dates, amounts, locations)."
+    ),
+    "tags": ("**tags** (list[string]): Short topical labels."),
+    "evidence_spans": (
+        "**evidence_spans** (list[object]): Up to 2 short supporting snippets."
+    ),
+    "source_excerpt": (
+        "**source_excerpt** (string | null): Best evidentiary quote (<=200 chars)."
+    ),
+    "severity": (
+        '**severity** (string | null): "low", "medium", "high", or null.'
+    ),
+    "sentiment": (
+        '**sentiment** (string | null): "negative", "neutral", "positive", or null.'
+    ),
+    "forward_looking": (
+        "**forward_looking** (boolean): True when forward-looking language is present."
+    ),
+    "follow_up_questions": (
+        "**follow_up_questions** (list[string]): Up to 3 next-step analyst questions."
+    ),
+}
+
 REQUIRED_ANALYSIS_FIELDS: tuple[str, str] = (
     "is_relevant",
     "confidence_score",
@@ -120,6 +192,8 @@ class AnalysisInstructionBuilder(BaseModel):
 
     analysis_fields: list[str] = []
     """List of analysis fields to include in instructions."""
+    style: Literal["full", "compact"] = "full"
+    """Instruction verbosity profile."""
 
     def build(self) -> str:
         """Return formatted instruction text for the prompt."""
@@ -157,9 +231,14 @@ class AnalysisInstructionBuilder(BaseModel):
                 )
 
         ordered = [field for field in ANALYSIS_FIELD_ORDER if field in selected]
+        description_map = (
+            ANALYSIS_FIELD_DESCRIPTIONS_COMPACT
+            if self.style == "compact"
+            else ANALYSIS_FIELD_DESCRIPTIONS
+        )
         lines: list[str] = []
         for idx, field in enumerate(ordered, start=1):
-            description = ANALYSIS_FIELD_DESCRIPTIONS.get(field, field)
+            description = description_map.get(field, field)
             lines.append(f"{idx}. {description}")
 
         if not lines:

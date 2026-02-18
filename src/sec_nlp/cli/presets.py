@@ -348,6 +348,7 @@ PRESET_CONFIGS: dict[AnalyzePreset, ConfigData] = {
             "query_match_terms",
             "missing_query_terms",
         ],
+        "analysis_instruction_style": "compact",
         "compact_result_output": True,
         "limit": 2,
         "batch_size": 12,

@@ -86,6 +86,7 @@ class SearchRunnable(
     query_term_min_hits: int = Field(default=1, ge=0)
     query_term_min_ratio: float = Field(default=0.3, ge=0.0)
     query_term_min_len: int = Field(default=3, ge=1)
+    search_analyze_limit: int = Field(default=5, ge=1)
     search_analyze: bool = Field(default=True)
     export_results_enabled: bool = Field(default=True)
     distance_metric: str = Field(default="Cosine")
@@ -208,10 +209,14 @@ class SearchRunnable(
 
         distance_metric = self.distance_metric
         distance_prefers_lower = distance_metric in ("Cosine", "Euclid")
+        analysis_results_by_query = self._limit_query_results_for_analysis(
+            results_by_query,
+            distance_prefers_lower=distance_prefers_lower,
+        )
 
         unique_hits: dict[tuple[str | None, str | None, str], _UniqueHit] = {}
 
-        for query, query_results in results_by_query.items():
+        for query, query_results in analysis_results_by_query.items():
             for doc, score in query_results.filtered:
                 key = self._build_unique_hit_key(doc)
                 hit = unique_hits.get(key)
@@ -247,6 +252,42 @@ class SearchRunnable(
             )
 
         return retrieved, results_by_query
+
+    def _limit_query_results_for_analysis(
+        self,
+        results_by_query: SearchResultsByQuery,
+        *,
+        distance_prefers_lower: bool,
+    ) -> SearchResultsByQuery:
+        if not self.search_analyze:
+            return results_by_query
+
+        limit = max(1, self.search_analyze_limit)
+        prefers_lower = distance_prefers_lower and self.search_type != "mmr"
+        limited: SearchResultsByQuery = {}
+        was_limited = False
+
+        for query, query_results in results_by_query.items():
+            if len(query_results.filtered) <= limit:
+                limited[query] = query_results
+                continue
+            ranked = sorted(
+                query_results.filtered,
+                key=lambda item: float(item[1]),
+                reverse=not prefers_lower,
+            )
+            limited[query] = SearchQueryResults(
+                filtered=ranked[:limit],
+                total=query_results.total,
+            )
+            was_limited = True
+
+        if was_limited:
+            logger.info(
+                "Limiting analyzed hits to top %d per query (search.analyze_limit)",
+                limit,
+            )
+        return limited
 
     def _passes_query_term_gate(
         self, query: str | None, content: str | None

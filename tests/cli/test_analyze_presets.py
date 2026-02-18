@@ -11,6 +11,7 @@ def test_sentiment_preset_enables_compact_sentiment_profile() -> None:
     config = get_preset_config(AnalyzePreset.sentiment)
 
     assert config.get("compact_result_output") is True
+    assert config.get("analysis_instruction_style") == "compact"
     assert config.get("top_k_chunks") == 24
     assert config.get("max_chunks_per_filing") == 12
 

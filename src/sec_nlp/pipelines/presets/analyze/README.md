@@ -134,6 +134,8 @@ See also:
 
 - `search.queries` (or `topics` when queries are empty) must be set to retrieve hits and run analysis.
 - `vector_mode` must be `read` or `write` if search is enabled.
+- `search.analyze_limit` caps the number of hits analyzed per query (search export can still include the full retrieved set).
 - `search.export_results` controls whether search summaries are written after the run.
 - `confidence_threshold` controls what is considered relevant in outputs.
 - `analysis_fields` controls which fields are requested from the LLM prompt.
+- `analysis_instruction_style=compact` reduces prompt token overhead for faster, sentiment-focused runs.

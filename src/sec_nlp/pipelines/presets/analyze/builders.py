@@ -130,6 +130,7 @@ def build_search_runner(
         query_term_min_hits=config.search.query_term_min_hits,
         query_term_min_ratio=config.search.query_term_min_ratio,
         query_term_min_len=config.search.query_term_min_len,
+        search_analyze_limit=config.search.analyze_limit,
         search_analyze=config.search.analyze,
         export_results_enabled=config.search.export_results,
         distance_metric=config.vdb.qdrant_distance,

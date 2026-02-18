@@ -224,7 +224,8 @@ class AnalyzePipeline(BasePipeline):
             prompt_path = self.config.llm.prompt_path
             self._prompt = load_prompt_template(prompt_path)
             self._analysis_instructions = AnalysisInstructionBuilder(
-                analysis_fields=self.config.analysis_fields
+                analysis_fields=self.config.analysis_fields,
+                style=self.config.analysis_instruction_style,
             ).build()
 
         except Exception as e:

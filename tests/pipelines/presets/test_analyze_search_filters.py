@@ -306,3 +306,57 @@ def test_export_results_writes_summary_with_unique_hits(
     }
     assert matched[query_a] == 0.2
     assert matched[query_b] == 0.1
+
+
+def test_limit_query_results_for_analysis_caps_hits_per_query() -> None:
+    query = "supply chain disruption"
+    doc_a = Document(page_content="A", metadata={})
+    doc_b = Document(page_content="B", metadata={})
+    doc_c = Document(page_content="C", metadata={})
+
+    results_by_query = {
+        query: SearchQueryResults(
+            filtered=[(doc_a, 0.32), (doc_b, 0.12), (doc_c, 0.28)],
+            total=3,
+        )
+    }
+
+    runner = SearchRunnable(search_analyze_limit=2, search_analyze=True)
+    limited = runner._limit_query_results_for_analysis(
+        results_by_query,
+        distance_prefers_lower=True,
+    )
+
+    limited_hits = limited[query].filtered
+    assert len(limited_hits) == 2
+    assert limited_hits[0][0].page_content == "B"
+    assert limited_hits[1][0].page_content == "C"
+
+
+def test_limit_query_results_for_analysis_uses_rank_order_for_mmr() -> None:
+    query = "rare earth approvals"
+    doc_a = Document(page_content="A", metadata={})
+    doc_b = Document(page_content="B", metadata={})
+    doc_c = Document(page_content="C", metadata={})
+
+    results_by_query = {
+        query: SearchQueryResults(
+            filtered=[(doc_a, 0.2), (doc_b, 0.9), (doc_c, 0.7)],
+            total=3,
+        )
+    }
+
+    runner = SearchRunnable(
+        search_analyze_limit=2,
+        search_analyze=True,
+        search_type="mmr",
+    )
+    limited = runner._limit_query_results_for_analysis(
+        results_by_query,
+        distance_prefers_lower=True,
+    )
+
+    limited_hits = limited[query].filtered
+    assert len(limited_hits) == 2
+    assert limited_hits[0][0].page_content == "B"
+    assert limited_hits[1][0].page_content == "C"
