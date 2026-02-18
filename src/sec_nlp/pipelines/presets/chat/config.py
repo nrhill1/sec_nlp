@@ -96,6 +96,84 @@ class ChatSettings(BasePipelineSettings):
         le=1.0,
         description="Minimum vector score required to keep a hit.",
     )
+    rerank_mode: Literal["score", "mmr"] = Field(
+        default="score",
+        description="Chunk reranking mode after retrieval (raw score or MMR diversity rerank).",
+    )
+    rerank_lambda: float = Field(
+        default=0.75,
+        ge=0.0,
+        le=1.0,
+        description="MMR relevance weight (higher = more relevance, lower = more diversity).",
+    )
+    rerank_candidates: int = Field(
+        default=32,
+        ge=1,
+        le=200,
+        description="Maximum candidate chunks considered by reranker.",
+    )
+    prefetch_retrieve: bool = Field(
+        default=False,
+        description="Preemptively run retrieve indexing when target collection is missing or sparse.",
+    )
+    prefetch_min_points: int = Field(
+        default=1,
+        ge=0,
+        le=10000,
+        description="Minimum points required in a collection before skipping prefetch.",
+    )
+    prefetch_queries: list[str] = Field(
+        default_factory=list,
+        description="Optional retrieve queries used during prefetch (defaults to the chat question).",
+        json_schema_extra={
+            "cli_args": {
+                "nargs": "+",
+                "action": "extend",
+            }
+        },
+    )
+    prefetch_efts_candidates: int = Field(
+        default=200,
+        ge=1,
+        le=1000,
+        description="EFTS candidate cap used by prefetch retrieve runs.",
+    )
+    prefetch_top_k: int = Field(
+        default=40,
+        ge=1,
+        le=200,
+        description="Top-K retrieve hits persisted during prefetch runs.",
+    )
+    include_market_context: bool = Field(
+        default=False,
+        description="Attach recent market context (price/volatility) to prompt.",
+    )
+    include_news_context: bool = Field(
+        default=False,
+        description="Attach recent news/geopolitical headlines to prompt.",
+    )
+    market_lookback_days: int = Field(
+        default=30,
+        ge=5,
+        le=365,
+        description="Lookback window for market context calculations.",
+    )
+    news_lookback_days: int = Field(
+        default=14,
+        ge=1,
+        le=90,
+        description="Lookback window for supplemental news context.",
+    )
+    max_news_items: int = Field(
+        default=5,
+        ge=1,
+        le=20,
+        description="Maximum supplemental headlines included in prompt context.",
+    )
+    market_benchmark_symbol: str = Field(
+        default="SPY",
+        description="Benchmark symbol used for relative market context.",
+    )
     strict_citations: bool = Field(
         default=True,
         description="Require citation IDs in every assistant answer.",
@@ -142,6 +220,37 @@ class ChatSettings(BasePipelineSettings):
             return None
         cleaned = value.strip()
         return cleaned or None
+
+    @field_validator("prefetch_queries", mode="before")
+    @classmethod
+    def _normalize_prefetch_queries(
+        cls, value: list[str] | str | None
+    ) -> list[str]:
+        if value is None:
+            return []
+        if isinstance(value, str):
+            value = [part.strip() for part in value.split("||") if part.strip()]
+
+        normalized: list[str] = []
+        seen: set[str] = set()
+        for raw in value:
+            cleaned = raw.strip()
+            if not cleaned:
+                continue
+            key = cleaned.casefold()
+            if key in seen:
+                continue
+            seen.add(key)
+            normalized.append(cleaned)
+        return normalized
+
+    @field_validator("market_benchmark_symbol", mode="before")
+    @classmethod
+    def _normalize_benchmark_symbol(cls, value: str) -> str:
+        cleaned = value.strip().upper()
+        if not cleaned:
+            raise ValueError("market_benchmark_symbol cannot be empty")
+        return cleaned
 
     @field_validator("collections", mode="before")
     @classmethod
