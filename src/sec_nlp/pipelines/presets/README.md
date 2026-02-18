@@ -1,6 +1,6 @@
 # Pipeline Docs
 
-Each pipeline has its own docs directory.
+Each pipeline has its own in-module README.
 
 - `analyze/README.md`
 - `chat/README.md`

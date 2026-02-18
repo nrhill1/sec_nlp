@@ -28,6 +28,7 @@ from sec_nlp.pipelines.vector.config import VectorConfig
 from sec_nlp.prompts import (
     ANALYZE_MARKET_CORRELATION_PROMPT_PATH,
     ANALYZE_PROMPT_PATH,
+    ANALYZE_SENTIMENT_PROMPT_PATH,
     HOLDINGS_PROMPT_PATH,
     PROXY_PROMPT_PATH,
 )
@@ -86,6 +87,7 @@ _DEFAULT_MODE_TOPICS = {
 _PROMPT_PROFILES: dict[str, str] = {
     "default": str(ANALYZE_PROMPT_PATH),
     "market_correlation": str(ANALYZE_MARKET_CORRELATION_PROMPT_PATH),
+    "sentiment": str(ANALYZE_SENTIMENT_PROMPT_PATH),
 }
 
 
@@ -231,12 +233,13 @@ class AnalyzeConfig(BasePipelineSettings):
             "thorough",
             "comprehensive",
             "rare_earths",
+            "sentiment",
         ]
         | None
     ) = Field(
         default=None,
         description=(
-            "Use a preset configuration (quick, laptop, thorough, comprehensive, rare-earths)"
+            "Use a preset configuration (quick, laptop, thorough, comprehensive, rare-earths, sentiment)"
         ),
     )
 
@@ -277,15 +280,17 @@ class AnalyzeConfig(BasePipelineSettings):
             }
         },
     )
-    prompt: Literal["default", "market_correlation"] | None = Field(
-        default=None,
-        description="Select the prompt profile for analysis output.",
-        json_schema_extra={
-            "cli_args": {
-                "aliases": ["--prompt-profile", "--prompt"],
-                "choices": ["default", "market_correlation"],
-            }
-        },
+    prompt: Literal["default", "market_correlation", "sentiment"] | None = (
+        Field(
+            default=None,
+            description="Select the prompt profile for analysis output.",
+            json_schema_extra={
+                "cli_args": {
+                    "aliases": ["--prompt-profile", "--prompt"],
+                    "choices": ["default", "market_correlation", "sentiment"],
+                }
+            },
+        )
     )
 
     # Vector Database Configuration
@@ -877,6 +882,13 @@ class AnalyzeConfig(BasePipelineSettings):
             "follow_up_questions",
         ],
         description="Fields to extract from LLM analysis",
+    )
+    compact_result_output: bool = Field(
+        default=False,
+        description=(
+            "Reduce per-result output payload to selected analysis_fields and "
+            "omit empty values."
+        ),
     )
 
     # Processing Options

@@ -96,6 +96,8 @@ def build_analysis_runner(
         llm_retry_attempts=config.llm_retry_attempts,
         llm_retry_backoff=config.llm_retry_backoff,
         confidence_mode=config.confidence_mode,
+        analysis_fields=config.analysis_fields,
+        compact_result_output=config.compact_result_output,
         include_raw_chunks=config.include_raw_chunks,
         batch_size=config.batch_size,
         query_term_min_len=config.search.query_term_min_len,

@@ -5,7 +5,7 @@ from collections.abc import Mapping
 from enum import Enum
 from typing import TypeGuard
 
-from sec_nlp.prompts import ANALYZE_PROMPT_PATH
+from sec_nlp.prompts import ANALYZE_PROMPT_PATH, ANALYZE_SENTIMENT_PROMPT_PATH
 from sec_nlp.types import ConfigData, ConfigObject, ConfigValue
 
 
@@ -17,6 +17,7 @@ class AnalyzePreset(str, Enum):
     thorough = "thorough"
     comprehensive = "comprehensive"
     rare_earths = "rare_earths"
+    sentiment = "sentiment"
 
     @property
     def description(self) -> str:
@@ -30,6 +31,7 @@ PRESET_DESCRIPTIONS: dict[AnalyzePreset, str] = {
     AnalyzePreset.thorough: "Balanced analysis: better model, 3 filings, vector DB enabled",
     AnalyzePreset.comprehensive: "Full analysis: best model, 5 filings, all features enabled",
     AnalyzePreset.rare_earths: "Focus on rare earth miners (8-K/6-K current reports) with finance-tuned LLM and search queries",
+    AnalyzePreset.sentiment: "Sentiment-focused analysis: lean schema, fewer chunks, faster inference",
 }
 
 
@@ -322,6 +324,48 @@ PRESET_CONFIGS: dict[AnalyzePreset, ConfigData] = {
         "max_chunks_per_filing": 40,  # Allow more chunks per filing
         "collect_metrics": True,
         "export_format": "yaml",
+    },
+    AnalyzePreset.sentiment: {
+        "llm": {
+            "model_name": "llama3.2:1b",
+            "temperature": 0.05,
+            "max_new_tokens": 512,
+            "prompt_file": ANALYZE_SENTIMENT_PROMPT_PATH,
+            "ollama_kwargs": {
+                "num_predict": 320,
+            },
+        },
+        "analysis_fields": [
+            "is_relevant",
+            "confidence_score",
+            "summary",
+            "key_points",
+            "sentiment",
+            "impact_direction",
+            "impact_magnitude",
+            "forward_looking",
+            "source_excerpt",
+            "query_match_terms",
+            "missing_query_terms",
+        ],
+        "compact_result_output": True,
+        "limit": 2,
+        "batch_size": 12,
+        "top_k_chunks": 24,
+        "adaptive_top_k_cap": 24,
+        "max_chunks_per_filing": 12,
+        "min_chunk_length": 350,
+        "deduplicate_chunks": True,
+        "confidence_threshold": 0.55,
+        "search": {
+            "limit": 8,
+            "analyze_limit": 6,
+            "score_threshold": 0.55,
+        },
+        "export_format": "yaml",
+        "aggregate_by_filing": True,
+        "include_raw_chunks": False,
+        "collect_metrics": True,
     },
 }
 

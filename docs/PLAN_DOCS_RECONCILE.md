@@ -8,7 +8,7 @@ Created: 2026-02-18
 - Add crate docs for Rust packages that currently lack docs entries.
 
 ## Pipeline Doc Coverage
-- [x] analyze (`docs/pipelines/analyze/README.md`)
+- [x] analyze (`src/sec_nlp/pipelines/presets/analyze/README.md`)
 - [x] chat
 - [x] events
 - [x] exb
@@ -20,8 +20,8 @@ Created: 2026-02-18
 - [x] warranty
 
 ## Crate Doc Coverage
-- [x] efts (`docs/crates/efts/README.md`)
-- [x] market (`docs/crates/market/README.md`)
+- [x] efts (`crates/efts/README.md`)
+- [x] market (`crates/market/README.md`)
 - [x] corr
 - [x] entity
 - [x] newswatch
@@ -30,7 +30,7 @@ Created: 2026-02-18
 ## Index Reconciliation
 - [x] `docs/README.md`
 - [x] `README.md` additional docs pointers
-- [x] `docs/pipelines/README.md` aggregate index
+- [x] `src/sec_nlp/pipelines/presets/README.md` aggregate index
 
 ## Supplemental/Misc
 - [x] Keep this plan doc as temporary tracking note for this pass

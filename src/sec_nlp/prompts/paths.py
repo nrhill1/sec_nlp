@@ -9,5 +9,8 @@ ANALYZE_PROMPT_PATH: Path = PROMPTS_DIR / "analyze" / "default.yaml"
 ANALYZE_MARKET_CORRELATION_PROMPT_PATH: Path = (
     PROMPTS_DIR / "analyze" / "market_correlation.yaml"
 )
+ANALYZE_SENTIMENT_PROMPT_PATH: Path = (
+    PROMPTS_DIR / "analyze" / "sentiment_focus.yaml"
+)
 PROXY_PROMPT_PATH: Path = PROMPTS_DIR / "proxy" / "default.yaml"
 HOLDINGS_PROMPT_PATH: Path = PROMPTS_DIR / "holdings" / "default.yaml"

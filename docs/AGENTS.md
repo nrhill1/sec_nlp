@@ -154,12 +154,12 @@ Always run `make pre-commit` or `uv run pre-commit run --all-files` before commi
 ## Documentation
 
 - `docs/ARCHITECTURE.md` — system architecture and design decisions
-- `docs/pipelines/` — per-pipeline documentation
-- `docs/crates/` — per-crate READMEs
-- `docs/pipelines/analyze/OUTPUTS_ANALYZE.md`, `docs/pipelines/analyze/OUTPUTS_SEARCH_SUMMARY.md` — analyze output format specs
+- `src/sec_nlp/pipelines/presets/` — per-pipeline README docs
+- `crates/` — per-crate READMEs
+- `src/sec_nlp/pipelines/presets/analyze/OUTPUTS_ANALYZE.md`, `src/sec_nlp/pipelines/presets/analyze/OUTPUTS_SEARCH_SUMMARY.md` — analyze output format specs
 
 When modifying pipelines or adding features:
-1. Update the relevant pipeline doc in `docs/pipelines/` if behavior changes.
+1. Update the relevant pipeline doc in `src/sec_nlp/pipelines/presets/<pipeline>/README.md` if behavior changes.
 2. Update `docs/ARCHITECTURE.md` if adding new components or changing data flow.
 3. Keep docstrings current — every public function and class should have one.
 

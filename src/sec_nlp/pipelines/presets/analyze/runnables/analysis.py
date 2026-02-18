@@ -70,6 +70,8 @@ class AnalyzerRunnable(
     llm_retry_attempts: int = Field(default=0, ge=0)
     llm_retry_backoff: float = Field(default=0.0, ge=0.0)
     confidence_mode: str = Field(default="basic")
+    analysis_fields: list[str] = Field(default_factory=list)
+    compact_result_output: bool = Field(default=False)
     include_raw_chunks: bool = Field(default=False)
     batch_size: int = Field(default=8, ge=1)
     adaptive_batch_token_budget: int = Field(
@@ -210,6 +212,24 @@ class AnalyzerRunnable(
             return self.batch_size
         adaptive = max(1, int(self.adaptive_batch_token_budget / avg_tokens))
         return min(adaptive, self.batch_size)
+
+    def _selected_output_fields(self) -> set[str]:
+        selected = {
+            field.strip()
+            for field in self.analysis_fields
+            if isinstance(field, str) and field.strip()
+        }
+        selected.update(
+            {
+                "is_relevant",
+                "confidence_score",
+                "source_metadata",
+                "matched_queries",
+            }
+        )
+        if self.include_raw_chunks:
+            selected.add("raw_chunk")
+        return selected
 
     def _cache_path(self) -> Path | None:
         if not self.llm_cache_enabled:
@@ -824,44 +844,120 @@ class AnalyzerRunnable(
                 else:
                     confidence_score = min(float(confidence_score), calibrated)
 
-        result_dict: AnalysisResultDict = {
+        if not self.compact_result_output:
+            result_dict: AnalysisResultDict = {
+                "is_relevant": is_relevant,
+                "confidence_score": confidence_score,
+                "summary": result.summary,
+                "key_points": result.key_points,
+                "reasoning": result.reasoning,
+                "query_match_terms": query_match_terms,
+                "missing_query_terms": missing_query_terms,
+                "binding_status": result.binding_status,
+                "contingencies": result.contingencies,
+                "impact_channels": result.impact_channels,
+                "impact_direction": result.impact_direction,
+                "impact_magnitude": result.impact_magnitude,
+                "impact_horizon": result.impact_horizon,
+                "impact_confidence": result.impact_confidence,
+                "impact_rationale": result.impact_rationale,
+                "extracted_entities": result.extracted_entities,
+                "compensation_data": result.compensation_data,
+                "proposal_info": result.proposal_info,
+                "performance_metrics": result.performance_metrics,
+                "peer_set": result.peer_set,
+                "pay_for_performance_flags": result.pay_for_performance_flags,
+                "tags": result.tags,
+                "evidence_spans": result.evidence_spans,
+                "source_excerpt": result.source_excerpt,
+                "severity": result.severity,
+                "sentiment": result.sentiment,
+                "forward_looking": result.forward_looking,
+                "follow_up_questions": result.follow_up_questions,
+                "source_metadata": source_metadata,
+            }
+            if matched_queries:
+                result_dict["matched_queries"] = matched_queries
+            if self.include_raw_chunks:
+                result_dict["raw_chunk"] = doc.page_content
+            return result_dict
+
+        selected = self._selected_output_fields()
+        compact: AnalysisResultDict = {
             "is_relevant": is_relevant,
-            "confidence_score": confidence_score,
-            "summary": result.summary,
-            "key_points": result.key_points,
-            "reasoning": result.reasoning,
-            "query_match_terms": query_match_terms,
-            "missing_query_terms": missing_query_terms,
-            "binding_status": result.binding_status,
-            "contingencies": result.contingencies,
-            "impact_channels": result.impact_channels,
-            "impact_direction": result.impact_direction,
-            "impact_magnitude": result.impact_magnitude,
-            "impact_horizon": result.impact_horizon,
-            "impact_confidence": result.impact_confidence,
-            "impact_rationale": result.impact_rationale,
-            "extracted_entities": result.extracted_entities,
-            "compensation_data": result.compensation_data,
-            "proposal_info": result.proposal_info,
-            "performance_metrics": result.performance_metrics,
-            "peer_set": result.peer_set,
-            "pay_for_performance_flags": result.pay_for_performance_flags,
-            "tags": result.tags,
-            "evidence_spans": result.evidence_spans,
-            "source_excerpt": result.source_excerpt,
-            "severity": result.severity,
-            "sentiment": result.sentiment,
-            "forward_looking": result.forward_looking,
-            "follow_up_questions": result.follow_up_questions,
             "source_metadata": source_metadata,
         }
+        if confidence_score is not None:
+            compact["confidence_score"] = confidence_score
         if matched_queries:
-            result_dict["matched_queries"] = matched_queries
+            compact["matched_queries"] = matched_queries
 
-        if self.include_raw_chunks:
-            result_dict["raw_chunk"] = doc.page_content
-
-        return result_dict
+        if "summary" in selected and result.summary:
+            compact["summary"] = result.summary
+        if "key_points" in selected and result.key_points:
+            compact["key_points"] = result.key_points
+        if "reasoning" in selected and result.reasoning:
+            compact["reasoning"] = result.reasoning
+        if "query_match_terms" in selected and query_match_terms:
+            compact["query_match_terms"] = query_match_terms
+        if "missing_query_terms" in selected and missing_query_terms:
+            compact["missing_query_terms"] = missing_query_terms
+        if "binding_status" in selected and result.binding_status:
+            compact["binding_status"] = result.binding_status
+        if "contingencies" in selected and result.contingencies:
+            compact["contingencies"] = result.contingencies
+        if "impact_channels" in selected and result.impact_channels:
+            compact["impact_channels"] = result.impact_channels
+        if "impact_direction" in selected and result.impact_direction:
+            compact["impact_direction"] = result.impact_direction
+        if "impact_magnitude" in selected and result.impact_magnitude:
+            compact["impact_magnitude"] = result.impact_magnitude
+        if "impact_horizon" in selected and result.impact_horizon:
+            compact["impact_horizon"] = result.impact_horizon
+        if (
+            "impact_confidence" in selected
+            and result.impact_confidence is not None
+        ):
+            compact["impact_confidence"] = result.impact_confidence
+        if "impact_rationale" in selected and result.impact_rationale:
+            compact["impact_rationale"] = result.impact_rationale
+        if "extracted_entities" in selected and result.extracted_entities:
+            compact["extracted_entities"] = result.extracted_entities
+        if (
+            "compensation_data" in selected
+            and result.compensation_data is not None
+        ):
+            compact["compensation_data"] = result.compensation_data
+        if "proposal_info" in selected and result.proposal_info is not None:
+            compact["proposal_info"] = result.proposal_info
+        if "performance_metrics" in selected and result.performance_metrics:
+            compact["performance_metrics"] = result.performance_metrics
+        if "peer_set" in selected and result.peer_set:
+            compact["peer_set"] = result.peer_set
+        if (
+            "pay_for_performance_flags" in selected
+            and result.pay_for_performance_flags
+        ):
+            compact["pay_for_performance_flags"] = (
+                result.pay_for_performance_flags
+            )
+        if "tags" in selected and result.tags:
+            compact["tags"] = result.tags
+        if "evidence_spans" in selected and result.evidence_spans:
+            compact["evidence_spans"] = result.evidence_spans
+        if "source_excerpt" in selected and result.source_excerpt:
+            compact["source_excerpt"] = result.source_excerpt
+        if "severity" in selected and result.severity:
+            compact["severity"] = result.severity
+        if "sentiment" in selected and result.sentiment:
+            compact["sentiment"] = result.sentiment
+        if "forward_looking" in selected:
+            compact["forward_looking"] = result.forward_looking
+        if "follow_up_questions" in selected and result.follow_up_questions:
+            compact["follow_up_questions"] = result.follow_up_questions
+        if self.include_raw_chunks and "raw_chunk" in selected:
+            compact["raw_chunk"] = doc.page_content
+        return compact
 
     def _create_error_result(
         self, item: AnalysisInput, doc: Document, error: Exception

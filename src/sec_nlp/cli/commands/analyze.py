@@ -31,6 +31,7 @@ class AnalyzeCommand(AnalyzeConfig, BasePipelineCommand):
         --preset laptop         Laptop-friendly: small model, tighter caps, targeted search
         --preset thorough       Balanced: better model, 3 filings, vector DB
         --preset comprehensive  Full: best model, 5 filings, all features
+        --preset sentiment      Sentiment-focused: lean schema and faster inference
 
     Interactive mode:
         Run 'sec-nlp analyze' without arguments to launch interactive setup.

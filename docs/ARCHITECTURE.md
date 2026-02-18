@@ -30,7 +30,7 @@
 4. LLM analysis for retrieved chunks.
 5. Aggregate, enrich (market correlation optional), and export.
 
-Reference: `docs/pipelines/analyze/README.md`
+Reference: `src/sec_nlp/pipelines/presets/analyze/README.md`
 
 ## Deterministic Pipeline Pattern
 Most non-LLM presets follow:

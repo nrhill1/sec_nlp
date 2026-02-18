@@ -184,3 +184,27 @@ def test_analyzer_runnable_ensemble_majority_vote() -> None:
         assert isinstance(confidence, float)
         assert abs(confidence - 0.6) < 1e-9
         assert item.get("summary") == "ensemble-a-summary"
+
+
+def test_analyzer_runnable_compact_output_keeps_selected_fields() -> None:
+    runner = AnalyzerRunnable(
+        graph=_FixedGraph(
+            is_relevant=True,
+            confidence=0.8,
+            summary="material sentiment shift",
+        ),
+        symbols=["AAPL"],
+        analysis_fields=["summary", "sentiment"],
+        compact_result_output=True,
+    )
+
+    results = runner.analyze_chunks("AAPL", _make_docs())
+    assert len(results) == 2
+    first = results[0]
+
+    assert first.get("is_relevant") is True
+    assert isinstance(first.get("confidence_score"), float)
+    assert first.get("summary") == "material sentiment shift"
+    assert "source_metadata" in first
+    assert "impact_channels" not in first
+    assert "tags" not in first
