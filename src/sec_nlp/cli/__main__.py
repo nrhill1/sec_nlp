@@ -52,6 +52,7 @@ FIELD_SUGGESTIONS: list[tuple[str, list[str]]] = [
 # argparse "unrecognized arguments" errors.
 _MULTI_VALUE_FLAGS: set[str] = {
     "--periods",
+    "--collections",
     "--sections",
     "--section-numbers",
     "--topics",
@@ -74,6 +75,7 @@ _MULTI_VALUE_FLAGS: set[str] = {
 # before handing argv to CliApp so they remain strings (e.g. "0000102909").
 _SYMBOL_POSITIONAL_COMMANDS: set[str] = {
     "analyze",
+    "chat",
     "warranty",
     "exb",
     "financials",

@@ -2,6 +2,7 @@
 """Out of the box pipelines."""
 
 from .analyze import AnalyzeConfig, AnalyzePipeline
+from .chat import ChatPipeline, ChatSettings
 from .events import EventsPipeline, EventsSettings
 from .exb import ExhibitConfig, ExhibitPipeline
 from .financials import FinancialsPipeline, FinancialsSettings
@@ -14,6 +15,8 @@ from .warranty import WarrantyConfig, WarrantyPipeline
 __all__: tuple[str, ...] = (
     "AnalyzeConfig",
     "AnalyzePipeline",
+    "ChatPipeline",
+    "ChatSettings",
     "EventsPipeline",
     "EventsSettings",
     "ExhibitConfig",

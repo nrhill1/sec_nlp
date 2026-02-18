@@ -14,6 +14,7 @@ from pydantic_settings import (
 from sec_nlp.core.infra.logger import logger
 
 from .analyze import AnalyzeCommand
+from .chat import Chat
 from .clean import Clean
 from .efts import EFTS
 from .events import Events
@@ -46,6 +47,10 @@ class Root(BaseSettings):
 
     analyze: CliSubCommand[AnalyzeCommand] = Field(
         description="Analyze SEC filings with configurable filtering and LLM"
+    )
+
+    chat: CliSubCommand[Chat] = Field(
+        description="Run retrieval-augmented chat over indexed filings"
     )
 
     warranty: CliSubCommand[Warranty] = Field(

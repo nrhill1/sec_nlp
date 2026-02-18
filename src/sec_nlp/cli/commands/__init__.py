@@ -1,5 +1,6 @@
 # src/sec_nlp/cli/commands/__init__.py
 from .analyze import AnalyzeCommand
+from .chat import Chat
 from .clean import Clean
 from .efts import EFTS
 from .events import Events
@@ -17,6 +18,7 @@ from .version import Version
 
 __all__: tuple[str, ...] = (
     "AnalyzeCommand",
+    "Chat",
     "Clean",
     "EFTS",
     "Events",
