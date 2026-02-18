@@ -22,7 +22,7 @@ from ..models import RetrievalHit
 _WORD_RE = re.compile(r"[a-z0-9]+")
 
 
-@dataclass(frozen=True)
+@dataclass(slots=True, frozen=True)
 class _ChunkCandidate:
     text: str
     section_type: str | None
@@ -52,15 +52,21 @@ def _mode_for_form(form_type: str, fallback: FilingMode) -> FilingMode:
 
 
 def _best_html_file(accession_dir: Path) -> Path | None:
-    html_paths = [
-        path
-        for path in accession_dir.rglob("*")
-        if path.is_file() and path.suffix.lower() in {".htm", ".html", ".xhtml"}
-    ]
-    if not html_paths:
-        return None
-    html_paths.sort(key=lambda path: path.stat().st_size, reverse=True)
-    return html_paths[0]
+    best_path: Path | None = None
+    best_size = -1
+    for path in accession_dir.rglob("*"):
+        if not path.is_file():
+            continue
+        if path.suffix.lower() not in {".htm", ".html", ".xhtml"}:
+            continue
+        try:
+            size = path.stat().st_size
+        except OSError:
+            continue
+        if size > best_size:
+            best_path = path
+            best_size = size
+    return best_path
 
 
 def _find_html_for_accession(
@@ -185,10 +191,10 @@ def _load_chunk_candidates(
         html_path,
         section_filter=_build_section_filter(settings),
     )
-    limited_docs = list(docs)[: settings.max_chunks_per_accession]
-
     candidates: list[_ChunkCandidate] = []
-    for doc in limited_docs:
+    for doc in docs:
+        if len(candidates) >= settings.max_chunks_per_accession:
+            break
         if not isinstance(doc, Document):
             continue
         text = doc.page_content.strip()

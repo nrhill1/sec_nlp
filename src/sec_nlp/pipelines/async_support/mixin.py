@@ -93,15 +93,47 @@ class AsyncPipelineRunner:
             List of results from all coroutines (may include exceptions)
         """
 
-        async def limited_coro(coro: Coroutine[None, None, T]) -> T:
+        async def limited_coro(
+            index: int, coro: Coroutine[None, None, T]
+        ) -> tuple[int, T | None, BaseException | None]:
             async with semaphore:
-                return await coro
+                try:
+                    return index, await coro, None
+                except BaseException as exc:  # pragma: no cover - passthrough
+                    return index, None, exc
 
-        limited_coros = [limited_coro(coro) for coro in coros]
-        results: list[T | BaseException] = await asyncio.gather(
-            *limited_coros, return_exceptions=return_exceptions
-        )
-        return results
+        if not coros:
+            return []
+
+        tasks = [
+            asyncio.create_task(limited_coro(index, coro))
+            for index, coro in enumerate(coros)
+        ]
+        ordered: list[T | BaseException | None] = [None] * len(coros)
+
+        try:
+            for task in asyncio.as_completed(tasks):
+                index, value, exc = await task
+                if exc is not None:
+                    if return_exceptions:
+                        ordered[index] = exc
+                        continue
+                    for pending in tasks:
+                        if not pending.done():
+                            pending.cancel()
+                    await asyncio.gather(*tasks, return_exceptions=True)
+                    raise exc
+
+                ordered[index] = value
+        finally:
+            await asyncio.gather(*tasks, return_exceptions=True)
+
+        return [
+            result
+            if result is not None
+            else RuntimeError("task did not complete")
+            for result in ordered
+        ]
 
     @staticmethod
     def run_async_in_new_loop(coro: Coroutine[None, None, T]) -> T:
@@ -226,20 +258,27 @@ class AsyncSymbolProcessor:
                     logger.error("Failed to process %s: %s", symbol, e)
                     raise
 
-        tasks = [process_with_tracking(symbol) for symbol in symbols]
-        results = await asyncio.gather(*tasks, return_exceptions=True)
+        async def process_with_error_capture(
+            symbol: str,
+        ) -> tuple[str, T | BaseException]:
+            try:
+                return await process_with_tracking(symbol)
+            except BaseException as exc:
+                return symbol, exc
 
-        # Build result dict, handling exceptions
         result_dict: dict[str, T] = {}
-        for i, result in enumerate(results):
-            symbol = symbols[i]
-            if isinstance(result, Exception):
+        tasks = [
+            asyncio.create_task(process_with_error_capture(symbol))
+            for symbol in symbols
+        ]
+        for task in asyncio.as_completed(tasks):
+            symbol, value = await task
+            if isinstance(value, BaseException):
                 logger.error(
-                    "Symbol %s failed with exception: %s", symbol, result
+                    "Symbol %s failed with exception: %s", symbol, value
                 )
-            elif isinstance(result, tuple) and len(result) == 2:
-                sym, val = result
-                result_dict[sym] = val
+                continue
+            result_dict[symbol] = value
 
         return result_dict
 

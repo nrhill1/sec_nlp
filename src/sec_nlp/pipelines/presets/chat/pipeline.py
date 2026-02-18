@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import re
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
@@ -75,7 +76,7 @@ _STOPWORDS = {
 }
 
 
-@dataclass(frozen=True)
+@dataclass(slots=True, frozen=True)
 class _RetrievedChunk:
     collection: str
     score: float
@@ -310,7 +311,7 @@ class ChatPipeline(BasePipeline):
             key = (
                 chunk.collection.casefold(),
                 (chunk.accession_number or "").casefold(),
-                chunk.snippet.casefold(),
+                self._snippet_fingerprint(chunk.snippet),
             )
             if key in seen:
                 continue
@@ -354,6 +355,13 @@ class ChatPipeline(BasePipeline):
                 ]
             )
         return Filter(should=symbol_conditions)
+
+    @staticmethod
+    def _snippet_fingerprint(text: str) -> str:
+        return hashlib.blake2b(
+            text.casefold().encode("utf-8"),
+            digest_size=8,
+        ).hexdigest()
 
     def _collection_points(
         self,
@@ -529,7 +537,7 @@ class ChatPipeline(BasePipeline):
             (
                 chunk.collection.casefold(),
                 (chunk.accession_number or "").casefold(),
-                chunk.snippet.casefold(),
+                self._snippet_fingerprint(chunk.snippet),
             )
             for chunk in selected
         }
@@ -537,7 +545,7 @@ class ChatPipeline(BasePipeline):
             key = (
                 chunk.collection.casefold(),
                 (chunk.accession_number or "").casefold(),
-                chunk.snippet.casefold(),
+                self._snippet_fingerprint(chunk.snippet),
             )
             if key in selected_keys:
                 continue
