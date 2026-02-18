@@ -36,7 +36,7 @@ def _mode_for_form(form_type: str, fallback: FilingMode) -> FilingMode:
         return FilingMode.annual
     if normalized.startswith("10-Q"):
         return FilingMode.quarterly
-    if normalized.startswith("8-K"):
+    if normalized.startswith(("8-K", "6-K", "6K")):
         return FilingMode.current
     if normalized.startswith("DEF 14A"):
         return FilingMode.proxy

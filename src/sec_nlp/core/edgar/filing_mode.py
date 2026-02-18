@@ -13,7 +13,7 @@ class FilingMode(StrEnum):
 
     annual = "annual"  # 10-K
     quarterly = "quarterly"  # 10-Q
-    current = "current"  # 8-K
+    current = "current"  # 8-K / 6-K
     proxy = "proxy"  # DEF 14A
     holdings = "holdings"  # 13F-HR
     insider = "insider"  # Forms 3/4
@@ -47,7 +47,7 @@ class FilingMode(StrEnum):
         descriptions: dict[FilingMode, str] = {
             FilingMode.annual: "Annual Report",
             FilingMode.quarterly: "Quarterly Report",
-            FilingMode.current: "Current Report (Material Events)",
+            FilingMode.current: "Current Report (Material Events; 8-K/6-K)",
             FilingMode.proxy: "Proxy Statement (Shareholder Meeting)",
             FilingMode.holdings: "Institutional Holdings Report",
             FilingMode.insider: "Insider Ownership Reports (Forms 3/4)",
@@ -59,6 +59,8 @@ class FilingMode(StrEnum):
     @property
     def forms(self):
         """Return all SEC form types associated with this mode."""
+        if self == FilingMode.current:
+            return ("8-K", "6-K")
         if self == FilingMode.insider:
             return ("3", "4")
         return (self.form,)

@@ -125,7 +125,7 @@ class BasePipelineSettings(BaseSettings, ABC):
     )
     forms: list[str] | None = Field(
         default=None,
-        description="SEC form types to search (e.g., ['10-K', '10-Q', '8-K']). Overrides mode if specified.",
+        description="SEC form types to search (e.g., ['10-K', '10-Q', '8-K', '6-K']). Overrides mode if specified.",
     )
     start_date: date | None = Field(
         default=None,
@@ -208,12 +208,12 @@ class BasePipelineSettings(BaseSettings, ABC):
         if isinstance(v, str):
             # Handle comma or space-separated
             v = [part for part in v.replace(",", " ").split() if part]
-        # Normalize variants: "10K" -> "10-K", "8k" -> "8-K"
+        # Normalize variants: "10K" -> "10-K", "8k" -> "8-K", "6k" -> "6-K"
         normalized = []
         for form in v:
             form_upper = form.strip().upper()
             # Add hyphens if missing for common forms
-            if form_upper in ("10K", "10Q", "8K"):
+            if form_upper in ("10K", "10Q", "8K", "6K"):
                 form_upper = form_upper[:-1] + "-" + form_upper[-1]
             normalized.append(form_upper)
         return normalized if normalized else None
