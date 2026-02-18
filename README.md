@@ -168,7 +168,9 @@ make stubs
 ## Additional Docs
 - [docs/README.md](docs/README.md)
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
+- [docs/pipelines/README.md](docs/pipelines/README.md)
 - [docs/pipelines/analyze/README.md](docs/pipelines/analyze/README.md)
+- [docs/crates/README.md](docs/crates/README.md)
 - [docs/PROJECT_STATE.md](docs/PROJECT_STATE.md)
 
 ## License
