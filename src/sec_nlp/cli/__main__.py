@@ -52,6 +52,7 @@ FIELD_SUGGESTIONS: list[tuple[str, list[str]]] = [
 # argparse "unrecognized arguments" errors.
 _MULTI_VALUE_FLAGS: set[str] = {
     "--periods",
+    "--collections",
     "--sections",
     "--section-numbers",
     "--topics",
@@ -63,6 +64,26 @@ _MULTI_VALUE_FLAGS: set[str] = {
     "--queries",
     "--material-keywords",
     "--exhibit-numbers",
+    "--forms",
+    "--feeds",
+    "--filer-ciks",
+}
+
+# Commands whose leading positional args are symbol-like identifiers.
+# Numeric CIK inputs must stay string-typed, but pydantic-settings may try
+# to JSON-decode unquoted numbers for list fields. We wrap numeric tokens
+# before handing argv to CliApp so they remain strings (e.g. "0000102909").
+_SYMBOL_POSITIONAL_COMMANDS: set[str] = {
+    "analyze",
+    "chat",
+    "warranty",
+    "exb",
+    "financials",
+    "holdings",
+    "insider",
+    "news",
+    "events",
+    "retrieve",
 }
 
 _FALSEY: set[str] = {"false", "0", "no", "off", "n"}
@@ -99,6 +120,19 @@ _BOOLEAN_FLAGS: set[str] = {
 
 def _normalize_cli_args(argv: list[str]) -> list[str]:
     """Expand space-separated list args and coerce bool false values."""
+    if argv and argv[0] in _SYMBOL_POSITIONAL_COMMANDS:
+        rewritten_symbols: list[str] = [argv[0]]
+        i = 1
+        while i < len(argv) and not argv[i].startswith("-"):
+            token = argv[i]
+            if token.isdigit():
+                rewritten_symbols.append(f'"{token}"')
+            else:
+                rewritten_symbols.append(token)
+            i += 1
+        rewritten_symbols.extend(argv[i:])
+        argv = rewritten_symbols
+
     normalized: list[str] = []
     i = 0
     while i < len(argv):
@@ -134,9 +168,12 @@ def _normalize_cli_args(argv: list[str]) -> list[str]:
         normalized.append(arg)
         i += 1
 
+    command_name = normalized[0] if normalized else ""
+    rewrite_queries = command_name in {"analyze", "exb"}
+
     rewritten: list[str] = []
     for token in normalized:
-        if token == "--queries":
+        if rewrite_queries and token == "--queries":
             rewritten.append("--search.queries")
         else:
             rewritten.append(token)

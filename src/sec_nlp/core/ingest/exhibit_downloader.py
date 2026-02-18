@@ -405,10 +405,7 @@ class ExhibitDownloader:
         if filename_lower.startswith("ex"):
             return True
 
-        if doc_type.upper().startswith("EX-"):
-            return True
-
-        return False
+        return doc_type.upper().startswith("EX-")
 
     def _matches_exhibit_filter(
         self, exhibit_number: str, filter_numbers: list[str]

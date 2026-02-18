@@ -249,19 +249,22 @@ def extract_changes(
     flush_pending()
 
     # Fallback: if texts differ but aggregation produced no changes, emit a single MODIFIED
-    if not changes and old_text != new_text:
-        if (
+    if (
+        not changes
+        and old_text != new_text
+        and (
             len(old_text) >= min_change_length
             or len(new_text) >= min_change_length
-        ):
-            changes.append(
-                TextChange(
-                    change_type=ChangeType.MODIFIED,
-                    old_text=old_text,
-                    new_text=new_text,
-                    similarity=compute_text_similarity(old_text, new_text),
-                )
+        )
+    ):
+        changes.append(
+            TextChange(
+                change_type=ChangeType.MODIFIED,
+                old_text=old_text,
+                new_text=new_text,
+                similarity=compute_text_similarity(old_text, new_text),
             )
+        )
 
     return changes
 

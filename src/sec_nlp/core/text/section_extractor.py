@@ -309,13 +309,13 @@ class SectionExtractor:
             match = re.search(pattern, match_text, re.IGNORECASE)
             return match.group(1) if match else None
 
-        elif section_type == "item":
+        if section_type == "item":
             # Match: Item 1A, Item 7, Item 1.01
             pattern = r"item\s+(\d+[a-z]?(?:\.\d+)?)"
             match = re.search(pattern, match_text, re.IGNORECASE)
             return match.group(1) if match else None
 
-        elif section_type == "part":
+        if section_type == "part":
             # Match: Part I, Part II
             pattern = r"part\s+([ivxIVX]+)"
             match = re.search(pattern, match_text, re.IGNORECASE)

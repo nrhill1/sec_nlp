@@ -388,18 +388,13 @@ class SectionFilter:
                 # For custom patterns, fall back to full check
                 # (can't reliably do substring matching)
                 return True
-            else:
-                section_terms = self.QUICK_CHECK_TERMS.get(
-                    pattern_config.section_type, []
-                )
-                terms_to_check.update(section_terms)
+            section_terms = self.QUICK_CHECK_TERMS.get(
+                pattern_config.section_type, []
+            )
+            terms_to_check.update(section_terms)
 
         # Fast substring check - any match means "maybe relevant"
-        for term in terms_to_check:
-            if term in check_content:
-                return True
-
-        return False
+        return any(term in check_content for term in terms_to_check)
 
     def should_process_html(
         self,

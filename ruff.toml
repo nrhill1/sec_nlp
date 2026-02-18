@@ -16,11 +16,19 @@ select = [
   "B",   # flake8-bugbear
   "C4",  # flake8-comprehensions
   "UP",  # pyupgrade
+  "SIM", # flake8-simplify
+  "RET", # flake8-return
+  "PIE", # flake8-pie
+  "T20", # flake8-print
 ]
 ignore = [
-  "E501",  # line too long (handled by formatter)
-  "B008",  # do not perform function calls in argument defaults
-  "C901",  # too complex
+  "E501",   # line too long (handled by formatter)
+  "B008",   # do not perform function calls in argument defaults
+  "C901",   # too complex
+  "SIM105", # contextlib.suppress — often less readable than try/except
+  "SIM108", # ternary operator — not always clearer
+  "SIM117", # multiple-with — nested contexts are often more readable
+  "RET504", # unnecessary-assign — named returns aid debugging
 ]
 
 [lint.isort]
@@ -29,7 +37,10 @@ force-wrap-aliases = true
 
 [lint.per-file-ignores]
 "__init__.py" = ["F401"]
-"tests/*" = ["F401", "F811"]
+"tests/*" = ["F401", "F811", "T201"]
+"src/scripts/*" = ["T201"]
+"src/sec_nlp/cli/*" = ["T201"]
+"src/sec_nlp/pipelines/base/result.py" = ["T201"]
 
 [lint.pydocstyle]
 convention = "google"

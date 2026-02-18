@@ -27,6 +27,7 @@ from sec_nlp.pipelines.base.result import BasePipelineResult
 from sec_nlp.pipelines.base.validation import validate_pipeline
 from sec_nlp.pipelines.observability.metrics import track_pipeline_metrics
 from sec_nlp.pipelines.observability.profiling import PipelineProfiler
+from sec_nlp.pipelines.presets.analyze.config import SearchConfig
 
 __all__ = ("BasePipelineCommand",)
 
@@ -69,15 +70,17 @@ class BasePipelineCommand(BaseModel, ABC):
 
     def cli_cmd(self) -> None:
         """Execute the configured pipeline."""
+        symbols_required = self._symbols_required()
         if (
             self._supports_interactive()
+            and symbols_required
             and not self._has_symbols()
             and sys.stdin.isatty()
         ):
             self._run_interactive()
             return
 
-        if not self._has_symbols():
+        if symbols_required and not self._has_symbols():
             self._handle_missing_symbols()
             return
 
@@ -118,6 +121,9 @@ class BasePipelineCommand(BaseModel, ABC):
     def _has_symbols(self) -> bool:
         symbols = getattr(self, "symbols", [])
         return bool(symbols)
+
+    def _symbols_required(self) -> bool:
+        return not bool(getattr(self, "symbols_optional", False))
 
     def _log_header(self) -> None:
         title = (
@@ -175,9 +181,7 @@ class BasePipelineCommand(BaseModel, ABC):
             k for k in keywords if k
         )
         has_search = (
-            search_config is not None
-            and hasattr(search_config, "queries")
-            and isinstance(search_config.queries, list)
+            isinstance(search_config, SearchConfig)
             and len(search_config.queries) > 0
         )
         has_settings = (

@@ -98,3 +98,29 @@ def test_llm_defaults_when_not_provided(tmp_path: Path) -> None:
     # Should have default prompt_file
     assert config.llm.prompt_file is not None
     assert config.llm.prompt_file.exists()
+
+
+def test_macro_context_flag_can_be_enabled(tmp_path: Path) -> None:
+    config = AnalyzeConfig(
+        symbols=["AAPL"],
+        out_path=tmp_path,
+        dl_path=tmp_path,
+        macro_context=True,
+    )
+    assert config.macro_context is True
+
+
+def test_llm_ensemble_models_are_normalized(tmp_path: Path) -> None:
+    config = AnalyzeConfig.model_validate(
+        {
+            "symbols": ["AAPL"],
+            "out_path": str(tmp_path),
+            "dl_path": str(tmp_path),
+            "llm_ensemble_models": [
+                "llama3.2:3b",
+                "llama3.2:3b",
+                "qwen2.5:7b",
+            ],
+        }
+    )
+    assert config.llm_ensemble_models == ["llama3.2:3b", "qwen2.5:7b"]

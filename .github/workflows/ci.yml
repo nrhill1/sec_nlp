@@ -155,7 +155,7 @@ jobs:
           cache-all-crates: true
 
       - name: Setup and lint
-        run: make check
+        run: make lint
 
       - name: Build extension
         run: make build-ext

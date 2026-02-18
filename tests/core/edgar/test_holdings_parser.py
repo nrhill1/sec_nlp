@@ -66,3 +66,57 @@ def test_holdings_parser_parses_info_table(tmp_path: Path) -> None:
     voting = metadata.get("voting_authority")
     assert isinstance(voting, dict)
     assert voting.get("sole") == 1000
+
+
+def test_holdings_parser_parses_info_table_from_full_submission_fallback(
+    tmp_path: Path,
+) -> None:
+    accession_dir = (
+        tmp_path
+        / "sec-edgar-filings"
+        / "0000102909"
+        / "13F-HR"
+        / "0000102909-25-000353"
+    )
+    accession_dir.mkdir(parents=True, exist_ok=True)
+
+    full_submission = """
+<SEC-DOCUMENT>
+<SEC-HEADER>
+FILED AS OF DATE: 20251103
+</SEC-HEADER>
+<DOCUMENT>
+<TYPE>INFORMATION TABLE</TYPE>
+<TEXT>
+<informationTable xmlns="http://www.sec.gov/edgar/document/thirteenf/informationtable">
+  <infoTable>
+    <nameOfIssuer>1 800 FLOWERS COM INC</nameOfIssuer>
+    <titleOfClass>CL A</titleOfClass>
+    <cusip>68243Q106</cusip>
+    <value>10347</value>
+    <shrsOrPrnAmt>
+      <sshPrnamt>335100</sshPrnamt>
+      <sshPrnamtType>SH</sshPrnamtType>
+    </shrsOrPrnAmt>
+    <investmentDiscretion>SOLE</investmentDiscretion>
+    <votingAuthority>
+      <Sole>335100</Sole>
+      <Shared>0</Shared>
+      <None>0</None>
+    </votingAuthority>
+  </infoTable>
+</informationTable>
+</TEXT>
+</DOCUMENT>
+</SEC-DOCUMENT>
+"""
+    (accession_dir / "full-submission.txt").write_text(full_submission.strip())
+
+    docs = parse_holdings_documents(accession_dir)
+
+    assert len(docs) == 1
+    metadata = docs[0].metadata
+    assert metadata.get("issuer") == "1 800 FLOWERS COM INC"
+    assert metadata.get("cusip") == "68243Q106"
+    assert metadata.get("shares") == 335100
+    assert metadata.get("value") == 10347

@@ -118,14 +118,12 @@ class BasePipeline(BaseModel, ABC):
         Returns:
             Result object with outputs and metadata
         """
-        pass
 
     @abstractmethod
     def _build_components(self) -> None:
         """
         Build pipeline components that depend on config.
         """
-        pass
 
     @classmethod
     @abstractmethod

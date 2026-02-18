@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from xml.etree import ElementTree
 
@@ -10,6 +11,11 @@ from langchain_core.documents import Document
 
 from sec_nlp.core.infra.logger import logger
 from sec_nlp.types import JsonDict, JsonValue
+
+_INFO_TABLE_BLOCK_RE = re.compile(
+    r"<informationTable\b.*?</informationTable>",
+    re.IGNORECASE | re.DOTALL,
+)
 
 
 def _local_tag(tag: JsonValue) -> JsonValue:
@@ -155,16 +161,28 @@ def _parse_xml_text(xml_text: JsonValue) -> list[JsonDict]:
     text = xml_text.strip()
     if not text:
         return []
+
+    roots: list[ElementTree.Element] = []
     try:
-        root = ElementTree.fromstring(text)
+        roots.append(ElementTree.fromstring(text))
     except ElementTree.ParseError:
-        return []
+        # full-submission.txt includes SGML headers and multiple document blocks.
+        # Pull out embedded informationTable XML blocks when direct parsing fails.
+        for match in _INFO_TABLE_BLOCK_RE.finditer(text):
+            snippet = match.group(0).strip()
+            if not snippet:
+                continue
+            try:
+                roots.append(ElementTree.fromstring(snippet))
+            except ElementTree.ParseError:
+                continue
 
     entries: list[JsonDict] = []
-    for node in root.iter():
-        tag = _local_tag(node.tag)
-        if isinstance(tag, str) and tag.lower() == "infotable":
-            entries.append(_parse_info_table(node))
+    for root in roots:
+        for node in root.iter():
+            tag = _local_tag(node.tag)
+            if isinstance(tag, str) and tag.lower() == "infotable":
+                entries.append(_parse_info_table(node))
     return entries
 
 
@@ -179,9 +197,7 @@ def _is_info_table_file(path: Path) -> bool:
         return True
     if "info-table" in name:
         return True
-    if "13f" in name and "table" in name:
-        return True
-    return False
+    return "13f" in name and "table" in name
 
 
 class HoldingsParser:

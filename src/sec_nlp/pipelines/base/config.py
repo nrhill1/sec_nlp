@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 import logging
+import sqlite3
 import uuid
 from abc import ABC, abstractmethod
 from datetime import UTC, date, datetime, timedelta
@@ -34,6 +35,7 @@ class BasePipelineSettings(BaseSettings, ABC):
     """
 
     pipeline_type: ClassVar[str] = _CLASSVAR_UNSET
+    symbols_optional: ClassVar[bool] = False
 
     model_config = SettingsConfigDict(
         extra="ignore",
@@ -96,7 +98,10 @@ class BasePipelineSettings(BaseSettings, ABC):
     _run_timestamp: datetime = PrivateAttr(
         default_factory=lambda: datetime.now(UTC)
     )
-    _short_id: int = PrivateAttr(default=0)  # Sequential ID from registry
+    # Mutable container so frozen model can update without object.__setattr__
+    _short_id_ref: dict[str, int] = PrivateAttr(
+        default_factory=lambda: {"value": 0}
+    )
     _profiling_metadata: JsonDict = PrivateAttr(default_factory=dict)
 
     # Data paths
@@ -161,10 +166,9 @@ class BasePipelineSettings(BaseSettings, ABC):
                 output_dir=str(self.out_path),
             )
             if short_id is not None:
-                self._short_id = short_id
-        except Exception:
-            # Don't fail if registry is unavailable
-            pass
+                self._short_id_ref["value"] = short_id
+        except (ImportError, OSError, sqlite3.Error):
+            logger.debug("Run registry unavailable during init")
 
     @abstractmethod
     def pipeline_label(self) -> str:
@@ -358,17 +362,18 @@ class BasePipelineSettings(BaseSettings, ABC):
     def short_id(self) -> int:
         """Get the short sequential run ID (e.g., 42)."""
         self._ensure_short_id()
-        return self._short_id
+        return self._short_id_ref["value"]
 
     @property
     def short_id_display(self) -> str:
         """Get the short ID for display (e.g., '#42')."""
         self._ensure_short_id()
-        return f"#{self._short_id}" if self._short_id else str(self.run_id)
+        sid = self._short_id_ref["value"]
+        return f"#{sid}" if sid else str(self.run_id)
 
     def _ensure_short_id(self) -> None:
-        """Populate _short_id from the run registry if missing."""
-        if self._short_id:
+        """Populate _short_id_ref from the run registry if missing."""
+        if self._short_id_ref["value"]:
             return
         try:
             from sec_nlp.pipelines.observability.run_registry import (
@@ -378,7 +383,7 @@ class BasePipelineSettings(BaseSettings, ABC):
             registry = get_registry()
             existing = registry.get_run(str(self.run_id))
             if existing is not None:
-                object.__setattr__(self, "_short_id", existing.record_id)
+                self._short_id_ref["value"] = existing.record_id
                 return
 
             short_id = registry.register_run(
@@ -388,9 +393,9 @@ class BasePipelineSettings(BaseSettings, ABC):
                 output_dir=str(self.out_path),
             )
             if short_id is not None:
-                object.__setattr__(self, "_short_id", short_id)
-        except Exception:
-            # Registry is optional; keep _short_id unset if unavailable.
+                self._short_id_ref["value"] = short_id
+        except (ImportError, OSError, sqlite3.Error):
+            logger.debug("Run registry unavailable for short_id lookup")
             return
 
     @property
@@ -443,9 +448,8 @@ class BasePipelineSettings(BaseSettings, ABC):
                 success=success,
                 metadata=serialized_metadata,
             )
-        except Exception:
-            # Don't fail if registry is unavailable
-            pass
+        except (ImportError, OSError, sqlite3.Error):
+            logger.debug("Run registry unavailable for run completion")
 
     @property
     def num_symbols(self) -> int:

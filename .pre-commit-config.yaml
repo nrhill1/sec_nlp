@@ -44,15 +44,15 @@ repos:
     pass_filenames: false
 
   - id: rs-sg-fmt
-    name: Rust Format (sec_grep)
+    name: Rust Format (efts)
     entry: make rs-sg-fmt
-    files: '^crates/sec_grep/'
+    files: '^crates/efts/'
     language: system
     pass_filenames: false
 
   - id: rs-sg-clippy
-    name: Rust Clippy (sec_grep)
+    name: Rust Clippy (efts)
     entry: make rs-sg-clippy
-    files: '^crates/sec_grep/'
+    files: '^crates/efts/'
     language: system
     pass_filenames: false

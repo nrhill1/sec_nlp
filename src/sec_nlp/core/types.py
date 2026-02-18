@@ -12,10 +12,7 @@ def is_json_object(value: JsonValue) -> TypeGuard[JsonObject]:
     """Return True if value is a mapping with string keys."""
     if not isinstance(value, Mapping):
         return False
-    for key in value:
-        if not isinstance(key, str):
-            return False
-    return True
+    return all(isinstance(key, str) for key in value)
 
 
 def is_json_mapping(value: JsonValue) -> TypeGuard[Mapping[str, JsonValue]]:

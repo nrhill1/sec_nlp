@@ -187,9 +187,7 @@ class RelationshipResolver:
                     cleaned = line.strip()
                     if cleaned:
                         lines.append(cleaned)
-                    if cleaned.startswith(
-                        "</SEC-HEADER>"
-                    ) or cleaned.startswith("<DOCUMENT>"):
+                    if cleaned.startswith(("</SEC-HEADER>", "<DOCUMENT>")):
                         break
                     if len(lines) >= self.header_line_limit:
                         break

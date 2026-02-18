@@ -9,6 +9,7 @@ from collections.abc import Iterable
 from datetime import date
 from functools import lru_cache
 from pathlib import Path
+from typing import TypedDict
 
 from langchain_core.documents import Document
 
@@ -91,8 +92,15 @@ def html_paths_for_symbol(
     return html_files[:limit] if limit else html_files
 
 
+class _TickerEntry(TypedDict):
+    cik: str
+    company_name: str
+
+
 @lru_cache(maxsize=4)
-def _load_cik_map(company_name: str, email: str) -> dict[str, str]:
+def _load_ticker_registry(
+    company_name: str, email: str
+) -> dict[str, _TickerEntry]:
     logger.debug("Fetching ticker-to-CIK mapping from SEC...")
     url = "https://www.sec.gov/files/company_tickers.json"
     headers = {"User-Agent": f"{company_name} {email}"}
@@ -101,33 +109,57 @@ def _load_cik_map(company_name: str, email: str) -> dict[str, str]:
     with urllib.request.urlopen(req) as response:
         data = json.loads(response.read())
 
-    cik_map: dict[str, str] = {}
+    registry: dict[str, _TickerEntry] = {}
     for entry in data.values():
         ticker_symbol = entry.get("ticker", "").upper()
         cik_num = entry.get("cik_str")
+        company_title = str(entry.get("title", "")).strip()
         if ticker_symbol and cik_num:
-            cik_map[ticker_symbol] = str(cik_num).zfill(10)
+            registry[ticker_symbol] = _TickerEntry(
+                cik=str(cik_num).zfill(10),
+                company_name=company_title,
+            )
 
-    logger.debug("Loaded %d ticker-to-CIK mappings", len(cik_map))
-    return cik_map
+    logger.debug("Loaded %d ticker registry entries", len(registry))
+    return registry
 
 
 def get_cik_for_ticker(*, ticker: str, company_name: str, email: str) -> str:
     """Look up CIK for a ticker symbol from SEC."""
     try:
-        cik_map = _load_cik_map(company_name, email)
+        registry = _load_ticker_registry(company_name, email)
     except Exception as exc:
         logger.error("Failed to fetch ticker-to-CIK mapping: %s", exc)
         raise
 
     key = ticker.upper()
-    if key not in cik_map:
+    if key not in registry:
         raise ValueError(
             f"Could not find CIK for ticker {ticker}. "
             "Ticker may not exist or may not be in SEC database."
         )
 
-    return cik_map[key]
+    return registry[key]["cik"]
+
+
+def get_company_name_for_ticker(
+    *,
+    ticker: str,
+    company_name: str,
+    email: str,
+) -> str | None:
+    """Look up issuer company name for a ticker symbol from SEC.
+
+    Returns ``None`` when the ticker is not found or has no title.
+    """
+
+    registry = _load_ticker_registry(company_name, email)
+    entry = registry.get(ticker.upper())
+    if entry is None:
+        return None
+
+    company_title = entry.get("company_name", "").strip()
+    return company_title or None
 
 
 def load_xbrl_facts(

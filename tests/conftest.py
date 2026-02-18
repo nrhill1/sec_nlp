@@ -3,7 +3,6 @@
 
 import asyncio
 import logging
-import sys
 import tempfile
 from collections.abc import Generator
 from pathlib import Path
@@ -52,11 +51,6 @@ def temp_pipeline_config(tmp_path: Path) -> TempPipelineConfig:
     outputs_dir.mkdir(parents=True, exist_ok=True)
     downloads_dir.mkdir(parents=True, exist_ok=True)
     return TempPipelineConfig(out_path=outputs_dir, dl_path=downloads_dir)
-    logger.info("Starting pytest session")
-    logger.info(f"Python version: {sys.version}")
-    logger.info(f"Python executable: {sys.executable}")
-    logger.info(f"Python path: {sys.path}")
-    logger.info("=" * 80)
 
 
 @pytest.fixture

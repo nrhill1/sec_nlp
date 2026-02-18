@@ -90,9 +90,7 @@ class PipelineStage(BaseModel):
         """
         # Check skip_on_failure
         if previous_output is not None and not previous_output.success:
-            if not self.skip_on_failure:
-                return True  # Will run and likely fail
-            return False  # Skip on failure
+            return not self.skip_on_failure
 
         # Check custom condition
         if self.condition is not None:

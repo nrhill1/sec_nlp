@@ -14,11 +14,18 @@ from pydantic_settings import (
 from sec_nlp.core.infra.logger import logger
 
 from .analyze import AnalyzeCommand
+from .chat import Chat
 from .clean import Clean
 from .efts import EFTS
+from .events import Events
 from .exb import Exb
+from .financials import Financials
+from .holdings import Holdings
+from .insider import Insider
 from .market import Market
+from .news import News
 from .qdrant import Qdrant
+from .retrieve import Retrieve
 from .runs import Runs
 from .version import Version
 from .warranty import Warranty
@@ -42,11 +49,39 @@ class Root(BaseSettings):
         description="Analyze SEC filings with configurable filtering and LLM"
     )
 
+    chat: CliSubCommand[Chat] = Field(
+        description="Run retrieval-augmented chat over indexed filings"
+    )
+
     warranty: CliSubCommand[Warranty] = Field(
         description="Run the warranty pipeline"
     )
 
     exb: CliSubCommand[Exb] = Field(description="Run the exhibit pipeline")
+
+    financials: CliSubCommand[Financials] = Field(
+        description="Run the financial statement extraction pipeline"
+    )
+
+    holdings: CliSubCommand[Holdings] = Field(
+        description="Run the institutional holdings analysis pipeline"
+    )
+
+    insider: CliSubCommand[Insider] = Field(
+        description="Run the insider trading analysis pipeline"
+    )
+
+    news: CliSubCommand[News] = Field(
+        description="Run the news monitoring and correlation pipeline"
+    )
+
+    retrieve: CliSubCommand[Retrieve] = Field(
+        description="Run the EFTS-first retrieval pipeline"
+    )
+
+    events: CliSubCommand[Events] = Field(
+        description="Run the event detection and timeline pipeline"
+    )
 
     efts: CliSubCommand[EFTS] = Field(
         description="Search SEC EDGAR filings using Full-Text Search API"

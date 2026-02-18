@@ -52,7 +52,7 @@ def log_chunk_length_stats(
             meta = d.metadata or {}
             try:
                 keyword_scores.append(float(meta.get(keyword_field, 0.0)))
-            except Exception:
+            except (TypeError, ValueError):
                 continue
 
     # Build prefix for log messages

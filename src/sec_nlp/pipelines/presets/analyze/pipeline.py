@@ -4,6 +4,7 @@
 import signal
 from collections import defaultdict
 from concurrent.futures import Future, ThreadPoolExecutor
+from datetime import date
 from pathlib import Path
 from statistics import mean, median
 from time import perf_counter
@@ -34,6 +35,11 @@ from rich.progress import (
 from rich.table import Table
 from rich.text import Text
 
+from sec_nlp.core.edgar.economic import (
+    EconomicDataError,
+    align_to_filings,
+    fetch_series,
+)
 from sec_nlp.core.edgar.filing_mode import FilingMode
 from sec_nlp.core.infra.logger import log_divider, logger
 from sec_nlp.core.infra.rich_console import get_rich_console
@@ -352,6 +358,38 @@ class AnalyzePipeline(BasePipeline):
             )
             logger.info("Built LLM processing graph")
 
+            ensemble_graphs: list[Runnable[AnalysisInput, AnalysisResult]] = []
+            ensemble_model_names: list[str] = []
+            seen_models = {self.config.llm.model_name.casefold()}
+            for model_name in self.config.llm_ensemble_models:
+                normalized_model = model_name.strip()
+                if not normalized_model:
+                    continue
+                model_key = normalized_model.casefold()
+                if model_key in seen_models:
+                    continue
+                seen_models.add(model_key)
+                ensemble_llm_config = self.config.llm.model_copy(
+                    update={"model_name": normalized_model}
+                )
+                ensemble_llm = ensemble_llm_config.setup_ollama_model()
+                ensemble_graph = build_runnable(
+                    prompt=self._prompt,
+                    llm=ensemble_llm,
+                    input_model=AnalysisInput,
+                    output_model=AnalysisResult,
+                    require_json=self.config.llm.require_json,
+                )
+                ensemble_graphs.append(ensemble_graph)
+                ensemble_model_names.append(normalized_model)
+
+            if ensemble_model_names:
+                logger.info(
+                    "Enabled analyze ensemble with %d additional model(s): %s",
+                    len(ensemble_model_names),
+                    ", ".join(ensemble_model_names),
+                )
+
         except Exception as e:
             raise RuntimeError(
                 f"{type(e).__name__}: Failed to build LLM graph: {e}\n"
@@ -387,6 +425,8 @@ class AnalyzePipeline(BasePipeline):
             graph=self._graph,
             callbacks=self._callbacks,
             analysis_instructions=self._analysis_instructions,
+            ensemble_graphs=ensemble_graphs,
+            ensemble_model_names=ensemble_model_names,
         )
         self._search_runner = build_search_runner(
             config=self.config,
@@ -539,7 +579,7 @@ class AnalyzePipeline(BasePipeline):
                             "chunk_stats": chunk_stats,
                         }
                         symbol_key = str(symbol)
-                        metadata[symbol_key] = symbol_meta  # type: ignore[assignment]
+                        metadata[symbol_key] = symbol_meta
                         progress.update(phase_task, visible=False)
                         self._phase_start = 0.0
                         progress.advance(overall_task)
@@ -767,6 +807,15 @@ class AnalyzePipeline(BasePipeline):
             phase_task=phase_task,
         )
         stats["analyzed_count"] = len(analysis_results)
+
+        if not self.config.search.analyze:
+            logger.info(
+                "Analysis disabled for %s (--search.analyze=false); "
+                "exporting search results only",
+                symbol,
+            )
+            timings["total"] = sum(timings.values())
+            return [], stats
 
         # Phase 5: Post-processing (confidence, correlation)
         self._update_phase(progress, phase_task, symbol, "Post-processing")
@@ -1006,17 +1055,21 @@ class AnalyzePipeline(BasePipeline):
 
         market_data = self._build_market_enrichment(symbol, docs)
         market_context = self._format_market_context(market_data)
-        if market_context:
-            self._market_context_by_symbol[symbol] = market_context
+        macro_context = self._build_macro_context(docs)
+        combined_context = self._combine_contexts(market_context, macro_context)
+        if combined_context:
+            self._market_context_by_symbol[symbol] = combined_context
             for doc in docs:
                 metadata = dict(doc.metadata or {})
-                metadata["market_enrichment_context"] = market_context
+                metadata["market_enrichment_context"] = combined_context
+                if macro_context:
+                    metadata["macro_context"] = macro_context
                 doc.metadata = metadata
 
         self._log_chunk_stats_by_accession(docs, symbol=symbol, label=None)
         self._vector_indexer.index(symbol, docs, timings)
 
-        return stats, market_data, market_context
+        return stats, market_data, combined_context
 
     def _run_search_and_analysis(
         self,
@@ -1053,6 +1106,13 @@ class AnalyzePipeline(BasePipeline):
                 "No vector search hits for %s; skipping analysis step", symbol
             )
             return [], []
+
+        if not self.config.search.analyze:
+            logger.info(
+                "Search analysis disabled; skipping LLM analysis for %s",
+                symbol,
+            )
+            return [], docs_for_analysis
 
         logger.info(
             "Analyzing %d retrieved chunks for %s (from vector search)",
@@ -1364,6 +1424,76 @@ class AnalyzePipeline(BasePipeline):
     ) -> str | None:
         """Summarize market data for inclusion in the LLM context."""
         return format_market_context(enrichment)
+
+    def _build_macro_context(self, docs: list[Document]) -> str | None:
+        """Build a compact macroeconomic context string for filing docs."""
+        if not self.config.macro_context:
+            return None
+
+        filing_date = self._extract_filing_date_for_macro(docs)
+        if filing_date is None:
+            return None
+
+        indicators: tuple[tuple[str, str], ...] = (
+            ("GDP", "gdp_growth"),
+            ("CPIAUCSL", "cpi_yoy"),
+            ("UNRATE", "unemployment_rate"),
+            ("FEDFUNDS", "fed_funds_rate"),
+            ("T10Y2Y", "yield_spread_10y_2y"),
+        )
+
+        values: list[str] = []
+        for indicator_id, context_field in indicators:
+            try:
+                series = fetch_series(
+                    indicator_id,
+                    end_date=filing_date.isoformat(),
+                )
+                contexts = align_to_filings(series, [filing_date.isoformat()])
+            except EconomicDataError as exc:
+                logger.debug(
+                    "Macro context unavailable for %s: %s",
+                    indicator_id,
+                    exc,
+                )
+                return None
+            except Exception:
+                logger.debug(
+                    "Macro context fetch failed for %s",
+                    indicator_id,
+                    exc_info=True,
+                )
+                continue
+
+            if not contexts:
+                continue
+            value = getattr(contexts[0], context_field, None)
+            if isinstance(value, (int, float)):
+                values.append(f"{indicator_id}={value:.2f}")
+
+        if not values:
+            return None
+        return f"macro near {filing_date.isoformat()}: {'; '.join(values)}"
+
+    @staticmethod
+    def _extract_filing_date_for_macro(docs: list[Document]) -> date | None:
+        for doc in docs:
+            metadata = doc.metadata or {}
+            for key in ("filing_date", "acceptance_date", "filed_date"):
+                raw_value = metadata.get(key)
+                if isinstance(raw_value, str) and raw_value.strip():
+                    try:
+                        return date.fromisoformat(raw_value.strip()[:10])
+                    except ValueError:
+                        continue
+        return None
+
+    @staticmethod
+    def _combine_contexts(*contexts: str | None) -> str | None:
+        parts = [context for context in contexts if context]
+        if not parts:
+            return None
+        return " | ".join(parts)
 
     def _update_efts_keywords_from_docs(
         self, symbol: str, docs: list[Document]

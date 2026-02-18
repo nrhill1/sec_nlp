@@ -245,7 +245,7 @@ def format_table(
         if color and padding > 0:
             if align == "right":
                 return " " * padding + color_text(text, color=color)
-            elif align == "center":
+            if align == "center":
                 left_pad = padding // 2
                 right_pad = padding - left_pad
                 return (
@@ -253,9 +253,9 @@ def format_table(
                     + color_text(text, color=color)
                     + " " * right_pad
                 )
-            else:  # left
-                return color_text(text, color=color) + " " * padding
-        elif color:
+            # left
+            return color_text(text, color=color) + " " * padding
+        if color:
             return color_text(text, color=color)
         return padded
 

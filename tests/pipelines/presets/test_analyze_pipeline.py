@@ -1,11 +1,12 @@
 from pathlib import Path
-from typing import ClassVar, Literal
+from typing import ClassVar, Literal, cast
 from unittest.mock import Mock
 
 from langchain_core.documents import Document
 from langchain_core.runnables import Runnable, RunnableConfig
 from rich.progress import Progress, TaskID
 
+from sec_nlp.core.edgar.economic import EconomicSeries, MacroContext
 from sec_nlp.pipelines.presets.analyze import (
     AnalysisInput,
     AnalysisResult,
@@ -136,6 +137,7 @@ def _make_config(
     batch_size: int = 2,
     min_chunk_length: int = 10,
     deduplicate_chunks: bool = False,
+    macro_context: bool = False,
 ) -> AnalyzeConfig:
     return AnalyzeConfig(
         symbols=["AAPL"],
@@ -152,6 +154,7 @@ def _make_config(
         batch_size=batch_size,
         min_chunk_length=min_chunk_length,
         deduplicate_chunks=deduplicate_chunks,
+        macro_context=macro_context,
     )
 
 
@@ -165,6 +168,7 @@ def _make_pipeline(
     batch_size: int = 2,
     min_chunk_length: int = 10,
     deduplicate_chunks: bool = False,
+    macro_context: bool = False,
 ) -> AnalyzePipeline:
     config = _make_config(
         tmp_path,
@@ -175,6 +179,7 @@ def _make_pipeline(
         batch_size=batch_size,
         min_chunk_length=min_chunk_length,
         deduplicate_chunks=deduplicate_chunks,
+        macro_context=macro_context,
     )
     return _TestAnalyzePipeline(config=config)
 
@@ -287,3 +292,119 @@ def test_run_uses_cached_search_results(tmp_path: Path) -> None:
     call = runner.export_results.call_args
     assert call.kwargs.get("cached") is True
     assert call.kwargs.get("queries") == ["cached-query"]
+
+
+def test_build_macro_context_when_enabled(tmp_path: Path, monkeypatch) -> None:
+    pipeline = _make_pipeline(tmp_path, macro_context=True)
+    docs = [
+        Document(
+            page_content="macro doc",
+            metadata={"filing_date": "2024-03-15"},
+        )
+    ]
+
+    from sec_nlp.pipelines.presets.analyze import pipeline as pipeline_module
+
+    def _mock_fetch_series(
+        series_id: str,
+        start_date: str = "",
+        end_date: str = "",
+    ) -> EconomicSeries:
+        _ = start_date
+        _ = end_date
+        return EconomicSeries(
+            series_id=series_id,
+            description=series_id,
+            observations=[("2024-03-01", 1.23)],
+        )
+
+    def _mock_align_to_filings(
+        series: EconomicSeries,
+        filing_dates: list[str],
+    ) -> list[MacroContext]:
+        filing_date = filing_dates[0]
+        if series.series_id == "GDP":
+            return [MacroContext(filing_date=filing_date, gdp_growth=1.23)]
+        if series.series_id == "CPIAUCSL":
+            return [MacroContext(filing_date=filing_date, cpi_yoy=1.23)]
+        if series.series_id == "UNRATE":
+            return [
+                MacroContext(
+                    filing_date=filing_date,
+                    unemployment_rate=1.23,
+                )
+            ]
+        if series.series_id == "FEDFUNDS":
+            return [
+                MacroContext(
+                    filing_date=filing_date,
+                    fed_funds_rate=1.23,
+                )
+            ]
+        if series.series_id == "T10Y2Y":
+            return [
+                MacroContext(
+                    filing_date=filing_date,
+                    yield_spread_10y_2y=1.23,
+                )
+            ]
+        return [MacroContext(filing_date=filing_date)]
+
+    monkeypatch.setattr(pipeline_module, "fetch_series", _mock_fetch_series)
+    monkeypatch.setattr(
+        pipeline_module, "align_to_filings", _mock_align_to_filings
+    )
+
+    context = pipeline._build_macro_context(docs)
+
+    assert context is not None
+    assert "macro near 2024-03-15" in context
+    assert "GDP=1.23" in context
+    assert "UNRATE=1.23" in context
+
+
+def test_run_search_and_analysis_skips_llm_when_search_analyze_disabled(
+    tmp_path: Path, monkeypatch
+) -> None:
+    from sec_nlp.pipelines.presets.analyze.runnables.analysis import (
+        AnalyzerRunnable,
+    )
+
+    config = AnalyzeConfig(
+        symbols=["AAPL"],
+        out_path=tmp_path,
+        dl_path=tmp_path,
+        vector_mode="read",
+        export_format="json",
+        search=SearchConfig(queries=["warranty"], analyze=False),
+        collect_metrics=False,
+    )
+    pipe = _TestAnalyzePipeline(config=config)
+    pipe._vector_store = Mock()
+    search_runner = cast(Mock, pipe._search_runner)
+    search_runner.metadata_filters = {"symbol": ["AAPL"]}
+    sample_docs = [
+        Document(
+            page_content="Sample filing text",
+            metadata={
+                "symbol": "AAPL",
+                "accession_number": "0000000000-26-000001",
+            },
+        )
+    ]
+    search_runner.retrieve_hits_with_results.return_value = (
+        sample_docs,
+        {"warranty": SearchQueryResults(filtered=[], total=1)},
+    )
+    analyze_chunks = Mock(return_value=[])
+    monkeypatch.setattr(AnalyzerRunnable, "analyze_chunks", analyze_chunks)
+
+    analysis_results, docs_for_analysis = pipe._run_search_and_analysis(
+        "AAPL",
+        ["warranty"],
+        {},
+    )
+
+    assert analysis_results == []
+    assert docs_for_analysis == sample_docs
+    analyze_chunks.assert_not_called()

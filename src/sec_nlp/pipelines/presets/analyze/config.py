@@ -1,6 +1,7 @@
 # src/sec_nlp/pipelines/presets/analyze/config.py
 """Configuration for generalized document analysis pipeline."""
 
+from pathlib import Path
 from typing import ClassVar, Literal, Self
 
 from pydantic import (
@@ -262,6 +263,20 @@ class AnalyzeConfig(BasePipelineSettings):
         ),
         description="LLM configuration for document analysis",
     )
+    llm_ensemble_models: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Optional additional model names for analyze ensemble voting. "
+            "Base model still comes from llm.model_name."
+        ),
+        json_schema_extra={
+            "cli_args": {
+                "nargs": "+",
+                "action": "extend",
+                "aliases": ["--ensemble-models", "--llm-ensemble-models"],
+            }
+        },
+    )
     prompt: Literal["default", "market_correlation"] | None = Field(
         default=None,
         description="Select the prompt profile for analysis output.",
@@ -400,6 +415,18 @@ class AnalyzeConfig(BasePipelineSettings):
         json_schema_extra={
             "cli_args": {
                 "aliases": ["--market-correlation-enabled"],
+            }
+        },
+    )
+    macro_context: bool = Field(
+        default=False,
+        description=(
+            "Include macroeconomic context from FRED indicators in per-symbol "
+            "analysis metadata when available."
+        ),
+        json_schema_extra={
+            "cli_args": {
+                "aliases": ["--macro-context"],
             }
         },
     )
@@ -638,6 +665,29 @@ class AnalyzeConfig(BasePipelineSettings):
             return []
         return [str(item) for item in v]
 
+    @field_validator("llm_ensemble_models", mode="before")
+    @classmethod
+    def _normalize_llm_ensemble_models(
+        cls, value: list[str] | str | None
+    ) -> list[str]:
+        if value is None:
+            return []
+        if isinstance(value, str):
+            value = [part.strip() for part in value.split(",") if part.strip()]
+
+        normalized: list[str] = []
+        seen: set[str] = set()
+        for model in value:
+            cleaned = model.strip()
+            if not cleaned:
+                continue
+            key = cleaned.casefold()
+            if key in seen:
+                continue
+            seen.add(key)
+            normalized.append(cleaned)
+        return normalized
+
     custom_section_pattern: str | None = Field(
         default=None,
         description="Custom regex pattern for section matching (when section_type='custom')",
@@ -785,6 +835,20 @@ class AnalyzeConfig(BasePipelineSettings):
         ge=0.0,
         description="Initial backoff (seconds) for LLM retry; doubles each attempt",
     )
+    llm_response_cache: bool = Field(
+        default=False,
+        description="Cache successful LLM chunk-analysis responses across runs.",
+    )
+    llm_response_cache_file: Path = Field(
+        default=Path(".analyze_llm_cache.json"),
+        description="LLM response cache filename or absolute path.",
+    )
+    llm_response_cache_max_entries: int = Field(
+        default=20000,
+        ge=100,
+        le=500000,
+        description="Maximum number of cached LLM responses to retain.",
+    )
 
     analysis_fields: list[str] = Field(
         default_factory=lambda: [
@@ -893,6 +957,12 @@ class AnalyzeConfig(BasePipelineSettings):
         default=True,
         description="Collect and report performance metrics",
     )
+
+    def llm_response_cache_path(self) -> Path:
+        cache_file = self.llm_response_cache_file
+        if cache_file.is_absolute():
+            return cache_file
+        return self.dl_path / cache_file
 
     def pipeline_label(self) -> str:
         return "Analyze"

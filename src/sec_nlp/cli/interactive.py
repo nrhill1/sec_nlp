@@ -231,10 +231,7 @@ def _is_embedding_model(model: JsonObject) -> bool:
         families = [family]
     elif isinstance(family, list):
         families = [str(f) for f in family]
-    if any("embed" in f.lower() for f in families):
-        return True
-
-    return False
+    return any("embed" in f.lower() for f in families)
 
 
 def _build_model_choices(

@@ -73,7 +73,21 @@ def build_analysis_runner(
     graph: Runnable[AnalysisInput, AnalysisResult],
     callbacks: list[BaseCallbackHandler],
     analysis_instructions: str,
+    ensemble_graphs: list[Runnable[AnalysisInput, AnalysisResult]]
+    | None = None,
+    ensemble_model_names: list[str] | None = None,
 ) -> AnalyzerRunnable:
+    prompt_ref = (
+        str(config.llm.prompt_file)
+        if config.llm.prompt_file is not None
+        else ""
+    )
+    cache_namespace = (
+        f"{config.llm.model_name}|"
+        f"{config.llm.temperature}|"
+        f"{config.llm.require_json}|"
+        f"{prompt_ref}"
+    )
     return AnalyzerRunnable(
         graph=graph,
         callbacks=callbacks,
@@ -86,6 +100,16 @@ def build_analysis_runner(
         batch_size=config.batch_size,
         query_term_min_len=config.search.query_term_min_len,
         run_id=config.run_id,
+        llm_cache_enabled=config.llm_response_cache,
+        llm_cache_file=(
+            config.llm_response_cache_path()
+            if config.llm_response_cache
+            else None
+        ),
+        llm_cache_max_entries=config.llm_response_cache_max_entries,
+        llm_cache_namespace=cache_namespace,
+        ensemble_graphs=ensemble_graphs or [],
+        ensemble_model_names=ensemble_model_names or [],
     )
 
 

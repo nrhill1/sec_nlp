@@ -582,12 +582,11 @@ class ExhibitPipeline(BasePipeline):
         if not self._qdrant_client:
             return False
 
-        found = scroll_exists(
+        return scroll_exists(
             self._qdrant_client,
             self._collection_name(),
             {"accession_number": [accession_number]},
         )
-        return found
 
     def _filter_indexed_accessions(
         self, docs: list[Document]
@@ -638,8 +637,7 @@ class ExhibitPipeline(BasePipeline):
         if content_len <= 0:
             return base
         # Smaller for huge exhibits, keep reasonable minimum
-        scaled = max(2000, min(base, max(2500, content_len // 3)))
-        return scaled
+        return max(2000, min(base, max(2500, content_len // 3)))
 
     @staticmethod
     def _is_reference_stub(doc: Document) -> bool:
@@ -661,7 +659,4 @@ class ExhibitPipeline(BasePipeline):
             return True
 
         # Very short fragments with no sentences
-        if len(text) < 200 and text.count(".") < 1:
-            return True
-
-        return False
+        return len(text) < 200 and text.count(".") < 1

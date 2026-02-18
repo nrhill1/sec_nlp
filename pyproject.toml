@@ -31,6 +31,7 @@ dependencies = [
   "unstructured>=0.18.20",
   "pyahocorasick>=2.2.0",
   "pandas>=2.3.3",
+  "fredapi>=0.5.2",
   "rich>=13.8.0",
 ]
 
@@ -44,6 +45,10 @@ cache-keys = [
   {file = "pyproject.toml"},
   {file = "crates/market/Cargo.toml"},
   {file = "crates/efts/Cargo.toml"},
+  {file = "crates/corr/Cargo.toml"},
+  {file = "crates/xbrl/Cargo.toml"},
+  {file = "crates/entity/Cargo.toml"},
+  {file = "crates/newswatch/Cargo.toml"},
   {file = "**/*.rs"},
 ]
 
@@ -78,6 +83,7 @@ dev = [
   "types-psutil>=7.1.3.20251125",
   "ty>=0.0.4",
   "pytest-socket>=0.7.0",
+  "pytest-xdist>=3.5.0",
   "mypy>=1.19.1",
   "maturin>=1.5.0",
 ]

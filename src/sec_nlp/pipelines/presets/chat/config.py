@@ -1,0 +1,177 @@
+"""Config model for RAG chat pipeline."""
+
+from __future__ import annotations
+
+from typing import ClassVar, Literal
+
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic_settings import SettingsConfigDict
+
+from sec_nlp.core.edgar.filing_mode import FilingMode
+from sec_nlp.pipelines.base.config import BasePipelineSettings
+from sec_nlp.pipelines.llm.config import LLMConfig
+from sec_nlp.pipelines.vector.config import VectorConfig
+
+
+class ChatHistoryTurn(BaseModel):
+    """Single turn used as conversation history input."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    role: Literal["user", "assistant"]
+    message: str
+
+
+class ChatSettings(BasePipelineSettings):
+    """Configuration for retrieval-augmented chat over indexed filings."""
+
+    model_config = SettingsConfigDict(env_prefix="SEC_NLP_CHAT_")
+
+    pipeline_type: ClassVar[Literal["chat"]] = "chat"
+    symbols_optional: ClassVar[bool] = True
+
+    symbols: list[str] = Field(
+        default_factory=list,
+        description="Optional ticker symbols to scope retrieval.",
+    )
+    mode: FilingMode = Field(
+        default=FilingMode.annual,
+        description="Default filing mode when forms are not explicitly set.",
+    )
+    forms: list[str] | None = Field(
+        default_factory=lambda: ["10-K", "10-Q", "8-K"],
+        description="Forms used for optional metadata filtering.",
+    )
+    question: str | None = Field(
+        default=None,
+        description="Single question to answer. Omit to use interactive mode.",
+        json_schema_extra={
+            "cli_args": {
+                "aliases": ["--q", "--query", "--question"],
+            }
+        },
+    )
+    chat_history: list[ChatHistoryTurn] = Field(
+        default_factory=list,
+        description="Prior turns included for context and transcript generation.",
+    )
+    interactive: bool = Field(
+        default=True,
+        description="Enable interactive terminal chat when --question is omitted.",
+    )
+    collections: list[str] = Field(
+        default_factory=lambda: ["retrieve", "analyze"],
+        description="Qdrant collections searched for context chunks.",
+        json_schema_extra={
+            "cli_args": {
+                "nargs": "+",
+                "action": "extend",
+            }
+        },
+    )
+    top_k: int = Field(
+        default=8,
+        ge=1,
+        le=100,
+        description="Maximum total retrieved chunks per question.",
+    )
+    max_context_chunks: int = Field(
+        default=8,
+        ge=1,
+        le=40,
+        description="Maximum chunks passed into the answer prompt.",
+    )
+    min_score: float = Field(
+        default=0.0,
+        ge=0.0,
+        le=1.0,
+        description="Minimum vector score required to keep a hit.",
+    )
+    strict_citations: bool = Field(
+        default=True,
+        description="Require citation IDs in every assistant answer.",
+    )
+    include_history: bool = Field(
+        default=True,
+        description="Include prior turns in LLM prompt context.",
+    )
+    history_turns: int = Field(
+        default=6,
+        ge=0,
+        le=50,
+        description="Maximum prior turns injected into prompt context.",
+    )
+    transcript_autosave: bool = Field(
+        default=True,
+        description="Persist transcript output after each answered question.",
+    )
+    output_format: Literal["csv", "json", "yaml", "all"] = Field(
+        default="all",
+        description="Transcript output format to emit.",
+    )
+    llm: LLMConfig = Field(
+        default_factory=lambda: LLMConfig(
+            model_name="llama3.2:1b",
+            require_json=False,
+            temperature=0.1,
+        ),
+        description="LLM settings for response generation.",
+    )
+    vdb: VectorConfig = Field(
+        default_factory=lambda: VectorConfig(
+            collection_name="retrieve",
+            search_type="similarity",
+            vector_size=1024,
+        ),
+        description="Vector store settings used for retrieval.",
+    )
+
+    @field_validator("question", mode="before")
+    @classmethod
+    def _normalize_question(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        cleaned = value.strip()
+        return cleaned or None
+
+    @field_validator("collections", mode="before")
+    @classmethod
+    def _normalize_collections(cls, value: list[str] | str | None) -> list[str]:
+        if value is None:
+            return ["retrieve", "analyze"]
+        if isinstance(value, str):
+            value = [part for part in value.replace(",", " ").split() if part]
+
+        normalized: list[str] = []
+        seen: set[str] = set()
+        for raw in value:
+            cleaned = raw.strip()
+            if not cleaned:
+                continue
+            key = cleaned.casefold()
+            if key in seen:
+                continue
+            seen.add(key)
+            normalized.append(cleaned)
+        return normalized or ["retrieve", "analyze"]
+
+    @field_validator("chat_history", mode="before")
+    @classmethod
+    def _normalize_history(
+        cls,
+        value: list[ChatHistoryTurn | dict[str, str]] | None,
+    ) -> list[ChatHistoryTurn]:
+        if value is None:
+            return []
+
+        normalized: list[ChatHistoryTurn] = []
+        for raw in value:
+            if isinstance(raw, ChatHistoryTurn):
+                normalized.append(raw)
+                continue
+            if isinstance(raw, dict):
+                normalized.append(ChatHistoryTurn.model_validate(raw))
+        return normalized
+
+    def pipeline_label(self) -> str:
+        return "Chat"
