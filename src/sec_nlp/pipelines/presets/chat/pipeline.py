@@ -114,6 +114,44 @@ class ChatPipeline(BasePipeline):
     def _build_components(self) -> None:
         return
 
+    def _effective_end_date(self) -> date:
+        return self.config.end_date or date.today()
+
+    def _chunk_identity(self, chunk: _RetrievedChunk) -> tuple[str, str, str]:
+        return (
+            chunk.collection.casefold(),
+            (chunk.accession_number or "").casefold(),
+            self._snippet_fingerprint(chunk.snippet),
+        )
+
+    def _base_metadata(
+        self,
+        *,
+        external_context: str,
+        external_metadata: dict[str, JsonValue],
+    ) -> ResultDict:
+        metadata: ResultDict = {
+            "collections": list(self.config.collections),
+            "forms_filter": self.config.forms or [],
+            "filed_after": (
+                self.config.start_date.isoformat()
+                if self.config.start_date
+                else None
+            ),
+            "filed_before": (
+                self.config.end_date.isoformat()
+                if self.config.end_date
+                else None
+            ),
+            "rerank_mode": self.config.rerank_mode,
+            "prefetch_retrieve": self.config.prefetch_retrieve,
+            "include_market_context": self.config.include_market_context,
+            "include_news_context": self.config.include_news_context,
+            "external_context": external_context,
+            **external_metadata,
+        }
+        return metadata
+
     def run(self) -> ChatResult:
         try:
             self.config.setup_paths()
@@ -142,29 +180,18 @@ class ChatPipeline(BasePipeline):
             )
 
             outputs: list[Path] = []
-            metadata: ResultDict = {
-                "collections": list(self.config.collections),
-                "hits_retrieved": len(citations),
-                "citations_returned": len(used_citation_ids),
-                "strict_citations": self.config.strict_citations,
-                "symbol_scope": self.config.symbols,
-                "forms_filter": self.config.forms or [],
-                "filed_after": (
-                    self.config.start_date.isoformat()
-                    if self.config.start_date
-                    else None
-                ),
-                "filed_before": (
-                    self.config.end_date.isoformat()
-                    if self.config.end_date
-                    else None
-                ),
-                "rerank_mode": self.config.rerank_mode,
-                "prefetch_retrieve": self.config.prefetch_retrieve,
-                "include_market_context": self.config.include_market_context,
-                "include_news_context": self.config.include_news_context,
-            }
-            metadata.update(external_metadata)
+            metadata = self._base_metadata(
+                external_context=external_context,
+                external_metadata=external_metadata,
+            )
+            metadata.update(
+                {
+                    "hits_retrieved": len(citations),
+                    "citations_returned": len(used_citation_ids),
+                    "strict_citations": self.config.strict_citations,
+                    "symbol_scope": self.config.symbols,
+                }
+            )
 
             if self.config.transcript_autosave:
                 outputs = self._write_outputs(
@@ -308,11 +335,7 @@ class ChatPipeline(BasePipeline):
         dedupe_limit = max(self.config.top_k, self.config.rerank_candidates)
 
         for chunk in combined:
-            key = (
-                chunk.collection.casefold(),
-                (chunk.accession_number or "").casefold(),
-                self._snippet_fingerprint(chunk.snippet),
-            )
+            key = self._chunk_identity(chunk)
             if key in seen:
                 continue
             seen.add(key)
@@ -533,20 +556,9 @@ class ChatPipeline(BasePipeline):
             remaining.remove(best_idx)
 
         selected = [candidates[idx] for idx in selected_indices]
-        selected_keys = {
-            (
-                chunk.collection.casefold(),
-                (chunk.accession_number or "").casefold(),
-                self._snippet_fingerprint(chunk.snippet),
-            )
-            for chunk in selected
-        }
+        selected_keys = {self._chunk_identity(chunk) for chunk in selected}
         for chunk in chunks:
-            key = (
-                chunk.collection.casefold(),
-                (chunk.accession_number or "").casefold(),
-                self._snippet_fingerprint(chunk.snippet),
-            )
+            key = self._chunk_identity(chunk)
             if key in selected_keys:
                 continue
             selected.append(chunk)
@@ -689,7 +701,7 @@ class ChatPipeline(BasePipeline):
         return "\n\n".join(sections), metadata
 
     def _market_context_lines(self, *, symbol: str) -> list[str]:
-        end = self.config.end_date or date.today()
+        end = self._effective_end_date()
         start = max(
             self.config.start_date
             or (end - timedelta(days=self.config.market_lookback_days)),
@@ -741,7 +753,7 @@ class ChatPipeline(BasePipeline):
         ]
 
     def _news_context_lines(self, *, symbol: str, question: str) -> list[str]:
-        lookback_start = date.today() - timedelta(
+        lookback_start = self._effective_end_date() - timedelta(
             days=self.config.news_lookback_days
         )
         keywords = [symbol]
@@ -1045,13 +1057,7 @@ class ChatPipeline(BasePipeline):
         external_context: str,
         external_metadata: dict[str, JsonValue],
     ) -> list[Path]:
-        symbol = (
-            self.config.symbols[0].upper()
-            if self.config.symbols
-            else (citations[0].symbol or "ALL")
-            if citations
-            else "ALL"
-        )
+        symbol = self._context_symbol(citations) or "ALL"
 
         symbol_out = self.config.get_symbol_output_dir(symbol)
         base_stem = build_run_file_stem(symbol, "chat", self.config.run_id)
@@ -1066,6 +1072,20 @@ class ChatPipeline(BasePipeline):
             run_short_id_raw if isinstance(run_short_id_raw, int) else None
         )
 
+        payload_metadata = self._base_metadata(
+            external_context=external_context,
+            external_metadata=external_metadata,
+        )
+        payload_metadata.update(
+            {
+                "top_k": self.config.top_k,
+                "max_context_chunks": self.config.max_context_chunks,
+                "strict_citations": self.config.strict_citations,
+                "include_history": self.config.include_history,
+                "history_turns": self.config.history_turns,
+            }
+        )
+
         payload = ChatTranscriptPayload(
             run_timestamp=str(run_header["run_timestamp"]),
             run_short_id=run_short_id,
@@ -1077,31 +1097,7 @@ class ChatPipeline(BasePipeline):
             citations=citations,
             citation_ids=citation_ids,
             turns=turns,
-            metadata={
-                "collections": list(self.config.collections),
-                "top_k": self.config.top_k,
-                "max_context_chunks": self.config.max_context_chunks,
-                "strict_citations": self.config.strict_citations,
-                "include_history": self.config.include_history,
-                "history_turns": self.config.history_turns,
-                "forms_filter": self.config.forms or [],
-                "filed_after": (
-                    self.config.start_date.isoformat()
-                    if self.config.start_date
-                    else None
-                ),
-                "filed_before": (
-                    self.config.end_date.isoformat()
-                    if self.config.end_date
-                    else None
-                ),
-                "rerank_mode": self.config.rerank_mode,
-                "prefetch_retrieve": self.config.prefetch_retrieve,
-                "include_market_context": self.config.include_market_context,
-                "include_news_context": self.config.include_news_context,
-                "external_context": external_context,
-                **external_metadata,
-            },
+            metadata=cast(dict[str, JsonValue], payload_metadata),
         )
 
         outputs: list[Path] = []
