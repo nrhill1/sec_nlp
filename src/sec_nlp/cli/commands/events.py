@@ -8,7 +8,7 @@ from sec_nlp.pipelines.presets.events import EventsPipeline, EventsSettings
 
 
 class Events(EventsSettings, BasePipelineCommand):
-    """Detect material events from 8-K filings and score market impact."""
+    """Detect material events from 8-K/6-K filings and score market impact."""
 
     @classmethod
     def pipeline_class(cls) -> type[EventsPipeline]:

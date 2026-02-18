@@ -21,10 +21,10 @@ class EventsSettings(BasePipelineSettings):
 
     mode: FilingMode = Field(
         default=FilingMode.current,
-        description="Filing mode for event extraction (8-K current reports).",
+        description="Filing mode for event extraction (8-K/6-K current reports).",
     )
     forms: list[str] | None = Field(
-        default_factory=lambda: ["8-K"],
+        default_factory=lambda: ["8-K", "6-K"],
         description="SEC forms to include for event extraction.",
     )
     lookback_years: int = Field(
@@ -94,7 +94,7 @@ class EventsSettings(BasePipelineSettings):
     def validate_mode(cls, value: FilingMode) -> FilingMode:
         if value != FilingMode.current:
             raise ValueError(
-                "Events pipeline only supports current filing mode (8-K)."
+                "Events pipeline only supports current filing mode (8-K/6-K)."
             )
         return value
 
@@ -102,19 +102,27 @@ class EventsSettings(BasePipelineSettings):
     @classmethod
     def validate_forms(cls, value: list[str] | str | None) -> list[str] | None:
         if value is None:
-            return ["8-K"]
+            return ["8-K", "6-K"]
         if isinstance(value, str):
             value = [part for part in value.replace(",", " ").split() if part]
 
         normalized: list[str] = []
+        seen: set[str] = set()
         for form in value:
             cleaned = form.strip().upper()
             if cleaned == "8K":
                 cleaned = "8-K"
-            if cleaned != "8-K":
-                raise ValueError("Events pipeline only supports form 8-K.")
+            elif cleaned == "6K":
+                cleaned = "6-K"
+            if cleaned not in {"8-K", "6-K"}:
+                raise ValueError(
+                    "Events pipeline only supports forms 8-K and 6-K."
+                )
+            if cleaned in seen:
+                continue
+            seen.add(cleaned)
             normalized.append(cleaned)
-        return normalized or ["8-K"]
+        return normalized or ["8-K", "6-K"]
 
     @field_validator("event_types", mode="before")
     @classmethod

@@ -1,4 +1,4 @@
-"""Scan 8-K filings and detect event mentions."""
+"""Scan current-report filings (8-K/6-K) and detect event mentions."""
 
 from __future__ import annotations
 
@@ -49,6 +49,15 @@ def _normalize_event_type(value: str) -> str:
     return value.strip().lower().replace("-", "_").replace(" ", "_")
 
 
+def _extract_form_type(path: Path) -> str:
+    parts = path.parts
+    if "sec-edgar-filings" in parts:
+        index = parts.index("sec-edgar-filings")
+        if index + 3 < len(parts):
+            return parts[index + 2].strip().upper()
+    return path.parent.parent.name.strip().upper()
+
+
 def _resolve_event_type(
     item_numbers: list[str], text: str
 ) -> tuple[str, list[str], str | None]:
@@ -88,7 +97,7 @@ def scan_events_for_symbol(
     symbol: str,
     settings: EventsSettings,
 ) -> tuple[list[DetectedEvent], int, int]:
-    """Download and scan 8-K filings for a symbol."""
+    """Download and scan current-report filings for a symbol."""
 
     start_date, end_date = settings.effective_event_date_range
     download_results = download_filings(
@@ -108,12 +117,22 @@ def scan_events_for_symbol(
             symbol=symbol,
             mode=FilingMode.current,
             base=settings.dl_path,
-            limit=settings.limit,
+            limit=None,
             start_date=start_date,
             end_date=end_date,
         )
     except FileNotFoundError:
         return [], downloaded, 0
+
+    allowed_forms = {form.upper() for form in settings.effective_forms}
+    if allowed_forms:
+        html_paths = [
+            path
+            for path in html_paths
+            if _extract_form_type(path) in allowed_forms
+        ]
+    if settings.limit is not None:
+        html_paths = html_paths[: settings.limit]
 
     detected: list[DetectedEvent] = []
     for html_path in html_paths:
@@ -128,6 +147,7 @@ def scan_events_for_symbol(
             continue
 
         accession = _extract_accession(html_path) or html_path.parent.name
+        filing_form = _extract_form_type(html_path)
         item_numbers = _extract_item_numbers(text)
         event_type, entity_mentions, snippet = _resolve_event_type(
             item_numbers,
@@ -138,7 +158,7 @@ def scan_events_for_symbol(
             continue
 
         if snippet is None and item_numbers:
-            snippet = f"8-K item {'/'.join(item_numbers[:3])}"
+            snippet = f"{filing_form} item {'/'.join(item_numbers[:3])}"
 
         detected.append(
             DetectedEvent(
@@ -146,7 +166,7 @@ def scan_events_for_symbol(
                 event_type=event_type,
                 event_date=filing_date.isoformat(),
                 filing_accession=accession,
-                filing_form="8-K",
+                filing_form=filing_form,
                 filing_items=item_numbers,
                 entity_mentions=entity_mentions,
                 text_snippet=snippet,

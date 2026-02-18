@@ -16,12 +16,13 @@ def _write_filing_fixture(
     *,
     base: Path,
     symbol: str,
+    form_dir: str = "8-K",
     accession: str,
     filed_as_of: str,
     html_name: str,
     html_body: str,
 ) -> Path:
-    accession_dir = base / "sec-edgar-filings" / symbol / "8-K" / accession
+    accession_dir = base / "sec-edgar-filings" / symbol / form_dir / accession
     accession_dir.mkdir(parents=True, exist_ok=True)
     submission = accession_dir / "full-submission.txt"
     submission.write_text(
@@ -80,6 +81,23 @@ def test_scan_events_for_symbol_extracts_item_event(
     assert events[0].filing_items == ["5.02"]
 
 
+def test_events_settings_default_current_forms() -> None:
+    settings = EventsSettings(
+        email="test@example.com",
+        symbols=["ABC"],
+    )
+    assert settings.effective_forms == ["8-K", "6-K"]
+
+
+def test_events_settings_normalizes_6k_forms() -> None:
+    settings = EventsSettings(
+        email="test@example.com",
+        symbols=["ABC"],
+        forms=["6k", "8K", "6-K"],
+    )
+    assert settings.forms == ["6-K", "8-K"]
+
+
 def test_score_event_impacts_attaches_metrics(monkeypatch) -> None:
     settings = EventsSettings(
         email="test@example.com",
@@ -136,6 +154,63 @@ def test_score_event_impacts_attaches_metrics(monkeypatch) -> None:
     assert scored[0].impact.car_5d == 0.01
     assert scored[0].impact.car_30d == 0.03
     assert scored[0].impact.significant is True
+
+
+def test_scan_events_for_symbol_supports_6_k_form_filter(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    symbol = "ABC"
+    dl_path = tmp_path / "downloads"
+    out_path = tmp_path / "outputs"
+    _write_filing_fixture(
+        base=dl_path,
+        symbol=symbol,
+        form_dir="8-K",
+        accession="0000000000-26-000001",
+        filed_as_of="20260201",
+        html_name="abc_8k.html",
+        html_body="Item 5.02 Departure of Director or Certain Officers",
+    )
+    _write_filing_fixture(
+        base=dl_path,
+        symbol=symbol,
+        form_dir="6-K",
+        accession="0000000000-26-000002",
+        filed_as_of="20260202",
+        html_name="abc_6k.html",
+        html_body="Item 2.02 Results of Operations and Financial Condition",
+    )
+
+    settings = EventsSettings(
+        email="test@example.com",
+        symbols=[symbol],
+        forms=["6-K"],
+        dl_path=dl_path,
+        out_path=out_path,
+        include_news_context=False,
+        include_market_context=False,
+        limit=10,
+    )
+
+    monkeypatch.setattr(
+        "sec_nlp.pipelines.presets.events.steps.scan.download_filings",
+        lambda **_: {symbol: {"downloaded": 0}},
+    )
+    monkeypatch.setattr(
+        "sec_nlp.pipelines.presets.events.steps.scan.detect_events",
+        lambda text: [],
+    )
+
+    events, downloaded, scanned = scan_events_for_symbol(
+        symbol=symbol,
+        settings=settings,
+    )
+
+    assert downloaded == 0
+    assert scanned == 1
+    assert len(events) == 1
+    assert events[0].filing_form == "6-K"
 
 
 def test_events_pipeline_run_writes_outputs_with_mocked_steps(

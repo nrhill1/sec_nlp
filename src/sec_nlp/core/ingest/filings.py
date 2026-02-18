@@ -56,17 +56,26 @@ def html_paths_for_symbol(
     end_date: date | None = None,
 ) -> list[Path]:
     """Get HTML file paths for a symbol, optionally filtered by date range."""
-    filing_dir_path = filing_dir(base, symbol, mode)
-    if not filing_dir_path.exists():
+    symbol_root = base / "sec-edgar-filings" / symbol.upper()
+    form_dirs = [symbol_root / form for form in mode.forms]
+    existing_form_dirs = [path for path in form_dirs if path.exists()]
+    if not existing_form_dirs:
+        forms_label = ", ".join(mode.forms)
         raise FileNotFoundError(
-            f"No filings found for {symbol} in mode {mode.value} at {filing_dir_path}"
+            f"No filings found for {symbol} in mode {mode.value} "
+            f"(forms: {forms_label}) under {symbol_root}"
         )
 
     html_files_with_dates: list[tuple[Path, date | None]] = []
-    for html_path in filing_dir_path.rglob("*.html"):
-        accession_dir = html_path.parent
-        filing_date = get_filing_date_from_dir(accession_dir)
-        html_files_with_dates.append((html_path, filing_date))
+    for form_dir in existing_form_dirs:
+        for html_path in form_dir.rglob("*"):
+            if not html_path.is_file():
+                continue
+            if html_path.suffix.lower() not in {".html", ".htm", ".xhtml"}:
+                continue
+            accession_dir = html_path.parent
+            filing_date = get_filing_date_from_dir(accession_dir)
+            html_files_with_dates.append((html_path, filing_date))
 
     if start_date or end_date:
         filtered: list[tuple[Path, date | None]] = []
