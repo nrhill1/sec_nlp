@@ -69,7 +69,7 @@ class ExhibitConfig(BasePipelineSettings):
 
     mode: FilingMode = Field(
         default=FilingMode.annual,
-        description="Filing type (10-K annual, 10-Q quarterly, or 8-K current)",
+        description="Filing type (10-K annual, 10-Q quarterly, or 8-K/6-K current)",
     )
     exhibit_categories: list[JsonValue] = Field(
         default_factory=lambda: [
@@ -239,7 +239,7 @@ class ExhibitConfig(BasePipelineSettings):
             FilingMode.current,
         ):
             raise ValueError(
-                "ExhibitPipeline supports annual (10-K), quarterly (10-Q), or current (8-K) filings. "
+                "ExhibitPipeline supports annual (10-K), quarterly (10-Q), or current (8-K/6-K) filings. "
                 f"Got: {v}"
             )
         return v

@@ -10,6 +10,7 @@ from types import SimpleNamespace
 from langchain_core.documents import Document
 
 from sec_nlp.core.edgar.efts_models import EFTSHit
+from sec_nlp.core.edgar.filing_mode import FilingMode
 from sec_nlp.pipelines.presets.retrieve import (
     RetrievePipeline,
     RetrieveSettings,
@@ -18,6 +19,7 @@ from sec_nlp.pipelines.presets.retrieve.models import RetrievalHit
 from sec_nlp.pipelines.presets.retrieve.steps import (
     candidate_search as candidate_search_steps,
     download_and_chunk_hits,
+    download_chunk as download_chunk_steps,
     index_retrieval_hits,
     rank_retrieval_hits,
     rerank_with_embeddings,
@@ -73,6 +75,16 @@ def test_rank_retrieval_hits_sorts_and_dedupes() -> None:
     assert len(ranked) == 2
     assert ranked[0].score == 0.9
     assert ranked[0].accession_number == "0000123456-26-000001"
+
+
+def test_mode_for_form_maps_6_k_to_current() -> None:
+    assert (
+        download_chunk_steps._mode_for_form(
+            "6-K",
+            fallback=FilingMode.annual,
+        )
+        == FilingMode.current
+    )
 
 
 def test_candidate_search_filters_cross_symbol_hits() -> None:

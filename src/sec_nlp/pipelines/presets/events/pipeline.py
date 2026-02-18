@@ -41,11 +41,11 @@ from .steps import (
 
 
 class EventsPipeline(BasePipeline):
-    """Detect events from 8-K filings and produce a scored timeline."""
+    """Detect events from current-report filings and produce a scored timeline."""
 
     pipeline_type: ClassVar[Literal["events"]] = "events"
     description: ClassVar[str] = (
-        "Detect material events from 8-K filings and score market impact"
+        "Detect material events from 8-K/6-K filings and score market impact"
     )
     requires_llm: ClassVar[bool] = False
 
@@ -228,7 +228,7 @@ class EventsPipeline(BasePipeline):
             symbol=symbol,
             events=events,
             metadata={
-                "forms": self.config.forms or ["8-K"],
+                "forms": self.config.effective_forms,
                 "lookback_years": self.config.lookback_years,
                 "event_types": self.config.event_types,
                 "pre_window_days": self.config.pre_window_days,

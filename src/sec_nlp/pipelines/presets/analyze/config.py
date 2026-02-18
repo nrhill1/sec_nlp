@@ -340,7 +340,7 @@ class AnalyzeConfig(BasePipelineSettings):
     # Filing Parameters
     mode: FilingMode = Field(
         default=FilingMode.annual,
-        description="Filing type to process (10-K, 10-Q, 8-K, DEF 14A, 13F-HR, S-1, S-3)",
+        description="Filing type to process (10-K, 10-Q, 8-K/6-K, DEF 14A, 13F-HR, S-1, S-3)",
     )
     loader_use_async: bool = Field(
         default=True,

@@ -53,6 +53,11 @@ class TestFormsNormalization:
         config = AnalyzeConfig(forms=["8K"])
         assert config.forms == ["8-K"]
 
+    def test_normalize_6k_to_6_k(self) -> None:
+        """Test that 6K is normalized to 6-K."""
+        config = AnalyzeConfig(forms=["6K"])
+        assert config.forms == ["6-K"]
+
     def test_normalize_lowercase(self) -> None:
         """Test that lowercase forms are uppercased."""
         config = AnalyzeConfig(forms=["10k", "8k"])
@@ -101,9 +106,9 @@ class TestModeFormsProperty:
         assert mode.forms == ("10-Q",)
 
     def test_current_mode_forms(self) -> None:
-        """Test current mode returns 8-K."""
+        """Test current mode returns current-report forms."""
         mode = FilingMode.current
-        assert mode.forms == ("8-K",)
+        assert mode.forms == ("8-K", "6-K")
 
     def test_insider_mode_forms(self) -> None:
         """Test insider mode returns multiple forms."""
@@ -164,4 +169,4 @@ class TestBackwardCompatibility:
         assert config.effective_forms == ["10-Q"]
 
         config = AnalyzeConfig(mode=FilingMode.current)
-        assert config.effective_forms == ["8-K"]
+        assert config.effective_forms == ["8-K", "6-K"]

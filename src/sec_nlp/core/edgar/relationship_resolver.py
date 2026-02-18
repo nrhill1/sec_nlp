@@ -36,7 +36,7 @@ _ACCEPTANCE_PATTERN: Final[re.Pattern[str]] = re.compile(
     r"<ACCEPTANCE-DATETIME>(\d{14})"
 )
 
-_RELATED_8K_WINDOW_DAYS: Final[int] = 30
+_RELATED_CURRENT_REPORT_WINDOW_DAYS: Final[int] = 30
 
 
 def _parse_yyyymmdd(value: str) -> date | None:
@@ -139,7 +139,7 @@ class RelationshipResolver:
         self._add_amendment_relations(graph, filings)
         self._add_same_period_relations(graph, filings)
         self._add_same_fiscal_year_relations(graph, filings)
-        self._add_related_8k_relations(graph, filings)
+        self._add_related_current_report_relations(graph, filings)
         self._add_proxy_relations(graph, filings)
 
         return graph
@@ -408,14 +408,14 @@ class RelationshipResolver:
                     graph.add_relation(relation)
 
     @staticmethod
-    def _add_related_8k_relations(
+    def _add_related_current_report_relations(
         graph: FilingRelationshipGraph,
         filings: list[FilingIdentifier],
     ) -> None:
-        eight_ks = [
+        current_reports = [
             filing
             for filing in filings
-            if (filing.base_form_type or "").startswith("8-K")
+            if (filing.base_form_type or "") in {"8-K", "6-K"}
             and filing.filed_date
         ]
         bases = [
@@ -426,20 +426,21 @@ class RelationshipResolver:
         ]
 
         for base in bases:
-            for eight_k in eight_ks:
-                if not base.filed_date or not eight_k.filed_date:
+            for current_report in current_reports:
+                if not base.filed_date or not current_report.filed_date:
                     continue
-                delta = abs((eight_k.filed_date - base.filed_date).days)
-                if delta > _RELATED_8K_WINDOW_DAYS:
+                delta = abs((current_report.filed_date - base.filed_date).days)
+                if delta > _RELATED_CURRENT_REPORT_WINDOW_DAYS:
                     continue
                 relation = FilingRelation(
                     source=base,
-                    target=eight_k,
+                    target=current_report,
                     relation_type=FilingRelationType.related_8k,
                     confidence=0.5,
                     evidence=(
-                        f"8-K filed within {_RELATED_8K_WINDOW_DAYS} days of "
-                        f"{base.form_type or 'filing'}"
+                        f"{current_report.base_form_type or 'Current report'} "
+                        f"filed within {_RELATED_CURRENT_REPORT_WINDOW_DAYS} "
+                        f"days of {base.form_type or 'filing'}"
                     ),
                 )
                 graph.add_relation(relation)

@@ -31,6 +31,10 @@ class TestFilingMode:
         """Test that quarterly mode returns correct SEC form code."""
         assert FilingMode.quarterly.form == "10-Q"
 
+    def test_filing_mode_forms_property_current(self) -> None:
+        """Test that current mode returns both 8-K and 6-K."""
+        assert FilingMode.current.forms == ("8-K", "6-K")
+
     def test_filing_mode_string_comparison(self) -> None:
         """Test that FilingMode can be compared to strings."""
         assert FilingMode.annual.value == "annual"
@@ -116,7 +120,8 @@ class TestFilingMode:
         assert FilingMode.annual.description == "Annual Report"
         assert FilingMode.quarterly.description == "Quarterly Report"
         assert (
-            FilingMode.current.description == "Current Report (Material Events)"
+            FilingMode.current.description
+            == "Current Report (Material Events; 8-K/6-K)"
         )
         assert (
             FilingMode.proxy.description

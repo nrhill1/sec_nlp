@@ -43,7 +43,7 @@ class EFTS(BaseModel):
     )
     forms: list[str] = Field(
         default_factory=list,
-        description="Form types to filter (e.g., 10-K, 8-K). Empty = all forms.",
+        description="Form types to filter (e.g., 10-K, 8-K, 6-K). Empty = all forms.",
         json_schema_extra={"cli_args": {"nargs": "+", "action": "extend"}},
     )
     tickers: list[str] = Field(
