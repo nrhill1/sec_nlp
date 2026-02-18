@@ -10,9 +10,7 @@ use crate::error::EftsError;
 static LAST_REQUEST: Lazy<Mutex<Instant>> =
     Lazy::new(|| Mutex::new(Instant::now() - Duration::from_secs(60)));
 
-pub(crate) fn build_client(
-    timeout_seconds: f64,
-) -> Result<Client, EftsError> {
+pub(crate) fn build_client(timeout_seconds: f64) -> Result<Client, EftsError> {
     let timeout = if timeout_seconds > 0.0 {
         timeout_seconds
     } else {
@@ -63,10 +61,7 @@ pub(crate) fn build_params(
     params.push(("q".to_string(), query.to_string()));
     params.push(("from".to_string(), start.to_string()));
     params.push(("size".to_string(), limit.to_string()));
-    params.push((
-        "sort".to_string(),
-        format!("{}:{}", sort_field, sort_order),
-    ));
+    params.push(("sort".to_string(), format!("{}:{}", sort_field, sort_order)));
     if !forms.is_empty() {
         params.push(("forms".to_string(), forms.join(",")));
     }
@@ -105,12 +100,7 @@ pub(crate) fn make_request(
         .send()
         .map_err(|err| {
             let retryable = err.is_timeout() || err.is_connect();
-            EftsError::new(
-                0,
-                format!("Network error: {}", err),
-                None,
-                retryable,
-            )
+            EftsError::new(0, format!("Network error: {}", err), None, retryable)
         })?;
 
     let status = response.status();
@@ -123,22 +113,11 @@ pub(crate) fn make_request(
             status.canonical_reason().unwrap_or("error")
         );
         let detail = if body.is_empty() { None } else { Some(body) };
-        return Err(EftsError::new(
-            status.as_u16(),
-            message,
-            detail,
-            retryable,
-        ));
+        return Err(EftsError::new(status.as_u16(), message, detail, retryable));
     }
 
-    serde_json::from_str(&body).map_err(|err| {
-        EftsError::new(
-            0,
-            format!("JSON parse error: {}", err),
-            Some(body),
-            false,
-        )
-    })
+    serde_json::from_str(&body)
+        .map_err(|err| EftsError::new(0, format!("JSON parse error: {}", err), Some(body), false))
 }
 
 #[cfg(test)]
@@ -200,18 +179,7 @@ mod tests {
 
     #[test]
     fn build_params_skips_blank_dates() {
-        let params = build_params(
-            "q",
-            &[],
-            &[],
-            &[],
-            Some(" "),
-            None,
-            10,
-            0,
-            "score",
-            "desc",
-        );
+        let params = build_params("q", &[], &[], &[], Some(" "), None, 10, 0, "score", "desc");
 
         let mut map = std::collections::HashMap::new();
         for (key, value) in params {

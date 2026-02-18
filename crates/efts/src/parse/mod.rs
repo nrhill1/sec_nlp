@@ -114,9 +114,7 @@ mod tests {
 
     #[test]
     fn extract_tickers_from_company_filters_cik() {
-        let tickers = extract_tickers_from_company(
-            "Example Corp (CIK 0001234567) (EXM, EXM.A)",
-        );
+        let tickers = extract_tickers_from_company("Example Corp (CIK 0001234567) (EXM, EXM.A)");
 
         assert_eq!(tickers, vec!["EXM", "EXM.A"]);
     }

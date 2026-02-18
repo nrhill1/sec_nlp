@@ -147,7 +147,7 @@ pub struct BatchSearchResult {
 }
 
 #[pymethods]
- impl BatchSearchResult {
+impl BatchSearchResult {
     /// Return hits as a list of EFTSHit objects.
     #[getter]
     fn hits(&self, py: Python<'_>) -> PyResult<Vec<Py<SearchHit>>> {

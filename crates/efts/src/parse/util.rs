@@ -1,30 +1,19 @@
 use serde_json::Value;
 
-pub(crate) fn get_str(
-    data: &serde_json::Map<String, Value>,
-    key: &str,
-    default: &str,
-) -> String {
+pub(crate) fn get_str(data: &serde_json::Map<String, Value>, key: &str, default: &str) -> String {
     data.get(key)
         .and_then(|v| v.as_str())
         .unwrap_or(default)
         .to_string()
 }
 
-pub(crate) fn get_optional_str(
-    data: &serde_json::Map<String, Value>,
-    key: &str,
-) -> Option<String> {
+pub(crate) fn get_optional_str(data: &serde_json::Map<String, Value>, key: &str) -> Option<String> {
     data.get(key)
         .and_then(|v| v.as_str())
         .map(|s| s.to_string())
 }
 
-pub(crate) fn get_u32(
-    data: &serde_json::Map<String, Value>,
-    key: &str,
-    default: u32,
-) -> u32 {
+pub(crate) fn get_u32(data: &serde_json::Map<String, Value>, key: &str, default: u32) -> u32 {
     data.get(key)
         .and_then(|v| v.as_u64().or_else(|| v.as_f64().map(|f| f as u64)))
         .map(|v| v as u32)

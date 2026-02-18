@@ -65,7 +65,11 @@ fn extract_filed_date(source: &Map<String, Value>) -> String {
         .and_then(|v| v.as_str())
         .or_else(|| source.get("filed").and_then(|v| v.as_str()));
     if let Some(value) = filed {
-        let trimmed = if value.len() >= 10 { &value[..10] } else { value };
+        let trimmed = if value.len() >= 10 {
+            &value[..10]
+        } else {
+            value
+        };
         if let Ok(date) = NaiveDate::parse_from_str(trimmed, "%Y-%m-%d") {
             return date.format("%Y-%m-%d").to_string();
         }
@@ -78,8 +82,7 @@ fn extract_accession(source: &Map<String, Value>) -> String {
         .get("adsh")
         .or_else(|| source.get("accession_number"));
     let accession = raw.and_then(value_to_string).unwrap_or_default();
-    if !accession.is_empty() && !accession.contains('-') && accession.len() == 18
-    {
+    if !accession.is_empty() && !accession.contains('-') && accession.len() == 18 {
         format!(
             "{}-{}-{}",
             &accession[0..10],

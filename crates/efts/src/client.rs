@@ -31,20 +31,10 @@ impl EftsClient {
         base_url: Option<String>,
     ) -> Result<Self, EftsError> {
         if timeout <= 0.0 {
-            return Err(EftsError::new(
-                0,
-                "timeout must be > 0",
-                None,
-                false,
-            ));
+            return Err(EftsError::new(0, "timeout must be > 0", None, false));
         }
         if retry_delay < 0.0 {
-            return Err(EftsError::new(
-                0,
-                "retry_delay must be >= 0",
-                None,
-                false,
-            ));
+            return Err(EftsError::new(0, "retry_delay must be >= 0", None, false));
         }
         if rate_limit_delay < 0.0 {
             return Err(EftsError::new(
@@ -54,8 +44,7 @@ impl EftsClient {
                 false,
             ));
         }
-        let user_agent =
-            user_agent.unwrap_or_else(|| DEFAULT_USER_AGENT.to_string());
+        let user_agent = user_agent.unwrap_or_else(|| DEFAULT_USER_AGENT.to_string());
         let base_url = base_url.unwrap_or_else(|| EFTS_BASE_URL.to_string());
         validate_base_url(&base_url)?;
         Ok(Self {
@@ -84,30 +73,18 @@ impl EftsClient {
     ) -> Result<SearchResponse, EftsError> {
         let limit = limit.clamp(1, 100);
         let params = build_params(
-            query,
-            forms,
-            ciks,
-            tickers,
-            start_date,
-            end_date,
-            limit,
-            start,
-            sort_field,
-            sort_order,
+            query, forms, ciks, tickers, start_date, end_date, limit, start, sort_field, sort_order,
         );
         let client = build_client(self.timeout_seconds)?;
         let mut delay_seconds = self.retry_delay_seconds;
         for attempt in 0..=self.max_retries {
             enforce_rate_limit(self.rate_limit_delay_seconds);
-            match make_request(&client, &self.base_url, &params, &self.user_agent)
-            {
+            match make_request(&client, &self.base_url, &params, &self.user_agent) {
                 Ok(data) => return Ok(parse_response(&data, query)),
                 Err(err) => {
                     if attempt < self.max_retries && err.retryable {
                         if delay_seconds > 0.0 {
-                            std::thread::sleep(Duration::from_secs_f64(
-                                delay_seconds,
-                            ));
+                            std::thread::sleep(Duration::from_secs_f64(delay_seconds));
                         }
                         delay_seconds *= 2.0;
                         continue;
@@ -141,16 +118,7 @@ impl EftsClient {
     ) -> Result<SearchResponse, EftsError> {
         let limit = limit.clamp(1, 100);
         let params = build_params(
-            query,
-            forms,
-            ciks,
-            tickers,
-            start_date,
-            end_date,
-            limit,
-            start,
-            sort_field,
-            sort_order,
+            query, forms, ciks, tickers, start_date, end_date, limit, start, sort_field, sort_order,
         );
         let client = build_async_client(self.timeout_seconds)?;
         let mut delay_seconds = self.retry_delay_seconds;
@@ -201,19 +169,12 @@ impl EftsClient {
             let remaining = max_results - (all_hits.len() as u32);
             let fetch_size = std::cmp::min(page_size, remaining);
             let response = self.execute_search(
-                query,
-                forms,
-                ciks,
-                tickers,
-                start_date,
-                end_date,
-                fetch_size,
-                offset,
-                sort_field,
+                query, forms, ciks, tickers, start_date, end_date, fetch_size, offset, sort_field,
                 sort_order,
             )?;
             let hit_count = response.hits_vec.len();
-            let has_more = (response.start as u64) + (response.hits_vec.len() as u64) < response.total;
+            let has_more =
+                (response.start as u64) + (response.hits_vec.len() as u64) < response.total;
             let next_offset = response.start + (response.hits_vec.len() as u32);
             all_hits.extend(response.hits_vec);
             if hit_count == 0 || !has_more {
@@ -249,16 +210,8 @@ impl EftsClient {
             let fetch_size = std::cmp::min(page_size, remaining);
             let response = self
                 .execute_search_async(
-                    query,
-                    forms,
-                    ciks,
-                    tickers,
-                    start_date,
-                    end_date,
-                    fetch_size,
-                    offset,
-                    sort_field,
-                    sort_order,
+                    query, forms, ciks, tickers, start_date, end_date, fetch_size, offset,
+                    sort_field, sort_order,
                 )
                 .await?;
             let hit_count = response.hits_vec.len();
@@ -365,16 +318,8 @@ impl EftsClient {
             let fetch_size = std::cmp::min(page_size, remaining);
             let response = self
                 .execute_search_async(
-                    query,
-                    forms,
-                    ciks,
-                    tickers,
-                    start_date,
-                    end_date,
-                    fetch_size,
-                    offset,
-                    sort_field,
-                    sort_order,
+                    query, forms, ciks, tickers, start_date, end_date, fetch_size, offset,
+                    sort_field, sort_order,
                 )
                 .await?;
 
@@ -382,7 +327,7 @@ impl EftsClient {
             if current_page == 0 {
                 total_hits = response.total;
                 let effective_max = std::cmp::min(max_results as u64, total_hits);
-                total_pages = ((effective_max + 99) / 100) as u32;
+                total_pages = effective_max.div_ceil(100) as u32;
                 if total_pages == 0 {
                     total_pages = 1;
                 }
@@ -625,9 +570,7 @@ impl EftsClient {
             })
             .map_err(|err| err.to_py_err())?;
         // Return native PyO3 list of EFTSHit - no JSON serialization!
-        hits.into_iter()
-            .map(|hit| Py::new(py, hit))
-            .collect()
+        hits.into_iter().map(|hit| Py::new(py, hit)).collect()
     }
 
     #[allow(clippy::too_many_arguments)]

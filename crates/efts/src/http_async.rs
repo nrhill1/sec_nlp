@@ -75,12 +75,7 @@ pub(crate) async fn make_request_async(
         .await
         .map_err(|err| {
             let retryable = err.is_timeout() || err.is_connect();
-            EftsError::new(
-                0,
-                format!("Network error: {}", err),
-                None,
-                retryable,
-            )
+            EftsError::new(0, format!("Network error: {}", err), None, retryable)
         })?;
 
     let status = response.status();
@@ -96,12 +91,6 @@ pub(crate) async fn make_request_async(
         return Err(EftsError::new(status.as_u16(), message, detail, retryable));
     }
 
-    serde_json::from_str(&body).map_err(|err| {
-        EftsError::new(
-            0,
-            format!("JSON parse error: {}", err),
-            Some(body),
-            false,
-        )
-    })
+    serde_json::from_str(&body)
+        .map_err(|err| EftsError::new(0, format!("JSON parse error: {}", err), Some(body), false))
 }

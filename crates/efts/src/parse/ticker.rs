@@ -2,13 +2,9 @@ use once_cell::sync::Lazy;
 use regex::Regex;
 use serde_json::{Map, Value};
 
-static PAREN_PATTERN: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"\(([^)]+)\)").expect("valid regex"));
+static PAREN_PATTERN: Lazy<Regex> = Lazy::new(|| Regex::new(r"\(([^)]+)\)").expect("valid regex"));
 
-pub(crate) fn extract_tickers(
-    source: &Map<String, Value>,
-    company_name: &str,
-) -> Vec<String> {
+pub(crate) fn extract_tickers(source: &Map<String, Value>, company_name: &str) -> Vec<String> {
     let mut tickers = Vec::new();
     match source.get("tickers") {
         Some(Value::Array(items)) => {
@@ -19,9 +15,7 @@ pub(crate) fn extract_tickers(
             }
         }
         Some(Value::String(value)) => {
-            for item in value.split(|ch: char| {
-                ch == ',' || ch == '/' || ch.is_whitespace()
-            }) {
+            for item in value.split(|ch: char| ch == ',' || ch == '/' || ch.is_whitespace()) {
                 append_ticker(&mut tickers, item);
             }
         }

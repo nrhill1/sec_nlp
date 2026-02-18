@@ -2,7 +2,6 @@ use once_cell::sync::Lazy;
 use regex::Regex;
 use serde_json::{Map, Value};
 
-
 static CIK_PATTERN: Lazy<Regex> =
     Lazy::new(|| Regex::new(r"(?i)\bCIK\s*(\d{1,10})\b").expect("valid regex"));
 

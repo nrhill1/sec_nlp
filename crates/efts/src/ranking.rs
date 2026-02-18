@@ -25,7 +25,10 @@ pub struct KeywordResult {
 #[pymethods]
 impl KeywordResult {
     fn __repr__(&self) -> String {
-        format!("KeywordResult(keyword='{}', score={:.4})", self.keyword, self.score)
+        format!(
+            "KeywordResult(keyword='{}', score={:.4})",
+            self.keyword, self.score
+        )
     }
 }
 
@@ -42,7 +45,10 @@ pub struct DocumentScore {
 #[pymethods]
 impl DocumentScore {
     fn __repr__(&self) -> String {
-        format!("DocumentScore(index={}, score={:.4})", self.index, self.score)
+        format!(
+            "DocumentScore(index={}, score={:.4})",
+            self.index, self.score
+        )
     }
 }
 
@@ -333,12 +339,7 @@ pub struct TextRankExtractor {
 impl TextRankExtractor {
     #[new]
     #[pyo3(signature = (window_size=2, damping=0.85, tolerance=0.00005, phrase_length=None))]
-    fn new(
-        window_size: usize,
-        damping: f32,
-        tolerance: f32,
-        phrase_length: Option<usize>,
-    ) -> Self {
+    fn new(window_size: usize, damping: f32, tolerance: f32, phrase_length: Option<usize>) -> Self {
         Self {
             stop_words: get_stop_words(),
             window_size,
@@ -489,7 +490,8 @@ mod tests {
     #[test]
     fn test_rake_extractor() {
         let extractor = RakeExtractor::new();
-        let text = "Compatibility of systems of linear constraints over the set of natural numbers.";
+        let text =
+            "Compatibility of systems of linear constraints over the set of natural numbers.";
         let keywords = extractor.extract_keywords(text, 5);
         assert!(!keywords.is_empty());
     }
