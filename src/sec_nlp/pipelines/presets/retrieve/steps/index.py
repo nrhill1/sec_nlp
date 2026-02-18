@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+from typing import Any
 from uuid import NAMESPACE_URL, uuid5
 
 from qdrant_client import QdrantClient
@@ -80,6 +81,9 @@ def index_retrieval_hits(
     symbol: str,
     hits: list[RetrievalHit],
     settings: RetrieveSettings,
+    qdrant_client: QdrantClient | None = None,
+    embedder: Any | None = None,
+    embedding_dim: int | None = None,
 ) -> list[RetrievalHit]:
     """Upsert retrieval hits into Qdrant when indexing is enabled."""
 
@@ -90,7 +94,7 @@ def index_retrieval_hits(
         return hits
 
     try:
-        qdrant = settings.vdb.setup_qdrant_client()
+        qdrant = qdrant_client or settings.vdb.setup_qdrant_client()
         collection_name = _resolve_collection_name(settings)
         has_collection = qdrant.collection_exists(collection_name)
 
@@ -122,12 +126,17 @@ def index_retrieval_hits(
             )
             return hits
 
-        embedder, embedding_dim = settings.vdb.setup_embedding_model()
+        active_embedder = embedder
+        active_embedding_dim = embedding_dim
+        if active_embedder is None or active_embedding_dim is None:
+            active_embedder, active_embedding_dim = (
+                settings.vdb.setup_embedding_model()
+            )
         if not has_collection:
             qdrant.create_collection(
                 collection_name=collection_name,
                 vectors_config=VectorParams(
-                    size=embedding_dim,
+                    size=active_embedding_dim,
                     distance=Distance.COSINE,
                 ),
                 replication_factor=settings.vdb.qdrant_replication_factor,
@@ -138,7 +147,7 @@ def index_retrieval_hits(
         vectors = embed_texts_with_cache(
             texts=[hit.snippet or "" for hit, _ in keyed_hits],
             settings=settings,
-            embedder=embedder,
+            embedder=active_embedder,
             cache_prefix="snippet",
         )
 

@@ -84,6 +84,7 @@ class BasePipelineCommand(BaseModel, ABC):
             self._handle_missing_symbols()
             return
 
+        self._log_header()
         self._log_config_details()
 
         if self._should_validate():
@@ -150,8 +151,15 @@ class BasePipelineCommand(BaseModel, ABC):
         if symbols:
             items.append(("Symbols", ", ".join(symbols)))
 
+        forms = getattr(self, "forms", None)
+        forms_display: list[str] = []
+        if isinstance(forms, list):
+            forms_display = [str(form) for form in forms if str(form).strip()]
+        if forms_display:
+            items.append(("Forms", ", ".join(forms_display)))
+
         mode = getattr(self, "mode", None)
-        if mode is not None:
+        if mode is not None and not forms_display:
             items.append(("Mode", str(mode)))
 
         batch_size = getattr(self, "batch_size", None)

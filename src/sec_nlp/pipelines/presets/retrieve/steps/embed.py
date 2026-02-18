@@ -380,6 +380,7 @@ def rerank_with_embeddings(
     *,
     hits: list[RetrievalHit],
     settings: RetrieveSettings,
+    embedder: Any | None = None,
 ) -> list[RetrievalHit]:
     """Rerank hits using query/snippet embedding similarity when enabled."""
 
@@ -387,12 +388,14 @@ def rerank_with_embeddings(
         return hits
 
     try:
-        embedder, _ = settings.vdb.setup_embedding_model()
+        active_embedder = embedder
+        if active_embedder is None:
+            active_embedder, _ = settings.vdb.setup_embedding_model()
         texts = [hit.snippet or "" for hit in hits]
         doc_vectors = _cached_text_embeddings(
             texts=texts,
             settings=settings,
-            embedder=embedder,
+            embedder=active_embedder,
             cache_prefix="snippet",
         )
         query_vectors: dict[str, list[float]] = {}
@@ -402,7 +405,9 @@ def rerank_with_embeddings(
         for hit, doc_vector in zip(hits, doc_vectors, strict=False):
             query_key = hit.query
             if query_key not in query_vectors:
-                query_vectors[query_key] = list(embedder.embed_query(query_key))
+                query_vectors[query_key] = list(
+                    active_embedder.embed_query(query_key)
+                )
             similarity = _cosine_similarity(
                 query_vectors[query_key], doc_vector
             )

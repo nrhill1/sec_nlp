@@ -17,8 +17,19 @@ from qdrant_client.http.models import (
     Filter,
     MatchValue,
 )
+from rich.progress import (
+    BarColumn,
+    Progress,
+    SpinnerColumn,
+    TaskID,
+    TaskProgressColumn,
+    TextColumn,
+    TimeElapsedColumn,
+    TimeRemainingColumn,
+)
 
 from sec_nlp.core.infra.logger import logger
+from sec_nlp.core.infra.rich_console import get_rich_console
 from sec_nlp.core.market import MarketExtensionError, create_market_retriever
 from sec_nlp.core.news.client import (
     NewswatchExtensionError,
@@ -152,6 +163,28 @@ class ChatPipeline(BasePipeline):
         }
         return metadata
 
+    def _update_phase(
+        self,
+        progress: Progress | None,
+        phase_task: TaskID | None,
+        phase: str,
+    ) -> None:
+        if progress is None or phase_task is None:
+            return
+
+        progress.reset(
+            phase_task,
+            start=True,
+            description=f"  - {phase}",
+            visible=True,
+            completed=0,
+        )
+        progress.update(
+            phase_task,
+            total=None,
+            completed=0,
+        )
+
     def run(self) -> ChatResult:
         try:
             self.config.setup_paths()
@@ -161,25 +194,93 @@ class ChatPipeline(BasePipeline):
                     "Chat pipeline requires a question (--question or --query)."
                 )
 
-            chunks = self._search_collections(question)
-            citations = self._to_citations(chunks)
-            external_context, external_metadata = self._build_external_context(
-                question=question,
-                citations=citations,
-            )
-            answer, used_citation_ids = self._build_answer(
-                question=question,
-                citations=citations,
-                external_context=external_context,
-            )
-
-            turns = self._build_turns(
-                question=question,
-                answer=answer,
-                citation_ids=used_citation_ids,
-            )
-
             outputs: list[Path] = []
+            console = get_rich_console()
+            with Progress(
+                SpinnerColumn(),
+                TextColumn("[bold cyan]{task.description}"),
+                BarColumn(complete_style="green", finished_style="bold green"),
+                TaskProgressColumn(),
+                TimeElapsedColumn(),
+                TextColumn("[dim]-[/dim]"),
+                TimeRemainingColumn(),
+                console=console,
+                transient=True,
+            ) as progress:
+                overall_task = progress.add_task(
+                    "Chat pipeline",
+                    total=5,
+                )
+                phase_task = progress.add_task("", total=None, visible=False)
+
+                self._update_phase(
+                    progress,
+                    phase_task,
+                    "Searching indexed collections",
+                )
+                chunks = self._search_collections(
+                    question,
+                    progress=progress,
+                    phase_task=phase_task,
+                )
+                progress.advance(overall_task)
+
+                self._update_phase(
+                    progress,
+                    phase_task,
+                    "Preparing citations and context",
+                )
+                citations = self._to_citations(chunks)
+                external_context, external_metadata = (
+                    self._build_external_context(
+                        question=question,
+                        citations=citations,
+                    )
+                )
+                progress.advance(overall_task)
+
+                self._update_phase(
+                    progress,
+                    phase_task,
+                    "Generating answer",
+                )
+                answer, used_citation_ids = self._build_answer(
+                    question=question,
+                    citations=citations,
+                    external_context=external_context,
+                )
+                progress.advance(overall_task)
+
+                self._update_phase(
+                    progress,
+                    phase_task,
+                    "Building transcript",
+                )
+                turns = self._build_turns(
+                    question=question,
+                    answer=answer,
+                    citation_ids=used_citation_ids,
+                )
+                progress.advance(overall_task)
+
+                self._update_phase(
+                    progress,
+                    phase_task,
+                    "Writing outputs",
+                )
+                if self.config.transcript_autosave:
+                    outputs = self._write_outputs(
+                        question=question,
+                        answer=answer,
+                        citations=citations,
+                        citation_ids=used_citation_ids,
+                        turns=turns,
+                        external_context=external_context,
+                        external_metadata=external_metadata,
+                    )
+                progress.advance(overall_task)
+                progress.update(phase_task, visible=False)
+
             metadata = self._base_metadata(
                 external_context=external_context,
                 external_metadata=external_metadata,
@@ -192,17 +293,6 @@ class ChatPipeline(BasePipeline):
                     "symbol_scope": self.config.symbols,
                 }
             )
-
-            if self.config.transcript_autosave:
-                outputs = self._write_outputs(
-                    question=question,
-                    answer=answer,
-                    citations=citations,
-                    citation_ids=used_citation_ids,
-                    turns=turns,
-                    external_context=external_context,
-                    external_metadata=external_metadata,
-                )
 
             self.config.complete_run(
                 success=True,
@@ -226,9 +316,18 @@ class ChatPipeline(BasePipeline):
                 error=f"{type(exc).__name__}: {exc}",
             )
 
-    def _search_collections(self, question: str) -> list[_RetrievedChunk]:
+    def _search_collections(
+        self,
+        question: str,
+        *,
+        progress: Progress | None = None,
+        phase_task: TaskID | None = None,
+    ) -> list[_RetrievedChunk]:
+        self._update_phase(progress, phase_task, "Loading embedding model")
         embedder, _ = self.config.vdb.setup_embedding_model()
         query_vector = list(embedder.embed_query(question))
+
+        self._update_phase(progress, phase_task, "Connecting to Qdrant")
         qdrant = self.config.vdb.setup_qdrant_client()
 
         symbols = [
@@ -254,80 +353,104 @@ class ChatPipeline(BasePipeline):
             )
 
         combined: list[_RetrievedChunk] = []
+        collections = [
+            collection.strip()
+            for collection in self.config.collections
+            if collection.strip()
+        ]
+        collection_task: TaskID | None = None
+        if progress is not None:
+            collection_task = progress.add_task(
+                "  - Collections",
+                total=max(len(collections), 1),
+            )
 
-        for collection in self.config.collections:
-            name = collection.strip()
-            if not name:
-                continue
-            if not qdrant.collection_exists(name):
-                self._maybe_prefetch_collection(
-                    qdrant=qdrant,
-                    collection=name,
-                    symbols=symbols,
-                    question=question,
-                )
-            if not qdrant.collection_exists(name):
-                logger.debug("Skipping unavailable collection '%s'", name)
-                continue
-
-            if (
-                self.config.prefetch_retrieve
-                and self.config.prefetch_min_points > 0
-            ):
-                point_count = self._collection_points(
-                    qdrant=qdrant,
-                    collection=name,
-                )
-                if (
-                    point_count is not None
-                    and point_count < self.config.prefetch_min_points
-                ):
+        for idx, name in enumerate(collections, start=1):
+            try:
+                if progress is not None and collection_task is not None:
+                    progress.update(
+                        collection_task,
+                        description=(
+                            f"  - Collection {idx}/{len(collections)}: {name}"
+                        ),
+                    )
+                if not qdrant.collection_exists(name):
                     self._maybe_prefetch_collection(
                         qdrant=qdrant,
                         collection=name,
                         symbols=symbols,
                         question=question,
                     )
-                point_count = self._collection_points(
-                    qdrant=qdrant,
-                    collection=name,
-                )
-                if (
-                    point_count is not None
-                    and point_count < self.config.prefetch_min_points
-                ):
-                    logger.debug(
-                        "Collection '%s' remains sparse (%d points < %d)",
-                        name,
-                        point_count,
-                        self.config.prefetch_min_points,
-                    )
-            if not qdrant.collection_exists(name):
-                continue
+                if not qdrant.collection_exists(name):
+                    logger.debug("Skipping unavailable collection '%s'", name)
+                    continue
 
-            query_filter = self._build_symbol_filter(symbols)
-            response = qdrant.query_points(
-                collection_name=name,
-                query=query_vector,
-                query_filter=query_filter,
-                limit=query_limit,
-                with_payload=True,
-                with_vectors=False,
-                score_threshold=self.config.min_score,
-            )
-            points = getattr(response, "points", [])
-            for point in points:
-                chunk = self._point_to_chunk(collection=name, point=point)
-                if chunk is None:
-                    continue
-                if not self._chunk_matches_filters(
-                    chunk,
-                    forms=allowed_forms,
-                    filed_after=filed_after,
-                    filed_before=filed_before,
+                if (
+                    self.config.prefetch_retrieve
+                    and self.config.prefetch_min_points > 0
                 ):
+                    point_count = self._collection_points(
+                        qdrant=qdrant,
+                        collection=name,
+                    )
+                    if (
+                        point_count is not None
+                        and point_count < self.config.prefetch_min_points
+                    ):
+                        self._maybe_prefetch_collection(
+                            qdrant=qdrant,
+                            collection=name,
+                            symbols=symbols,
+                            question=question,
+                        )
+                    point_count = self._collection_points(
+                        qdrant=qdrant,
+                        collection=name,
+                    )
+                    if (
+                        point_count is not None
+                        and point_count < self.config.prefetch_min_points
+                    ):
+                        logger.debug(
+                            "Collection '%s' remains sparse (%d points < %d)",
+                            name,
+                            point_count,
+                            self.config.prefetch_min_points,
+                        )
+                if not qdrant.collection_exists(name):
                     continue
-                combined.append(chunk)
+
+                query_filter = self._build_symbol_filter(symbols)
+                response = qdrant.query_points(
+                    collection_name=name,
+                    query=query_vector,
+                    query_filter=query_filter,
+                    limit=query_limit,
+                    with_payload=True,
+                    with_vectors=False,
+                    score_threshold=self.config.min_score,
+                )
+                points = getattr(response, "points", [])
+                for point in points:
+                    chunk = self._point_to_chunk(collection=name, point=point)
+                    if chunk is None:
+                        continue
+                    if not self._chunk_matches_filters(
+                        chunk,
+                        forms=allowed_forms,
+                        filed_after=filed_after,
+                        filed_before=filed_before,
+                    ):
+                        continue
+                    combined.append(chunk)
+            finally:
+                if progress is not None and collection_task is not None:
+                    progress.advance(collection_task)
+
+        if progress is not None and collection_task is not None:
+            if not collections:
+                progress.advance(collection_task)
+            progress.update(collection_task, visible=False)
 
         combined.sort(key=lambda chunk: chunk.score, reverse=True)
         deduped: list[_RetrievedChunk] = []

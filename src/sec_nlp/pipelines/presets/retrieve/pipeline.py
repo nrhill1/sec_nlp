@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import ClassVar, Literal, cast
+from typing import Any, ClassVar, Literal, cast
 
+from pydantic import PrivateAttr
 from rich.progress import (
     BarColumn,
     Progress,
@@ -52,6 +53,9 @@ class RetrievePipeline(BasePipeline):
     requires_llm: ClassVar[bool] = False
 
     config: RetrieveSettings
+    _embedder: Any | None = PrivateAttr(default=None)
+    _embedding_dim: int | None = PrivateAttr(default=None)
+    _qdrant_client: Any | None = PrivateAttr(default=None)
 
     @classmethod
     def config_model(cls) -> type[RetrieveSettings]:
@@ -62,7 +66,28 @@ class RetrievePipeline(BasePipeline):
         return RetrieveResult
 
     def _build_components(self) -> None:
-        return
+        if self.config.rerank_with_embeddings or self.config.index_results:
+            try:
+                self._embedder, self._embedding_dim = (
+                    self.config.vdb.setup_embedding_model()
+                )
+            except Exception as exc:
+                logger.warning(
+                    "Retrieve embedding model prewarm failed; will fallback to lazy setup: %s",
+                    exc,
+                )
+                self._embedder = None
+                self._embedding_dim = None
+
+        if self.config.index_results:
+            try:
+                self._qdrant_client = self.config.vdb.setup_qdrant_client()
+            except Exception as exc:
+                logger.warning(
+                    "Retrieve Qdrant preconnect failed; will fallback to lazy setup: %s",
+                    exc,
+                )
+                self._qdrant_client = None
 
     def run(self) -> RetrieveResult:
         try:
@@ -189,11 +214,15 @@ class RetrievePipeline(BasePipeline):
         ranked_hits = rerank_with_embeddings(
             hits=ranked_hits,
             settings=self.config,
+            embedder=self._embedder,
         )
         ranked_hits = index_retrieval_hits(
             symbol=output_symbol,
             hits=ranked_hits,
             settings=self.config,
+            qdrant_client=self._qdrant_client,
+            embedder=self._embedder,
+            embedding_dim=self._embedding_dim,
         )
 
         self._update_phase(progress, phase_task, output_symbol, "Writing")

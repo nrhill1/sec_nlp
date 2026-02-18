@@ -875,3 +875,102 @@ def test_index_retrieval_hits_short_circuits_when_all_hits_exist(
     assert indexed == hits
     assert embedder_called["value"] is False
     assert fake_client.upserted_points == 0
+
+
+def test_retrieve_pipeline_reuses_vector_components_across_symbols(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    config = RetrieveSettings(
+        email="test@example.com",
+        symbols=["BHP", "RIO"],
+        queries=["supply chain"],
+        dl_path=tmp_path / "downloads",
+        out_path=tmp_path / "outputs",
+        output_format="json",
+        top_k=5,
+        download_missing=False,
+        rerank_with_embeddings=True,
+        index_results=True,
+    )
+
+    candidates = {
+        "supply chain": [
+            _efts_hit(
+                accession="0000123456-26-000201",
+                filed=date(2026, 2, 1),
+                score=0.91,
+                company="Sample Corp",
+            )
+        ]
+    }
+
+    monkeypatch.setattr(
+        "sec_nlp.pipelines.presets.retrieve.pipeline.run_candidate_search",
+        lambda symbol, queries, settings: candidates,
+    )
+    monkeypatch.setattr(
+        "sec_nlp.pipelines.presets.retrieve.pipeline.download_and_chunk_hits",
+        lambda symbol, hits, settings: hits,
+    )
+
+    setup_calls = {"embedder": 0, "qdrant": 0}
+    fake_embedder = object()
+    fake_qdrant = object()
+
+    def _fake_setup_embedder(self):
+        setup_calls["embedder"] += 1
+        return fake_embedder, 2
+
+    def _fake_setup_qdrant(self):
+        setup_calls["qdrant"] += 1
+        return fake_qdrant
+
+    monkeypatch.setattr(
+        "sec_nlp.pipelines.vector.config.VectorConfig.setup_embedding_model",
+        _fake_setup_embedder,
+    )
+    monkeypatch.setattr(
+        "sec_nlp.pipelines.vector.config.VectorConfig.setup_qdrant_client",
+        _fake_setup_qdrant,
+    )
+
+    rerank_embedder_args: list[object | None] = []
+    index_embedder_args: list[object | None] = []
+    index_qdrant_args: list[object | None] = []
+
+    def _fake_rerank(*, hits, settings, embedder=None):
+        rerank_embedder_args.append(embedder)
+        return hits
+
+    def _fake_index(
+        *,
+        symbol,
+        hits,
+        settings,
+        qdrant_client=None,
+        embedder=None,
+        embedding_dim=None,
+    ):
+        index_qdrant_args.append(qdrant_client)
+        index_embedder_args.append(embedder)
+        return hits
+
+    monkeypatch.setattr(
+        "sec_nlp.pipelines.presets.retrieve.pipeline.rerank_with_embeddings",
+        _fake_rerank,
+    )
+    monkeypatch.setattr(
+        "sec_nlp.pipelines.presets.retrieve.pipeline.index_retrieval_hits",
+        _fake_index,
+    )
+
+    pipeline = RetrievePipeline(config=config)
+    result = pipeline.run()
+
+    assert result.success is True
+    assert setup_calls["embedder"] == 1
+    assert setup_calls["qdrant"] == 1
+    assert rerank_embedder_args == [fake_embedder, fake_embedder]
+    assert index_embedder_args == [fake_embedder, fake_embedder]
+    assert index_qdrant_args == [fake_qdrant, fake_qdrant]

@@ -33,7 +33,7 @@ def test_chat_pipeline_run_writes_outputs_with_mocked_retrieval(
     monkeypatch.setattr(
         ChatPipeline,
         "_search_collections",
-        lambda self, question: [
+        lambda self, question, **_: [
             _RetrievedChunk(
                 collection="retrieve",
                 score=0.91,
