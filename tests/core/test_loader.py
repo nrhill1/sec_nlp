@@ -118,6 +118,44 @@ class TestLoadDocumentsDiskMode:
         assert len(texts) >= 1
 
 
+def test_html_paths_for_symbol_current_mode_includes_8k_and_6k(
+    tmp_path: Path,
+) -> None:
+    symbol = "AAPL"
+    for form in ("8-K", "6-K"):
+        accession_dir = (
+            tmp_path
+            / "sec-edgar-filings"
+            / symbol
+            / form
+            / f"0000000000-26-00000{1 if form == '8-K' else 2}"
+        )
+        accession_dir.mkdir(parents=True, exist_ok=True)
+        (accession_dir / "full-submission.txt").write_text(
+            "FILED AS OF DATE:\t\t20260201\n",
+            encoding="utf-8",
+        )
+        (accession_dir / f"{form.lower()}_filing.html").write_text(
+            f"<html><body>{form} filing</body></html>",
+            encoding="utf-8",
+        )
+
+    loader = Loader(
+        email="test@example.com",
+        downloads_folder=tmp_path,
+        fetch_mode="download",
+    )
+
+    html_paths = loader.html_paths_for_symbol(
+        symbol=symbol,
+        mode=FilingMode.current,
+        base=tmp_path,
+    )
+
+    assert len(html_paths) == 2
+    assert {path.parent.parent.name for path in html_paths} == {"8-K", "6-K"}
+
+
 class TestKeywordFiltering:
     """Test keyword filtering functionality."""
 

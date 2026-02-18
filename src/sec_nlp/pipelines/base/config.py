@@ -121,7 +121,7 @@ class BasePipelineSettings(BaseSettings, ABC):
     )
     mode: FilingMode = Field(
         default=FilingMode.annual,
-        description="Filing type: annual (10-K) or quarterly (10-Q)",
+        description="Filing mode (annual, quarterly, current, proxy, holdings, insider, registration, shelf)",
     )
     forms: list[str] | None = Field(
         default=None,

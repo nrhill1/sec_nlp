@@ -29,7 +29,7 @@ PRESET_DESCRIPTIONS: dict[AnalyzePreset, str] = {
     AnalyzePreset.laptop: "Laptop-friendly analysis: small model, tighter caps, targeted search queries",
     AnalyzePreset.thorough: "Balanced analysis: better model, 3 filings, vector DB enabled",
     AnalyzePreset.comprehensive: "Full analysis: best model, 5 filings, all features enabled",
-    AnalyzePreset.rare_earths: "Focus on rare earth miners (8-K current reports) with finance-tuned LLM and search queries",
+    AnalyzePreset.rare_earths: "Focus on rare earth miners (8-K/6-K current reports) with finance-tuned LLM and search queries",
 }
 
 

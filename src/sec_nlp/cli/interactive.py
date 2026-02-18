@@ -479,7 +479,9 @@ def _gather_config() -> ConfigData | None:
             choices=[
                 questionary.Choice(title="annual (10-K)", value="annual"),
                 questionary.Choice(title="quarterly (10-Q)", value="quarterly"),
-                questionary.Choice(title="current (8-K)", value="current"),
+                questionary.Choice(
+                    title="current (8-K / 6-K)", value="current"
+                ),
                 questionary.Choice(title="proxy (DEF 14A)", value="proxy"),
                 questionary.Choice(title="holdings (13F-HR)", value="holdings"),
                 questionary.Choice(

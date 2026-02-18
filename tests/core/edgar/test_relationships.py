@@ -186,6 +186,38 @@ def test_relationship_resolver_parses_header_references(
     ) in relations
 
 
+def test_relationship_resolver_links_6k_as_related_current_report(
+    tmp_path: Path,
+) -> None:
+    symbol = "ACME"
+    tenq_acc = "0000000000-24-000040"
+    sixk_acc = "0000000000-24-000041"
+
+    _create_filing(
+        tmp_path,
+        symbol=symbol,
+        form_dir="10-Q",
+        accession=tenq_acc,
+        form_type="10-Q",
+        filed_date=date(2024, 5, 1),
+        period_end=date(2024, 3, 31),
+    )
+    _create_filing(
+        tmp_path,
+        symbol=symbol,
+        form_dir="6-K",
+        accession=sixk_acc,
+        form_type="6-K",
+        filed_date=date(2024, 5, 10),
+        period_end=None,
+    )
+
+    resolver = RelationshipResolver(downloads_folder=tmp_path)
+    relations = _relations_index(resolver, symbol)
+
+    assert (tenq_acc, sixk_acc, FilingRelationType.related_8k) in relations
+
+
 def test_loader_enriches_related_filings_metadata(
     tmp_path: Path,
 ) -> None:

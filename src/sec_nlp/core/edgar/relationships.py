@@ -32,7 +32,7 @@ class FilingRelationType(StrEnum):
     subsequent_period = "subsequent_period"  # Next period filing
 
     # Event relationships
-    related_8k = "related_8k"  # 8-K related to the filing
+    related_8k = "related_8k"  # Current report (8-K/6-K) related to filing
     proxy_for_annual = "proxy_for_annual"  # DEF 14A associated with 10-K
 
     def __str__(self) -> str:
@@ -75,7 +75,7 @@ class FilingIdentifier(BaseModel):
     )
     form_type: str | None = Field(
         default=None,
-        description="SEC form type (e.g., 10-K, 8-K)",
+        description="SEC form type (e.g., 10-K, 8-K, 6-K)",
     )
     filed_date: date | None = Field(
         default=None,
@@ -261,7 +261,7 @@ class FilingRelationshipGraph(BaseModel):
         return [filing for filing, _ in related]
 
     def get_related_8ks(self, accession: str) -> list[FilingIdentifier]:
-        """Get related 8-K filings."""
+        """Get related current-report filings (8-K/6-K)."""
         related = self.get_related(
             accession,
             relation_types=[FilingRelationType.related_8k],
