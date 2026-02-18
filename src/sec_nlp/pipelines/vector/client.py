@@ -20,8 +20,15 @@ def create_qdrant_client(
 ) -> QdrantClient:
     """Create a Qdrant client using shared connection settings."""
     if location:
+        normalized = location.strip()
+        if normalized == ":memory:":
+            return QdrantClient(
+                location=normalized,
+                timeout=timeout,
+                prefer_grpc=False,
+            )
         return QdrantClient(
-            location=location,
+            path=normalized,
             timeout=timeout,
             prefer_grpc=False,
         )

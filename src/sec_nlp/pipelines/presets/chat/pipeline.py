@@ -451,6 +451,8 @@ class ChatPipeline(BasePipeline):
             return False
 
         try:
+            vdb_config = self.config.vdb.model_dump(mode="python")
+            vdb_config["collection_name"] = collection
             retrieve_config = RetrieveSettings(
                 email=self.config.email,
                 symbols=symbols,
@@ -465,11 +467,7 @@ class ChatPipeline(BasePipeline):
                 output_format="json",
                 dl_path=self.config.dl_path,
                 out_path=self.config.out_path,
-                vdb=self.config.vdb.model_copy(
-                    update={
-                        "collection_name": collection,
-                    }
-                ),
+                vdb=vdb_config,
             )
             retrieve_result = RetrievePipeline(config=retrieve_config).run()
             return retrieve_result.success
@@ -478,6 +476,11 @@ class ChatPipeline(BasePipeline):
                 "Prefetch retrieve failed for collection '%s': %s",
                 collection,
                 exc,
+            )
+            logger.debug(
+                "Prefetch retrieve traceback for collection '%s'",
+                collection,
+                exc_info=True,
             )
             return False
 

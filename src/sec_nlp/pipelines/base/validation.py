@@ -467,10 +467,17 @@ class PipelineValidator(BaseModel):
             api_key = vdb_config.qdrant_api_key
 
             if qdrant_location:
-                client = QdrantClient(location=qdrant_location, timeout=5)
-                target = qdrant_location
+                normalized_location = qdrant_location.strip()
+                if normalized_location == ":memory:":
+                    client = QdrantClient(
+                        location=normalized_location, timeout=5
+                    )
+                    target_message = "embedded Qdrant"
+                else:
+                    client = QdrantClient(path=normalized_location, timeout=5)
+                    target_message = "local Qdrant"
+                target = normalized_location
                 target_label = "location"
-                target_message = "embedded Qdrant"
             else:
                 target = (
                     qdrant_url

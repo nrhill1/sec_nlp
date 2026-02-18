@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from datetime import date
 from pathlib import Path
+from types import SimpleNamespace
 
 from sec_nlp.pipelines.presets.chat import ChatPipeline, ChatSettings
 from sec_nlp.pipelines.presets.chat.pipeline import _RetrievedChunk
@@ -298,6 +299,39 @@ def test_search_collections_prefetches_missing_collection(
     assert hydrated["called"] is True
     assert len(chunks) == 1
     assert chunks[0].snippet == "hydrated chunk"
+
+
+def test_hydrate_retrieve_collection_uses_serializable_vdb_config(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    config = ChatSettings(
+        email="test@example.com",
+        symbols=["MP"],
+        question="What changed?",
+        dl_path=tmp_path / "downloads",
+        out_path=tmp_path / "outputs",
+        collections=["retrieve"],
+        prefetch_retrieve=True,
+        prefetch_queries=["rare earth"],
+        prefetch_top_k=5,
+        prefetch_efts_candidates=20,
+        vdb=VectorConfig(qdrant_location=".qdrant/rems"),
+    )
+    pipeline = ChatPipeline(config=config)
+
+    monkeypatch.setattr(
+        "sec_nlp.pipelines.presets.chat.pipeline.RetrievePipeline.run",
+        lambda self: SimpleNamespace(success=True),
+    )
+
+    hydrated = pipeline._hydrate_retrieve_collection(
+        collection="retrieve",
+        symbols=["MP"],
+        question="what changed",
+    )
+
+    assert hydrated is True
 
 
 def test_rerank_chunks_mmr_prefers_diversity(tmp_path: Path) -> None:

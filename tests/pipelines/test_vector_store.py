@@ -13,6 +13,7 @@ from sec_nlp.pipelines.vector import (
     VectorConfig,
     config as vector_config,
 )
+from sec_nlp.pipelines.vector.client import create_qdrant_client
 
 
 class TestVectorStoreCreation:
@@ -229,3 +230,53 @@ class TestEmbeddingAlignment:
 
         assert calls == [["only one"]]
         assert embeddings == [[0.1]]
+
+
+class TestQdrantClientFactory:
+    """Unit tests for shared Qdrant client constructor behavior."""
+
+    def test_create_qdrant_client_uses_memory_location_mode(self) -> None:
+        with patch(
+            "sec_nlp.pipelines.vector.client.QdrantClient"
+        ) as mock_client:
+            create_qdrant_client(
+                location=":memory:",
+                url=None,
+                host="localhost",
+                port=6333,
+                grpc_port=6334,
+                api_key=None,
+                timeout=5,
+                prefer_grpc=True,
+                https=False,
+            )
+
+        mock_client.assert_called_once_with(
+            location=":memory:",
+            timeout=5,
+            prefer_grpc=False,
+        )
+
+    def test_create_qdrant_client_uses_path_for_persistent_location(
+        self,
+    ) -> None:
+        with patch(
+            "sec_nlp.pipelines.vector.client.QdrantClient"
+        ) as mock_client:
+            create_qdrant_client(
+                location=".qdrant/rems",
+                url=None,
+                host="localhost",
+                port=6333,
+                grpc_port=6334,
+                api_key=None,
+                timeout=5,
+                prefer_grpc=True,
+                https=False,
+            )
+
+        mock_client.assert_called_once_with(
+            path=".qdrant/rems",
+            timeout=5,
+            prefer_grpc=False,
+        )
