@@ -205,16 +205,22 @@ class FinancialsPipeline(BasePipeline):
             return
 
         if total is None:
-            progress.update(
+            progress.reset(
                 phase_task,
+                start=True,
                 description=f"  ├─ {symbol}: {phase}",
                 visible=True,
+                completed=0,
+            )
+            progress.update(
+                phase_task,
                 total=None,
                 completed=0,
             )
         else:
-            progress.update(
+            progress.reset(
                 phase_task,
+                start=True,
                 description=f"  ├─ {symbol}: {phase}",
                 visible=True,
                 total=total,

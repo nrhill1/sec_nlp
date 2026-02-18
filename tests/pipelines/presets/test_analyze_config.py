@@ -48,6 +48,22 @@ def test_analyze_config_defaults_to_semantic_chunking(
     assert config.chunking_mode == "semantic"
 
 
+def test_analyze_defaults_to_compact_signal_pack(
+    tmp_path: Path,
+) -> None:
+    config = AnalyzeConfig(
+        symbols=["AAPL"],
+        out_path=tmp_path,
+        dl_path=tmp_path,
+    )
+    assert config.compact_result_output is True
+    assert config.analysis_instruction_style == "compact"
+    assert "sentiment" in config.analysis_fields
+    assert "impact_direction" in config.analysis_fields
+    assert "source_excerpt" in config.analysis_fields
+    assert "reasoning" not in config.analysis_fields
+
+
 def test_llm_partial_override_preserves_prompt_file(tmp_path: Path) -> None:
     """Overriding llm.model_name should not lose the default prompt_file.
 

@@ -38,12 +38,21 @@ Examples:
 ```
 sec-nlp analyze
 sec-nlp analyze AAPL --preset quick
+sec-nlp analyze AAPL --preset deep
 sec-nlp analyze AAPL --topics warranty --topics recall
 sec-nlp analyze AAPL --section-type item --section-numbers 1A
 sec-nlp analyze AAPL --search.queries "supply chain disruption"
 ```
 
 Run `sec-nlp analyze --help` for full options.
+
+By default, analyze emits a compact signal-pack result set (relevance, confidence, sentiment/impact, excerpts, and query-match terms). Use `--preset deep` for full-field extraction output.
+For a stable one-click production profile, use `--preset sentiment`.
+
+Production baseline example:
+```
+sec-nlp analyze MP LAC UUUU --preset sentiment
+```
 
 Search runs automatically when `--search.queries` is provided. If it is omitted, the pipeline falls back to `--topics` as search queries.
 

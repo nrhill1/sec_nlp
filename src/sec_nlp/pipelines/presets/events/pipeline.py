@@ -194,10 +194,15 @@ class EventsPipeline(BasePipeline):
         if progress is None or phase_task is None:
             return
 
-        progress.update(
+        progress.reset(
             phase_task,
+            start=True,
             description=f"  - {symbol}: {phase}",
             visible=True,
+            completed=0,
+        )
+        progress.update(
+            phase_task,
             total=None,
             completed=0,
         )

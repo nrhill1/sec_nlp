@@ -17,6 +17,7 @@ class AnalyzePreset(str, Enum):
     thorough = "thorough"
     comprehensive = "comprehensive"
     rare_earths = "rare_earths"
+    deep = "deep"
     sentiment = "sentiment"
 
     @property
@@ -31,7 +32,8 @@ PRESET_DESCRIPTIONS: dict[AnalyzePreset, str] = {
     AnalyzePreset.thorough: "Balanced analysis: better model, 3 filings, vector DB enabled",
     AnalyzePreset.comprehensive: "Full analysis: best model, 5 filings, all features enabled",
     AnalyzePreset.rare_earths: "Focus on rare earth miners (8-K/6-K current reports) with finance-tuned LLM and search queries",
-    AnalyzePreset.sentiment: "Sentiment-focused analysis: lean schema, fewer chunks, faster inference",
+    AnalyzePreset.deep: "Deep profile: verbose schema with full extraction fields",
+    AnalyzePreset.sentiment: "Baseline production profile: compact sentiment/impact signal pack with faster inference",
 }
 
 
@@ -324,6 +326,35 @@ PRESET_CONFIGS: dict[AnalyzePreset, ConfigData] = {
         "max_chunks_per_filing": 40,  # Allow more chunks per filing
         "collect_metrics": True,
         "export_format": "yaml",
+    },
+    AnalyzePreset.deep: {
+        "analysis_fields": [
+            "is_relevant",
+            "confidence_score",
+            "summary",
+            "key_points",
+            "reasoning",
+            "query_match_terms",
+            "missing_query_terms",
+            "binding_status",
+            "contingencies",
+            "impact_channels",
+            "impact_direction",
+            "impact_magnitude",
+            "impact_horizon",
+            "impact_confidence",
+            "impact_rationale",
+            "extracted_entities",
+            "tags",
+            "evidence_spans",
+            "source_excerpt",
+            "severity",
+            "sentiment",
+            "forward_looking",
+            "follow_up_questions",
+        ],
+        "analysis_instruction_style": "full",
+        "compact_result_output": False,
     },
     AnalyzePreset.sentiment: {
         "llm": {

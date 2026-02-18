@@ -746,17 +746,27 @@ class AnalyzePipeline(BasePipeline):
 
         if progress is None or phase_task is None:
             return
-        update_kwargs: dict[str, str | int | bool | None] = {
-            "description": f"  ├─ {symbol}: {phase}",
-            "visible": True,
-        }
-        if total is not None:
-            update_kwargs["total"] = total
-            update_kwargs["completed"] = 0
-        else:
-            update_kwargs["total"] = None
-            update_kwargs["completed"] = 0
-        progress.update(phase_task, **update_kwargs)  # type: ignore[arg-type]
+        description = f"  ├─ {symbol}: {phase}"
+        if total is None:
+            progress.reset(
+                phase_task,
+                start=True,
+                completed=0,
+                visible=True,
+                description=description,
+            )
+            # Clear any prior determinate total so elapsed reflects this phase only.
+            progress.update(phase_task, total=None, completed=0)
+            return
+
+        progress.reset(
+            phase_task,
+            start=True,
+            total=total,
+            completed=0,
+            visible=True,
+            description=description,
+        )
 
     def _process_symbol(
         self,

@@ -90,6 +90,45 @@ _PROMPT_PROFILES: dict[str, str] = {
     "sentiment": str(ANALYZE_SENTIMENT_PROMPT_PATH),
 }
 
+_SIGNAL_PACK_ANALYSIS_FIELDS: tuple[str, ...] = (
+    "is_relevant",
+    "confidence_score",
+    "summary",
+    "sentiment",
+    "impact_direction",
+    "impact_magnitude",
+    "impact_horizon",
+    "source_excerpt",
+    "query_match_terms",
+    "missing_query_terms",
+)
+
+_DEEP_ANALYSIS_FIELDS: tuple[str, ...] = (
+    "is_relevant",
+    "confidence_score",
+    "summary",
+    "key_points",
+    "reasoning",
+    "query_match_terms",
+    "missing_query_terms",
+    "binding_status",
+    "contingencies",
+    "impact_channels",
+    "impact_direction",
+    "impact_magnitude",
+    "impact_horizon",
+    "impact_confidence",
+    "impact_rationale",
+    "extracted_entities",
+    "tags",
+    "evidence_spans",
+    "source_excerpt",
+    "severity",
+    "sentiment",
+    "forward_looking",
+    "follow_up_questions",
+)
+
 
 class EFTSConfig(BaseModel):
     """Configuration for SEC EDGAR Full-Text Search (EFTS) integration."""
@@ -233,13 +272,14 @@ class AnalyzeConfig(BasePipelineSettings):
             "thorough",
             "comprehensive",
             "rare_earths",
+            "deep",
             "sentiment",
         ]
         | None
     ) = Field(
         default=None,
         description=(
-            "Use a preset configuration (quick, laptop, thorough, comprehensive, rare-earths, sentiment)"
+            "Use a preset configuration (quick, laptop, thorough, comprehensive, rare-earths, deep, sentiment)"
         ),
     )
 
@@ -856,35 +896,11 @@ class AnalyzeConfig(BasePipelineSettings):
     )
 
     analysis_fields: list[str] = Field(
-        default_factory=lambda: [
-            "is_relevant",
-            "confidence_score",
-            "summary",
-            "key_points",
-            "reasoning",
-            "query_match_terms",
-            "missing_query_terms",
-            "binding_status",
-            "contingencies",
-            "impact_channels",
-            "impact_direction",
-            "impact_magnitude",
-            "impact_horizon",
-            "impact_confidence",
-            "impact_rationale",
-            "extracted_entities",
-            "tags",
-            "evidence_spans",
-            "source_excerpt",
-            "severity",
-            "sentiment",
-            "forward_looking",
-            "follow_up_questions",
-        ],
+        default_factory=lambda: list(_SIGNAL_PACK_ANALYSIS_FIELDS),
         description="Fields to extract from LLM analysis",
     )
     analysis_instruction_style: Literal["full", "compact"] = Field(
-        default="full",
+        default="compact",
         description=(
             "Verbosity of field instructions embedded in the analysis prompt. "
             "'compact' reduces prompt token usage and latency."
@@ -897,7 +913,7 @@ class AnalyzeConfig(BasePipelineSettings):
         },
     )
     compact_result_output: bool = Field(
-        default=False,
+        default=True,
         description=(
             "Reduce per-result output payload to selected analysis_fields and "
             "omit empty values."
