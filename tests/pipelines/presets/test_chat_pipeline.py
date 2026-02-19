@@ -479,7 +479,16 @@ def test_build_external_context_uses_market_and_news(
     monkeypatch.setattr(
         ChatPipeline,
         "_market_context_lines",
-        lambda self, symbol: ["- market line"],
+        lambda self, symbols: (
+            ["- market line"],
+            symbols,
+            {
+                "window": "2024-01-01..2024-01-31",
+                "benchmark": "SPY",
+                "symbols": list(symbols),
+                "metrics": [],
+            },
+        ),
     )
     monkeypatch.setattr(
         ChatPipeline,
@@ -496,6 +505,7 @@ def test_build_external_context_uses_market_and_news(
     assert "News/geopolitics context" in context_text
     assert context_meta["market_context_items"] == 1
     assert context_meta["news_context_items"] == 1
+    assert context_meta["market_context_profile"] == "standard"
 
 
 def test_build_external_context_skips_multi_symbol_scope(
@@ -516,7 +526,7 @@ def test_build_external_context_skips_multi_symbol_scope(
     monkeypatch.setattr(
         ChatPipeline,
         "_market_context_lines",
-        lambda self, symbol: (_ for _ in ()).throw(
+        lambda self, symbols: (_ for _ in ()).throw(
             AssertionError("_market_context_lines should not be called")
         ),
     )
@@ -527,14 +537,6 @@ def test_build_external_context_skips_multi_symbol_scope(
             AssertionError("_news_context_lines should not be called")
         ),
     )
-    monkeypatch.setattr(
-        ChatPipeline,
-        "_market_context_lines_multi",
-        lambda self, symbols: (_ for _ in ()).throw(
-            AssertionError("_market_context_lines_multi should not be called")
-        ),
-    )
-
     context_text, context_meta = pipeline._build_external_context(
         question="How do geopolitics affect neodymium pricing?",
         citations=[],
@@ -592,16 +594,15 @@ def test_build_external_context_uses_multi_symbol_market_lines(
     monkeypatch.setattr(
         ChatPipeline,
         "_market_context_lines",
-        lambda self, symbol: (_ for _ in ()).throw(
-            AssertionError("_market_context_lines should not be called")
-        ),
-    )
-    monkeypatch.setattr(
-        ChatPipeline,
-        "_market_context_lines_multi",
         lambda self, symbols: (
             ["- Benchmark SPY: ...", "- AEM: ...", "- AREC: ..."],
             ["AEM", "AREC"],
+            {
+                "window": "2024-01-01..2024-12-31",
+                "benchmark": "SPY",
+                "symbols": list(symbols),
+                "metrics": [],
+            },
         ),
     )
 
@@ -617,6 +618,79 @@ def test_build_external_context_uses_multi_symbol_market_lines(
         "AREC",
     ]
     assert context_meta["market_context_symbols"] == ["AEM", "AREC"]
+
+
+def test_build_external_context_calls_market_bundle_once_for_multi_symbol(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    config = ChatSettings(
+        email="test@example.com",
+        symbols=["AEM", "AREC"],
+        question="Compare issuer risk signals.",
+        dl_path=tmp_path / "downloads",
+        out_path=tmp_path / "outputs",
+        include_market_context=True,
+        include_news_context=False,
+    )
+    pipeline = ChatPipeline(config=config)
+    citations = pipeline._to_citations(
+        [
+            _RetrievedChunk(
+                collection="retrieve",
+                score=0.9,
+                symbol="AEM",
+                accession_number="A1",
+                form_type="10-K",
+                filed_date="2024-12-31",
+                source=None,
+                snippet="AEM filing snippet.",
+            ),
+            _RetrievedChunk(
+                collection="retrieve",
+                score=0.89,
+                symbol="AREC",
+                accession_number="B1",
+                form_type="10-K",
+                filed_date="2024-12-31",
+                source=None,
+                snippet="AREC filing snippet.",
+            ),
+        ]
+    )
+
+    observed_calls = {"value": 0}
+    observed_symbols: list[str] = []
+
+    def _fake_market_context_lines(self, *, symbols):
+        observed_calls["value"] += 1
+        observed_symbols[:] = list(symbols)
+        return (
+            ["- Benchmark SPY: ...", "- AEM: ...", "- AREC: ..."],
+            ["AEM", "AREC"],
+            {
+                "window": "2024-01-01..2024-12-31",
+                "benchmark": "SPY",
+                "symbols": list(symbols),
+                "metrics": [],
+            },
+        )
+
+    monkeypatch.setattr(
+        ChatPipeline,
+        "_market_context_lines",
+        _fake_market_context_lines,
+    )
+
+    context_text, context_meta = pipeline._build_external_context(
+        question="Compare issuer risk signals.",
+        citations=citations,
+    )
+
+    assert "Market context" in context_text
+    assert observed_calls["value"] == 1
+    assert observed_symbols == ["AEM", "AREC"]
+    assert context_meta["market_context_items"] == 3
 
 
 def test_build_prompt_adds_ticker_disambiguation_rules(tmp_path: Path) -> None:

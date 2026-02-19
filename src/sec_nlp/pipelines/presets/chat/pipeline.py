@@ -31,7 +31,7 @@ from rich.progress import (
 
 from sec_nlp.core.infra.logger import logger
 from sec_nlp.core.infra.rich_console import get_rich_console
-from sec_nlp.core.market import MarketExtensionError, create_market_retriever
+from sec_nlp.core.market_analytics import build_market_context
 from sec_nlp.core.news.client import (
     NewswatchExtensionError,
     create_news_retriever,
@@ -923,17 +923,21 @@ class ChatPipeline(BasePipeline):
                 metadata["market_context_requested_symbols"] = market_symbols
             lines: list[str] = []
             covered_symbols: list[str] = []
-            if len(market_symbols) == 1:
-                lines = self._market_context_lines(symbol=market_symbols[0])
-                if lines:
-                    covered_symbols = market_symbols
-            elif len(market_symbols) > 1:
-                lines, covered_symbols = self._market_context_lines_multi(
-                    symbols=market_symbols
-                )
+            market_context_bundle: dict[str, JsonValue] = {}
+            if market_symbols:
+                (
+                    lines,
+                    covered_symbols,
+                    market_context_bundle,
+                ) = self._market_context_lines(symbols=market_symbols)
             if lines:
                 sections.append("Market context:\n" + "\n".join(lines))
                 metadata["market_context_items"] = len(lines)
+            if market_context_bundle:
+                metadata["market_context_bundle"] = market_context_bundle
+                metadata["market_context_profile"] = (
+                    self.config.market_context_profile
+                )
             if covered_symbols:
                 metadata["market_context_symbols"] = covered_symbols
             if market_symbols:
@@ -971,63 +975,12 @@ class ChatPipeline(BasePipeline):
             return "", metadata
         return "\n\n".join(sections), metadata
 
-    def _market_context_lines(self, *, symbol: str) -> list[str]:
-        end = self._effective_end_date()
-        start = max(
-            self.config.start_date
-            or (end - timedelta(days=self.config.market_lookback_days)),
-            end - timedelta(days=self.config.market_lookback_days),
-        )
-        try:
-            retriever = create_market_retriever()
-            symbol_quotes = retriever.retrieve_range(symbol, (start, end))
-            benchmark_quotes = retriever.retrieve_range(
-                self.config.market_benchmark_symbol,
-                (start, end),
-            )
-        except MarketExtensionError as exc:
-            logger.debug("Market context unavailable: %s", exc)
-            return []
-        except Exception as exc:
-            logger.debug("Market context fetch failed: %s", exc)
-            return []
-
-        if len(symbol_quotes) < 2 or len(benchmark_quotes) < 2:
-            return []
-
-        start_price = symbol_quotes[0].adjclose
-        end_price = symbol_quotes[-1].adjclose
-        benchmark_start = benchmark_quotes[0].adjclose
-        benchmark_end = benchmark_quotes[-1].adjclose
-        if start_price <= 0.0 or benchmark_start <= 0.0:
-            return []
-
-        symbol_return_pct = ((end_price / start_price) - 1.0) * 100.0
-        benchmark_return_pct = ((benchmark_end / benchmark_start) - 1.0) * 100.0
-        spread_pct = symbol_return_pct - benchmark_return_pct
-        highs = [quote.high for quote in symbol_quotes]
-        lows = [quote.low for quote in symbol_quotes]
-        high_price = max(highs)
-        low_price = min(lows)
-        range_pct = (
-            ((high_price - low_price) / low_price * 100.0)
-            if low_price > 0
-            else 0.0
-        )
-
-        return [
-            (
-                f"- {symbol}: {start.isoformat()} to {end.isoformat()} "
-                f"return {symbol_return_pct:+.2f}% (benchmark {self.config.market_benchmark_symbol}: {benchmark_return_pct:+.2f}%, spread {spread_pct:+.2f}%)."
-            ),
-            f"- {symbol}: high/low range {range_pct:.2f}% in lookback window.",
-        ]
-
-    def _market_context_lines_multi(
+    def _market_context_lines(
         self, *, symbols: list[str]
-    ) -> tuple[list[str], list[str]]:
+    ) -> tuple[list[str], list[str], dict[str, JsonValue]]:
         if not symbols:
-            return [], []
+            return [], [], {}
+
         end = self._effective_end_date()
         start = max(
             self.config.start_date
@@ -1035,66 +988,88 @@ class ChatPipeline(BasePipeline):
             end - timedelta(days=self.config.market_lookback_days),
         )
         try:
-            retriever = create_market_retriever()
-            benchmark_quotes = retriever.retrieve_range(
-                self.config.market_benchmark_symbol,
-                (start, end),
+            bundle = build_market_context(
+                symbols=symbols,
+                start_date=start,
+                end_date=end,
+                benchmark=self.config.market_benchmark_symbol,
             )
-        except MarketExtensionError as exc:
-            logger.debug("Market context unavailable: %s", exc)
-            return [], []
         except Exception as exc:
-            logger.debug("Market context fetch failed: %s", exc)
-            return [], []
+            logger.debug("Market context unavailable: %s", exc)
+            return [], [], {}
 
-        if len(benchmark_quotes) < 2:
-            return [], []
-
-        benchmark_start = benchmark_quotes[0].adjclose
-        benchmark_end = benchmark_quotes[-1].adjclose
-        if benchmark_start <= 0.0:
-            return [], []
-        benchmark_return_pct = ((benchmark_end / benchmark_start) - 1.0) * 100.0
-
-        lines: list[str] = [
-            (
-                f"- Benchmark {self.config.market_benchmark_symbol}: {start.isoformat()} "
-                f"to {end.isoformat()} return {benchmark_return_pct:+.2f}%."
-            )
+        bundle_payload = cast(
+            dict[str, JsonValue],
+            bundle.model_dump(mode="json", exclude_none=True),
+        )
+        metrics_by_symbol = {metric.symbol: metric for metric in bundle.metrics}
+        covered_symbols = [
+            symbol for symbol in symbols if symbol in metrics_by_symbol
         ]
-        covered_symbols: list[str] = []
-        for symbol in symbols:
-            try:
-                symbol_quotes = retriever.retrieve_range(symbol, (start, end))
-            except Exception:
-                logger.debug("Market context fetch failed for %s", symbol)
+        if not covered_symbols:
+            return [], [], bundle_payload
+
+        benchmark_return_pct = next(
+            (
+                metric.benchmark_return_pct
+                for metric in bundle.metrics
+                if metric.benchmark_return_pct is not None
+            ),
+            None,
+        )
+
+        lines: list[str] = []
+        if (
+            benchmark_return_pct is not None
+            and self.config.market_context_profile == "standard"
+        ):
+            lines.append(
+                f"- Benchmark {bundle.benchmark}: {bundle.window} return {benchmark_return_pct:+.2f}%."
+            )
+
+        for symbol in covered_symbols:
+            metric = metrics_by_symbol[symbol]
+            return_pct = (
+                f"{metric.return_pct:+.2f}%"
+                if metric.return_pct is not None
+                else "n/a"
+            )
+            spread_pct = (
+                f"{metric.spread_pct:+.2f}%"
+                if metric.spread_pct is not None
+                else "n/a"
+            )
+            beta_value = (
+                f"{metric.beta:.2f}" if metric.beta is not None else "n/a"
+            )
+            if self.config.market_context_profile == "compact":
+                lines.append(
+                    f"- {symbol}: return {return_pct}, spread vs {bundle.benchmark} {spread_pct}, beta {beta_value}."
+                )
                 continue
-            if len(symbol_quotes) < 2:
-                continue
-            start_price = symbol_quotes[0].adjclose
-            end_price = symbol_quotes[-1].adjclose
-            if start_price <= 0.0:
-                continue
-            symbol_return_pct = ((end_price / start_price) - 1.0) * 100.0
-            spread_pct = symbol_return_pct - benchmark_return_pct
-            highs = [quote.high for quote in symbol_quotes]
-            lows = [quote.low for quote in symbol_quotes]
-            high_price = max(highs)
-            low_price = min(lows)
-            range_pct = (
-                ((high_price - low_price) / low_price * 100.0)
-                if low_price > 0
-                else 0.0
+
+            max_drawdown = (
+                f"{metric.max_drawdown:.2f}%"
+                if metric.max_drawdown is not None
+                else "n/a"
             )
             lines.append(
-                f"- {symbol}: return {symbol_return_pct:+.2f}% "
-                f"(spread vs {self.config.market_benchmark_symbol} {spread_pct:+.2f}%, "
-                f"high/low range {range_pct:.2f}%)."
+                f"- {symbol}: return {return_pct} (spread vs {bundle.benchmark} {spread_pct}, beta {beta_value}, max drawdown {max_drawdown})."
             )
-            covered_symbols.append(symbol)
-        if not covered_symbols:
-            return [], []
-        return lines, covered_symbols
+            atr_value = f"{metric.atr:.4f}" if metric.atr is not None else "n/a"
+            std_dev_value = (
+                f"{metric.std_dev:.4f}" if metric.std_dev is not None else "n/a"
+            )
+            volume_spike_value = (
+                f"{metric.volume_spike:.2f}"
+                if metric.volume_spike is not None
+                else "n/a"
+            )
+            lines.append(
+                f"- {symbol}: ATR {atr_value}, return std-dev {std_dev_value}, volume spike {volume_spike_value}, observations {metric.observations}."
+            )
+
+        return lines, covered_symbols, bundle_payload
 
     def _news_context_lines(self, *, symbol: str, question: str) -> list[str]:
         lookback_start = self._effective_end_date() - timedelta(

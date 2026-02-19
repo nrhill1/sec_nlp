@@ -148,6 +148,10 @@ class ChatSettings(BasePipelineSettings):
         default=False,
         description="Attach recent market context (price/volatility) to prompt.",
     )
+    market_context_profile: Literal["compact", "standard"] = Field(
+        default="standard",
+        description="Market context verbosity profile (compact=1 line/symbol, standard=2-3 lines/symbol).",
+    )
     market_context_scope: Literal["auto", "single", "multi"] = Field(
         default="auto",
         description="How market context symbols are selected: single symbol, multi-symbol, or auto mode.",

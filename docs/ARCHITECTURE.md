@@ -6,6 +6,7 @@
 - `src/sec_nlp/cli/` - command models, argument normalization, and command dispatch.
 - `src/sec_nlp/pipelines/base/` - shared pipeline lifecycle, config, validation, and result models.
 - `src/sec_nlp/pipelines/presets/` - production pipeline implementations (`analyze`, `exb`, `warranty`, `financials`, `holdings`, `insider`, `news`, `events`, `retrieve`, `chat`).
+- `src/sec_nlp/pipelines/tools/` - reusable LangChain `StructuredTool` wrappers (`market_context_tool`, `retrieve_hits_tool`, `qdrant_search_tool`, `news_context_tool`).
 - `src/sec_nlp/core/` - EDGAR ingestion, text processing, stats, market/news helpers, and infra services.
 - `src/sec_nlp/pipelines/observability/` - run registry + metrics/profiling.
 - `crates/` - Rust crates (`efts`, `market`, `xbrl`, `corr`, `entity`, `newswatch`).
@@ -65,3 +66,47 @@ outputs/<run_timestamp>/analyze/<SYMBOL>/search/summary.yaml
 - Clear separation between config, execution, and serialization.
 - Fast-path native integrations through Rust extensions.
 - Optional infrastructure dependencies (Qdrant, Docker) instead of mandatory services.
+
+## Tool Wrappers (LangChain)
+
+The wrappers-first tool package exposes deterministic helpers without enabling autonomous tool-calling in `chat`.
+
+- `market_context_tool`: derive market metrics bundle for symbols.
+- `retrieve_hits_tool`: run deterministic EFTS candidate search + ranking.
+- `qdrant_search_tool`: direct semantic query against a Qdrant collection.
+- `news_context_tool`: recent deduped headline retrieval.
+
+Example LCEL composition:
+
+```python
+from langchain_core.runnables import RunnableParallel, RunnableLambda
+from sec_nlp.pipelines.tools import (
+    market_context_tool,
+    qdrant_search_tool,
+)
+
+chain = RunnableParallel(
+    market=RunnableLambda(
+        lambda x: market_context_tool.invoke(
+            {
+                "symbols": x["symbols"],
+                "start_date": x["start_date"],
+                "end_date": x["end_date"],
+                "benchmark": "SPY",
+                "profile": "compact",
+            }
+        )
+    ),
+    filings=RunnableLambda(
+        lambda x: qdrant_search_tool.invoke(
+            {
+                "collection": x["collection"],
+                "query": x["query"],
+                "top_k": 20,
+                "symbols": x["symbols"],
+                "forms": ["10-K", "10-Q", "8-K", "6-K"],
+            }
+        )
+    ),
+)
+```

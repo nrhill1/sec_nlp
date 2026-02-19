@@ -34,9 +34,12 @@ def _point_id(symbol: str, hit: RetrievalHit) -> str:
 
 
 def _payload(
-    symbol: str, hit: RetrievalHit, settings: RetrieveSettings
+    symbol: str,
+    hit: RetrievalHit,
+    settings: RetrieveSettings,
+    market_signals: dict[str, JsonValue] | None = None,
 ) -> dict[str, JsonValue]:
-    return {
+    payload: dict[str, JsonValue] = {
         "symbol": symbol,
         "query": hit.query,
         "accession_number": hit.accession_number,
@@ -53,6 +56,9 @@ def _payload(
         "run_id": str(settings.run_id),
         "run_short_id": settings.short_id_display,
     }
+    if settings.include_market_signals and market_signals:
+        payload["market_signals"] = market_signals
+    return payload
 
 
 def _existing_point_ids(
@@ -84,6 +90,7 @@ def index_retrieval_hits(
     qdrant_client: QdrantClient | None = None,
     embedder: Any | None = None,
     embedding_dim: int | None = None,
+    market_signals: dict[str, JsonValue] | None = None,
 ) -> list[RetrievalHit]:
     """Upsert retrieval hits into Qdrant when indexing is enabled."""
 
@@ -159,7 +166,12 @@ def index_retrieval_hits(
                 PointStruct(
                     id=point_id,
                     vector=list(vector),
-                    payload=_payload(symbol, hit, settings),
+                    payload=_payload(
+                        symbol,
+                        hit,
+                        settings,
+                        market_signals=market_signals,
+                    ),
                 )
             )
 

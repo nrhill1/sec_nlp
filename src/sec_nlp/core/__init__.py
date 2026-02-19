@@ -15,6 +15,11 @@ from .market import (
     MarketRetriever,
     create_market_retriever,
 )
+from .market_analytics import (
+    MarketContextBundle,
+    MarketContextMetric,
+    build_market_context,
+)
 from .news import (
     NewsItem,
     NewsRetriever,
@@ -80,6 +85,9 @@ __all__: tuple[str, ...] = (
     "MarketQuote",
     "MarketRetriever",
     "create_market_retriever",
+    "MarketContextBundle",
+    "MarketContextMetric",
+    "build_market_context",
     # News
     "NewswatchExtensionError",
     "NewsItem",

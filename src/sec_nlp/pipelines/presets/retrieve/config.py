@@ -70,6 +70,10 @@ class RetrieveSettings(BasePipelineSettings):
         default=False,
         description="Upsert retrieved snippets into Qdrant for reuse.",
     )
+    include_market_signals: bool = Field(
+        default=False,
+        description="Attach derived market context metrics to retrieve outputs and indexed payloads.",
+    )
     embedding_cache: bool = Field(
         default=True,
         description="Cache snippet embeddings across runs for rerank/index.",
