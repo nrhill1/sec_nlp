@@ -10,6 +10,7 @@ from email.utils import parsedate_to_datetime
 from pathlib import Path
 from typing import ClassVar, Literal, Protocol, cast
 
+import numpy as np
 from qdrant_client import QdrantClient
 from qdrant_client.http.models import (
     Condition,
@@ -97,6 +98,7 @@ class _RetrievedChunk:
     filed_date: str | None
     source: str | None
     snippet: str
+    vector: list[float] | None = None
 
 
 class _SnippetEmbedder(Protocol):
@@ -162,6 +164,27 @@ class ChatPipeline(BasePipeline):
             **external_metadata,
         }
         return metadata
+
+    def _symbol_coverage_metadata(
+        self,
+        citations: list[ChatCitation],
+    ) -> dict[str, JsonValue]:
+        requested = [
+            symbol.upper() for symbol in self.config.symbols if symbol.strip()
+        ]
+        requested = list(dict.fromkeys(requested))
+        retrieved = [
+            citation.symbol.upper()
+            for citation in citations
+            if citation.symbol and citation.symbol.strip()
+        ]
+        retrieved = list(dict.fromkeys(retrieved))
+        missing = [symbol for symbol in requested if symbol not in retrieved]
+        return {
+            "requested_symbols": requested,
+            "retrieved_symbols": retrieved,
+            "missing_symbols": missing,
+        }
 
     def _update_phase(
         self,
@@ -231,12 +254,21 @@ class ChatPipeline(BasePipeline):
                     "Preparing citations and context",
                 )
                 citations = self._to_citations(chunks)
+                coverage_metadata = self._symbol_coverage_metadata(citations)
                 external_context, external_metadata = (
                     self._build_external_context(
                         question=question,
                         citations=citations,
                     )
                 )
+                external_metadata.update(coverage_metadata)
+                missing_symbols = coverage_metadata.get("missing_symbols")
+                if isinstance(missing_symbols, list) and missing_symbols:
+                    logger.warning(
+                        "No retrieved filing chunks for %d symbols: %s",
+                        len(missing_symbols),
+                        ", ".join(str(symbol) for symbol in missing_symbols),
+                    )
                 progress.advance(overall_task)
 
                 self._update_phase(
@@ -427,7 +459,7 @@ class ChatPipeline(BasePipeline):
                     query_filter=query_filter,
                     limit=query_limit,
                     with_payload=True,
-                    with_vectors=False,
+                    with_vectors=self.config.rerank_mode == "mmr",
                     score_threshold=self.config.min_score,
                 )
                 points = getattr(response, "points", [])
@@ -608,20 +640,22 @@ class ChatPipeline(BasePipeline):
             return False
 
     @staticmethod
-    def _cosine_similarity(vec_a: list[float], vec_b: list[float]) -> float:
-        if not vec_a or not vec_b or len(vec_a) != len(vec_b):
-            return 0.0
-
-        dot = 0.0
-        norm_a = 0.0
-        norm_b = 0.0
-        for a, b in zip(vec_a, vec_b, strict=False):
-            dot += a * b
-            norm_a += a * a
-            norm_b += b * b
-        if norm_a <= 0.0 or norm_b <= 0.0:
-            return 0.0
-        return dot / ((norm_a**0.5) * (norm_b**0.5))
+    def _coerce_vector(
+        values: list[float] | tuple[float, ...] | None,
+        *,
+        expected_dim: int | None = None,
+    ) -> np.ndarray | None:
+        if values is None:
+            return None
+        vector = np.asarray(values, dtype=np.float32)
+        if vector.ndim != 1 or vector.size == 0:
+            return None
+        if expected_dim is not None and vector.size != expected_dim:
+            return None
+        norm = float(np.linalg.norm(vector))
+        if norm <= 0.0:
+            return None
+        return vector / norm
 
     def _rerank_chunks_mmr(
         self,
@@ -634,27 +668,49 @@ class ChatPipeline(BasePipeline):
             return chunks
 
         candidates = chunks[: self.config.rerank_candidates]
-        snippets = [chunk.snippet for chunk in candidates]
-        try:
-            raw_vectors = embedder.embed_documents(snippets)
-        except Exception as exc:
-            logger.debug("MMR rerank skipped (embedding failure): %s", exc)
+        query_unit = self._coerce_vector(query_vector)
+        if query_unit is None:
             return chunks
 
-        vectors: list[list[float]] = []
-        for raw in raw_vectors:
-            if isinstance(raw, list):
-                vectors.append(
-                    [
-                        float(value)
-                        for value in raw
-                        if isinstance(value, (int, float))
-                    ]
+        vectors: list[np.ndarray | None] = []
+        missing_indices: list[int] = []
+        for idx, chunk in enumerate(candidates):
+            coerced = self._coerce_vector(
+                chunk.vector,
+                expected_dim=query_unit.size,
+            )
+            vectors.append(coerced)
+            if coerced is None:
+                missing_indices.append(idx)
+
+        if missing_indices:
+            snippets = [candidates[idx].snippet for idx in missing_indices]
+            try:
+                raw_vectors = embedder.embed_documents(snippets)
+            except Exception as exc:
+                logger.debug("MMR rerank skipped (embedding failure): %s", exc)
+                return chunks
+
+            if len(raw_vectors) != len(missing_indices):
+                return chunks
+            for idx, raw in zip(missing_indices, raw_vectors, strict=False):
+                if not isinstance(raw, list):
+                    return chunks
+                numeric = [
+                    float(value)
+                    for value in raw
+                    if isinstance(value, (int, float))
+                ]
+                coerced = self._coerce_vector(
+                    numeric, expected_dim=query_unit.size
                 )
-            else:
-                vectors.append([])
-        if len(vectors) != len(candidates):
+                if coerced is None:
+                    return chunks
+                vectors[idx] = coerced
+
+        if any(vector is None for vector in vectors):
             return chunks
+        matrix = np.vstack(cast(list[np.ndarray], vectors))
 
         selected_indices: list[int] = []
         remaining = list(range(len(candidates)))
@@ -663,13 +719,12 @@ class ChatPipeline(BasePipeline):
             best_idx = remaining[0]
             best_score = float("-inf")
             for idx in remaining:
-                relevance = self._cosine_similarity(query_vector, vectors[idx])
+                relevance = float(np.dot(matrix[idx], query_unit))
                 diversity = 0.0
                 if selected_indices:
-                    diversity = max(
-                        self._cosine_similarity(vectors[idx], vectors[chosen])
-                        for chosen in selected_indices
-                    )
+                    selected_matrix = matrix[selected_indices]
+                    similarities = selected_matrix @ matrix[idx]
+                    diversity = float(np.max(similarities))
                 mmr_score = (
                     self.config.rerank_lambda * relevance
                     - (1.0 - self.config.rerank_lambda) * diversity
@@ -791,15 +846,42 @@ class ChatPipeline(BasePipeline):
             return citations[0].symbol.upper()
         return None
 
+    def _external_context_symbol(
+        self,
+        citations: list[ChatCitation],
+    ) -> str | None:
+        configured = [
+            symbol.upper() for symbol in self.config.symbols if symbol.strip()
+        ]
+        unique_configured = list(dict.fromkeys(configured))
+        if len(unique_configured) == 1:
+            return unique_configured[0]
+        if len(unique_configured) > 1:
+            return None
+        if citations and citations[0].symbol:
+            return citations[0].symbol.upper()
+        return None
+
     def _build_external_context(
         self,
         *,
         question: str,
         citations: list[ChatCitation],
     ) -> tuple[str, dict[str, JsonValue]]:
-        symbol = self._context_symbol(citations)
+        symbol_scope = [
+            symbol.upper() for symbol in self.config.symbols if symbol.strip()
+        ]
+        symbol = self._external_context_symbol(citations)
         if not symbol:
-            return "", {"market_context_items": 0, "news_context_items": 0}
+            metadata: dict[str, JsonValue] = {
+                "market_context_items": 0,
+                "news_context_items": 0,
+            }
+            if symbol_scope:
+                metadata["symbol_scope"] = symbol_scope
+                if len(set(symbol_scope)) > 1:
+                    metadata["external_context_skipped"] = "multiple_symbols"
+            return "", metadata
 
         sections: list[str] = []
         metadata: dict[str, JsonValue] = {
@@ -807,6 +889,8 @@ class ChatPipeline(BasePipeline):
             "news_context_items": 0,
             "external_context_symbol": symbol,
         }
+        if symbol_scope:
+            metadata["symbol_scope"] = symbol_scope
 
         if self.config.include_market_context:
             lines = self._market_context_lines(symbol=symbol)
@@ -978,6 +1062,7 @@ class ChatPipeline(BasePipeline):
             metadata_dict,
             keys=("source", "edgar_url"),
         )
+        vector = self._extract_point_vector(point)
 
         return _RetrievedChunk(
             collection=collection,
@@ -988,6 +1073,7 @@ class ChatPipeline(BasePipeline):
             filed_date=filed_date,
             source=source,
             snippet=snippet,
+            vector=vector,
         )
 
     @staticmethod
@@ -1031,6 +1117,30 @@ class ChatPipeline(BasePipeline):
         if len(snippet) > 700:
             snippet = snippet[:697].rstrip() + "..."
         return snippet
+
+    @staticmethod
+    def _extract_point_vector(point: object) -> list[float] | None:
+        candidate = getattr(point, "vector", None)
+        if candidate is None:
+            candidate = getattr(point, "vectors", None)
+
+        if isinstance(candidate, dict):
+            # Named vectors are stored as mapping[name, vector]; use first vector.
+            for value in candidate.values():
+                if isinstance(value, list):
+                    candidate = value
+                    break
+            else:
+                return None
+
+        if not isinstance(candidate, list):
+            return None
+        numeric = [
+            float(value)
+            for value in candidate
+            if isinstance(value, (int, float))
+        ]
+        return numeric or None
 
     def _to_citations(
         self, chunks: list[_RetrievedChunk]
@@ -1102,6 +1212,37 @@ class ChatPipeline(BasePipeline):
         citations: list[ChatCitation],
         external_context: str = "",
     ) -> str:
+        symbol_scope = [
+            symbol.upper() for symbol in self.config.symbols if symbol.strip()
+        ]
+        if not symbol_scope:
+            symbol_scope = [
+                citation.symbol.upper()
+                for citation in citations
+                if citation.symbol and citation.symbol.strip()
+            ]
+        symbol_scope = list(dict.fromkeys(symbol_scope))
+        symbol_scope_line = (
+            ", ".join(symbol_scope) if symbol_scope else "(unspecified)"
+        )
+        covered_symbols = [
+            citation.symbol.upper()
+            for citation in citations
+            if citation.symbol and citation.symbol.strip()
+        ]
+        covered_symbols = list(dict.fromkeys(covered_symbols))
+        missing_scope_symbols = [
+            symbol for symbol in symbol_scope if symbol not in covered_symbols
+        ]
+        covered_line = (
+            ", ".join(covered_symbols) if covered_symbols else "(none)"
+        )
+        missing_line = (
+            ", ".join(missing_scope_symbols)
+            if missing_scope_symbols
+            else "(none)"
+        )
+
         history_lines: list[str] = []
         if self.config.include_history and self.config.chat_history:
             keep = self.config.history_turns
@@ -1140,7 +1281,13 @@ class ChatPipeline(BasePipeline):
             "You are a financial filings assistant.\n"
             "Use only the provided context.\n"
             "If context is insufficient, say so directly.\n"
+            "Treat each ticker symbol as a distinct issuer.\n"
+            "Never claim two different tickers are the same entity unless a cited chunk explicitly states a ticker change, rename, or merger.\n"
             "Every factual claim must include citation IDs in [C#] form.\n\n"
+            f"Ticker scope:\n{symbol_scope_line}\n\n"
+            f"Symbols with retrieved filing evidence:\n{covered_line}\n\n"
+            f"Symbols without retrieved filing evidence:\n{missing_line}\n\n"
+            "Do not generalize claims to symbols without retrieved filing evidence.\n\n"
             f"Conversation history:\n{history_block}\n\n"
             f"Question:\n{question}\n\n"
             f"Context chunks:\n{context_block}\n\n"

@@ -397,6 +397,70 @@ def test_rerank_chunks_mmr_prefers_diversity(tmp_path: Path) -> None:
     assert reranked[1].snippet == "chunk c"
 
 
+def test_rerank_chunks_mmr_uses_stored_vectors_without_reembedding(
+    tmp_path: Path,
+) -> None:
+    config = ChatSettings(
+        email="test@example.com",
+        symbols=["NAMM"],
+        question="What changed?",
+        dl_path=tmp_path / "downloads",
+        out_path=tmp_path / "outputs",
+        rerank_mode="mmr",
+        rerank_lambda=0.25,
+        rerank_candidates=4,
+        top_k=2,
+    )
+    chunks = [
+        _RetrievedChunk(
+            collection="retrieve",
+            score=0.95,
+            symbol="NAMM",
+            accession_number="A1",
+            form_type="6-K",
+            filed_date="2024-06-01",
+            source=None,
+            snippet="chunk a",
+            vector=[1.0, 0.0],
+        ),
+        _RetrievedChunk(
+            collection="retrieve",
+            score=0.94,
+            symbol="NAMM",
+            accession_number="A2",
+            form_type="6-K",
+            filed_date="2024-06-01",
+            source=None,
+            snippet="chunk b",
+            vector=[0.99, 0.01],
+        ),
+        _RetrievedChunk(
+            collection="retrieve",
+            score=0.90,
+            symbol="NAMM",
+            accession_number="A3",
+            form_type="6-K",
+            filed_date="2024-06-01",
+            source=None,
+            snippet="chunk c",
+            vector=[0.6, 0.8],
+        ),
+    ]
+
+    class _FailEmbedder:
+        def embed_documents(self, texts: list[str]) -> list[list[float]]:
+            raise AssertionError("embed_documents should not be called")
+
+    reranked = ChatPipeline(config=config)._rerank_chunks_mmr(
+        chunks=chunks,
+        query_vector=[1.0, 0.0],
+        embedder=_FailEmbedder(),
+    )
+
+    assert reranked[0].snippet == "chunk a"
+    assert reranked[1].snippet == "chunk c"
+
+
 def test_build_external_context_uses_market_and_news(
     tmp_path: Path,
     monkeypatch,
@@ -432,6 +496,135 @@ def test_build_external_context_uses_market_and_news(
     assert "News/geopolitics context" in context_text
     assert context_meta["market_context_items"] == 1
     assert context_meta["news_context_items"] == 1
+
+
+def test_build_external_context_skips_multi_symbol_scope(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    config = ChatSettings(
+        email="test@example.com",
+        symbols=["AEM", "AREC"],
+        question="How do geopolitics affect neodymium pricing?",
+        dl_path=tmp_path / "downloads",
+        out_path=tmp_path / "outputs",
+        include_market_context=True,
+        include_news_context=True,
+    )
+    pipeline = ChatPipeline(config=config)
+
+    monkeypatch.setattr(
+        ChatPipeline,
+        "_market_context_lines",
+        lambda self, symbol: (_ for _ in ()).throw(
+            AssertionError("_market_context_lines should not be called")
+        ),
+    )
+    monkeypatch.setattr(
+        ChatPipeline,
+        "_news_context_lines",
+        lambda self, symbol, question: (_ for _ in ()).throw(
+            AssertionError("_news_context_lines should not be called")
+        ),
+    )
+
+    context_text, context_meta = pipeline._build_external_context(
+        question="How do geopolitics affect neodymium pricing?",
+        citations=[],
+    )
+
+    assert context_text == ""
+    assert context_meta["market_context_items"] == 0
+    assert context_meta["news_context_items"] == 0
+    assert context_meta["external_context_skipped"] == "multiple_symbols"
+    assert context_meta["symbol_scope"] == ["AEM", "AREC"]
+
+
+def test_build_prompt_adds_ticker_disambiguation_rules(tmp_path: Path) -> None:
+    config = ChatSettings(
+        email="test@example.com",
+        symbols=["AEM", "AREC"],
+        question="Compare issuer risk signals.",
+        dl_path=tmp_path / "downloads",
+        out_path=tmp_path / "outputs",
+    )
+    pipeline = ChatPipeline(config=config)
+    chunks = [
+        _RetrievedChunk(
+            collection="retrieve",
+            score=0.9,
+            symbol="AEM",
+            accession_number="A1",
+            form_type="10-K",
+            filed_date="2024-12-31",
+            source=None,
+            snippet="AEM filing snippet.",
+        ),
+        _RetrievedChunk(
+            collection="retrieve",
+            score=0.89,
+            symbol="AREC",
+            accession_number="B1",
+            form_type="10-K",
+            filed_date="2024-12-31",
+            source=None,
+            snippet="AREC filing snippet.",
+        ),
+    ]
+    citations = pipeline._to_citations(chunks)
+
+    prompt = pipeline._build_prompt(
+        question="Compare issuer risk signals.",
+        citations=citations,
+        external_context="",
+    )
+
+    assert "Treat each ticker symbol as a distinct issuer." in prompt
+    assert "Never claim two different tickers are the same entity" in prompt
+    assert "Ticker scope:\nAEM, AREC" in prompt
+    assert "Symbols with retrieved filing evidence:\nAEM, AREC" in prompt
+    assert "Symbols without retrieved filing evidence:\n(none)" in prompt
+
+
+def test_symbol_coverage_metadata_tracks_missing_symbols(
+    tmp_path: Path,
+) -> None:
+    config = ChatSettings(
+        email="test@example.com",
+        symbols=["AEM", "AREC", "ALB"],
+        question="Compare issuer risk signals.",
+        dl_path=tmp_path / "downloads",
+        out_path=tmp_path / "outputs",
+    )
+    pipeline = ChatPipeline(config=config)
+    chunks = [
+        _RetrievedChunk(
+            collection="retrieve",
+            score=0.9,
+            symbol="AEM",
+            accession_number="A1",
+            form_type="10-K",
+            filed_date="2024-12-31",
+            source=None,
+            snippet="AEM filing snippet.",
+        ),
+        _RetrievedChunk(
+            collection="retrieve",
+            score=0.89,
+            symbol="ALB",
+            accession_number="B1",
+            form_type="10-K",
+            filed_date="2024-12-31",
+            source=None,
+            snippet="ALB filing snippet.",
+        ),
+    ]
+    citations = pipeline._to_citations(chunks)
+    metadata = pipeline._symbol_coverage_metadata(citations)
+
+    assert metadata["requested_symbols"] == ["AEM", "AREC", "ALB"]
+    assert metadata["retrieved_symbols"] == ["AEM", "ALB"]
+    assert metadata["missing_symbols"] == ["AREC"]
 
 
 def test_chat_pipeline_run_requires_question(tmp_path: Path) -> None:
