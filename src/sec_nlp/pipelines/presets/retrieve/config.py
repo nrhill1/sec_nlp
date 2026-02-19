@@ -134,22 +134,38 @@ class RetrieveSettings(BasePipelineSettings):
             return []
         if isinstance(value, (int, float)):
             value = [str(value)]
+
+        raw_values: list[str] = []
         if isinstance(value, str):
-            value = [part.strip() for part in value.split("||") if part.strip()]
+            raw_values = [value]
+        else:
+            for raw in value:
+                if isinstance(raw, bool) or raw is None:
+                    continue
+                cleaned_raw = str(raw).strip()
+                if not cleaned_raw:
+                    continue
+                raw_values.append(cleaned_raw)
+
+        # pydantic-settings can split a single comma-containing CLI token into
+        # multiple list entries before this validator runs. If at least one part
+        # still contains our explicit query delimiter, rejoin and then split only
+        # on "||" so punctuation commas are preserved in the final query text.
+        if len(raw_values) > 1 and any("||" in part for part in raw_values):
+            raw_values = [", ".join(raw_values)]
 
         normalized: list[str] = []
         seen: set[str] = set()
-        for raw in value:
-            if isinstance(raw, bool) or raw is None:
-                continue
-            cleaned = str(raw).strip()
-            if not cleaned:
-                continue
-            key = cleaned.casefold()
-            if key in seen:
-                continue
-            seen.add(key)
-            normalized.append(cleaned)
+        for raw in raw_values:
+            for part in raw.split("||"):
+                cleaned = part.strip()
+                if not cleaned:
+                    continue
+                key = cleaned.casefold()
+                if key in seen:
+                    continue
+                seen.add(key)
+                normalized.append(cleaned)
         return normalized
 
     @field_validator("sections", mode="before")

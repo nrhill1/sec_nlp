@@ -199,6 +199,42 @@ def test_mode_for_form_maps_6_k_to_current() -> None:
     )
 
 
+def test_retrieve_settings_rejoins_comma_split_pipe_queries(
+    tmp_path: Path,
+) -> None:
+    settings = RetrieveSettings(
+        email="test@example.com",
+        symbols=["ABC"],
+        queries=[
+            "Australian rare-earth supplier concentration and magnet-chain exposure||South China Sea shipping/security disruption risk to NdPr feedstock and REO flows||Export controls and tariff changes impacting REM pricing power",
+            "margin risk",
+            "and capex timing",
+        ],
+        dl_path=tmp_path / "downloads",
+        out_path=tmp_path / "outputs",
+    )
+
+    assert settings.queries == [
+        "Australian rare-earth supplier concentration and magnet-chain exposure",
+        "South China Sea shipping/security disruption risk to NdPr feedstock and REO flows",
+        "Export controls and tariff changes impacting REM pricing power, margin risk, and capex timing",
+    ]
+
+
+def test_retrieve_settings_keeps_explicit_query_list_without_pipes(
+    tmp_path: Path,
+) -> None:
+    settings = RetrieveSettings(
+        email="test@example.com",
+        symbols=["ABC"],
+        queries=["alpha query", "beta query"],
+        dl_path=tmp_path / "downloads",
+        out_path=tmp_path / "outputs",
+    )
+
+    assert settings.queries == ["alpha query", "beta query"]
+
+
 def test_candidate_search_filters_cross_symbol_hits() -> None:
     hits = [
         EFTSHit(

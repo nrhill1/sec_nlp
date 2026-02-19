@@ -2,13 +2,16 @@
 
 from __future__ import annotations
 
+import logging
 import sys
 from datetime import date
 from pathlib import Path
 from unittest.mock import Mock, patch
 
+import pytest
+
 from sec_nlp.cli.commands.chat import Chat
-from sec_nlp.pipelines.presets.chat import ChatSettings
+from sec_nlp.pipelines.presets.chat import ChatResult, ChatSettings
 
 
 def test_chat_inherits_from_chat_settings() -> None:
@@ -189,3 +192,36 @@ def test_chat_cli_llm_override_preserves_pipeline_defaults(
     assert config.llm.model_name == "ministral-3:3b"
     assert config.llm.require_json is False
     assert config.llm.temperature == 0.1
+
+
+def test_chat_handle_result_logs_question_before_answer(
+    tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    dl_path = tmp_path / "downloads"
+    out_path = tmp_path / "outputs"
+    dl_path.mkdir()
+    out_path.mkdir()
+
+    cmd = Chat(
+        email="test@example.com",
+        dl_path=dl_path,
+        out_path=out_path,
+        symbols=["CDE"],
+        question="What changed in liquidity risk?",
+    )
+    result = ChatResult(
+        success=True,
+        answer="Liquidity risk increased.",
+        citation_ids=["C1"],
+    )
+
+    caplog.set_level(logging.INFO, logger="sec_nlp")
+    cmd._handle_result(result)
+
+    question_pos = caplog.text.find("Question:")
+    answer_pos = caplog.text.find("Answer:")
+    assert question_pos != -1
+    assert answer_pos != -1
+    assert question_pos < answer_pos
+    assert "What changed in liquidity risk?" in caplog.text

@@ -153,6 +153,11 @@ class Chat(ChatSettings, BasePipelineCommand):
             logger.error(color_text("Chat failed", color="red"))
             return
 
+        question = (self.question or "").strip()
+        if question:
+            logger.info(color_text("Question:", color="cyan"))
+            logger.info(question)
+
         if result.answer is not None:
             logger.info(color_text("Answer:", color="green"))
             logger.info(result.answer)
