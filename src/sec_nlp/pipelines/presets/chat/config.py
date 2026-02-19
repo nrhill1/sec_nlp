@@ -148,6 +148,16 @@ class ChatSettings(BasePipelineSettings):
         default=False,
         description="Attach recent market context (price/volatility) to prompt.",
     )
+    market_context_scope: Literal["auto", "single", "multi"] = Field(
+        default="auto",
+        description="How market context symbols are selected: single symbol, multi-symbol, or auto mode.",
+    )
+    market_context_max_symbols: int = Field(
+        default=8,
+        ge=1,
+        le=50,
+        description="Maximum symbols included when market context scope resolves to multi-symbol mode.",
+    )
     include_news_context: bool = Field(
         default=False,
         description="Attach recent news/geopolitical headlines to prompt.",

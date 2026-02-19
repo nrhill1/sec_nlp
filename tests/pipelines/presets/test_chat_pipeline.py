@@ -527,6 +527,13 @@ def test_build_external_context_skips_multi_symbol_scope(
             AssertionError("_news_context_lines should not be called")
         ),
     )
+    monkeypatch.setattr(
+        ChatPipeline,
+        "_market_context_lines_multi",
+        lambda self, symbols: (_ for _ in ()).throw(
+            AssertionError("_market_context_lines_multi should not be called")
+        ),
+    )
 
     context_text, context_meta = pipeline._build_external_context(
         question="How do geopolitics affect neodymium pricing?",
@@ -536,8 +543,80 @@ def test_build_external_context_skips_multi_symbol_scope(
     assert context_text == ""
     assert context_meta["market_context_items"] == 0
     assert context_meta["news_context_items"] == 0
-    assert context_meta["external_context_skipped"] == "multiple_symbols"
+    assert (
+        context_meta["market_context_skipped"]
+        == "no_retrieved_symbols_for_multi_scope"
+    )
+    assert context_meta["news_context_skipped"] == "multiple_symbols"
     assert context_meta["symbol_scope"] == ["AEM", "AREC"]
+
+
+def test_build_external_context_uses_multi_symbol_market_lines(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    config = ChatSettings(
+        email="test@example.com",
+        symbols=["AEM", "AREC"],
+        question="How do geopolitics affect neodymium pricing?",
+        dl_path=tmp_path / "downloads",
+        out_path=tmp_path / "outputs",
+        include_market_context=True,
+        include_news_context=False,
+    )
+    pipeline = ChatPipeline(config=config)
+    chunks = [
+        _RetrievedChunk(
+            collection="retrieve",
+            score=0.9,
+            symbol="AEM",
+            accession_number="A1",
+            form_type="10-K",
+            filed_date="2024-12-31",
+            source=None,
+            snippet="AEM filing snippet.",
+        ),
+        _RetrievedChunk(
+            collection="retrieve",
+            score=0.89,
+            symbol="AREC",
+            accession_number="B1",
+            form_type="10-K",
+            filed_date="2024-12-31",
+            source=None,
+            snippet="AREC filing snippet.",
+        ),
+    ]
+    citations = pipeline._to_citations(chunks)
+
+    monkeypatch.setattr(
+        ChatPipeline,
+        "_market_context_lines",
+        lambda self, symbol: (_ for _ in ()).throw(
+            AssertionError("_market_context_lines should not be called")
+        ),
+    )
+    monkeypatch.setattr(
+        ChatPipeline,
+        "_market_context_lines_multi",
+        lambda self, symbols: (
+            ["- Benchmark SPY: ...", "- AEM: ...", "- AREC: ..."],
+            ["AEM", "AREC"],
+        ),
+    )
+
+    context_text, context_meta = pipeline._build_external_context(
+        question="How do geopolitics affect neodymium pricing?",
+        citations=citations,
+    )
+
+    assert "Market context" in context_text
+    assert context_meta["market_context_items"] == 3
+    assert context_meta["market_context_requested_symbols"] == [
+        "AEM",
+        "AREC",
+    ]
+    assert context_meta["market_context_symbols"] == ["AEM", "AREC"]
 
 
 def test_build_prompt_adds_ticker_disambiguation_rules(tmp_path: Path) -> None:

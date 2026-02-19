@@ -862,6 +862,43 @@ class ChatPipeline(BasePipeline):
             return citations[0].symbol.upper()
         return None
 
+    @staticmethod
+    def _citation_symbols(citations: list[ChatCitation]) -> list[str]:
+        symbols = [
+            citation.symbol.upper()
+            for citation in citations
+            if citation.symbol and citation.symbol.strip()
+        ]
+        return list(dict.fromkeys(symbols))
+
+    def _resolve_market_context_symbols(
+        self,
+        citations: list[ChatCitation],
+    ) -> list[str]:
+        symbol_scope = [
+            symbol.upper() for symbol in self.config.symbols if symbol.strip()
+        ]
+        symbol_scope = list(dict.fromkeys(symbol_scope))
+        citation_symbols = self._citation_symbols(citations)
+        max_symbols = self.config.market_context_max_symbols
+
+        if self.config.market_context_scope == "single":
+            symbol = self._external_context_symbol(citations)
+            return [symbol] if symbol else []
+
+        if self.config.market_context_scope == "multi":
+            if citation_symbols:
+                return citation_symbols[:max_symbols]
+            return symbol_scope[:max_symbols]
+
+        # auto mode
+        if len(symbol_scope) <= 1:
+            symbol = self._external_context_symbol(citations)
+            return [symbol] if symbol else []
+        if citation_symbols:
+            return citation_symbols[:max_symbols]
+        return []
+
     def _build_external_context(
         self,
         *,
@@ -871,40 +908,64 @@ class ChatPipeline(BasePipeline):
         symbol_scope = [
             symbol.upper() for symbol in self.config.symbols if symbol.strip()
         ]
-        symbol = self._external_context_symbol(citations)
-        if not symbol:
-            metadata: dict[str, JsonValue] = {
-                "market_context_items": 0,
-                "news_context_items": 0,
-            }
-            if symbol_scope:
-                metadata["symbol_scope"] = symbol_scope
-                if len(set(symbol_scope)) > 1:
-                    metadata["external_context_skipped"] = "multiple_symbols"
-            return "", metadata
 
         sections: list[str] = []
         metadata: dict[str, JsonValue] = {
             "market_context_items": 0,
             "news_context_items": 0,
-            "external_context_symbol": symbol,
         }
         if symbol_scope:
             metadata["symbol_scope"] = symbol_scope
 
         if self.config.include_market_context:
-            lines = self._market_context_lines(symbol=symbol)
+            market_symbols = self._resolve_market_context_symbols(citations)
+            if market_symbols:
+                metadata["market_context_requested_symbols"] = market_symbols
+            lines: list[str] = []
+            covered_symbols: list[str] = []
+            if len(market_symbols) == 1:
+                lines = self._market_context_lines(symbol=market_symbols[0])
+                if lines:
+                    covered_symbols = market_symbols
+            elif len(market_symbols) > 1:
+                lines, covered_symbols = self._market_context_lines_multi(
+                    symbols=market_symbols
+                )
             if lines:
                 sections.append("Market context:\n" + "\n".join(lines))
                 metadata["market_context_items"] = len(lines)
+            if covered_symbols:
+                metadata["market_context_symbols"] = covered_symbols
+            if market_symbols:
+                missing_symbols = [
+                    symbol
+                    for symbol in market_symbols
+                    if symbol not in covered_symbols
+                ]
+                if missing_symbols:
+                    metadata["market_context_missing_symbols"] = missing_symbols
+            elif (
+                self.config.market_context_scope != "single"
+                and len(symbol_scope) > 1
+            ):
+                metadata["market_context_skipped"] = (
+                    "no_retrieved_symbols_for_multi_scope"
+                )
 
         if self.config.include_news_context:
-            lines = self._news_context_lines(symbol=symbol, question=question)
-            if lines:
-                sections.append(
-                    "News/geopolitics context:\n" + "\n".join(lines)
+            symbol = self._external_context_symbol(citations)
+            if symbol:
+                metadata["external_context_symbol"] = symbol
+                lines = self._news_context_lines(
+                    symbol=symbol, question=question
                 )
-                metadata["news_context_items"] = len(lines)
+                if lines:
+                    sections.append(
+                        "News/geopolitics context:\n" + "\n".join(lines)
+                    )
+                    metadata["news_context_items"] = len(lines)
+            elif len(symbol_scope) > 1:
+                metadata["news_context_skipped"] = "multiple_symbols"
 
         if not sections:
             return "", metadata
@@ -961,6 +1022,79 @@ class ChatPipeline(BasePipeline):
             ),
             f"- {symbol}: high/low range {range_pct:.2f}% in lookback window.",
         ]
+
+    def _market_context_lines_multi(
+        self, *, symbols: list[str]
+    ) -> tuple[list[str], list[str]]:
+        if not symbols:
+            return [], []
+        end = self._effective_end_date()
+        start = max(
+            self.config.start_date
+            or (end - timedelta(days=self.config.market_lookback_days)),
+            end - timedelta(days=self.config.market_lookback_days),
+        )
+        try:
+            retriever = create_market_retriever()
+            benchmark_quotes = retriever.retrieve_range(
+                self.config.market_benchmark_symbol,
+                (start, end),
+            )
+        except MarketExtensionError as exc:
+            logger.debug("Market context unavailable: %s", exc)
+            return [], []
+        except Exception as exc:
+            logger.debug("Market context fetch failed: %s", exc)
+            return [], []
+
+        if len(benchmark_quotes) < 2:
+            return [], []
+
+        benchmark_start = benchmark_quotes[0].adjclose
+        benchmark_end = benchmark_quotes[-1].adjclose
+        if benchmark_start <= 0.0:
+            return [], []
+        benchmark_return_pct = ((benchmark_end / benchmark_start) - 1.0) * 100.0
+
+        lines: list[str] = [
+            (
+                f"- Benchmark {self.config.market_benchmark_symbol}: {start.isoformat()} "
+                f"to {end.isoformat()} return {benchmark_return_pct:+.2f}%."
+            )
+        ]
+        covered_symbols: list[str] = []
+        for symbol in symbols:
+            try:
+                symbol_quotes = retriever.retrieve_range(symbol, (start, end))
+            except Exception:
+                logger.debug("Market context fetch failed for %s", symbol)
+                continue
+            if len(symbol_quotes) < 2:
+                continue
+            start_price = symbol_quotes[0].adjclose
+            end_price = symbol_quotes[-1].adjclose
+            if start_price <= 0.0:
+                continue
+            symbol_return_pct = ((end_price / start_price) - 1.0) * 100.0
+            spread_pct = symbol_return_pct - benchmark_return_pct
+            highs = [quote.high for quote in symbol_quotes]
+            lows = [quote.low for quote in symbol_quotes]
+            high_price = max(highs)
+            low_price = min(lows)
+            range_pct = (
+                ((high_price - low_price) / low_price * 100.0)
+                if low_price > 0
+                else 0.0
+            )
+            lines.append(
+                f"- {symbol}: return {symbol_return_pct:+.2f}% "
+                f"(spread vs {self.config.market_benchmark_symbol} {spread_pct:+.2f}%, "
+                f"high/low range {range_pct:.2f}%)."
+            )
+            covered_symbols.append(symbol)
+        if not covered_symbols:
+            return [], []
+        return lines, covered_symbols
 
     def _news_context_lines(self, *, symbol: str, question: str) -> list[str]:
         lookback_start = self._effective_end_date() - timedelta(
