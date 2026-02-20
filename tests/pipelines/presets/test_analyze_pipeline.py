@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import ClassVar, Literal, cast
+from typing import ClassVar, Literal
 from unittest.mock import Mock
 
 from langchain_core.documents import Document
@@ -381,7 +381,9 @@ def test_run_search_and_analysis_skips_llm_when_search_analyze_disabled(
     )
     pipe = _TestAnalyzePipeline(config=config)
     pipe._vector_store = Mock()
-    search_runner = cast(Mock, pipe._search_runner)
+    search_runner_raw = pipe._search_runner
+    assert isinstance(search_runner_raw, Mock)
+    search_runner = search_runner_raw
     search_runner.metadata_filters = {"symbol": ["AAPL"]}
     sample_docs = [
         Document(

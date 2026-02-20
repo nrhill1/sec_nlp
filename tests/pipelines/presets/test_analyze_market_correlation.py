@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from datetime import date
-from typing import cast
 
 from sec_nlp.pipelines.presets.analyze.io.formats import (
     market_correlation as formatter,
@@ -162,7 +161,15 @@ def test_build_market_correlation_uses_stats_wrapper(
     assert isinstance(payload, dict)
     metrics_raw = payload["metrics"]
     assert isinstance(metrics_raw, dict)
-    metrics = cast(dict[str, float | None], metrics_raw)
+    metrics: dict[str, float | None] = {}
+    for key, value in metrics_raw.items():
+        if not isinstance(key, str):
+            continue
+        if value is None:
+            metrics[key] = None
+            continue
+        if isinstance(value, (int, float)):
+            metrics[key] = float(value)
     assert metrics["car_pre5"] == 0.11
     assert metrics["car_post5"] == 0.22
     assert metrics["car_post30"] == 0.33
@@ -171,7 +178,15 @@ def test_build_market_correlation_uses_stats_wrapper(
 
     signal_raw = payload["signal_correlations"]
     assert isinstance(signal_raw, dict)
-    signal = cast(dict[str, float | None], signal_raw)
+    signal: dict[str, float | None] = {}
+    for key, value in signal_raw.items():
+        if not isinstance(key, str):
+            continue
+        if value is None:
+            signal[key] = None
+            continue
+        if isinstance(value, (int, float)):
+            signal[key] = float(value)
     assert signal["sentiment_score"] == 0.0
 
     assert len(calls["cumulative"]) == 3
@@ -203,7 +218,15 @@ def test_build_market_correlation_falls_back_without_extension(
     assert isinstance(payload, dict)
     metrics_raw = payload["metrics"]
     assert isinstance(metrics_raw, dict)
-    metrics = cast(dict[str, float | None], metrics_raw)
+    metrics: dict[str, float | None] = {}
+    for key, value in metrics_raw.items():
+        if not isinstance(key, str):
+            continue
+        if value is None:
+            metrics[key] = None
+            continue
+        if isinstance(value, (int, float)):
+            metrics[key] = float(value)
     assert metrics["car_pre5"] == 0.01
     assert metrics["car_post5"] == 0.03
     assert metrics["car_post30"] == 0.05

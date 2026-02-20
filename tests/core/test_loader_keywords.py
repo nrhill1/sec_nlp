@@ -2,13 +2,16 @@
 """Test keyword filtering optimizations."""
 
 from pathlib import Path
-from typing import cast
 
 import pytest
 from unstructured.documents.elements import Element, Text
 
 from sec_nlp.core.ingest.loader import Loader
 from tests.utils.typing import Benchmark
+
+
+def _elements(values: list[str]) -> list[Element]:
+    return [Text(value) for value in values]
 
 
 class TestKeywordOptimization:
@@ -22,9 +25,7 @@ class TestKeywordOptimization:
             keywords=["Risk"],
         )
 
-        elements: list[Element] = cast(
-            list[Element], ["RISK factors", "risk assessment", "No match"]
-        )
+        elements = _elements(["RISK factors", "risk assessment", "No match"])
         filtered = loader._filter_elements_by_keywords(elements, ["Risk"])
 
         assert len(filtered) == 2
@@ -40,9 +41,7 @@ class TestKeywordOptimization:
             keyword_boundary=True,
         )
 
-        elements: list[Element] = cast(
-            list[Element], ["risk factors", "risky business", "at risk"]
-        )
+        elements = _elements(["risk factors", "risky business", "at risk"])
         filtered = loader._filter_elements_by_keywords(
             elements,
             ["risk"],
@@ -60,9 +59,7 @@ class TestKeywordOptimization:
             keyword_boundary=False,  # Default
         )
 
-        elements: list[Element] = cast(
-            list[Element], ["risk factors", "risky business", "at risk"]
-        )
+        elements = _elements(["risk factors", "risky business", "at risk"])
         filtered = loader._filter_elements_by_keywords(
             elements,
             ["risk"],
@@ -80,14 +77,13 @@ class TestKeywordOptimization:
             keyword_mode="any",
         )
 
-        elements: list[Element] = cast(
-            list[Element],
+        elements = _elements(
             [
                 "risk only",
                 "warranty only",
                 "both risk and warranty",
                 "neither",
-            ],
+            ]
         )
         filtered = loader._filter_elements_by_keywords(
             elements,
@@ -107,14 +103,13 @@ class TestKeywordOptimization:
             keyword_mode="all",
         )
 
-        elements: list[Element] = cast(
-            list[Element],
+        elements = _elements(
             [
                 "risk only",
                 "warranty only",
                 "both risk and warranty",
                 "neither",
-            ],
+            ]
         )
         filtered = loader._filter_elements_by_keywords(
             elements,
@@ -133,7 +128,7 @@ class TestKeywordOptimization:
             downloads_folder=tmp_path,
         )
 
-        elements: list[Element] = cast(list[Element], ["one", "two", "three"])
+        elements = _elements(["one", "two", "three"])
         filtered = loader._filter_elements_by_keywords(
             elements,
             [],
@@ -149,7 +144,7 @@ class TestKeywordOptimization:
             keywords=["nonexistent"],
         )
 
-        elements: list[Element] = cast(list[Element], ["one", "two", "three"])
+        elements = _elements(["one", "two", "three"])
         filtered = loader._filter_elements_by_keywords(
             elements,
             ["nonexistent"],
@@ -165,9 +160,7 @@ class TestKeywordOptimization:
             keywords=["risk (high)"],  # Contains regex special chars
         )
 
-        elements: list[Element] = cast(
-            list[Element], ["risk (high) factor", "risk high factor", "risk"]
-        )
+        elements = _elements(["risk (high) factor", "risk high factor", "risk"])
         filtered = loader._filter_elements_by_keywords(
             elements,
             ["risk (high)"],
@@ -186,13 +179,12 @@ class TestKeywordOptimization:
             keywords=["original"],
         )
 
-        elements: list[Element] = cast(
-            list[Element],
+        elements = _elements(
             [
                 "original content",
                 "different content",
                 "both original and different",
-            ],
+            ]
         )
 
         # Filter with instance keywords

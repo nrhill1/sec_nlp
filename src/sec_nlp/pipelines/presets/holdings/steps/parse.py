@@ -7,12 +7,13 @@ from pathlib import Path
 from langchain_core.documents import Document
 
 from sec_nlp.core.edgar.holdings_parser import HoldingsParser
+from sec_nlp.types import JsonValue
 
 from ..models import HoldingPosition
 from .download import DownloadedHoldingsFiling
 
 
-def _coerce_str(value: object) -> str | None:
+def _coerce_str(value: JsonValue) -> str | None:
     if value is None:
         return None
     if isinstance(value, str):
@@ -21,7 +22,7 @@ def _coerce_str(value: object) -> str | None:
     return str(value)
 
 
-def _coerce_int(value: object) -> int | None:
+def _coerce_int(value: JsonValue) -> int | None:
     if isinstance(value, bool):
         return None
     if isinstance(value, int):
@@ -39,7 +40,7 @@ def _coerce_int(value: object) -> int | None:
     return None
 
 
-def _source_name(value: object) -> str | None:
+def _source_name(value: JsonValue) -> str | None:
     source = _coerce_str(value)
     if source is None:
         return None

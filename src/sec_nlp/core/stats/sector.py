@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Mapping, Sequence
 from datetime import UTC, date, datetime, timedelta
-from typing import Protocol, cast
+from typing import Protocol
 
 from pydantic import BaseModel, ConfigDict
 
@@ -41,8 +41,16 @@ def _resolve_sic(
     if symbol_to_sic is None:
         return "UNKNOWN"
     if isinstance(symbol_to_sic, Mapping):
-        mapping = cast("Mapping[str, str]", symbol_to_sic)
-        raw_value = mapping.get(symbol.upper())
+        raw_value: str | None = None
+        lookup = symbol.upper()
+        for mapping_key, mapping_value in symbol_to_sic.items():
+            if (
+                isinstance(mapping_key, str)
+                and isinstance(mapping_value, str)
+                and mapping_key.upper() == lookup
+            ):
+                raw_value = mapping_value
+                break
     else:
         raw_value = symbol_to_sic(symbol)
     if isinstance(raw_value, str):

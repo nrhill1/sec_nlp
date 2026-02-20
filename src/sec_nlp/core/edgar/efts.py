@@ -395,7 +395,7 @@ def _rust_execute_search(
     return _convert_rust_response(rust_response)
 
 
-def _convert_rust_response(rust_response: object) -> EFTSSearchResponse:
+def _convert_rust_response(rust_response) -> EFTSSearchResponse:
     """Convert Rust EFTSSearchResponse to Pydantic model."""
     # Convert Rust EFTSHit objects to Pydantic EFTSHit models
     hits = [
@@ -412,31 +412,31 @@ def _convert_rust_response(rust_response: object) -> EFTSSearchResponse:
             score=hit.score,
             filing_url=hit.filing_url,
         )
-        for hit in rust_response.hits  # type: ignore[attr-defined]
+        for hit in rust_response.hits
     ]
     return EFTSSearchResponse(
-        query=rust_response.query,  # type: ignore[attr-defined]
-        total=rust_response.total,  # type: ignore[attr-defined]
+        query=rust_response.query,
+        total=rust_response.total,
         hits=hits,
-        start=rust_response.start,  # type: ignore[attr-defined]
-        limit=rust_response.limit,  # type: ignore[attr-defined]
+        start=rust_response.start,
+        limit=rust_response.limit,
     )
 
 
-def _convert_rust_hit(hit: object) -> EFTSHit:
+def _convert_rust_hit(hit) -> EFTSHit:
     """Convert a single Rust EFTSHit to Pydantic model."""
     return EFTSHit(
-        accession_number=hit.accession_number,  # type: ignore[attr-defined]
-        cik=hit.cik,  # type: ignore[attr-defined]
-        company_name=hit.company_name,  # type: ignore[attr-defined]
-        tickers=list(hit.tickers),  # type: ignore[attr-defined]
-        form_type=hit.form_type,  # type: ignore[attr-defined]
-        filed_date=hit.filed_date,  # type: ignore[attr-defined]
-        file_number=hit.file_number,  # type: ignore[attr-defined]
-        film_number=hit.film_number,  # type: ignore[attr-defined]
-        snippet=hit.snippet,  # type: ignore[attr-defined]
-        score=hit.score,  # type: ignore[attr-defined]
-        filing_url=hit.filing_url,  # type: ignore[attr-defined]
+        accession_number=hit.accession_number,
+        cik=hit.cik,
+        company_name=hit.company_name,
+        tickers=list(hit.tickers),
+        form_type=hit.form_type,
+        filed_date=hit.filed_date,
+        file_number=hit.file_number,
+        film_number=hit.film_number,
+        snippet=hit.snippet,
+        score=hit.score,
+        filing_url=hit.filing_url,
     )
 
 
@@ -483,14 +483,14 @@ async def _rust_execute_batch_search_async(
     return [_convert_rust_batch_result(result) for result in rust_results]
 
 
-def _convert_rust_batch_result(rust_result: object) -> EFTSBatchResult:
+def _convert_rust_batch_result(rust_result) -> EFTSBatchResult:
     """Convert Rust EFTSBatchResult to Pydantic model."""
-    hits = [_convert_rust_hit(hit) for hit in rust_result.hits]  # type: ignore[attr-defined]
+    hits = [_convert_rust_hit(hit) for hit in rust_result.hits]
     return EFTSBatchResult(
-        query=rust_result.query,  # type: ignore[attr-defined]
+        query=rust_result.query,
         hits=hits,
-        total=rust_result.total,  # type: ignore[attr-defined]
-        error=rust_result.error,  # type: ignore[attr-defined]
+        total=rust_result.total,
+        error=rust_result.error,
     )
 
 

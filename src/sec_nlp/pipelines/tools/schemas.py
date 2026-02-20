@@ -3,9 +3,13 @@
 from __future__ import annotations
 
 from datetime import date
-from typing import Any, Literal
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+from sec_nlp.types import JsonDict
+
+type ToolJsonRecord = JsonDict
 
 
 def _normalize_symbol_list(values: list[str]) -> list[str]:
@@ -25,7 +29,7 @@ def _normalize_symbol_list(values: list[str]) -> list[str]:
 class MarketContextToolInput(BaseModel):
     """Arguments for the market context tool."""
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(frozen=True, extra="forbid")
 
     symbols: list[str] = Field(default_factory=list)
     start_date: date
@@ -53,19 +57,19 @@ class MarketContextToolInput(BaseModel):
 class MarketContextToolOutput(BaseModel):
     """Return payload for the market context tool."""
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(frozen=True, extra="forbid")
 
     window: str
     benchmark: str
     symbols: list[str]
-    metrics: list[dict[str, Any]]
+    metrics: list[ToolJsonRecord]
     lines: list[str] = Field(default_factory=list)
 
 
 class RetrieveHitsToolInput(BaseModel):
     """Arguments for retrieve-hits tool."""
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(frozen=True, extra="forbid")
 
     symbols: list[str] = Field(default_factory=list)
     queries: list[str]
@@ -107,17 +111,17 @@ class RetrieveHitsToolInput(BaseModel):
 class RetrieveHitsToolOutput(BaseModel):
     """Return payload for retrieve-hits tool."""
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(frozen=True, extra="forbid")
 
     collection: str
-    run_metadata: dict[str, Any]
-    hits: list[dict[str, Any]]
+    run_metadata: ToolJsonRecord
+    hits: list[ToolJsonRecord]
 
 
 class QdrantSearchToolInput(BaseModel):
     """Arguments for Qdrant semantic-search tool."""
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(frozen=True, extra="forbid")
 
     collection: str
     query: str
@@ -157,18 +161,18 @@ class QdrantSearchToolInput(BaseModel):
 class QdrantSearchToolOutput(BaseModel):
     """Return payload for Qdrant semantic-search tool."""
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(frozen=True, extra="forbid")
 
     collection: str
     query: str
     hit_count: int
-    hits: list[dict[str, Any]]
+    hits: list[ToolJsonRecord]
 
 
 class NewsContextToolInput(BaseModel):
     """Arguments for news-context tool."""
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(frozen=True, extra="forbid")
 
     keywords: list[str]
     max_results: int = Field(default=50, ge=1, le=200)
@@ -199,7 +203,7 @@ class NewsContextToolInput(BaseModel):
 class NewsContextToolOutput(BaseModel):
     """Return payload for news-context tool."""
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(frozen=True, extra="forbid")
 
     lookback_days: int
-    items: list[dict[str, Any]]
+    items: list[ToolJsonRecord]

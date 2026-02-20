@@ -5,7 +5,6 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import cast
 
 from langchain_core.documents import Document
 
@@ -14,6 +13,7 @@ from sec_nlp.core.infra.logger import logger
 from sec_nlp.core.ingest.downloader import download_accessions
 from sec_nlp.core.ingest.loader import Loader
 from sec_nlp.core.text.filters import create_item_filter
+from sec_nlp.core.types import coerce_json_value
 from sec_nlp.types import JsonValue
 
 from ..config import RetrieveSettings
@@ -200,7 +200,13 @@ def _load_chunk_candidates(
         text = doc.page_content.strip()
         if not text:
             continue
-        metadata = cast(dict[str, JsonValue], doc.metadata or {})
+        metadata: dict[str, JsonValue] = {}
+        for raw_key, raw_value in (doc.metadata or {}).items():
+            if not isinstance(raw_key, str):
+                continue
+            normalized = coerce_json_value(raw_value)
+            if normalized is not None:
+                metadata[raw_key] = normalized
         candidates.append(
             _ChunkCandidate(
                 text=text,

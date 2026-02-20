@@ -14,7 +14,7 @@ warnings.filterwarnings(
 )
 
 
-def __getattr__(name: str) -> object:
+def __getattr__(name: str):
     """Lazy load EFTS modules to avoid import issues when running as __main__."""
     efts_exports = {
         "EFTSAPIError": "efts",

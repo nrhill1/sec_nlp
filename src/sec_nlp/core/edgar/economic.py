@@ -21,6 +21,7 @@ from sec_nlp.core.stats.correlation import (
     CorrExtensionError,
     pearson as corr_pearson,
 )
+from sec_nlp.types import JsonValue
 
 
 class EconomicDataError(RuntimeError):
@@ -105,7 +106,9 @@ def _coerce_date(value: str | date | datetime) -> date:
     return date.fromisoformat(value)
 
 
-def _normalize_observation_date(value: object) -> str | None:
+def _normalize_observation_date(
+    value: JsonValue | date | datetime,
+) -> str | None:
     if isinstance(value, datetime):
         return value.date().isoformat()
     if isinstance(value, date):
@@ -121,7 +124,7 @@ def _normalize_observation_date(value: object) -> str | None:
     return None
 
 
-def _normalize_observation_value(value: object) -> float | None:
+def _normalize_observation_value(value: JsonValue) -> float | None:
     if isinstance(value, bool) or value is None:
         return None
     if isinstance(value, (int, float)):

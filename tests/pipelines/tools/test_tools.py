@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from datetime import UTC, date, datetime, timedelta
 from types import SimpleNamespace
-from typing import Any, cast
 
 import pytest
 
@@ -19,6 +18,7 @@ from sec_nlp.pipelines.tools import (
     qdrant_search_tool,
     retrieve_hits_tool,
 )
+from sec_nlp.types import JsonValue
 
 
 def test_market_context_tool_returns_structured_payload(
@@ -47,18 +47,14 @@ def test_market_context_tool_returns_structured_payload(
         ),
     )
 
-    payload = market_context_tool.invoke(
-        cast(
-            Any,
-            {
-                "symbols": ["AAA"],
-                "start_date": "2024-01-01",
-                "end_date": "2024-01-31",
-                "profile": "compact",
-            },
-        )
-    )
-    payload = cast(dict[str, Any], payload)
+    market_input: dict[str, JsonValue] = {
+        "symbols": ["AAA"],
+        "start_date": "2024-01-01",
+        "end_date": "2024-01-31",
+        "profile": "compact",
+    }
+    payload = market_context_tool.invoke(market_input)
+    assert isinstance(payload, dict)
 
     assert payload["window"] == "2024-01-01..2024-01-31"
     assert payload["benchmark"] == "SPY"
@@ -106,18 +102,14 @@ def test_retrieve_hits_tool_returns_hits(monkeypatch, tmp_path) -> None:
         ],
     )
 
-    payload = retrieve_hits_tool.invoke(
-        cast(
-            Any,
-            {
-                "symbols": ["AAA"],
-                "queries": ["supply chain"],
-                "top_k": 5,
-                "collection": "retrieve_x",
-            },
-        )
-    )
-    payload = cast(dict[str, Any], payload)
+    retrieve_input: dict[str, JsonValue] = {
+        "symbols": ["AAA"],
+        "queries": ["supply chain"],
+        "top_k": 5,
+        "collection": "retrieve_x",
+    }
+    payload = retrieve_hits_tool.invoke(retrieve_input)
+    assert isinstance(payload, dict)
 
     assert payload["collection"] == "retrieve_x"
     assert payload["run_metadata"]["symbols_processed"] == 1
@@ -128,15 +120,11 @@ def test_retrieve_hits_tool_returns_hits(monkeypatch, tmp_path) -> None:
 
 def test_retrieve_hits_tool_enforces_top_k_bound() -> None:
     with pytest.raises(ValueError):
-        retrieve_hits_tool.invoke(
-            cast(
-                Any,
-                {
-                    "queries": ["supply chain"],
-                    "top_k": 201,
-                },
-            )
-        )
+        limit_input: dict[str, JsonValue] = {
+            "queries": ["supply chain"],
+            "top_k": 201,
+        }
+        retrieve_hits_tool.invoke(limit_input)
 
 
 def test_qdrant_search_tool_returns_hits(monkeypatch) -> None:
@@ -171,19 +159,15 @@ def test_qdrant_search_tool_returns_hits(monkeypatch) -> None:
         lambda self: _FakeQdrant(),
     )
 
-    payload = qdrant_search_tool.invoke(
-        cast(
-            Any,
-            {
-                "collection": "retrieve",
-                "query": "supply chain risk",
-                "top_k": 5,
-                "symbols": ["AAA"],
-                "forms": ["10-K"],
-            },
-        )
-    )
-    payload = cast(dict[str, Any], payload)
+    qdrant_input: dict[str, JsonValue] = {
+        "collection": "retrieve",
+        "query": "supply chain risk",
+        "top_k": 5,
+        "symbols": ["AAA"],
+        "forms": ["10-K"],
+    }
+    payload = qdrant_search_tool.invoke(qdrant_input)
+    assert isinstance(payload, dict)
 
     assert payload["collection"] == "retrieve"
     assert payload["query"] == "supply chain risk"
@@ -229,17 +213,13 @@ def test_news_context_tool_filters_and_dedupes(monkeypatch) -> None:
         lambda **kwargs: _FakeRetriever(),
     )
 
-    payload = news_context_tool.invoke(
-        cast(
-            Any,
-            {
-                "keywords": ["rare earth"],
-                "max_results": 10,
-                "lookback_days": 14,
-            },
-        )
-    )
-    payload = cast(dict[str, Any], payload)
+    news_input: dict[str, JsonValue] = {
+        "keywords": ["rare earth"],
+        "max_results": 10,
+        "lookback_days": 14,
+    }
+    payload = news_context_tool.invoke(news_input)
+    assert isinstance(payload, dict)
 
     assert payload["lookback_days"] == 14
     assert len(payload["items"]) == 1

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from time import monotonic
-from typing import Any
 
 from langchain_core.tools import StructuredTool
 from qdrant_client.http.models import (
@@ -14,7 +13,9 @@ from qdrant_client.http.models import (
     MatchValue,
 )
 
+from sec_nlp.core.types import as_json_dict
 from sec_nlp.pipelines.vector.config import VectorConfig
+from sec_nlp.types import JsonDict
 
 from .schemas import QdrantSearchToolInput, QdrantSearchToolOutput
 
@@ -77,7 +78,7 @@ def _run_qdrant_search_tool(
     forms: list[str] | None = None,
     score_threshold: float | None = None,
     timeout_seconds: float | None = 30.0,
-) -> dict[str, Any]:
+) -> JsonDict:
     started_at = monotonic()
     symbols = symbols or []
     forms = forms or []
@@ -122,7 +123,7 @@ def _run_qdrant_search_tool(
         stage="query_points",
     )
 
-    hits: list[dict[str, Any]] = []
+    hits: list[JsonDict] = []
     for point in getattr(response, "points", []):
         payload = getattr(point, "payload", {}) or {}
         if not isinstance(payload, dict):
@@ -160,7 +161,10 @@ def _run_qdrant_search_tool(
         hit_count=len(hits),
         hits=hits,
     )
-    return output.model_dump(mode="json", exclude_none=True)
+    payload = as_json_dict(output.model_dump(mode="json", exclude_none=True))
+    if payload is None:
+        raise ValueError("qdrant_search_tool produced a non-JSON payload")
+    return payload
 
 
 qdrant_search_tool = StructuredTool.from_function(

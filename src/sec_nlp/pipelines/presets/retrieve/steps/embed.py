@@ -9,7 +9,6 @@ import sqlite3
 import time
 from collections.abc import Iterable, Iterator, Sequence
 from pathlib import Path
-from typing import Any
 
 from sec_nlp.core.infra.logger import logger
 
@@ -29,7 +28,7 @@ def _cache_key(
     return hashlib.sha1(payload.encode("utf-8")).hexdigest()
 
 
-def _coerce_vector(value: object) -> list[float] | None:
+def _coerce_vector(value) -> list[float] | None:
     if value is None or isinstance(value, (str, bytes, bytearray)):
         return None
     if not isinstance(value, Iterable):
@@ -48,7 +47,7 @@ def _embed_documents(
     *,
     texts: Sequence[str],
     settings: RetrieveSettings,
-    embedder: Any,
+    embedder,
 ) -> list[list[float]]:
     raw_vectors = settings.vdb.batch_embed_documents(
         embedder,
@@ -249,7 +248,7 @@ def _cached_text_embeddings(
     *,
     texts: Sequence[str],
     settings: RetrieveSettings,
-    embedder: Any,
+    embedder,
     cache_prefix: str,
 ) -> list[list[float]]:
     if not texts:
@@ -380,7 +379,7 @@ def rerank_with_embeddings(
     *,
     hits: list[RetrievalHit],
     settings: RetrieveSettings,
-    embedder: Any | None = None,
+    embedder=None,
 ) -> list[RetrievalHit]:
     """Rerank hits using query/snippet embedding similarity when enabled."""
 
@@ -444,7 +443,7 @@ def embed_texts_with_cache(
     *,
     texts: Sequence[str],
     settings: RetrieveSettings,
-    embedder: Any,
+    embedder,
     cache_prefix: str = "snippet",
 ) -> list[list[float]]:
     """Embed text list with optional disk cache support."""

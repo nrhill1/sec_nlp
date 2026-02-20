@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import hashlib
-from typing import Any
 from uuid import NAMESPACE_URL, uuid5
 
+from langchain_ollama.embeddings import OllamaEmbeddings
 from qdrant_client import QdrantClient
 from qdrant_client.models import Distance, PointStruct, VectorParams
 
@@ -88,7 +88,7 @@ def index_retrieval_hits(
     hits: list[RetrievalHit],
     settings: RetrieveSettings,
     qdrant_client: QdrantClient | None = None,
-    embedder: Any | None = None,
+    embedder: OllamaEmbeddings | None = None,
     embedding_dim: int | None = None,
     market_signals: dict[str, JsonValue] | None = None,
 ) -> list[RetrievalHit]:

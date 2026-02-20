@@ -6,9 +6,8 @@ import json
 from datetime import date
 from pathlib import Path
 from types import SimpleNamespace
-from typing import cast
 
-from sec_nlp.core.edgar.xbrl_facts import XbrlParser
+from sec_nlp.core.edgar.xbrl_facts import XbrlFact, XbrlParser
 from sec_nlp.pipelines.presets.financials.config import FinancialsSettings
 from sec_nlp.pipelines.presets.financials.models import FinancialFact
 from sec_nlp.pipelines.presets.financials.pipeline import FinancialsPipeline
@@ -46,23 +45,37 @@ def test_extract_financial_facts_dedupes_and_filters(tmp_path: Path) -> None:
         filed_date=date(2024, 12, 31),
     )
 
-    duplicate = SimpleNamespace(
+    duplicate = XbrlFact(
         tag="us-gaap:Revenues",
+        namespace="us-gaap",
         local_name="Revenues",
         value=100.0,
+        raw_value="100.0",
+        scale=0,
         unit="USD",
         decimals=0,
+        context_ref="ctx_20241231",
         period_start="2024-01-01",
         period_end="2024-12-31",
         period_instant=None,
+        entity_id=None,
         segment=None,
     )
-    parser = SimpleNamespace(parse_file=lambda _path: [duplicate, duplicate])
+
+    class _Parser(XbrlParser):
+        def __init__(self) -> None:
+            pass
+
+        def parse_file(self, path: str | Path) -> list[XbrlFact]:
+            _ = path
+            return [duplicate, duplicate]
+
+    parser = _Parser()
 
     facts = extract_financial_facts(
         symbol="ABC",
         filing=filing,
-        parser=cast(XbrlParser, parser),
+        parser=parser,
     )
     assert len(facts) == 1
     assert facts[0].concept == "revenue"

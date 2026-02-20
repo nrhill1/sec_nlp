@@ -218,9 +218,11 @@ def _resolve_quotes(
     start_date: date,
     end_date: date,
 ) -> dict[str, list[MarketQuote]]:
-    if hasattr(retriever, "retrieve_ranges"):
+    try:
         batch = retriever.retrieve_ranges(symbols, (start_date, end_date))
         return {symbol.upper(): quotes for symbol, quotes in batch.items()}
+    except AttributeError:
+        pass
 
     output: dict[str, list[MarketQuote]] = {}
     for symbol in symbols:

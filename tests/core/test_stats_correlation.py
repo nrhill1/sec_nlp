@@ -10,9 +10,9 @@ from sec_nlp.core.stats import correlation
 
 
 def test_wrapper_forwards_inputs_to_extension(monkeypatch) -> None:
-    calls: dict[str, object] = {}
+    calls: dict[str, tuple] = {}
 
-    def _record(name: str, *args: object) -> None:
+    def _record(name: str, *args) -> None:
         calls[name] = args
 
     fake_module = SimpleNamespace(

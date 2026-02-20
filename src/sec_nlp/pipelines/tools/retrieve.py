@@ -4,16 +4,17 @@ from __future__ import annotations
 
 from pathlib import Path
 from time import monotonic
-from typing import Any
 
 from langchain_core.tools import StructuredTool
 
+from sec_nlp.core.types import as_json_dict
 from sec_nlp.pipelines.presets.retrieve import RetrieveSettings
 from sec_nlp.pipelines.presets.retrieve.steps import (
     rank_retrieval_hits,
     run_candidate_search,
 )
 from sec_nlp.pipelines.vector.config import VectorConfig
+from sec_nlp.types import JsonDict
 
 from .schemas import RetrieveHitsToolInput, RetrieveHitsToolOutput
 
@@ -71,7 +72,7 @@ def _run_retrieve_hits_tool(
     top_k: int = 20,
     collection: str = "retrieve",
     timeout_seconds: float | None = 30.0,
-) -> dict[str, Any]:
+) -> JsonDict:
     started_at = monotonic()
     settings = _build_settings(
         symbols=symbols,
@@ -84,7 +85,7 @@ def _run_retrieve_hits_tool(
     )
 
     symbol_scope = settings.symbols if settings.symbols else [None]
-    output_hits: list[dict[str, Any]] = []
+    output_hits: list[JsonDict] = []
     queries_processed = 0
     for symbol in symbol_scope:
         _check_timeout(
@@ -102,9 +103,12 @@ def _run_retrieve_hits_tool(
             candidates_by_query=candidates_by_query,
             top_k=settings.top_k,
         )
-        output_hits.extend(
-            hit.model_dump(mode="json", exclude_none=True) for hit in ranked
-        )
+        for hit in ranked:
+            payload = as_json_dict(
+                hit.model_dump(mode="json", exclude_none=True)
+            )
+            if payload is not None:
+                output_hits.append(payload)
         queries_processed += len(settings.queries)
 
     _check_timeout(
@@ -123,7 +127,10 @@ def _run_retrieve_hits_tool(
         },
         hits=output_hits,
     )
-    return output.model_dump(mode="json", exclude_none=True)
+    payload = as_json_dict(output.model_dump(mode="json", exclude_none=True))
+    if payload is None:
+        raise ValueError("retrieve_hits_tool produced a non-JSON payload")
+    return payload
 
 
 retrieve_hits_tool = StructuredTool.from_function(

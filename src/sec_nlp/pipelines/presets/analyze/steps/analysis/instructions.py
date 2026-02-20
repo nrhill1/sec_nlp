@@ -92,7 +92,7 @@ ANALYSIS_FIELD_DESCRIPTIONS: dict[str, str] = {
         '**tags** (list[string]): Short labels like "risk", "accounting", "governance", "legal", "liquidity", "strategy", "operations"; [] if none.'
     ),
     "evidence_spans": (
-        '**evidence_spans** (list[object]): Up to 2 supporting snippets. Each: {"text": "<short quote>", "start_char": <int|optional>, "end_char": <int|optional>}. Use [] if none.'
+        '**evidence_spans** (list[record]): Up to 2 supporting snippets. Each: {"text": "<short quote>", "start_char": <int|optional>, "end_char": <int|optional>}. Use [] if none.'
     ),
     "source_excerpt": (
         "**source_excerpt** (string | null): A single short quote (<=200 chars) that best evidences the finding; null if not relevant."
@@ -162,7 +162,7 @@ ANALYSIS_FIELD_DESCRIPTIONS_COMPACT: dict[str, str] = {
     ),
     "tags": ("**tags** (list[string]): Short topical labels."),
     "evidence_spans": (
-        "**evidence_spans** (list[object]): Up to 2 short supporting snippets."
+        "**evidence_spans** (list[record]): Up to 2 short supporting snippets."
     ),
     "source_excerpt": (
         "**source_excerpt** (string | null): Best evidentiary quote (<=200 chars)."

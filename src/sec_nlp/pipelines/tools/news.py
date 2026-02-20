@@ -5,11 +5,12 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 from email.utils import parsedate_to_datetime
 from time import monotonic
-from typing import Any
 
 from langchain_core.tools import StructuredTool
 
 from sec_nlp.core.news.client import create_news_retriever
+from sec_nlp.core.types import as_json_dict
+from sec_nlp.types import JsonDict
 
 from .schemas import NewsContextToolInput, NewsContextToolOutput
 
@@ -51,7 +52,7 @@ def _run_news_context_tool(
     max_results: int = 50,
     lookback_days: int = 14,
     timeout_seconds: float | None = 30.0,
-) -> dict[str, Any]:
+) -> JsonDict:
     started_at = monotonic()
     cutoff_date = datetime.now(UTC).date() - timedelta(days=lookback_days)
     retriever = create_news_retriever(
@@ -70,7 +71,7 @@ def _run_news_context_tool(
         stage="news fetch",
     )
 
-    deduped: list[dict[str, Any]] = []
+    deduped: list[JsonDict] = []
     seen: set[str] = set()
     for item in raw_items:
         published_at = _parse_timestamp(item.published_at)
@@ -93,13 +94,19 @@ def _run_news_context_tool(
                 "snippet": item.snippet,
             }
         )
-    deduped.sort(key=lambda item: item["published_at"], reverse=True)
+    deduped.sort(
+        key=lambda item: str(item.get("published_at") or ""),
+        reverse=True,
+    )
 
     output = NewsContextToolOutput(
         lookback_days=lookback_days,
         items=deduped[:max_results],
     )
-    return output.model_dump(mode="json", exclude_none=True)
+    payload = as_json_dict(output.model_dump(mode="json", exclude_none=True))
+    if payload is None:
+        raise ValueError("news_context_tool produced a non-JSON payload")
+    return payload
 
 
 news_context_tool = StructuredTool.from_function(

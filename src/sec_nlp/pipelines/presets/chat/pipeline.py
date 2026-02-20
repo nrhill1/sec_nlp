@@ -4,11 +4,12 @@ from __future__ import annotations
 
 import hashlib
 import re
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 from email.utils import parsedate_to_datetime
 from pathlib import Path
-from typing import ClassVar, Literal, Protocol, cast
+from typing import ClassVar, Literal, Protocol
 
 import numpy as np
 from qdrant_client import QdrantClient
@@ -36,12 +37,13 @@ from sec_nlp.core.news.client import (
     NewswatchExtensionError,
     create_news_retriever,
 )
+from sec_nlp.core.types import as_json_dict
 from sec_nlp.pipelines import BasePipeline
 from sec_nlp.pipelines.output_io import (
     build_run_file_stem,
     build_run_header_fields,
 )
-from sec_nlp.types import JsonDict, JsonValue, ResultDict
+from sec_nlp.types import JsonDict, JsonValue, ResultDict, ResultValue
 
 from ..retrieve import RetrievePipeline, RetrieveSettings
 from .config import ChatSettings
@@ -164,6 +166,41 @@ class ChatPipeline(BasePipeline):
             **external_metadata,
         }
         return metadata
+
+    @classmethod
+    def _result_to_json_value(cls, value: ResultValue) -> JsonValue | None:
+        if isinstance(value, Path):
+            return str(value)
+        if isinstance(value, (str, int, float, bool)) or value is None:
+            return value
+        if isinstance(value, Sequence) and not isinstance(value, str):
+            items: list[JsonValue] = []
+            for item in value:
+                normalized = cls._result_to_json_value(item)
+                if normalized is None:
+                    return None
+                items.append(normalized)
+            return items
+        if isinstance(value, Mapping):
+            payload: JsonDict = {}
+            for key, item in value.items():
+                if not isinstance(key, str):
+                    return None
+                normalized = cls._result_to_json_value(item)
+                if normalized is None:
+                    return None
+                payload[key] = normalized
+            return payload
+        return None
+
+    @classmethod
+    def _registry_metadata(cls, metadata: ResultDict) -> JsonDict:
+        payload: JsonDict = {}
+        for key, value in metadata.items():
+            normalized = cls._result_to_json_value(value)
+            if normalized is not None:
+                payload[key] = normalized
+        return payload
 
     def _symbol_coverage_metadata(
         self,
@@ -328,7 +365,7 @@ class ChatPipeline(BasePipeline):
 
             self.config.complete_run(
                 success=True,
-                metadata=cast(JsonDict, metadata),
+                metadata=self._registry_metadata(metadata),
             )
             return ChatResult(
                 success=True,
@@ -710,7 +747,10 @@ class ChatPipeline(BasePipeline):
 
         if any(vector is None for vector in vectors):
             return chunks
-        matrix = np.vstack(cast(list[np.ndarray], vectors))
+        dense_vectors = [vector for vector in vectors if vector is not None]
+        if len(dense_vectors) != len(vectors):
+            return chunks
+        matrix = np.vstack(dense_vectors)
 
         selected_indices: list[int] = []
         remaining = list(range(len(candidates)))
@@ -998,10 +1038,11 @@ class ChatPipeline(BasePipeline):
             logger.debug("Market context unavailable: %s", exc)
             return [], [], {}
 
-        bundle_payload = cast(
-            dict[str, JsonValue],
-            bundle.model_dump(mode="json", exclude_none=True),
+        bundle_payload = as_json_dict(
+            bundle.model_dump(mode="json", exclude_none=True)
         )
+        if bundle_payload is None:
+            bundle_payload = {}
         metrics_by_symbol = {metric.symbol: metric for metric in bundle.metrics}
         covered_symbols = [
             symbol for symbol in symbols if symbol in metrics_by_symbol
@@ -1126,7 +1167,7 @@ class ChatPipeline(BasePipeline):
         self,
         *,
         collection: str,
-        point: object,
+        point,
     ) -> _RetrievedChunk | None:
         payload = getattr(point, "payload", None)
         if not isinstance(payload, dict):
@@ -1137,11 +1178,13 @@ class ChatPipeline(BasePipeline):
             return None
 
         metadata = payload.get("metadata")
-        metadata_dict: dict[str, JsonValue]
+        metadata_dict: dict[str, JsonValue] = {}
         if isinstance(metadata, dict):
-            metadata_dict = cast(dict[str, JsonValue], metadata)
-        else:
-            metadata_dict = {}
+            for raw_key, raw_value in metadata.items():
+                if not isinstance(raw_key, str):
+                    continue
+                if isinstance(raw_value, str):
+                    metadata_dict[raw_key] = raw_value
 
         score_raw = getattr(point, "score", None)
         score = float(score_raw) if isinstance(score_raw, (int, float)) else 0.0
@@ -1213,7 +1256,12 @@ class ChatPipeline(BasePipeline):
 
         metadata = payload.get("metadata")
         if isinstance(metadata, dict):
-            metadata_dict = cast(dict[str, JsonValue], metadata)
+            metadata_dict: dict[str, JsonValue] = {}
+            for raw_key, raw_value in metadata.items():
+                if not isinstance(raw_key, str):
+                    continue
+                if isinstance(raw_value, str):
+                    metadata_dict[raw_key] = raw_value
             for key in ("raw_chunk", "page_content", "snippet", "content"):
                 value = metadata_dict.get(key)
                 if isinstance(value, str) and value.strip():
@@ -1228,7 +1276,7 @@ class ChatPipeline(BasePipeline):
         return snippet
 
     @staticmethod
-    def _extract_point_vector(point: object) -> list[float] | None:
+    def _extract_point_vector(point) -> list[float] | None:
         candidate = getattr(point, "vector", None)
         if candidate is None:
             candidate = getattr(point, "vectors", None)
@@ -1479,7 +1527,7 @@ class ChatPipeline(BasePipeline):
             citations=citations,
             citation_ids=citation_ids,
             turns=turns,
-            metadata=cast(dict[str, JsonValue], payload_metadata),
+            metadata=self._registry_metadata(payload_metadata),
         )
 
         outputs: list[Path] = []

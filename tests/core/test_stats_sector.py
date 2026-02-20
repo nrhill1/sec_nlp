@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from datetime import UTC, date, datetime
-from typing import cast
 
 import pytest
 
@@ -11,15 +11,16 @@ import sec_nlp.core.stats.sector as sector_module
 from sec_nlp.core.market import MarketQuote
 
 
-class _FakeRetriever:
+class _FakeRetriever(sector_module.MarketRangeRetriever):
     def __init__(self, quotes_by_ticker: dict[str, list[MarketQuote]]) -> None:
         self._quotes_by_ticker = quotes_by_ticker
 
     def retrieve_range(
         self,
         ticker: str,
-        _date_range: tuple[date, date],
+        date_range: Sequence[date | datetime],
     ) -> list[MarketQuote]:
+        _ = date_range
         return list(self._quotes_by_ticker.get(ticker, []))
 
 
@@ -62,13 +63,12 @@ def test_sector_correlation_groups_symbols_by_sic() -> None:
             ],
         }
     )
-
     result = sector_module.sector_correlation(
         ["AAA", "BBB", "CCC"],
         days=10,
         as_of=date(2024, 1, 4),
         symbol_to_sic={"AAA": "3571", "BBB": "3571", "CCC": "2834"},
-        retriever=cast(sector_module.MarketRangeRetriever, retriever),
+        retriever=retriever,
     )
 
     assert len(result) == 2
@@ -113,7 +113,7 @@ def test_sector_correlation_uses_fallback_when_corr_missing(
         days=10,
         as_of=date(2024, 1, 4),
         symbol_to_sic={"AAA": "3571", "BBB": "3571"},
-        retriever=cast(sector_module.MarketRangeRetriever, retriever),
+        retriever=retriever,
     )
 
     assert len(result) == 1

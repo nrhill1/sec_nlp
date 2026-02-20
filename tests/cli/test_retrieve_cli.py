@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
-from typing import cast
 from unittest.mock import Mock, patch
 
 from sec_nlp.cli.commands.retrieve import Retrieve
@@ -43,13 +42,15 @@ def test_retrieve_normalizes_numeric_sections(tmp_path: Path) -> None:
     dl_path.mkdir()
     out_path.mkdir()
 
-    cmd = Retrieve(
-        email="test@example.com",
-        dl_path=dl_path,
-        out_path=out_path,
-        symbols=["aapl"],
-        queries=["risk"],
-        sections=cast(list[str], [7, "item 1a"]),
+    cmd = Retrieve.model_validate(
+        {
+            "email": "test@example.com",
+            "dl_path": dl_path,
+            "out_path": out_path,
+            "symbols": ["aapl"],
+            "queries": ["risk"],
+            "sections": [7, "item 1a"],
+        }
     )
 
     assert cmd.sections == ["7", "1A"]

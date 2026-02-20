@@ -41,9 +41,7 @@ def test_sector_correlation_runnable_identifies_strongest_pair(
         sector_correlation as runnable_module,
     )
 
-    def _mock_sector_correlation(
-        *args: object, **kwargs: object
-    ) -> list[SectorCorrelation]:
+    def _mock_sector_correlation(*args, **kwargs) -> list[SectorCorrelation]:
         _ = args
         _ = kwargs
         return [

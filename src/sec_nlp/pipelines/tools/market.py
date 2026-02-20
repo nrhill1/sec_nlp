@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from time import monotonic
-from typing import Any
 
 from langchain_core.tools import StructuredTool
 
@@ -11,6 +10,8 @@ from sec_nlp.core.market_analytics import (
     MarketContextMetric,
     build_market_context,
 )
+from sec_nlp.core.types import as_json_dict
+from sec_nlp.types import JsonDict
 
 from .schemas import MarketContextToolInput, MarketContextToolOutput
 
@@ -77,7 +78,7 @@ def _run_market_context_tool(
     benchmark: str = "SPY",
     profile: str = "standard",
     timeout_seconds: float | None = 30.0,
-) -> dict[str, Any]:
+) -> JsonDict:
     started_at = monotonic()
     _check_timeout(
         started_at=started_at,
@@ -129,7 +130,10 @@ def _run_market_context_tool(
         ],
         lines=lines,
     )
-    return output.model_dump(mode="json", exclude_none=True)
+    payload = as_json_dict(output.model_dump(mode="json", exclude_none=True))
+    if payload is None:
+        raise ValueError("market_context_tool produced a non-JSON payload")
+    return payload
 
 
 market_context_tool = StructuredTool.from_function(

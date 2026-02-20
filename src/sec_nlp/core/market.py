@@ -128,10 +128,11 @@ class MarketRetriever:
         )
         self._cache: OrderedDict[CacheKey, MarketCacheEntry] = OrderedDict()
 
-    def _log(self, message: str, *args: str) -> None:
-        logger.debug(message, *args)
-
-    def _log(self, message: str, *args: object) -> None:
+    def _log(
+        self,
+        message: str,
+        *args: str | int | float | bool | None,
+    ) -> None:
         logger.debug(message, *args)
 
     def _cache_enabled(self) -> bool:

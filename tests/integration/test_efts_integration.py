@@ -11,7 +11,7 @@ from sec_nlp.core.types import as_json_dict
 from sec_nlp.types import JsonDict, JsonValue
 
 
-def _coerce_json_value(value: object) -> JsonValue | None:
+def _coerce_json_value(value) -> JsonValue | None:
     if isinstance(value, (str, int, float, bool)) or value is None:
         return value
     if isinstance(value, list):

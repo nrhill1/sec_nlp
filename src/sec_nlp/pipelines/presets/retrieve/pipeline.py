@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from pathlib import Path
-from typing import Any, ClassVar, Literal, cast
+from typing import ClassVar, Literal
 
+from langchain_ollama.embeddings import OllamaEmbeddings
 from pydantic import PrivateAttr
+from qdrant_client import QdrantClient
 from rich.progress import (
     BarColumn,
     Progress,
@@ -20,6 +23,7 @@ from rich.progress import (
 from sec_nlp.core.infra.logger import logger
 from sec_nlp.core.infra.rich_console import get_rich_console
 from sec_nlp.core.market_analytics import build_market_context
+from sec_nlp.core.types import as_json_dict
 from sec_nlp.pipelines import BasePipeline
 from sec_nlp.pipelines.output_io import (
     build_run_file_stem,
@@ -54,9 +58,9 @@ class RetrievePipeline(BasePipeline):
     requires_llm: ClassVar[bool] = False
 
     config: RetrieveSettings
-    _embedder: Any | None = PrivateAttr(default=None)
+    _embedder: OllamaEmbeddings | None = PrivateAttr(default=None)
     _embedding_dim: int | None = PrivateAttr(default=None)
-    _qdrant_client: Any | None = PrivateAttr(default=None)
+    _qdrant_client: QdrantClient | None = PrivateAttr(default=None)
 
     @classmethod
     def config_model(cls) -> type[RetrieveSettings]:
@@ -157,7 +161,7 @@ class RetrievePipeline(BasePipeline):
 
             self.config.complete_run(
                 success=True,
-                metadata=cast(JsonDict, metadata),
+                metadata=self._registry_metadata(metadata),
             )
             return RetrieveResult(
                 success=True,
@@ -281,10 +285,10 @@ class RetrievePipeline(BasePipeline):
             )
             return {}
 
-        return cast(
-            dict[str, JsonValue],
-            bundle.model_dump(mode="json", exclude_none=True),
+        payload = as_json_dict(
+            bundle.model_dump(mode="json", exclude_none=True)
         )
+        return payload or {}
 
     @staticmethod
     def _market_signals_for_payload(
@@ -296,13 +300,50 @@ class RetrievePipeline(BasePipeline):
         metric = metrics_raw[0]
         if not isinstance(metric, dict):
             return None
-        metric_payload = cast(dict[str, JsonValue], metric)
         payload: dict[str, JsonValue] = {
             "window": market_context.get("window"),
             "benchmark": market_context.get("benchmark"),
         }
-        for key, value in metric_payload.items():
-            payload[key] = value
+        for key, value in metric.items():
+            if isinstance(key, str):
+                normalized = RetrievePipeline._coerce_result_to_json(value)
+                if normalized is not None:
+                    payload[key] = normalized
+        return payload
+
+    @classmethod
+    def _coerce_result_to_json(cls, value) -> JsonValue | None:
+        if isinstance(value, Path):
+            return str(value)
+        if isinstance(value, (str, int, float, bool)) or value is None:
+            return value
+        if isinstance(value, Sequence) and not isinstance(value, str):
+            items: list[JsonValue] = []
+            for item in value:
+                normalized = cls._coerce_result_to_json(item)
+                if normalized is None:
+                    return None
+                items.append(normalized)
+            return items
+        if isinstance(value, Mapping):
+            payload: JsonDict = {}
+            for key, item in value.items():
+                if not isinstance(key, str):
+                    return None
+                normalized = cls._coerce_result_to_json(item)
+                if normalized is None:
+                    return None
+                payload[key] = normalized
+            return payload
+        return None
+
+    @classmethod
+    def _registry_metadata(cls, metadata: ResultDict) -> JsonDict:
+        payload: JsonDict = {}
+        for key, value in metadata.items():
+            normalized = cls._coerce_result_to_json(value)
+            if normalized is not None:
+                payload[key] = normalized
         return payload
 
     def _update_phase(

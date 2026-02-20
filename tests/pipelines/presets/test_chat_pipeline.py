@@ -10,6 +10,7 @@ from types import SimpleNamespace
 from sec_nlp.pipelines.presets.chat import ChatPipeline, ChatSettings
 from sec_nlp.pipelines.presets.chat.pipeline import _RetrievedChunk
 from sec_nlp.pipelines.vector.config import VectorConfig
+from sec_nlp.types import JsonValue
 
 
 def test_chat_pipeline_run_writes_outputs_with_mocked_retrieval(
@@ -143,7 +144,7 @@ def test_search_collections_applies_form_and_date_filters(
             return [0.1, 0.2]
 
     class _FakePoint:
-        def __init__(self, payload: dict[str, object], score: float) -> None:
+        def __init__(self, payload: dict[str, JsonValue], score: float) -> None:
             self.payload = payload
             self.score = score
 
@@ -234,7 +235,7 @@ def test_search_collections_prefetches_missing_collection(
             return [0.2, 0.1]
 
     class _FakePoint:
-        def __init__(self, payload: dict[str, object], score: float) -> None:
+        def __init__(self, payload: dict[str, JsonValue], score: float) -> None:
             self.payload = payload
             self.score = score
 

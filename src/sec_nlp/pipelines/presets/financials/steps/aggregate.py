@@ -5,6 +5,8 @@ from __future__ import annotations
 from collections.abc import Iterable
 from dataclasses import dataclass
 
+from sec_nlp.types import JsonValue
+
 from ..models import FinancialFact, FinancialStatement
 
 
@@ -113,7 +115,7 @@ def aggregate_financials(
     return statements
 
 
-def _as_float(value: object) -> float | None:
+def _as_float(value: JsonValue) -> float | None:
     if isinstance(value, bool):
         return None
     if isinstance(value, (int, float)):

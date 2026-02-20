@@ -12,6 +12,7 @@ from pydantic_settings import SettingsConfigDict
 from sec_nlp.core.edgar.filing_mode import FilingMode
 from sec_nlp.pipelines.base.config import BasePipelineSettings
 from sec_nlp.pipelines.vector.config import VectorConfig
+from sec_nlp.types import ConfigValue
 
 
 class RetrieveSettings(BasePipelineSettings):
@@ -133,8 +134,8 @@ class RetrieveSettings(BasePipelineSettings):
     @model_validator(mode="before")
     @classmethod
     def disable_dry_run_for_embedding_ops(
-        cls, values: Mapping[str, object] | object
-    ) -> Mapping[str, object] | object:
+        cls, values: Mapping[str, ConfigValue] | ConfigValue
+    ) -> Mapping[str, ConfigValue] | ConfigValue:
         """Force dry_run off when features require embeddings/index writes."""
         if not isinstance(values, Mapping):
             return values
