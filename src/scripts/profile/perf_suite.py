@@ -17,7 +17,9 @@ from uuid import uuid4
 from pydantic import Field
 from pydantic_settings import BaseSettings, CliApp, SettingsConfigDict
 
-sys.path.insert(0, str(Path(__file__).parent.parent))
+# Add project src/ root so "scripts.*" and "sec_nlp.*" imports resolve
+# without shadowing stdlib modules like "profile".
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from scripts.utils import setup_import_path
 
