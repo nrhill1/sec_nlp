@@ -9,13 +9,10 @@ pub fn dedupe_news_items(items: Vec<NewsItem>, max_hamming_distance: u32) -> Vec
     for item in items {
         let fingerprint = simhash(&item.title);
         let tokens = token_set(&item.title);
-        if kept
-            .iter()
-            .any(|(existing_fp, existing_tokens, _)| {
-                hamming_distance(*existing_fp, fingerprint) <= max_hamming_distance
-                    || token_jaccard(existing_tokens, &tokens) >= 0.8
-            })
-        {
+        if kept.iter().any(|(existing_fp, existing_tokens, _)| {
+            hamming_distance(*existing_fp, fingerprint) <= max_hamming_distance
+                || token_jaccard(existing_tokens, &tokens) >= 0.8
+        }) {
             continue;
         }
         kept.push((fingerprint, tokens, item));
@@ -105,16 +102,10 @@ mod tests {
             .into_iter()
             .map(str::to_string)
             .collect();
-        let right: HashSet<String> = [
-            "acme",
-            "announces",
-            "quarterly",
-            "dividend",
-            "increase",
-        ]
-        .into_iter()
-        .map(str::to_string)
-        .collect();
+        let right: HashSet<String> = ["acme", "announces", "quarterly", "dividend", "increase"]
+            .into_iter()
+            .map(str::to_string)
+            .collect();
 
         assert!((token_jaccard(&left, &right) - 0.8).abs() < f64::EPSILON);
     }

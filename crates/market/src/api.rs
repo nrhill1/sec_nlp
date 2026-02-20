@@ -302,9 +302,17 @@ pub fn get_ranges(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Once;
+
+    static PYTHON_INIT: Once = Once::new();
+
+    fn init_python() {
+        PYTHON_INIT.call_once(Python::initialize);
+    }
 
     #[test]
     fn parse_date_valid() {
+        init_python();
         let dt = parse_date("2020-01-05").unwrap();
         assert_eq!(dt.date().year(), 2020);
         assert_eq!(dt.date().month(), Month::January);
@@ -313,34 +321,40 @@ mod tests {
 
     #[test]
     fn parse_date_invalid_month() {
+        init_python();
         assert!(parse_date("2020-13-01").is_err());
     }
 
     #[test]
     fn parse_date_invalid_format() {
+        init_python();
         assert!(parse_date("2020-01").is_err());
         assert!(parse_date("2020-01-01-01").is_err());
     }
 
     #[test]
     fn parse_date_range_dotdot() {
+        init_python();
         let (start, end) = parse_date_range("2020-01-01..2020-01-31").unwrap();
         assert!(end >= start);
     }
 
     #[test]
     fn parse_date_range_comma() {
+        init_python();
         let (start, end) = parse_date_range("2020-01-01,2020-01-31").unwrap();
         assert!(end >= start);
     }
 
     #[test]
     fn parse_date_range_reversed() {
+        init_python();
         assert!(parse_date_range("2020-01-31..2020-01-01").is_err());
     }
 
     #[test]
     fn unix_ts_rejects_pre_epoch() {
+        init_python();
         let date = Date::from_calendar_date(1969, Month::December, 31).unwrap();
         let dt = date.midnight().assume_utc();
         assert!(unix_ts(&dt).is_err());
@@ -348,6 +362,7 @@ mod tests {
 
     #[test]
     fn filter_quotes_inclusive() {
+        init_python();
         let quotes = vec![
             yahoo_finance_api::Quote {
                 timestamp: 5,
@@ -393,6 +408,7 @@ mod tests {
 
     #[test]
     fn normalize_tickers_dedupes_and_uppercases() {
+        init_python();
         let normalized = normalize_tickers(vec![
             " aapl ".to_string(),
             "AAPL".to_string(),
@@ -404,6 +420,7 @@ mod tests {
 
     #[test]
     fn split_cached_ranges_mixed_cache_hits() {
+        init_python();
         range_cache().clear();
         let date_range = "2024-01-01..2024-01-31";
         let cached_quote = MarketQuote {
@@ -428,6 +445,7 @@ mod tests {
 
     #[test]
     fn finalize_partial_ranges_keeps_successes() {
+        init_python();
         let quoted = MarketQuote {
             timestamp: 1,
             open: 1.0,
@@ -449,6 +467,7 @@ mod tests {
 
     #[test]
     fn finalize_partial_ranges_errors_when_all_fail() {
+        init_python();
         let fetched = vec![
             ("AAPL".to_string(), Err("timeout".to_string())),
             ("MSFT".to_string(), Err("not found".to_string())),
@@ -459,6 +478,7 @@ mod tests {
 
     #[test]
     fn get_ranges_rejects_invalid_date_range() {
+        init_python();
         let err = get_ranges(vec!["AAPL".to_string()], "invalid-range").unwrap_err();
         assert!(err
             .to_string()

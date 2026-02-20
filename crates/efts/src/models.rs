@@ -3,7 +3,7 @@ use pyo3::types::PyDate;
 use serde::Serialize;
 
 /// Individual search result from EFTS API.
-#[pyclass(name = "EFTSHit", frozen, module = "efts")]
+#[pyclass(name = "EFTSHit", frozen, module = "efts", skip_from_py_object)]
 #[derive(Debug, Clone, Serialize)]
 pub struct SearchHit {
     #[pyo3(get)]
@@ -76,7 +76,12 @@ impl SearchHit {
 }
 
 /// Paginated response from EFTS search API.
-#[pyclass(name = "EFTSSearchResponse", frozen, module = "efts")]
+#[pyclass(
+    name = "EFTSSearchResponse",
+    frozen,
+    module = "efts",
+    skip_from_py_object
+)]
 #[derive(Debug, Clone, Serialize)]
 pub struct SearchResponse {
     #[pyo3(get)]
@@ -131,7 +136,7 @@ impl SearchResponse {
 }
 
 /// Result from a single query in a batch search.
-#[pyclass(name = "EFTSBatchResult", frozen, module = "efts")]
+#[pyclass(name = "EFTSBatchResult", frozen, module = "efts", skip_from_py_object)]
 #[derive(Debug, Clone, Serialize)]
 pub struct BatchSearchResult {
     #[pyo3(get)]
@@ -182,7 +187,7 @@ impl BatchSearchResult {
 }
 
 /// Progress information during paginated search.
-#[pyclass(name = "EFTSProgress", frozen, module = "efts")]
+#[pyclass(name = "EFTSProgress", frozen, module = "efts", skip_from_py_object)]
 #[derive(Debug, Clone)]
 pub struct ProgressInfo {
     #[pyo3(get)]

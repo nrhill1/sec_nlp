@@ -424,7 +424,7 @@ impl EftsClient {
         let ciks = ciks.unwrap_or_default();
         let tickers = tickers.unwrap_or_default();
         let response = py
-            .allow_threads(move || {
+            .detach(move || {
                 self.execute_search(
                     &query,
                     &forms,
@@ -438,7 +438,7 @@ impl EftsClient {
                     &sort_order,
                 )
             })
-            .map_err(|err| err.to_py_err())?;
+            .map_err(|err: EftsError| err.to_py_err())?;
         // Return native PyO3 class directly - no JSON serialization!
         Py::new(py, response)
     }
@@ -519,7 +519,7 @@ impl EftsClient {
                 .map_err(|err| err.to_py_err())?;
 
             // Return native PyO3 class
-            Python::with_gil(|py| Py::new(py, response))
+            Python::attach(|py| Py::new(py, response))
         })
     }
 
@@ -555,7 +555,7 @@ impl EftsClient {
         let ciks = ciks.unwrap_or_default();
         let tickers = tickers.unwrap_or_default();
         let hits = py
-            .allow_threads(move || {
+            .detach(move || {
                 self.execute_search_all(
                     &query,
                     &forms,
@@ -568,7 +568,7 @@ impl EftsClient {
                     &sort_order,
                 )
             })
-            .map_err(|err| err.to_py_err())?;
+            .map_err(|err: EftsError| err.to_py_err())?;
         // Return native PyO3 list of EFTSHit - no JSON serialization!
         hits.into_iter().map(|hit| Py::new(py, hit)).collect()
     }
@@ -644,7 +644,7 @@ impl EftsClient {
                 .map_err(|err| err.to_py_err())?;
 
             // Return native PyO3 list of EFTSHit
-            Python::with_gil(|py| {
+            Python::attach(|py| {
                 hits.into_iter()
                     .map(|hit| Py::new(py, hit))
                     .collect::<PyResult<Vec<Py<SearchHit>>>>()
@@ -732,7 +732,7 @@ impl EftsClient {
                 .await;
 
             // Return native PyO3 list of BatchSearchResult
-            Python::with_gil(|py| {
+            Python::attach(|py| {
                 results
                     .into_iter()
                     .map(|result| Py::new(py, result))
@@ -777,7 +777,7 @@ impl EftsClient {
         &self,
         py: Python<'py>,
         query: String,
-        on_progress: PyObject,
+        on_progress: Py<PyAny>,
         forms: Option<Vec<String>>,
         ciks: Option<Vec<String>>,
         tickers: Option<Vec<String>>,
@@ -822,7 +822,7 @@ impl EftsClient {
                     &sort_order,
                     |progress| {
                         // Call the Python callback with progress info
-                        Python::with_gil(|py| {
+                        Python::attach(|py| {
                             if let Ok(progress_obj) = Py::new(py, progress) {
                                 let _ = on_progress.call1(py, (progress_obj,));
                             }
@@ -833,7 +833,7 @@ impl EftsClient {
                 .map_err(|err| err.to_py_err())?;
 
             // Return native PyO3 list of EFTSHit
-            Python::with_gil(|py| {
+            Python::attach(|py| {
                 hits.into_iter()
                     .map(|hit| Py::new(py, hit))
                     .collect::<PyResult<Vec<Py<SearchHit>>>>()

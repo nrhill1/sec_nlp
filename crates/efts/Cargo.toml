@@ -9,8 +9,8 @@ name = "efts"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-pyo3 = { version = "0.23", features = ["extension-module"] }
-pyo3-async-runtimes = { version = "0.23", features = ["tokio-runtime"] }
+pyo3 = { version = "0.28.2", features = ["extension-module", "abi3-py313"] }
+pyo3-async-runtimes = { version = "0.28", features = ["tokio-runtime"] }
 reqwest = { version = "0.12", default-features = false, features = ["blocking", "json", "rustls-tls"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
@@ -20,3 +20,6 @@ chrono = "0.4"
 tokio = { version = "1", features = ["rt-multi-thread", "time", "sync"] }
 keyword_extraction = { version = "1.5", features = ["yake", "tf_idf", "rake", "text_rank"] }
 stop-words = "0.8"
+
+[build-dependencies]
+pyo3-build-config = "0.28.2"
