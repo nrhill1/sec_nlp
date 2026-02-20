@@ -148,13 +148,13 @@ class AnalyzeCommand(AnalyzeConfig, BasePipelineCommand):
 
     def _log_config_details(self) -> None:
         """Log analyze-specific configuration."""
+        super()._log_config_details()
         items: list[tuple[str, str | None]] = []
 
         # Show preset if used
         if self.preset:
             items.append(("Preset", self.preset))
 
-        items.append(("Symbols", ", ".join(self.symbols)))
         items.append(
             (
                 "LLM",

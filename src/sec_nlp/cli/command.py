@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import sys
 from abc import ABC, abstractmethod
+from datetime import datetime
 from pathlib import Path
 
 from pydantic import BaseModel
@@ -149,9 +150,35 @@ class BasePipelineCommand(BaseModel, ABC):
         """Log pipeline config with enhanced Rich formatting for topics/keywords."""
         items: list[tuple[str, str | None]] = []
 
+        run_short = getattr(self, "short_id_display", None)
+        if isinstance(run_short, str):
+            items.append(("Run", run_short))
+
+        run_id = getattr(self, "run_id", None)
+        if run_id is not None:
+            items.append(("Run ID", str(run_id)))
+
+        run_timestamp = getattr(self, "run_timestamp", None)
+        if isinstance(run_timestamp, datetime):
+            items.append(
+                (
+                    "Started",
+                    run_timestamp.astimezone().strftime("%Y-%m-%d %H:%M:%S %Z"),
+                )
+            )
+
         symbols = getattr(self, "symbols", [])
         if symbols:
             items.append(("Symbols", ", ".join(symbols)))
+
+        date_range = getattr(self, "date_range", None)
+        if (
+            isinstance(date_range, tuple)
+            and len(date_range) == 2
+            and all(item is not None for item in date_range)
+        ):
+            start, end = date_range
+            items.append(("Date Range", f"{start} to {end}"))
 
         forms = getattr(self, "forms", None)
         forms_display: list[str] = []
@@ -168,12 +195,26 @@ class BasePipelineCommand(BaseModel, ABC):
         if batch_size is not None:
             items.append(("Batch size", str(batch_size)))
 
+        dry_run = getattr(self, "dry_run", None)
+        if isinstance(dry_run, bool):
+            items.append(("Dry Run", "yes" if dry_run else "no"))
+
+        out_path = getattr(self, "out_path", None)
+        if isinstance(out_path, Path):
+            items.append(("Outputs", str(out_path)))
+
         if items:
             for label, value in items:
                 logger.info(format_key_value(label, value))
 
+        self._log_pipeline_run_details()
+
         # Enhanced visual display for analyze-specific config
         self._log_analyze_config_panel()
+
+    def _log_pipeline_run_details(self) -> None:
+        """Hook for command-specific run detail logging."""
+        return
 
     def _log_analyze_config_panel(self) -> None:
         """Log analyze config (topics, keywords, search) as a Rich Panel."""

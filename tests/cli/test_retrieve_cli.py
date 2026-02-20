@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import sys
 from pathlib import Path
 from unittest.mock import Mock, patch
@@ -185,3 +186,32 @@ def test_retrieve_cli_integration_with_market_signals_flag(
     assert mock_run_pipeline.called
     config = mock_run_pipeline.call_args[0][0]
     assert config.include_market_signals is True
+
+
+def test_retrieve_logs_run_details_in_config_header(
+    tmp_path: Path,
+    caplog,
+) -> None:
+    dl_path = tmp_path / "downloads"
+    out_path = tmp_path / "outputs"
+    dl_path.mkdir()
+    out_path.mkdir()
+
+    cmd = Retrieve(
+        email="test@example.com",
+        dl_path=dl_path,
+        out_path=out_path,
+        symbols=["AAPL"],
+        queries=["supply chain"],
+        top_k=12,
+        efts_candidates=150,
+        index_results=True,
+    )
+
+    caplog.set_level(logging.INFO, logger="sec_nlp")
+    cmd._log_config_details()
+
+    assert "Run ID" in caplog.text
+    assert "Date Range" in caplog.text
+    assert "Queries" in caplog.text
+    assert "Collection" in caplog.text

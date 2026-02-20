@@ -8,6 +8,7 @@ from pydantic import Field
 from pydantic_settings import CliPositionalArg
 
 from sec_nlp.cli.command import BasePipelineCommand
+from sec_nlp.cli.formatting import format_key_value
 from sec_nlp.core.infra.logger import color_text, logger
 from sec_nlp.pipelines.base.result import BasePipelineResult
 from sec_nlp.pipelines.presets.chat import (
@@ -35,6 +36,20 @@ class Chat(ChatSettings, BasePipelineCommand):
 
     def _get_header_subtitle(self) -> str:
         return "RAG Chat"
+
+    def _log_pipeline_run_details(self) -> None:
+        collections = [name for name in self.collections if name.strip()]
+        if collections:
+            logger.info(format_key_value("Collections", ", ".join(collections)))
+
+        logger.info(format_key_value("Top K", str(self.top_k)))
+        logger.info(
+            format_key_value("Context Chunks", str(self.max_context_chunks))
+        )
+
+        question = (self.question or "").strip()
+        if question:
+            logger.info(format_key_value("Question", question))
 
     def cli_cmd(self) -> None:
         question = (self.question or "").strip()

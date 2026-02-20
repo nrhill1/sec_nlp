@@ -228,3 +228,31 @@ def test_chat_handle_result_logs_question_before_answer(
     assert answer_pos != -1
     assert question_pos < answer_pos
     assert "What changed in liquidity risk?" in caplog.text
+
+
+def test_chat_logs_run_details_in_config_header(
+    tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    dl_path = tmp_path / "downloads"
+    out_path = tmp_path / "outputs"
+    dl_path.mkdir()
+    out_path.mkdir()
+
+    cmd = Chat(
+        email="test@example.com",
+        dl_path=dl_path,
+        out_path=out_path,
+        symbols=["CDE"],
+        question="What changed in liquidity risk?",
+        collections=["retrieve"],
+        top_k=9,
+    )
+
+    caplog.set_level(logging.INFO, logger="sec_nlp")
+    cmd._log_config_details()
+
+    assert "Run ID" in caplog.text
+    assert "Date Range" in caplog.text
+    assert "Collections" in caplog.text
+    assert "Question" in caplog.text
