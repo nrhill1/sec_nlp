@@ -101,6 +101,8 @@ help:
 	@echo "  validate               Full validation (imports + types + tests)"
 	@echo "  cov-html               Generate coverage reports"
 	@echo "  perf-bench             Run chat/retrieve performance suite"
+	@echo "  perf-bench-fast        Run one-pass chat/retrieve perf suite"
+	@echo "  perf-smoke             Run minimal perf smoke pair"
 	@echo "  perf-compare           Compare latest two performance suite artifacts"
 	@echo "  pre-commit             Run pre-commit hooks"
 	@echo "  stubs                  Generate Python stubs into ./types (uses stubgen)"
@@ -273,6 +275,16 @@ verify-all: ready
 perf-bench: ready
 	@echo "==> Running performance suite..."
 	@uv run python src/scripts/profile/perf_suite.py --mode run
+
+.PHONY: perf-bench-fast
+perf-bench-fast: ready
+	@echo "==> Running one-pass performance suite..."
+	@uv run python src/scripts/profile/perf_suite.py --mode run --repeats 1
+
+.PHONY: perf-smoke
+perf-smoke: ready
+	@echo "==> Running perf smoke (retrieve/chat mining top_k=40)..."
+	@uv run python src/scripts/profile/perf_suite.py --mode run --repeats 1 --chat_model_name "ministral-3:3b" --chat_max_new_tokens 256 --include_cases '["retrieve_mining_topk40","chat_mining_topk40"]'
 
 .PHONY: perf-compare
 perf-compare: ready

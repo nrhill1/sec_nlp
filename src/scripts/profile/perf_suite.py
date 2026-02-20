@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import signal
 import subprocess
 import sys
@@ -122,21 +123,50 @@ def _safe_output_counts(
     return counts
 
 
-def _default_cases(email: str) -> list[PerfCase]:
+def _default_cases(
+    email: str,
+    *,
+    collection_name: str,
+    qdrant_location: str,
+    chat_model_name: str | None,
+    chat_max_new_tokens: int | None,
+) -> list[PerfCase]:
     forms = "10-K,10-Q,8-K,6-K"
     start_date = "2023-01-01"
     tech_symbols = ["NVDA", "AMD", "AVGO", "QCOM", "INTC"]
     mining_symbols = ["MP", "LAC", "UUUU", "AREC", "USAR"]
 
-    retrieve_queries = (
+    retrieve_queries_tech = (
         "AI accelerator demand and lead-time normalization||"
         "capex cycle and margin sensitivity||"
         "policy and export-control exposure"
     )
-    chat_question = (
+    retrieve_queries_mining = (
+        "rare earth production expansion and throughput||"
+        "NdPr pricing sensitivity and offtake visibility||"
+        "permitting, geopolitics, and supply chain concentration risk"
+    )
+    chat_question_tech = (
         "Compare demand durability, margin risk, and execution risk across "
         "the selected issuers using filing evidence."
     )
+    chat_question_mining = (
+        "Compare rare-earth supply chain risk, pricing power, and execution "
+        "risk across the selected issuers using filing evidence."
+    )
+    vdb_args = [
+        "--vdb.collection-name",
+        collection_name,
+        "--vdb.qdrant-location",
+        qdrant_location,
+        "--vdb.qdrant-url",
+        "null",
+    ]
+    chat_llm_args: list[str] = []
+    if chat_model_name and chat_model_name.strip():
+        chat_llm_args.extend(["--llm.model-name", chat_model_name.strip()])
+    if chat_max_new_tokens is not None:
+        chat_llm_args.extend(["--llm.max-new-tokens", str(chat_max_new_tokens)])
 
     cases: list[PerfCase] = []
     for top_k in (40, 80):
@@ -151,12 +181,78 @@ def _default_cases(email: str) -> list[PerfCase]:
                     "--email",
                     email,
                     "--no-dry-run",
+                    "--no-incremental",
+                    *vdb_args,
+                    "--no-download-missing",
+                    "--index-results",
                     "--forms",
                     forms,
                     "--start-date",
                     start_date,
                     "--queries",
-                    retrieve_queries,
+                    retrieve_queries_tech,
+                    "--efts-candidates",
+                    "220",
+                    "--top-k",
+                    str(top_k),
+                    "--output-format",
+                    "json",
+                ],
+            )
+        )
+        cases.append(
+            PerfCase(
+                name=f"chat_tech_topk{top_k}",
+                pipeline="chat",
+                tags=["chat", "tech", f"topk{top_k}"],
+                args=[
+                    "chat",
+                    *tech_symbols,
+                    "--email",
+                    email,
+                    "--no-dry-run",
+                    *vdb_args,
+                    "--collections",
+                    collection_name,
+                    "--forms",
+                    forms,
+                    "--start-date",
+                    start_date,
+                    "--question",
+                    chat_question_tech,
+                    *chat_llm_args,
+                    "--rerank-mode",
+                    "mmr",
+                    "--top-k",
+                    str(top_k),
+                    "--max-context-chunks",
+                    "8" if top_k == 40 else "10",
+                    "--output-format",
+                    "json",
+                ],
+            )
+        )
+        cases.append(
+            PerfCase(
+                name=f"retrieve_mining_topk{top_k}",
+                pipeline="retrieve",
+                tags=["retrieve", "mining", f"topk{top_k}"],
+                args=[
+                    "retrieve",
+                    *mining_symbols,
+                    "--email",
+                    email,
+                    "--no-dry-run",
+                    "--no-incremental",
+                    *vdb_args,
+                    "--no-download-missing",
+                    "--index-results",
+                    "--forms",
+                    forms,
+                    "--start-date",
+                    start_date,
+                    "--queries",
+                    retrieve_queries_mining,
                     "--efts-candidates",
                     "220",
                     "--top-k",
@@ -177,14 +273,16 @@ def _default_cases(email: str) -> list[PerfCase]:
                     "--email",
                     email,
                     "--no-dry-run",
+                    *vdb_args,
                     "--collections",
-                    "retrieve",
+                    collection_name,
                     "--forms",
                     forms,
                     "--start-date",
                     start_date,
                     "--question",
-                    chat_question,
+                    chat_question_mining,
+                    *chat_llm_args,
                     "--rerank-mode",
                     "mmr",
                     "--top-k",
@@ -280,6 +378,24 @@ class PerfSuiteConfig(BaseSettings):
         default="you@example.com",
         description="Email passed through to sec-nlp runs.",
     )
+    collection_name: str = Field(
+        default="perf_retrieve",
+        description="Qdrant collection used by retrieve/chat perf cases.",
+    )
+    qdrant_location: Path = Field(
+        default=Path(".qdrant/perf-suite"),
+        description="Local Qdrant location used during perf runs.",
+    )
+    chat_model_name: str | None = Field(
+        default=None,
+        description="Optional chat LLM model name override for perf runs.",
+    )
+    chat_max_new_tokens: int | None = Field(
+        default=None,
+        ge=32,
+        le=4096,
+        description="Optional chat max-new-tokens override for perf runs.",
+    )
     include_cases: list[str] = Field(
         default_factory=list,
         description="Optional case-name allowlist.",
@@ -303,7 +419,13 @@ class PerfSuiteConfig(BaseSettings):
     def _run_suite(self) -> None:
         output_dir = self.output_dir.resolve()
         output_dir.mkdir(parents=True, exist_ok=True)
-        cases = _default_cases(self.email)
+        cases = _default_cases(
+            self.email,
+            collection_name=self.collection_name,
+            qdrant_location=str(self.qdrant_location),
+            chat_model_name=self.chat_model_name,
+            chat_max_new_tokens=self.chat_max_new_tokens,
+        )
         if self.include_cases:
             allow = {
                 name.strip() for name in self.include_cases if name.strip()
@@ -329,6 +451,7 @@ class PerfSuiteConfig(BaseSettings):
                 completed = subprocess.run(
                     cmd,
                     cwd=str(Path.cwd()),
+                    env=self._subprocess_env(),
                     text=True,
                     capture_output=True,
                     check=False,
@@ -378,6 +501,21 @@ class PerfSuiteConfig(BaseSettings):
             encoding="utf-8",
         )
         logger.info("Perf suite artifact written to %s", artifact)
+
+    def _subprocess_env(self) -> dict[str, str]:
+        env = dict(os.environ)
+        env["SEC_NLP_VDB_COLLECTION_NAME"] = self.collection_name
+        env["SEC_NLP_VDB_QDRANT_LOCATION"] = str(self.qdrant_location)
+        # Force local embedded Qdrant for stable local perf runs.
+        for key in (
+            "SEC_NLP_VDB_QDRANT_URL",
+            "SEC_NLP_VDB_QDRANT_HOST",
+            "SEC_NLP_VDB_QDRANT_PORT",
+            "SEC_NLP_VDB_QDRANT_GRPC_PORT",
+            "SEC_NLP_VDB_QDRANT_API_KEY",
+        ):
+            env.pop(key, None)
+        return env
 
     def _compare_latest(self) -> None:
         output_dir = self.output_dir.resolve()

@@ -3,11 +3,12 @@
 This directory is organized by scope.
 
 ## Root docs (cross-cutting)
+
 - `ARCHITECTURE.md` - system architecture and runtime design
 - `PROJECT_STATE.md` - current command/pipeline/output snapshot
-- `AGENTS.md` - project-specific contributor/agent rules
 
 ## Pipeline docs
+
 - `../src/sec_nlp/pipelines/presets/README.md` - index of all pipeline docs
 - `../src/sec_nlp/pipelines/presets/analyze/README.md` - analyze pipeline walkthrough
 - `../src/sec_nlp/pipelines/presets/chat/README.md` - retrieval-augmented chat pipeline
@@ -24,6 +25,7 @@ This directory is organized by scope.
 - `../src/sec_nlp/pipelines/presets/analyze/EFTS_KEYWORDS_CORRELATION.md` - analyze-specific design notes
 
 ## Crate docs
+
 - `../crates/README.md` - index of Rust crate docs
 - `../crates/corr/README.md` - correlation/statistics extension docs
 - `../crates/efts/README.md` - EFTS Rust extension docs
@@ -33,6 +35,7 @@ This directory is organized by scope.
 - `../crates/xbrl/README.md` - XBRL parsing extension docs
 
 ## Placement rules
+
 - Put pipeline-specific docs under `src/sec_nlp/pipelines/presets/<pipeline>/`.
 - Put Rust extension docs under `crates/<crate>/`.
 - Keep only cross-cutting/index docs at `docs/` root.

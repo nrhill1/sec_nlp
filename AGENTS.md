@@ -168,5 +168,5 @@ When modifying pipelines or adding features:
 ## Commits
 
 - Include `Co-Authored-By: Warp <agent@warp.dev>` at the end of every commit message.
-- Use concise, imperative commit messages (e.g. "Fix confidence calibration double-penalty").
+- Use concise, imperative commit messages (e.g. `"Fix confidence calibration double-penalty"`).
 - Do not commit unless explicitly asked to.
