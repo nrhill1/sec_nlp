@@ -24,6 +24,8 @@
 - Deterministic SEC extraction: `warranty`, `financials`, `holdings`, `insider`
 - Timeline/correlation: `news`, `events`
 
+`retrieve` is EFTS-first and uses lexical ranking/pruning (stopword-aware by default) with selective chunk hydration before optional embedding rerank/index.
+
 ## Analyze Flow
 1. Load filings (optionally with EFTS expansion).
 2. Chunk/filter/dedupe content.

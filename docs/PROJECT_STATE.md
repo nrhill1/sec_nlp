@@ -36,7 +36,7 @@ This document captures the current command/pipeline surface in the repository an
 | `insider` | `FilingMode.insider` (enforced) | `3`, `4`, `5` | `csv` | Transactions, ledgers, cluster/alert generation |
 | `news` | `FilingMode.current` | `8-K`, `10-K`, `10-Q` | `json` | News timeline with optional market-correlation context |
 | `events` | `FilingMode.current` (enforced) | `8-K`, `6-K` | `json` | Event detection + event-study scoring |
-| `retrieve` | `FilingMode.annual` | `10-K`, `10-Q` | `json` | EFTS candidate ranking + optional embedding rerank/index |
+| `retrieve` | `FilingMode.annual` | `10-K`, `10-Q` | `json` | EFTS candidate ranking with stopword-aware lexical pruning, selective hydration, and optional embedding rerank/index |
 | `chat` | `FilingMode.annual` | optional filter | `all` | Retrieval-augmented Q&A over indexed chunks |
 
 ## Output Layout (Current)
