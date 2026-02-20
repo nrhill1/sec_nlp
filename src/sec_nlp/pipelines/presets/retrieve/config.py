@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from pathlib import Path
 from typing import ClassVar, Literal
 
@@ -128,6 +129,22 @@ class RetrieveSettings(BasePipelineSettings):
         default="json",
         description="Output file format to emit.",
     )
+
+    @model_validator(mode="before")
+    @classmethod
+    def disable_dry_run_for_embedding_ops(
+        cls, values: Mapping[str, object] | object
+    ) -> Mapping[str, object] | object:
+        """Force dry_run off when features require embeddings/index writes."""
+        if not isinstance(values, Mapping):
+            return values
+
+        merged = dict(values)
+        if bool(merged.get("index_results")) or bool(
+            merged.get("rerank_with_embeddings")
+        ):
+            merged["dry_run"] = False
+        return merged
 
     @field_validator("queries", mode="before")
     @classmethod
