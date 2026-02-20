@@ -6,6 +6,7 @@ import asyncio
 import re
 from collections.abc import Sequence
 from datetime import date
+from functools import lru_cache
 from types import TracebackType
 
 from sec_nlp.core.edgar.efts import EFTSAPIError, create_efts_client
@@ -38,7 +39,10 @@ def _normalize_cik(value: str | None) -> str | None:
     return digits.zfill(10)
 
 
-def _company_name_tickers(company_name: str) -> set[str]:
+@lru_cache(maxsize=4096)
+def _company_name_tickers(company_name: str) -> frozenset[str]:
+    if "(" not in company_name:
+        return frozenset()
     matches = re.findall(r"\(([^)]+)\)", company_name.upper())
     tickers: set[str] = set()
     for group in matches:
@@ -48,7 +52,7 @@ def _company_name_tickers(company_name: str) -> set[str]:
             token = part.strip()
             if _TICKER_TOKEN.match(token):
                 tickers.add(token)
-    return tickers
+    return frozenset(tickers)
 
 
 def _hit_matches_symbol(
@@ -62,12 +66,10 @@ def _hit_matches_symbol(
     if target in hit_tickers:
         return True
 
-    if target in _company_name_tickers(hit.company_name):
+    if symbol_cik is not None and _normalize_cik(hit.cik) == symbol_cik:
         return True
 
-    if symbol_cik is None:
-        return False
-    return _normalize_cik(hit.cik) == symbol_cik
+    return target in _company_name_tickers(hit.company_name)
 
 
 def _resolve_symbol_cik(

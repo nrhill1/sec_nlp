@@ -339,6 +339,39 @@ def test_candidate_search_keeps_hits_when_cik_matches_without_ticker() -> None:
     assert filtered[0].accession_number == "0001326801-26-000001"
 
 
+def test_candidate_search_cik_match_short_circuits_company_name_parse(
+    monkeypatch,
+) -> None:
+    hit = EFTSHit(
+        accession_number="0001326801-26-000001",
+        cik="0001326801",
+        company_name="Non-Matching Issuer Name",
+        tickers=[],
+        form_type="10-K",
+        filed_date=date(2026, 2, 1),
+        score=9.1,
+    )
+
+    def _raise_if_called(company_name: str):
+        raise AssertionError(
+            "_company_name_tickers should not be called when CIK matches"
+        )
+
+    monkeypatch.setattr(
+        candidate_search_steps,
+        "_company_name_tickers",
+        _raise_if_called,
+    )
+
+    matched = candidate_search_steps._hit_matches_symbol(
+        hit=hit,
+        symbol="MP",
+        symbol_cik="0001326801",
+    )
+
+    assert matched is True
+
+
 def test_candidate_search_allows_unscoped_hits_when_symbol_missing() -> None:
     hits = [
         EFTSHit(
