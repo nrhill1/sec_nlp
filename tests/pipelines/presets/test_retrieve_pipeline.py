@@ -413,6 +413,39 @@ def test_candidate_search_cik_match_short_circuits_company_name_parse(
     assert matched is True
 
 
+def test_candidate_search_ticker_mismatch_short_circuits_company_parse(
+    monkeypatch,
+) -> None:
+    hit = EFTSHit(
+        accession_number="0000915913-26-000018",
+        cik="0000915913",
+        company_name="Potentially expensive parse target",
+        tickers=["ALB"],
+        form_type="10-K",
+        filed_date=date(2026, 2, 11),
+        score=9.2,
+    )
+
+    def _raise_if_called(company_name: str):
+        raise AssertionError(
+            "_company_name_tickers should not run for explicit ticker mismatches"
+        )
+
+    monkeypatch.setattr(
+        candidate_search_steps,
+        "_company_name_tickers",
+        _raise_if_called,
+    )
+
+    matched = candidate_search_steps._hit_matches_symbol(
+        hit=hit,
+        symbol="MP",
+        symbol_cik=None,
+    )
+
+    assert matched is False
+
+
 def test_candidate_search_allows_unscoped_hits_when_symbol_missing() -> None:
     hits = [
         EFTSHit(
