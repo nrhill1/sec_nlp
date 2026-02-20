@@ -177,7 +177,11 @@ class RetrieveCandidateSearcher:
                 symbol_cik=None,
             )
             if len(filtered_hits) != len(raw_hits):
-                if any(_normalize_cik(hit.cik) is not None for hit in raw_hits):
+                # Avoid extra SEC ticker-registry lookups unless the fast
+                # ticker/company-name pass produced no symbol matches.
+                if not filtered_hits and any(
+                    _normalize_cik(hit.cik) is not None for hit in raw_hits
+                ):
                     if symbol_cik is None:
                         symbol_cik = self._resolve_symbol_cik_cached(
                             normalized_symbol

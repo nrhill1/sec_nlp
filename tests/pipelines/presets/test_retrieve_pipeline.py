@@ -10,7 +10,7 @@ from types import SimpleNamespace
 
 from langchain_core.documents import Document
 
-from sec_nlp.core.edgar.efts_models import EFTSHit
+from sec_nlp.core.edgar.efts_models import EFTSBatchResult, EFTSHit
 from sec_nlp.core.edgar.filing_mode import FilingMode
 from sec_nlp.pipelines.presets.retrieve import (
     RetrievePipeline,
@@ -372,6 +372,142 @@ def test_candidate_search_allows_unscoped_hits_when_symbol_missing() -> None:
         "0001326801-26-000001",
         "0000215466-24-000008",
     }
+
+
+def test_candidates_from_batch_results_skips_cik_lookup_when_ticker_match_exists(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    settings = RetrieveSettings(
+        email="test@example.com",
+        symbols=["MP"],
+        queries=["rare earth"],
+        dl_path=tmp_path / "downloads",
+        out_path=tmp_path / "outputs",
+    )
+    searcher = object.__new__(candidate_search_steps.RetrieveCandidateSearcher)
+    searcher._settings = settings
+    searcher._symbol_cik_cache = {}
+
+    resolve_calls = {"count": 0}
+
+    def _fake_resolve(self, symbol: str) -> str | None:
+        resolve_calls["count"] += 1
+        return "0001326801"
+
+    monkeypatch.setattr(
+        candidate_search_steps.RetrieveCandidateSearcher,
+        "_resolve_symbol_cik_cached",
+        _fake_resolve,
+    )
+
+    batch_results = [
+        EFTSBatchResult(
+            query="rare earth",
+            hits=[
+                EFTSHit(
+                    accession_number="0001326801-26-000001",
+                    cik="0001326801",
+                    company_name="MP Materials Corp. (MP) (CIK 0001326801)",
+                    tickers=["MP"],
+                    form_type="10-K",
+                    filed_date=date(2026, 2, 1),
+                    score=9.1,
+                ),
+                EFTSHit(
+                    accession_number="0000915913-26-000018",
+                    cik="0000915913",
+                    company_name="ALBEMARLE CORP (ALB) (CIK 0000915913)",
+                    tickers=["ALB"],
+                    form_type="10-K",
+                    filed_date=date(2026, 2, 11),
+                    score=9.2,
+                ),
+            ],
+            total=2,
+            error=None,
+        )
+    ]
+
+    candidates = searcher._candidates_from_batch_results(
+        normalized_symbol="MP",
+        queries=["rare earth"],
+        batch_results=batch_results,
+    )
+
+    assert resolve_calls["count"] == 0
+    assert len(candidates["rare earth"]) == 1
+    assert (
+        candidates["rare earth"][0].accession_number == "0001326801-26-000001"
+    )
+
+
+def test_candidates_from_batch_results_uses_cik_lookup_when_fast_match_empty(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    settings = RetrieveSettings(
+        email="test@example.com",
+        symbols=["MP"],
+        queries=["rare earth"],
+        dl_path=tmp_path / "downloads",
+        out_path=tmp_path / "outputs",
+    )
+    searcher = object.__new__(candidate_search_steps.RetrieveCandidateSearcher)
+    searcher._settings = settings
+    searcher._symbol_cik_cache = {}
+
+    resolve_calls = {"count": 0}
+
+    def _fake_resolve(self, symbol: str) -> str | None:
+        resolve_calls["count"] += 1
+        return "0001326801"
+
+    monkeypatch.setattr(
+        candidate_search_steps.RetrieveCandidateSearcher,
+        "_resolve_symbol_cik_cached",
+        _fake_resolve,
+    )
+
+    batch_results = [
+        EFTSBatchResult(
+            query="rare earth",
+            hits=[
+                EFTSHit(
+                    accession_number="0001326801-26-000001",
+                    cik="0001326801",
+                    company_name="MP Materials Corp.",
+                    tickers=[],
+                    form_type="10-K",
+                    filed_date=date(2026, 2, 1),
+                    score=9.1,
+                ),
+                EFTSHit(
+                    accession_number="0000915913-26-000018",
+                    cik="0000915913",
+                    company_name="ALBEMARLE CORP",
+                    tickers=[],
+                    form_type="10-K",
+                    filed_date=date(2026, 2, 11),
+                    score=9.2,
+                ),
+            ],
+            total=2,
+            error=None,
+        )
+    ]
+
+    candidates = searcher._candidates_from_batch_results(
+        normalized_symbol="MP",
+        queries=["rare earth"],
+        batch_results=batch_results,
+    )
+
+    assert resolve_calls["count"] == 1
+    assert len(candidates["rare earth"]) == 1
+    assert (
+        candidates["rare earth"][0].accession_number == "0001326801-26-000001"
+    )
 
 
 def test_retrieve_pipeline_run_writes_outputs_with_mocked_search(
