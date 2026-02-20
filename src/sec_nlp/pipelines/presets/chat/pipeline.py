@@ -131,6 +131,7 @@ class ChatPipeline(BasePipeline):
         default_factory=lambda: {"prompt_build": 0.0, "llm_generate": 0.0}
     )
     _last_llm_max_new_tokens: int | None = PrivateAttr(default=None)
+    _last_context_token_budget: int | None = PrivateAttr(default=None)
 
     @classmethod
     def config_model(cls) -> type[ChatSettings]:
@@ -294,6 +295,7 @@ class ChatPipeline(BasePipeline):
                 "llm_generate": 0.0,
             }
             self._last_llm_max_new_tokens = None
+            self._last_context_token_budget = None
             stage_timings: dict[str, float] = {
                 "vector_search": 0.0,
                 "rerank": 0.0,
@@ -437,6 +439,14 @@ class ChatPipeline(BasePipeline):
                         else self.config.llm.max_new_tokens
                     ),
                     "generation_token_cap": self.config.generation_token_cap,
+                    "context_token_budget_configured": self.config.context_token_budget,
+                    "context_token_budget_effective": (
+                        self._last_context_token_budget
+                        if self._last_context_token_budget is not None
+                        else self._effective_context_token_budget(
+                            len(citations)
+                        )
+                    ),
                     "stage_timings": {
                         name: round(value, 6)
                         for name, value in stage_timings.items()
@@ -1538,6 +1548,12 @@ class ChatPipeline(BasePipeline):
         adaptive_target = 96 + (32 * context_chunks)
         return max(96, min(configured, cap, adaptive_target))
 
+    def _effective_context_token_budget(self, citation_count: int) -> int:
+        configured = max(1, self.config.context_token_budget)
+        effective_generation = self._effective_max_new_tokens(citation_count)
+        adaptive_cap = max(512, effective_generation * 8)
+        return max(256, min(configured, adaptive_cap))
+
     def _invoke_llm_with_timeout(self, *, llm, prompt: str):
         invoke = getattr(llm, "invoke", None)
         if not callable(invoke):
@@ -1672,7 +1688,9 @@ class ChatPipeline(BasePipeline):
     def _pack_context_citations(
         self, citations: list[ChatCitation]
     ) -> list[tuple[ChatCitation, str]]:
-        budget_remaining = max(1, self.config.context_token_budget)
+        effective_budget = self._effective_context_token_budget(len(citations))
+        self._last_context_token_budget = effective_budget
+        budget_remaining = effective_budget
         packed: list[tuple[ChatCitation, str]] = []
         for citation in citations[: self.config.max_context_chunks]:
             summary_parts = [f"Collection={citation.collection}"]

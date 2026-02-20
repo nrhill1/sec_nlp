@@ -921,6 +921,8 @@ def test_effective_max_new_tokens_respects_cap(tmp_path: Path) -> None:
     assert pipeline._effective_max_new_tokens(1) == 128
     assert pipeline._effective_max_new_tokens(8) == 256
     assert pipeline._effective_max_new_tokens(20) == 256
+    assert pipeline._effective_context_token_budget(1) == 1024
+    assert pipeline._effective_context_token_budget(8) == 2048
 
 
 def test_chat_pipeline_run_requires_question(tmp_path: Path) -> None:
