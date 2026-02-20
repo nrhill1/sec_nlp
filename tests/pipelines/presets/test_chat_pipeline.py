@@ -906,6 +906,23 @@ def test_invoke_llm_with_timeout_raises(tmp_path: Path) -> None:
         pipeline._invoke_llm_with_timeout(llm=_SlowLLM(), prompt="x")
 
 
+def test_effective_max_new_tokens_respects_cap(tmp_path: Path) -> None:
+    config = ChatSettings(
+        email="test@example.com",
+        symbols=["CDE"],
+        question="What changed?",
+        dl_path=tmp_path / "downloads",
+        out_path=tmp_path / "outputs",
+        max_context_chunks=10,
+        generation_token_cap=256,
+    )
+    pipeline = ChatPipeline(config=config)
+
+    assert pipeline._effective_max_new_tokens(1) == 128
+    assert pipeline._effective_max_new_tokens(8) == 256
+    assert pipeline._effective_max_new_tokens(20) == 256
+
+
 def test_chat_pipeline_run_requires_question(tmp_path: Path) -> None:
     config = ChatSettings(
         email="test@example.com",

@@ -212,6 +212,15 @@ class ChatSettings(BasePipelineSettings):
         le=3600,
         description="Timeout for LLM answer generation in seconds.",
     )
+    generation_token_cap: int = Field(
+        default=512,
+        ge=0,
+        le=8192,
+        description=(
+            "Optional hard cap for generated tokens per answer "
+            "(0 disables cap)."
+        ),
+    )
     include_history: bool = Field(
         default=True,
         description="Include prior turns in LLM prompt context.",
@@ -235,6 +244,7 @@ class ChatSettings(BasePipelineSettings):
             model_name="llama3.2:1b",
             require_json=False,
             temperature=0.1,
+            max_new_tokens=384,
         ),
         description="LLM settings for response generation.",
     )

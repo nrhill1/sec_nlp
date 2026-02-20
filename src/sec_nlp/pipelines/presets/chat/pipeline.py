@@ -130,6 +130,7 @@ class ChatPipeline(BasePipeline):
     _last_answer_timings: dict[str, float] = PrivateAttr(
         default_factory=lambda: {"prompt_build": 0.0, "llm_generate": 0.0}
     )
+    _last_llm_max_new_tokens: int | None = PrivateAttr(default=None)
 
     @classmethod
     def config_model(cls) -> type[ChatSettings]:
@@ -292,6 +293,7 @@ class ChatPipeline(BasePipeline):
                 "prompt_build": 0.0,
                 "llm_generate": 0.0,
             }
+            self._last_llm_max_new_tokens = None
             stage_timings: dict[str, float] = {
                 "vector_search": 0.0,
                 "rerank": 0.0,
@@ -427,6 +429,14 @@ class ChatPipeline(BasePipeline):
                     "citations_returned": len(used_citation_ids),
                     "strict_citations": self.config.strict_citations,
                     "symbol_scope": self.config.symbols,
+                    "llm_model_name": self.config.llm.model_name,
+                    "llm_max_new_tokens_configured": self.config.llm.max_new_tokens,
+                    "llm_max_new_tokens_effective": (
+                        self._last_llm_max_new_tokens
+                        if self._last_llm_max_new_tokens is not None
+                        else self.config.llm.max_new_tokens
+                    ),
+                    "generation_token_cap": self.config.generation_token_cap,
                     "stage_timings": {
                         name: round(value, 6)
                         for name, value in stage_timings.items()
@@ -1478,7 +1488,14 @@ class ChatPipeline(BasePipeline):
         prompt_elapsed = perf_counter() - t_prompt
 
         t_llm = perf_counter()
-        llm = self.config.llm.setup_ollama_model()
+        llm_max_new_tokens = self._effective_max_new_tokens(len(citations))
+        self._last_llm_max_new_tokens = llm_max_new_tokens
+        llm_config = self.config.llm
+        if llm_max_new_tokens != llm_config.max_new_tokens:
+            llm_config = llm_config.model_copy(
+                update={"max_new_tokens": llm_max_new_tokens}
+            )
+        llm = llm_config.setup_ollama_model()
         raw_answer = self._invoke_llm_with_timeout(llm=llm, prompt=prompt)
         llm_elapsed = perf_counter() - t_llm
         self._last_answer_timings = {
@@ -1507,6 +1524,19 @@ class ChatPipeline(BasePipeline):
                 used_ids = fallback_ids
 
         return answer, used_ids
+
+    def _effective_max_new_tokens(self, citation_count: int) -> int:
+        configured = max(1, self.config.llm.max_new_tokens)
+        cap = self.config.generation_token_cap
+        if cap <= 0:
+            return configured
+
+        context_chunks = max(
+            1,
+            min(citation_count, self.config.max_context_chunks),
+        )
+        adaptive_target = 96 + (32 * context_chunks)
+        return max(96, min(configured, cap, adaptive_target))
 
     def _invoke_llm_with_timeout(self, *, llm, prompt: str):
         invoke = getattr(llm, "invoke", None)

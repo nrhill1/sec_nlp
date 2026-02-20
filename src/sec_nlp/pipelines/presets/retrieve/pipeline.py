@@ -145,11 +145,35 @@ class RetrievePipeline(BasePipeline):
                     "index": 0.0,
                     "write": 0.0,
                 }
+                precomputed_candidates_by_symbol: dict[
+                    str, dict[str, list]
+                ] = {}
+                shared_candidate_overhead = 0.0
 
                 if run_candidate_search is _ORIGINAL_RUN_CANDIDATE_SEARCH:
                     with RetrieveCandidateSearcher(
                         self.config
                     ) as candidate_searcher:
+                        if len(symbol_targets) > 1 and all(
+                            search_symbol is not None
+                            for search_symbol, _ in symbol_targets
+                        ):
+                            t0 = perf_counter()
+                            precomputed_candidates_by_symbol = (
+                                candidate_searcher.search_many(
+                                    symbols=[
+                                        search_symbol
+                                        for search_symbol, _ in symbol_targets
+                                    ],
+                                    queries=self.config.queries,
+                                )
+                            )
+                            prefetch_elapsed = perf_counter() - t0
+                            if symbol_targets:
+                                shared_candidate_overhead = (
+                                    prefetch_elapsed / len(symbol_targets)
+                                )
+
                         for search_symbol, output_symbol in symbol_targets:
                             progress.update(
                                 overall_task,
@@ -166,6 +190,12 @@ class RetrievePipeline(BasePipeline):
                                 search_symbol=search_symbol,
                                 output_symbol=output_symbol,
                                 candidate_searcher=candidate_searcher,
+                                precomputed_candidates=(
+                                    precomputed_candidates_by_symbol.get(
+                                        output_symbol
+                                    )
+                                ),
+                                shared_candidate_overhead=shared_candidate_overhead,
                                 progress=progress,
                                 phase_task=phase_task,
                             )
@@ -246,6 +276,8 @@ class RetrievePipeline(BasePipeline):
         search_symbol: str | None,
         output_symbol: str,
         candidate_searcher: RetrieveCandidateSearcher | None,
+        precomputed_candidates: dict[str, list] | None = None,
+        shared_candidate_overhead: float = 0.0,
         progress: Progress | None = None,
         phase_task: TaskID | None = None,
     ) -> tuple[
@@ -269,23 +301,29 @@ class RetrievePipeline(BasePipeline):
             output_symbol,
             "Candidate search",
         )
-        t0 = perf_counter()
-        if (
-            candidate_searcher is not None
-            and run_candidate_search is _ORIGINAL_RUN_CANDIDATE_SEARCH
-        ):
-            candidates_by_query = candidate_searcher.search(
-                symbol=search_symbol,
-                queries=self.config.queries,
+        if precomputed_candidates is not None:
+            candidates_by_query = precomputed_candidates
+            stage_timings["candidate_search"] = max(
+                0.0, shared_candidate_overhead
             )
         else:
-            # Preserve monkeypatch compatibility for unit tests.
-            candidates_by_query = run_candidate_search(
-                symbol=search_symbol,
-                queries=self.config.queries,
-                settings=self.config,
-            )
-        stage_timings["candidate_search"] = perf_counter() - t0
+            t0 = perf_counter()
+            if (
+                candidate_searcher is not None
+                and run_candidate_search is _ORIGINAL_RUN_CANDIDATE_SEARCH
+            ):
+                candidates_by_query = candidate_searcher.search(
+                    symbol=search_symbol,
+                    queries=self.config.queries,
+                )
+            else:
+                # Preserve monkeypatch compatibility for unit tests.
+                candidates_by_query = run_candidate_search(
+                    symbol=search_symbol,
+                    queries=self.config.queries,
+                    settings=self.config,
+                )
+            stage_timings["candidate_search"] = perf_counter() - t0
 
         candidate_count = sum(
             len(hits) for hits in candidates_by_query.values()

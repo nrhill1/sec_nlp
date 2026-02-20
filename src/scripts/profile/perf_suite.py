@@ -399,11 +399,11 @@ class PerfSuiteConfig(BaseSettings):
         description="Local Qdrant location used during perf runs.",
     )
     chat_model_name: str | None = Field(
-        default=None,
+        default="llama3.2:1b",
         description="Optional chat LLM model name override for perf runs.",
     )
     chat_max_new_tokens: int | None = Field(
-        default=None,
+        default=192,
         ge=32,
         le=4096,
         description="Optional chat max-new-tokens override for perf runs.",

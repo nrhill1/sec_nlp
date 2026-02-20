@@ -119,6 +119,7 @@ class RetrieveCandidateSearcher:
             company_name="SEC NLP Tool",
         )
         self._loop = asyncio.new_event_loop()
+        self._symbol_cik_cache: dict[str, str | None] = {}
 
     async def _batch_search_async(
         self,
@@ -135,6 +136,68 @@ class RetrieveCandidateSearcher:
             end_date=self._end_date,
             limit_per_query=self._settings.efts_candidates,
         )
+
+    def _resolve_symbol_cik_cached(self, symbol: str) -> str | None:
+        cached = self._symbol_cik_cache.get(symbol)
+        if symbol in self._symbol_cik_cache:
+            return cached
+        resolved = _resolve_symbol_cik(symbol=symbol, settings=self._settings)
+        self._symbol_cik_cache[symbol] = resolved
+        return resolved
+
+    def _candidates_from_batch_results(
+        self,
+        *,
+        normalized_symbol: str | None,
+        queries: Sequence[str],
+        batch_results: list[EFTSBatchResult],
+    ) -> dict[str, list[EFTSHit]]:
+        symbol_display = normalized_symbol or "<all>"
+        symbol_cik: str | None = None
+
+        candidates: dict[str, list[EFTSHit]] = {query: [] for query in queries}
+        for result in batch_results:
+            if not result.success:
+                logger.debug(
+                    "EFTS batch query failed for %s query=%r: %s",
+                    symbol_display,
+                    result.query,
+                    result.error,
+                )
+                continue
+
+            raw_hits = list(result.hits)
+            if normalized_symbol is None:
+                candidates[result.query] = raw_hits
+                continue
+
+            filtered_hits = _filter_hits_for_symbol(
+                hits=raw_hits,
+                symbol=normalized_symbol,
+                symbol_cik=None,
+            )
+            if len(filtered_hits) != len(raw_hits):
+                if any(_normalize_cik(hit.cik) is not None for hit in raw_hits):
+                    if symbol_cik is None:
+                        symbol_cik = self._resolve_symbol_cik_cached(
+                            normalized_symbol
+                        )
+                    if symbol_cik:
+                        filtered_hits = _filter_hits_for_symbol(
+                            hits=raw_hits,
+                            symbol=normalized_symbol,
+                            symbol_cik=symbol_cik,
+                        )
+                logger.info(
+                    "Filtered %d/%d cross-symbol EFTS hits for %s query=%r",
+                    len(raw_hits) - len(filtered_hits),
+                    len(raw_hits),
+                    normalized_symbol,
+                    result.query,
+                )
+            candidates[result.query] = filtered_hits
+
+        return candidates
 
     def search(
         self,
@@ -173,45 +236,71 @@ class RetrieveCandidateSearcher:
         finally:
             asyncio.set_event_loop(None)
 
-        symbol_cik = (
-            _resolve_symbol_cik(
-                symbol=normalized_symbol,
-                settings=self._settings,
-            )
-            if normalized_symbol
-            else None
+        return self._candidates_from_batch_results(
+            normalized_symbol=normalized_symbol,
+            queries=queries,
+            batch_results=batch_results,
         )
 
-        candidates: dict[str, list[EFTSHit]] = {}
-        for result in batch_results:
-            if not result.success:
-                logger.debug(
-                    "EFTS batch query failed for %s query=%r: %s",
-                    symbol_display,
-                    result.query,
-                    result.error,
-                )
-                continue
-            raw_hits = list(result.hits)
-            if normalized_symbol is None:
-                candidates[result.query] = raw_hits
-                continue
-            filtered_hits = _filter_hits_for_symbol(
-                hits=raw_hits,
-                symbol=normalized_symbol,
-                symbol_cik=symbol_cik,
-            )
-            if len(filtered_hits) != len(raw_hits):
-                logger.info(
-                    "Filtered %d/%d cross-symbol EFTS hits for %s query=%r",
-                    len(raw_hits) - len(filtered_hits),
-                    len(raw_hits),
-                    normalized_symbol,
-                    result.query,
-                )
-            candidates[result.query] = filtered_hits
+    def search_many(
+        self,
+        *,
+        symbols: Sequence[str | None],
+        queries: Sequence[str],
+    ) -> dict[str, dict[str, list[EFTSHit]]]:
+        if not queries:
+            return {}
 
-        return candidates
+        normalized_symbols: list[str] = []
+        seen: set[str] = set()
+        for raw_symbol in symbols:
+            normalized = _normalize_symbol(raw_symbol)
+            if normalized is None:
+                continue
+            if normalized in seen:
+                continue
+            seen.add(normalized)
+            normalized_symbols.append(normalized)
+        if not normalized_symbols:
+            return {}
+
+        async def _search_many_async() -> list[object]:
+            tasks = [
+                self._batch_search_async(symbol=symbol, queries=queries)
+                for symbol in normalized_symbols
+            ]
+            return await asyncio.gather(*tasks, return_exceptions=True)
+
+        try:
+            asyncio.set_event_loop(self._loop)
+            gathered = self._loop.run_until_complete(_search_many_async())
+        finally:
+            asyncio.set_event_loop(None)
+
+        results: dict[str, dict[str, list[EFTSHit]]] = {}
+        for symbol, current in zip(normalized_symbols, gathered, strict=False):
+            if isinstance(current, EFTSAPIError):
+                logger.warning(
+                    "EFTS candidate search failed for %s: %s",
+                    symbol,
+                    current,
+                )
+                results[symbol] = {query: [] for query in queries}
+                continue
+            if isinstance(current, Exception):
+                logger.warning(
+                    "Unexpected EFTS candidate search failure for %s: %s",
+                    symbol,
+                    current,
+                )
+                results[symbol] = {query: [] for query in queries}
+                continue
+            results[symbol] = self._candidates_from_batch_results(
+                normalized_symbol=symbol,
+                queries=queries,
+                batch_results=current,
+            )
+        return results
 
     def close(self) -> None:
         if self._loop.is_closed():

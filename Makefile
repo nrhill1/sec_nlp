@@ -103,6 +103,7 @@ help:
 	@echo "  perf-bench             Run chat/retrieve performance suite"
 	@echo "  perf-bench-fast        Run one-pass chat/retrieve perf suite"
 	@echo "  perf-smoke             Run minimal perf smoke pair"
+	@echo "  perf-gate-smoke        Run perf smoke and enforce SLO gate"
 	@echo "  perf-compare           Compare latest two performance suite artifacts"
 	@echo "  pre-commit             Run pre-commit hooks"
 	@echo "  stubs                  Generate Python stubs into ./types (uses stubgen)"
@@ -279,12 +280,17 @@ perf-bench: ready
 .PHONY: perf-bench-fast
 perf-bench-fast: ready
 	@echo "==> Running one-pass performance suite..."
-	@uv run python src/scripts/profile/perf_suite.py --mode run --repeats 1
+	@uv run python src/scripts/profile/perf_suite.py --mode run --repeats 1 --chat_model_name "llama3.2:1b" --chat_max_new_tokens 192
 
 .PHONY: perf-smoke
 perf-smoke: ready
 	@echo "==> Running perf smoke (retrieve/chat mining top_k=40)..."
-	@uv run python src/scripts/profile/perf_suite.py --mode run --repeats 1 --chat_model_name "ministral-3:3b" --chat_max_new_tokens 256 --include_cases '["retrieve_mining_topk40","chat_mining_topk40"]'
+	@uv run python src/scripts/profile/perf_suite.py --mode run --repeats 1 --chat_model_name "llama3.2:1b" --chat_max_new_tokens 192 --include_cases '["retrieve_mining_topk40","chat_mining_topk40"]'
+
+.PHONY: perf-gate-smoke
+perf-gate-smoke: ready
+	@echo "==> Running perf smoke with SLO gate..."
+	@uv run python src/scripts/profile/perf_suite.py --mode run --repeats 1 --enforce_slo --chat_model_name "llama3.2:1b" --chat_max_new_tokens 192 --include_cases '["retrieve_mining_topk40","chat_mining_topk40"]'
 
 .PHONY: perf-compare
 perf-compare: ready
