@@ -27,6 +27,9 @@ from sec_nlp.pipelines.presets.retrieve.steps import (
     rank_retrieval_hits,
     rerank_with_embeddings,
 )
+from sec_nlp.pipelines.presets.retrieve.steps.tokenization import (
+    DEFAULT_QUERY_STOPWORDS,
+)
 from sec_nlp.types import JsonValue
 
 
@@ -117,6 +120,51 @@ def test_prune_hits_by_query_terms_filters_low_overlap_snippets() -> None:
 
     assert len(kept) == 1
     assert kept[0].accession_number == "0000123456-26-000001"
+
+
+def test_prune_hits_by_query_terms_can_filter_stopword_only_overlap() -> None:
+    hits = [
+        RetrievalHit(
+            symbol="ABC",
+            query="the and neodymium supply chain",
+            accession_number="0000123456-26-000011",
+            form_type="10-K",
+            filed_date="2026-02-01",
+            company_name="ABC Corp",
+            cik="0000123456",
+            score=0.8,
+            edgar_url="https://example.com/a",
+            snippet="the and governance board compensation updates and controls",
+        ),
+        RetrievalHit(
+            symbol="ABC",
+            query="the and neodymium supply chain",
+            accession_number="0000123456-26-000012",
+            form_type="10-K",
+            filed_date="2026-02-01",
+            company_name="ABC Corp",
+            cik="0000123456",
+            score=0.7,
+            edgar_url="https://example.com/b",
+            snippet="Neodymium supply chain expansion and throughput updates.",
+        ),
+    ]
+
+    kept_without_stopwords = prune_hits_by_query_terms(
+        hits=hits,
+        min_hits=1,
+        min_ratio=0.34,
+    )
+    kept_with_stopwords = prune_hits_by_query_terms(
+        hits=hits,
+        min_hits=1,
+        min_ratio=0.34,
+        stopwords=DEFAULT_QUERY_STOPWORDS,
+    )
+
+    assert len(kept_without_stopwords) == 2
+    assert len(kept_with_stopwords) == 1
+    assert kept_with_stopwords[0].accession_number == "0000123456-26-000012"
 
 
 def test_embed_texts_with_cache_uses_sqlite_cache(
@@ -1127,6 +1175,72 @@ def test_download_and_chunk_hits_hydrates_missing_snippet_when_enabled(
 
     assert called["value"] is True
     assert enriched[0].snippet is not None
+
+
+def test_download_and_chunk_hits_uses_stopword_aware_chunk_matching(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    settings = RetrieveSettings(
+        email="test@example.com",
+        symbols=["ABC"],
+        queries=["neodymium"],
+        sections=["1A"],
+        dl_path=tmp_path / "downloads",
+        out_path=tmp_path / "outputs",
+        download_missing=False,
+        stopword_aware_lexical=True,
+    )
+    html_path = (
+        settings.dl_path
+        / "sec-edgar-filings"
+        / "ABC"
+        / "10-K"
+        / "0000123456-26-000104"
+        / "doc.html"
+    )
+    html_path.parent.mkdir(parents=True, exist_ok=True)
+    html_path.write_text("<html><body>placeholder</body></html>")
+
+    hit = RetrievalHit(
+        symbol="ABC",
+        query="the and of neodymium",
+        accession_number="0000123456-26-000104",
+        form_type="10-K",
+        filed_date="2026-02-11",
+        company_name="ABC Corp",
+        cik="0000123456",
+        score=0.73,
+        edgar_url="https://example.com",
+        snippet="orig",
+    )
+
+    monkeypatch.setattr(
+        "sec_nlp.pipelines.presets.retrieve.steps.download_chunk._find_html_for_accession",
+        lambda **kwargs: html_path,
+    )
+    monkeypatch.setattr(
+        "sec_nlp.pipelines.presets.retrieve.steps.download_chunk.Loader.transform_html",
+        lambda self, html_path, section_filter=None, **kwargs: [
+            Document(
+                page_content="the and of governance board controls",
+                metadata={"section_number": "1", "chunk_index": 0},
+            ),
+            Document(
+                page_content="neodymium supply agreement and throughput updates",
+                metadata={"section_number": "1A", "chunk_index": 1},
+            ),
+        ],
+    )
+
+    enriched = download_and_chunk_hits(
+        symbol="ABC",
+        hits=[hit],
+        settings=settings,
+    )
+
+    assert len(enriched) == 1
+    assert enriched[0].chunk_index == 1
 
 
 def test_rerank_with_embeddings_reorders_hits_with_fake_vectors(

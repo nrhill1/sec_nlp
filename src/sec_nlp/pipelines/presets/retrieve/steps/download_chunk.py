@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import re
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -18,8 +17,7 @@ from sec_nlp.types import JsonValue
 
 from ..config import RetrieveSettings
 from ..models import RetrievalHit
-
-_WORD_RE = re.compile(r"[a-z0-9]+")
+from .tokenization import DEFAULT_QUERY_STOPWORDS, extract_query_terms
 
 
 @dataclass(slots=True, frozen=True)
@@ -100,12 +98,6 @@ def _find_html_for_accession(
     return None
 
 
-def _tokenize_query(query: str) -> set[str]:
-    return {
-        token for token in _WORD_RE.findall(query.casefold()) if len(token) >= 3
-    }
-
-
 def _coerce_str(value: JsonValue) -> str | None:
     if isinstance(value, str):
         cleaned = value.strip()
@@ -143,11 +135,13 @@ def _choose_chunk(
     candidates: list[_ChunkCandidate],
     query: str,
     max_chars: int,
+    remove_stopwords: bool,
 ) -> _ChunkCandidate | None:
     if not candidates:
         return None
 
-    tokens = _tokenize_query(query)
+    stopwords = DEFAULT_QUERY_STOPWORDS if remove_stopwords else None
+    tokens = extract_query_terms(query, stopwords=stopwords)
     if not tokens:
         first = candidates[0]
         return _ChunkCandidate(
@@ -282,6 +276,11 @@ def download_and_chunk_hits(
     target_accessions: set[str] | None = None
     if not settings.sections:
         if not settings.hydrate_missing_snippets:
+            logger.debug(
+                "Hydration skipped for %s: no sections requested and "
+                "hydrate_missing_snippets disabled",
+                symbol,
+            )
             return hits
         target_accessions = {
             hit.accession_number
@@ -291,7 +290,19 @@ def download_and_chunk_hits(
         # EFTS snippets are usually present; skip expensive chunk extraction
         # unless section targeting is requested or snippet hydration is needed.
         if not target_accessions:
+            logger.debug(
+                "Hydration skipped for %s: all ranked hits already contain snippets",
+                symbol,
+            )
             return hits
+
+    logger.debug(
+        "Hydration start for %s: hits=%d section_filter=%s target_accessions=%s",
+        symbol,
+        len(hits),
+        bool(settings.sections),
+        ("all" if target_accessions is None else str(len(target_accessions))),
+    )
 
     hits_by_accession = {hit.accession_number: hit for hit in hits}
     html_paths: dict[str, Path] = {}
@@ -301,6 +312,11 @@ def download_and_chunk_hits(
             target_accessions is not None
             and hit.accession_number not in target_accessions
         ):
+            logger.debug(
+                "Hydration skip for %s accession=%s: snippet already present",
+                symbol,
+                hit.accession_number,
+            )
             continue
         html_path = _find_html_for_accession(
             dl_path=settings.dl_path,
@@ -310,8 +326,19 @@ def download_and_chunk_hits(
         )
         if html_path is None:
             missing.add(hit.accession_number)
+            logger.debug(
+                "Hydration needs download for %s accession=%s",
+                symbol,
+                hit.accession_number,
+            )
             continue
         html_paths[hit.accession_number] = html_path
+        logger.debug(
+            "Hydration source resolved for %s accession=%s path=%s",
+            symbol,
+            hit.accession_number,
+            html_path,
+        )
 
     if missing:
         _download_missing_accessions(
@@ -332,6 +359,18 @@ def download_and_chunk_hits(
             )
             if html_path is not None:
                 html_paths[accession] = html_path
+                logger.debug(
+                    "Hydration source resolved after download for %s accession=%s path=%s",
+                    symbol,
+                    accession,
+                    html_path,
+                )
+            else:
+                logger.debug(
+                    "Hydration source unresolved after download for %s accession=%s",
+                    symbol,
+                    accession,
+                )
 
     loader = Loader(
         email=settings.email,
@@ -350,6 +389,18 @@ def download_and_chunk_hits(
             )
             if candidates:
                 chunk_candidates[accession] = candidates
+                logger.debug(
+                    "Hydration chunk candidates for %s accession=%s count=%d",
+                    symbol,
+                    accession,
+                    len(candidates),
+                )
+            else:
+                logger.debug(
+                    "Hydration no chunk candidates for %s accession=%s",
+                    symbol,
+                    accession,
+                )
         except Exception as exc:
             logger.debug(
                 "Chunk extraction failed for %s (%s): %s",
@@ -365,11 +416,25 @@ def download_and_chunk_hits(
             candidates=candidates,
             query=hit.query,
             max_chars=settings.snippet_chars,
+            remove_stopwords=settings.stopword_aware_lexical,
         )
         if selected is None:
             enriched_hits.append(hit)
+            logger.debug(
+                "Hydration unchanged for %s accession=%s: no matching chunk found",
+                symbol,
+                hit.accession_number,
+            )
             continue
 
+        logger.debug(
+            "Hydration selected chunk for %s accession=%s section=%s item=%s chunk_index=%s",
+            symbol,
+            hit.accession_number,
+            selected.section_type,
+            selected.section_number,
+            selected.chunk_index,
+        )
         enriched_hits.append(
             hit.model_copy(
                 update={

@@ -3,14 +3,13 @@
 from __future__ import annotations
 
 import heapq
-import re
+from collections.abc import Collection
 from datetime import date
 
 from sec_nlp.core.edgar.efts_models import EFTSHit
 
 from ..models import RetrievalHit
-
-_QUERY_TOKEN_RE = re.compile(r"[a-z0-9]+")
+from .tokenization import extract_query_terms
 
 
 def _rank_key(
@@ -73,12 +72,17 @@ def rank_retrieval_hits(
     return [hit for _, hit in ranked_heap]
 
 
-def _query_terms(query: str, *, min_len: int = 3) -> set[str]:
-    terms: set[str] = set()
-    for token in _QUERY_TOKEN_RE.findall(query.casefold()):
-        if len(token) >= min_len:
-            terms.add(token)
-    return terms
+def _query_terms(
+    query: str,
+    *,
+    min_len: int = 3,
+    stopwords: Collection[str] | None = None,
+) -> set[str]:
+    return extract_query_terms(
+        query,
+        min_len=min_len,
+        stopwords=stopwords,
+    )
 
 
 def prune_hits_by_query_terms(
@@ -87,6 +91,7 @@ def prune_hits_by_query_terms(
     min_hits: int,
     min_ratio: float,
     min_term_len: int = 3,
+    stopwords: Collection[str] | None = None,
 ) -> list[RetrievalHit]:
     """Prune retrieval hits by lexical query-term overlap.
 
@@ -103,18 +108,30 @@ def prune_hits_by_query_terms(
 
     kept: list[RetrievalHit] = []
     for hit in hits:
-        terms = _query_terms(hit.query, min_len=min_term_len)
+        terms = _query_terms(
+            hit.query,
+            min_len=min_term_len,
+            stopwords=stopwords,
+        )
         if not terms:
             kept.append(hit)
             continue
 
-        snippet_terms = _query_terms(
+        snippet_terms_all = _query_terms(
             hit.snippet or "",
             min_len=min_term_len,
         )
         # EFTS snippets can be very short or sparse; skip lexical gating when
         # snippet evidence is too limited to evaluate overlap reliably.
-        if len(snippet_terms) < max(3, min_hits * 3):
+        if len(snippet_terms_all) < max(3, min_hits * 3):
+            kept.append(hit)
+            continue
+        snippet_terms = _query_terms(
+            hit.snippet or "",
+            min_len=min_term_len,
+            stopwords=stopwords,
+        )
+        if not snippet_terms:
             kept.append(hit)
             continue
 

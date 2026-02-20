@@ -49,6 +49,7 @@ from .steps import (
     rerank_with_embeddings,
     run_candidate_search,
 )
+from .steps.tokenization import DEFAULT_QUERY_STOPWORDS
 
 _ORIGINAL_RUN_CANDIDATE_SEARCH = run_candidate_search
 
@@ -376,6 +377,11 @@ class RetrievePipeline(BasePipeline):
             hits=ranked_hits,
             min_hits=self.config.query_term_min_hits,
             min_ratio=self.config.query_term_min_ratio,
+            stopwords=(
+                DEFAULT_QUERY_STOPWORDS
+                if self.config.stopword_aware_lexical
+                else None
+            ),
         )
         stage_timings["ranking"] = perf_counter() - t0
         lexical_pruned = max(0, ranked_before_prune - len(ranked_hits))

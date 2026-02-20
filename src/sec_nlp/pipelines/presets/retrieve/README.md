@@ -23,7 +23,8 @@ You must provide at least one query.
 - Env prefix: `SEC_NLP_RETRIEVE_`
 - `queries` (required)
 - `top_k`, `efts_candidates`
-- `download_missing`, `max_chunks_per_accession`
+- `download_missing`, `max_chunks_per_accession`, `hydrate_missing_snippets`
+- `stopword_aware_lexical` (default `true`)
 - `rerank_with_embeddings`, `embedding_weight`
 - `index_results` (persist snippets to Qdrant)
 - `output_format` (default `json`)
@@ -35,6 +36,7 @@ outputs/<run_timestamp>/retrieve/<SYMBOL|ALL>/
 ```
 
 Files:
+
 - `<symbol>_retrieve_<run_id>_ranked.csv`
 - `<symbol>_retrieve_<run_id>_summary.json`
 - `<symbol>_retrieve_<run_id>_summary.yaml`

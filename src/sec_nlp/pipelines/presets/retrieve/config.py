@@ -82,6 +82,13 @@ class RetrieveSettings(BasePipelineSettings):
             "to keep a hit before hydration (0 disables ratio pruning)."
         ),
     )
+    stopword_aware_lexical: bool = Field(
+        default=True,
+        description=(
+            "Remove common stopwords from lexical term matching used by snippet "
+            "pruning and hydration chunk selection."
+        ),
+    )
     rerank_with_embeddings: bool = Field(
         default=False,
         description="Enable snippet embedding rerank after chunk hydration.",
