@@ -23,6 +23,7 @@ from sec_nlp.pipelines.presets.retrieve.steps import (
     download_chunk as download_chunk_steps,
     embed as embed_steps,
     index_retrieval_hits,
+    prune_hits_by_query_terms,
     rank_retrieval_hits,
     rerank_with_embeddings,
 )
@@ -78,6 +79,44 @@ def test_rank_retrieval_hits_sorts_and_dedupes() -> None:
     assert len(ranked) == 2
     assert ranked[0].score == 0.9
     assert ranked[0].accession_number == "0000123456-26-000001"
+
+
+def test_prune_hits_by_query_terms_filters_low_overlap_snippets() -> None:
+    hits = [
+        RetrievalHit(
+            symbol="ABC",
+            query="supply chain bottleneck",
+            accession_number="0000123456-26-000001",
+            form_type="10-K",
+            filed_date="2026-02-01",
+            company_name="ABC Corp",
+            cik="0000123456",
+            score=0.9,
+            edgar_url="https://example.com/a",
+            snippet="Supply chain bottleneck risk remains elevated.",
+        ),
+        RetrievalHit(
+            symbol="ABC",
+            query="supply chain bottleneck",
+            accession_number="0000123456-26-000002",
+            form_type="10-K",
+            filed_date="2026-02-01",
+            company_name="ABC Corp",
+            cik="0000123456",
+            score=0.8,
+            edgar_url="https://example.com/b",
+            snippet="Board compensation updates and governance details.",
+        ),
+    ]
+
+    kept = prune_hits_by_query_terms(
+        hits=hits,
+        min_hits=1,
+        min_ratio=0.25,
+    )
+
+    assert len(kept) == 1
+    assert kept[0].accession_number == "0000123456-26-000001"
 
 
 def test_embed_texts_with_cache_uses_sqlite_cache(
@@ -452,6 +491,75 @@ def test_retrieve_pipeline_runs_unscoped_without_symbols(
     assert observed["queries"] == ["mine expansion"]
     assert len(result.outputs) == 1
     assert "ALL" in str(result.outputs[0])
+
+
+def test_retrieve_pipeline_respects_hydrate_top_n(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    config = RetrieveSettings(
+        email="test@example.com",
+        symbols=["ABC"],
+        queries=["supply chain"],
+        dl_path=tmp_path / "downloads",
+        out_path=tmp_path / "outputs",
+        output_format="json",
+        top_k=3,
+        hydrate_top_n=1,
+        download_missing=False,
+    )
+
+    candidates = {
+        "supply chain": [
+            _efts_hit(
+                accession="0000123456-26-000301",
+                filed=date(2026, 2, 1),
+                score=0.95,
+                company="ABC Co",
+            ),
+            _efts_hit(
+                accession="0000123456-26-000302",
+                filed=date(2026, 2, 1),
+                score=0.90,
+                company="ABC Co",
+            ),
+            _efts_hit(
+                accession="0000123456-26-000303",
+                filed=date(2026, 2, 1),
+                score=0.85,
+                company="ABC Co",
+            ),
+        ]
+    }
+
+    monkeypatch.setattr(
+        "sec_nlp.pipelines.presets.retrieve.pipeline.run_candidate_search",
+        lambda symbol, queries, settings: candidates,
+    )
+
+    hydrated_batches: list[int] = []
+
+    def _fake_download_and_chunk(symbol, hits, settings):
+        hydrated_batches.append(len(hits))
+        return hits
+
+    monkeypatch.setattr(
+        "sec_nlp.pipelines.presets.retrieve.pipeline.download_and_chunk_hits",
+        _fake_download_and_chunk,
+    )
+
+    pipeline = RetrievePipeline(config=config)
+    result = pipeline.run()
+
+    assert result.success is True
+    assert hydrated_batches == [1]
+
+    json_path = next(path for path in result.outputs if path.suffix == ".json")
+    payload = json.loads(json_path.read_text())
+    symbol_meta = payload["metadata"]
+    assert symbol_meta["hydrated_hits"] == 1
+    assert symbol_meta["passthrough_hits"] == 2
+    assert "stage_timings" in symbol_meta
 
 
 def test_download_and_chunk_hits_enriches_snippet_and_chunk_metadata(

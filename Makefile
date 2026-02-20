@@ -100,6 +100,8 @@ help:
 	@echo "Advanced:"
 	@echo "  validate               Full validation (imports + types + tests)"
 	@echo "  cov-html               Generate coverage reports"
+	@echo "  perf-bench             Run chat/retrieve performance suite"
+	@echo "  perf-compare           Compare latest two performance suite artifacts"
 	@echo "  pre-commit             Run pre-commit hooks"
 	@echo "  stubs                  Generate Python stubs into ./types (uses stubgen)"
 
@@ -266,6 +268,16 @@ verify-rs: ready
 verify-all: ready
 	@$(MAKE) verify-py
 	@$(MAKE) verify-rs
+
+.PHONY: perf-bench
+perf-bench: ready
+	@echo "==> Running performance suite..."
+	@uv run python src/scripts/profile/perf_suite.py --mode run
+
+.PHONY: perf-compare
+perf-compare: ready
+	@echo "==> Comparing performance suite artifacts..."
+	@uv run python src/scripts/profile/perf_suite.py --mode compare
 
 .PHONY: fmt
 fmt: ready

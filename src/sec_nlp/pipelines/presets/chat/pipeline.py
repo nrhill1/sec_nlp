@@ -5,13 +5,17 @@ from __future__ import annotations
 import hashlib
 import re
 from collections.abc import Mapping, Sequence
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 from email.utils import parsedate_to_datetime
 from pathlib import Path
+from time import perf_counter
 from typing import ClassVar, Literal, Protocol
 
 import numpy as np
+from langchain_ollama.embeddings import OllamaEmbeddings
+from pydantic import PrivateAttr
 from qdrant_client import QdrantClient
 from qdrant_client.http.models import (
     Condition,
@@ -117,6 +121,15 @@ class ChatPipeline(BasePipeline):
     requires_llm: ClassVar[bool] = True
 
     config: ChatSettings
+    _embedder: OllamaEmbeddings | None = PrivateAttr(default=None)
+    _embedding_dim: int | None = PrivateAttr(default=None)
+    _qdrant_client: QdrantClient | None = PrivateAttr(default=None)
+    _last_search_timings: dict[str, float] = PrivateAttr(
+        default_factory=lambda: {"vector_search": 0.0, "rerank": 0.0}
+    )
+    _last_answer_timings: dict[str, float] = PrivateAttr(
+        default_factory=lambda: {"prompt_build": 0.0, "llm_generate": 0.0}
+    )
 
     @classmethod
     def config_model(cls) -> type[ChatSettings]:
@@ -127,7 +140,26 @@ class ChatPipeline(BasePipeline):
         return ChatResult
 
     def _build_components(self) -> None:
-        return
+        try:
+            self._embedder, self._embedding_dim = (
+                self.config.vdb.setup_embedding_model()
+            )
+        except Exception as exc:
+            logger.warning(
+                "Chat embedding model prewarm failed; falling back to lazy init: %s",
+                exc,
+            )
+            self._embedder = None
+            self._embedding_dim = None
+
+        try:
+            self._qdrant_client = self.config.vdb.setup_qdrant_client()
+        except Exception as exc:
+            logger.warning(
+                "Chat Qdrant preconnect failed; falling back to lazy init: %s",
+                exc,
+            )
+            self._qdrant_client = None
 
     def _effective_end_date(self) -> date:
         return self.config.end_date or date.today()
@@ -255,6 +287,19 @@ class ChatPipeline(BasePipeline):
                 )
 
             outputs: list[Path] = []
+            self._last_search_timings = {"vector_search": 0.0, "rerank": 0.0}
+            self._last_answer_timings = {
+                "prompt_build": 0.0,
+                "llm_generate": 0.0,
+            }
+            stage_timings: dict[str, float] = {
+                "vector_search": 0.0,
+                "rerank": 0.0,
+                "external_context": 0.0,
+                "prompt_build": 0.0,
+                "llm_generate": 0.0,
+                "write": 0.0,
+            }
             console = get_rich_console()
             with Progress(
                 SpinnerColumn(),
@@ -283,6 +328,14 @@ class ChatPipeline(BasePipeline):
                     progress=progress,
                     phase_task=phase_task,
                 )
+                stage_timings.update(
+                    {
+                        "vector_search": self._last_search_timings.get(
+                            "vector_search", 0.0
+                        ),
+                        "rerank": self._last_search_timings.get("rerank", 0.0),
+                    }
+                )
                 progress.advance(overall_task)
 
                 self._update_phase(
@@ -292,12 +345,14 @@ class ChatPipeline(BasePipeline):
                 )
                 citations = self._to_citations(chunks)
                 coverage_metadata = self._symbol_coverage_metadata(citations)
+                t0 = perf_counter()
                 external_context, external_metadata = (
                     self._build_external_context(
                         question=question,
                         citations=citations,
                     )
                 )
+                stage_timings["external_context"] = perf_counter() - t0
                 external_metadata.update(coverage_metadata)
                 missing_symbols = coverage_metadata.get("missing_symbols")
                 if isinstance(missing_symbols, list) and missing_symbols:
@@ -317,6 +372,16 @@ class ChatPipeline(BasePipeline):
                     question=question,
                     citations=citations,
                     external_context=external_context,
+                )
+                stage_timings.update(
+                    {
+                        "prompt_build": self._last_answer_timings.get(
+                            "prompt_build", 0.0
+                        ),
+                        "llm_generate": self._last_answer_timings.get(
+                            "llm_generate", 0.0
+                        ),
+                    }
                 )
                 progress.advance(overall_task)
 
@@ -338,6 +403,7 @@ class ChatPipeline(BasePipeline):
                     "Writing outputs",
                 )
                 if self.config.transcript_autosave:
+                    t0 = perf_counter()
                     outputs = self._write_outputs(
                         question=question,
                         answer=answer,
@@ -347,6 +413,7 @@ class ChatPipeline(BasePipeline):
                         external_context=external_context,
                         external_metadata=external_metadata,
                     )
+                    stage_timings["write"] = perf_counter() - t0
                 progress.advance(overall_task)
                 progress.update(phase_task, visible=False)
 
@@ -360,6 +427,10 @@ class ChatPipeline(BasePipeline):
                     "citations_returned": len(used_citation_ids),
                     "strict_citations": self.config.strict_citations,
                     "symbol_scope": self.config.symbols,
+                    "stage_timings": {
+                        name: round(value, 6)
+                        for name, value in stage_timings.items()
+                    },
                 }
             )
 
@@ -392,12 +463,24 @@ class ChatPipeline(BasePipeline):
         progress: Progress | None = None,
         phase_task: TaskID | None = None,
     ) -> list[_RetrievedChunk]:
+        search_timings: dict[str, float] = {
+            "vector_search": 0.0,
+            "rerank": 0.0,
+        }
+        t_vector_start = perf_counter()
         self._update_phase(progress, phase_task, "Loading embedding model")
-        embedder, _ = self.config.vdb.setup_embedding_model()
+        embedder = self._embedder
+        if embedder is None:
+            embedder, embedding_dim = self.config.vdb.setup_embedding_model()
+            self._embedder = embedder
+            self._embedding_dim = embedding_dim
         query_vector = list(embedder.embed_query(question))
 
         self._update_phase(progress, phase_task, "Connecting to Qdrant")
-        qdrant = self.config.vdb.setup_qdrant_client()
+        qdrant = self._qdrant_client
+        if qdrant is None:
+            qdrant = self.config.vdb.setup_qdrant_client()
+            self._qdrant_client = qdrant
 
         symbols = [
             symbol.upper() for symbol in self.config.symbols if symbol.strip()
@@ -534,16 +617,70 @@ class ChatPipeline(BasePipeline):
             deduped.append(chunk)
             if len(deduped) >= dedupe_limit:
                 break
+        search_timings["vector_search"] = perf_counter() - t_vector_start
 
         if self.config.rerank_mode == "mmr":
+            t_rerank_start = perf_counter()
             reranked = self._rerank_chunks_mmr(
                 chunks=deduped,
                 query_vector=query_vector,
                 embedder=embedder,
             )
-            return reranked[: self.config.top_k]
+            search_timings["rerank"] = perf_counter() - t_rerank_start
+            self._last_search_timings = search_timings
+            return self._select_context_chunks(reranked)
 
-        return deduped
+        self._last_search_timings = search_timings
+        return self._select_context_chunks(deduped)
+
+    def _select_context_chunks(
+        self, chunks: list[_RetrievedChunk]
+    ) -> list[_RetrievedChunk]:
+        if not chunks:
+            return []
+
+        requested_symbols = [
+            symbol.upper() for symbol in self.config.symbols if symbol.strip()
+        ]
+        requested_symbols = list(dict.fromkeys(requested_symbols))
+        if not requested_symbols or self.config.per_symbol_min_chunks <= 0:
+            return chunks[: self.config.top_k]
+
+        selected: list[_RetrievedChunk] = []
+        selected_keys: set[tuple[str, str, str]] = set()
+        min_per_symbol = self.config.per_symbol_min_chunks
+
+        for symbol in requested_symbols:
+            picked = 0
+            for chunk in chunks:
+                chunk_symbol = (chunk.symbol or "").strip().upper()
+                if chunk_symbol != symbol:
+                    continue
+                key = self._chunk_identity(chunk)
+                if key in selected_keys:
+                    continue
+                selected.append(chunk)
+                selected_keys.add(key)
+                picked += 1
+                if (
+                    picked >= min_per_symbol
+                    or len(selected) >= self.config.top_k
+                ):
+                    break
+            if len(selected) >= self.config.top_k:
+                break
+
+        if len(selected) < self.config.top_k:
+            for chunk in chunks:
+                key = self._chunk_identity(chunk)
+                if key in selected_keys:
+                    continue
+                selected.append(chunk)
+                selected_keys.add(key)
+                if len(selected) >= self.config.top_k:
+                    break
+
+        return selected[: self.config.top_k]
 
     def _build_symbol_filter(self, symbols: list[str]) -> Filter | None:
         if not symbols:
@@ -1332,13 +1469,22 @@ class ChatPipeline(BasePipeline):
                 [],
             )
 
+        t_prompt = perf_counter()
         prompt = self._build_prompt(
             question=question,
             citations=citations,
             external_context=external_context,
         )
+        prompt_elapsed = perf_counter() - t_prompt
+
+        t_llm = perf_counter()
         llm = self.config.llm.setup_ollama_model()
-        raw_answer = llm.invoke(prompt)
+        raw_answer = self._invoke_llm_with_timeout(llm=llm, prompt=prompt)
+        llm_elapsed = perf_counter() - t_llm
+        self._last_answer_timings = {
+            "prompt_build": prompt_elapsed,
+            "llm_generate": llm_elapsed,
+        }
         answer = raw_answer if isinstance(raw_answer, str) else str(raw_answer)
         answer = answer.strip()
         if not answer:
@@ -1361,6 +1507,25 @@ class ChatPipeline(BasePipeline):
                 used_ids = fallback_ids
 
         return answer, used_ids
+
+    def _invoke_llm_with_timeout(self, *, llm, prompt: str):
+        invoke = getattr(llm, "invoke", None)
+        if not callable(invoke):
+            raise TypeError("Configured LLM does not expose invoke(prompt)")
+
+        timeout_seconds = self.config.llm_timeout_seconds
+        if timeout_seconds <= 0:
+            return invoke(prompt)
+
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            future = executor.submit(invoke, prompt)
+            try:
+                return future.result(timeout=float(timeout_seconds))
+            except TimeoutError as exc:
+                future.cancel()
+                raise TimeoutError(
+                    f"LLM generation timed out after {timeout_seconds}s"
+                ) from exc
 
     def _build_prompt(
         self,
@@ -1409,7 +1574,7 @@ class ChatPipeline(BasePipeline):
                 history_lines.append(f"{role}: {turn.message}")
 
         context_sections: list[str] = []
-        for citation in citations[: self.config.max_context_chunks]:
+        for citation, snippet in self._pack_context_citations(citations):
             summary_parts = [f"Collection={citation.collection}"]
             if citation.symbol:
                 summary_parts.append(f"Symbol={citation.symbol}")
@@ -1421,7 +1586,7 @@ class ChatPipeline(BasePipeline):
                 summary_parts.append(f"Accession={citation.accession_number}")
             summary = "; ".join(summary_parts)
             context_sections.append(
-                f"[{citation.citation_id}] {summary}\n{citation.snippet}"
+                f"[{citation.citation_id}] {summary}\n{snippet}"
             )
 
         history_block = (
@@ -1454,6 +1619,59 @@ class ChatPipeline(BasePipeline):
             "Company-specific factual claims must still cite filing chunks.\n\n"
             "Answer succinctly with grounded evidence and citations."
         )
+
+    @staticmethod
+    def _estimate_tokens(text: str) -> int:
+        normalized = text.strip()
+        if not normalized:
+            return 0
+        return max(1, len(normalized) // 4)
+
+    @classmethod
+    def _clip_to_token_budget(cls, text: str, budget_tokens: int) -> str:
+        if budget_tokens <= 0:
+            return ""
+        max_chars = max(1, budget_tokens * 4)
+        normalized = _WHITESPACE_RE.sub(" ", text).strip()
+        if len(normalized) <= max_chars:
+            return normalized
+        if max_chars <= 3:
+            return normalized[:max_chars]
+        return f"{normalized[: max_chars - 3].rstrip()}..."
+
+    def _pack_context_citations(
+        self, citations: list[ChatCitation]
+    ) -> list[tuple[ChatCitation, str]]:
+        budget_remaining = max(1, self.config.context_token_budget)
+        packed: list[tuple[ChatCitation, str]] = []
+        for citation in citations[: self.config.max_context_chunks]:
+            summary_parts = [f"Collection={citation.collection}"]
+            if citation.symbol:
+                summary_parts.append(f"Symbol={citation.symbol}")
+            if citation.form_type:
+                summary_parts.append(f"Form={citation.form_type}")
+            if citation.filed_date:
+                summary_parts.append(f"Filed={citation.filed_date}")
+            if citation.accession_number:
+                summary_parts.append(f"Accession={citation.accession_number}")
+            summary = "; ".join(summary_parts)
+            summary_tokens = self._estimate_tokens(summary)
+            if summary_tokens >= budget_remaining:
+                if not packed:
+                    packed.append((citation, ""))
+                break
+
+            snippet_budget = budget_remaining - summary_tokens
+            clipped_snippet = self._clip_to_token_budget(
+                citation.snippet,
+                snippet_budget,
+            )
+            snippet_tokens = self._estimate_tokens(clipped_snippet)
+            packed.append((citation, clipped_snippet))
+            budget_remaining -= summary_tokens + snippet_tokens
+            if budget_remaining <= 0:
+                break
+        return packed
 
     def _build_turns(
         self,

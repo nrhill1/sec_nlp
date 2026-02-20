@@ -58,6 +58,30 @@ class RetrieveSettings(BasePipelineSettings):
         le=1000,
         description="Maximum EFTS candidates fetched per query.",
     )
+    hydrate_top_n: int = Field(
+        default=120,
+        ge=1,
+        le=2000,
+        description="Maximum ranked hits to hydrate with filing chunk extraction per symbol.",
+    )
+    query_term_min_hits: int = Field(
+        default=1,
+        ge=0,
+        le=20,
+        description=(
+            "Minimum number of query terms that must appear in the EFTS snippet "
+            "to keep a hit before hydration (0 disables lexical pruning)."
+        ),
+    )
+    query_term_min_ratio: float = Field(
+        default=0.25,
+        ge=0.0,
+        le=1.0,
+        description=(
+            "Minimum ratio of query terms that must appear in the EFTS snippet "
+            "to keep a hit before hydration (0 disables ratio pruning)."
+        ),
+    )
     rerank_with_embeddings: bool = Field(
         default=False,
         description="Enable snippet embedding rerank after chunk hydration.",

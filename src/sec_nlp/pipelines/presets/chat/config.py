@@ -90,6 +90,20 @@ class ChatSettings(BasePipelineSettings):
         le=40,
         description="Maximum chunks passed into the answer prompt.",
     )
+    context_token_budget: int = Field(
+        default=6000,
+        ge=500,
+        le=40000,
+        description="Approximate token budget for packed filing context in the prompt.",
+    )
+    per_symbol_min_chunks: int = Field(
+        default=1,
+        ge=0,
+        le=20,
+        description=(
+            "Minimum number of chunks to reserve per requested symbol when selecting context."
+        ),
+    )
     min_score: float = Field(
         default=0.0,
         ge=0.0,
@@ -191,6 +205,12 @@ class ChatSettings(BasePipelineSettings):
     strict_citations: bool = Field(
         default=True,
         description="Require citation IDs in every assistant answer.",
+    )
+    llm_timeout_seconds: int = Field(
+        default=180,
+        ge=1,
+        le=3600,
+        description="Timeout for LLM answer generation in seconds.",
     )
     include_history: bool = Field(
         default=True,

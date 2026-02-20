@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 import heapq
+import re
 from datetime import date
 
 from sec_nlp.core.edgar.efts_models import EFTSHit
 
 from ..models import RetrievalHit
+
+_QUERY_TOKEN_RE = re.compile(r"[a-z0-9]+")
 
 
 def _rank_key(
@@ -68,3 +71,59 @@ def rank_retrieval_hits(
 
     ranked_heap.sort(key=lambda item: item[0], reverse=True)
     return [hit for _, hit in ranked_heap]
+
+
+def _query_terms(query: str, *, min_len: int = 3) -> set[str]:
+    terms: set[str] = set()
+    for token in _QUERY_TOKEN_RE.findall(query.casefold()):
+        if len(token) >= min_len:
+            terms.add(token)
+    return terms
+
+
+def prune_hits_by_query_terms(
+    *,
+    hits: list[RetrievalHit],
+    min_hits: int,
+    min_ratio: float,
+    min_term_len: int = 3,
+) -> list[RetrievalHit]:
+    """Prune retrieval hits by lexical query-term overlap.
+
+    Args:
+        hits: Ranked retrieval hits.
+        min_hits: Minimum matched query terms required. Set to 0 to disable.
+        min_ratio: Minimum matched/query-term ratio required. Set to 0 to disable.
+        min_term_len: Minimum length of query terms used for matching.
+    """
+    if not hits:
+        return []
+    if min_hits <= 0 and min_ratio <= 0:
+        return list(hits)
+
+    kept: list[RetrievalHit] = []
+    for hit in hits:
+        terms = _query_terms(hit.query, min_len=min_term_len)
+        if not terms:
+            kept.append(hit)
+            continue
+
+        snippet_terms = _query_terms(
+            hit.snippet or "",
+            min_len=min_term_len,
+        )
+        # EFTS snippets can be very short or sparse; skip lexical gating when
+        # snippet evidence is too limited to evaluate overlap reliably.
+        if len(snippet_terms) < max(3, min_hits * 3):
+            kept.append(hit)
+            continue
+
+        matched = len(terms.intersection(snippet_terms))
+
+        if min_hits > 0 and matched < min_hits:
+            continue
+        ratio = matched / len(terms)
+        if min_ratio > 0 and ratio < min_ratio:
+            continue
+        kept.append(hit)
+    return kept

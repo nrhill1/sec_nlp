@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import json
+import time
 from datetime import date
 from pathlib import Path
 from types import SimpleNamespace
+
+import pytest
 
 from sec_nlp.pipelines.presets.chat import ChatPipeline, ChatSettings
 from sec_nlp.pipelines.presets.chat.pipeline import _RetrievedChunk
@@ -779,6 +782,128 @@ def test_symbol_coverage_metadata_tracks_missing_symbols(
     assert metadata["requested_symbols"] == ["AEM", "AREC", "ALB"]
     assert metadata["retrieved_symbols"] == ["AEM", "ALB"]
     assert metadata["missing_symbols"] == ["AREC"]
+
+
+def test_select_context_chunks_reserves_requested_symbol_coverage(
+    tmp_path: Path,
+) -> None:
+    config = ChatSettings(
+        email="test@example.com",
+        symbols=["AEM", "AREC"],
+        question="What changed?",
+        dl_path=tmp_path / "downloads",
+        out_path=tmp_path / "outputs",
+        top_k=3,
+        per_symbol_min_chunks=1,
+    )
+    pipeline = ChatPipeline(config=config)
+    chunks = [
+        _RetrievedChunk(
+            collection="retrieve",
+            score=0.99,
+            symbol="AEM",
+            accession_number="1",
+            form_type="6-K",
+            filed_date="2024-01-01",
+            source=None,
+            snippet="aem-1",
+        ),
+        _RetrievedChunk(
+            collection="retrieve",
+            score=0.98,
+            symbol="AEM",
+            accession_number="2",
+            form_type="6-K",
+            filed_date="2024-01-02",
+            source=None,
+            snippet="aem-2",
+        ),
+        _RetrievedChunk(
+            collection="retrieve",
+            score=0.97,
+            symbol="AREC",
+            accession_number="3",
+            form_type="10-K",
+            filed_date="2024-01-03",
+            source=None,
+            snippet="arec-1",
+        ),
+    ]
+
+    selected = pipeline._select_context_chunks(chunks)
+    selected_symbols = [chunk.symbol for chunk in selected]
+    assert selected_symbols.count("AEM") >= 1
+    assert selected_symbols.count("AREC") >= 1
+
+
+def test_pack_context_citations_enforces_token_budget(tmp_path: Path) -> None:
+    config = ChatSettings(
+        email="test@example.com",
+        symbols=["CDE"],
+        question="What changed?",
+        dl_path=tmp_path / "downloads",
+        out_path=tmp_path / "outputs",
+        top_k=4,
+        max_context_chunks=4,
+        context_token_budget=500,
+    )
+    pipeline = ChatPipeline(config=config)
+    citations = pipeline._to_citations(
+        [
+            _RetrievedChunk(
+                collection="retrieve",
+                score=0.9,
+                symbol="CDE",
+                accession_number="1",
+                form_type="10-K",
+                filed_date="2024-01-01",
+                source=None,
+                snippet="This is a long context chunk " * 300,
+            ),
+            _RetrievedChunk(
+                collection="retrieve",
+                score=0.8,
+                symbol="CDE",
+                accession_number="2",
+                form_type="10-K",
+                filed_date="2024-01-02",
+                source=None,
+                snippet="Second chunk should likely be excluded by budget.",
+            ),
+        ]
+    )
+
+    packed = pipeline._pack_context_citations(citations)
+    assert len(packed) >= 1
+    assert packed[0][0].citation_id == "C1"
+    assert len(packed[0][1]) < len(citations[0].snippet)
+    total_tokens = 0
+    for citation, snippet in packed:
+        total_tokens += pipeline._estimate_tokens(
+            f"Collection={citation.collection}"
+        )
+        total_tokens += pipeline._estimate_tokens(snippet)
+    assert total_tokens <= config.context_token_budget
+
+
+def test_invoke_llm_with_timeout_raises(tmp_path: Path) -> None:
+    config = ChatSettings(
+        email="test@example.com",
+        symbols=["CDE"],
+        question="What changed?",
+        dl_path=tmp_path / "downloads",
+        out_path=tmp_path / "outputs",
+        llm_timeout_seconds=1,
+    )
+    pipeline = ChatPipeline(config=config)
+
+    class _SlowLLM:
+        def invoke(self, prompt: str) -> str:
+            time.sleep(2)
+            return "never reached"
+
+    with pytest.raises(TimeoutError):
+        pipeline._invoke_llm_with_timeout(llm=_SlowLLM(), prompt="x")
 
 
 def test_chat_pipeline_run_requires_question(tmp_path: Path) -> None:

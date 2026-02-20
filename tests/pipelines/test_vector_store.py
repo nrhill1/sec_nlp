@@ -5,6 +5,7 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, Mock, patch
 
+import pytest
 from langchain_ollama.embeddings import OllamaEmbeddings
 from qdrant_client import QdrantClient
 from qdrant_client.models import Distance
@@ -14,6 +15,11 @@ from sec_nlp.pipelines.vector import (
     config as vector_config,
 )
 from sec_nlp.pipelines.vector.client import create_qdrant_client
+
+
+@pytest.fixture(autouse=True)
+def _clear_vector_runtime_caches() -> None:
+    vector_config.clear_runtime_caches()
 
 
 class TestVectorStoreCreation:
@@ -89,6 +95,21 @@ class TestVectorStoreCreation:
             model="custom-embedder", validate_model_on_init=True
         )
         mock_instance.embed_query.assert_called_once_with("test")
+
+    def test_setup_embedding_model_reuses_process_cache(self) -> None:
+        mock_embedder_cls = Mock(return_value=Mock())
+        mock_instance = mock_embedder_cls.return_value
+        mock_instance.embed_query.return_value = [0.1, 0.2]
+        mock_instance.embed_documents.return_value = [[0.1, 0.2]]
+
+        with patch.object(vector_config, "OllamaEmbeddings", mock_embedder_cls):
+            config = VectorConfig(embedding_model="cache-embedder")
+            first_embedder, first_dim = config.setup_embedding_model()
+            second_embedder, second_dim = config.setup_embedding_model()
+
+        assert first_embedder is second_embedder
+        assert first_dim == second_dim == 2
+        mock_embedder_cls.assert_called_once()
 
     def test_setup_qdrant_client_uses_url_when_provided(self) -> None:
         """Ensure URL-based clients are initialized correctly."""
@@ -180,6 +201,19 @@ class TestVectorStoreCreation:
             prefer_grpc=True,
             https=False,
         )
+
+    def test_setup_qdrant_client_reuses_process_cache(self) -> None:
+        mock_client = Mock()
+
+        with patch.object(
+            vector_config, "create_qdrant_client", return_value=mock_client
+        ) as mock_factory:
+            config = VectorConfig(qdrant_url="http://cached-qdrant:6333")
+            first_client = config.setup_qdrant_client()
+            second_client = config.setup_qdrant_client()
+
+        assert first_client is second_client
+        mock_factory.assert_called_once()
 
 
 class TestEmbeddingAlignment:

@@ -6,6 +6,7 @@ import asyncio
 import re
 from collections.abc import Sequence
 from datetime import date
+from types import TracebackType
 
 from sec_nlp.core.edgar.efts import EFTSAPIError, create_efts_client
 from sec_nlp.core.edgar.efts_models import EFTSBatchResult, EFTSHit
@@ -107,26 +108,126 @@ def _filter_hits_for_symbol(
     return filtered
 
 
-async def _batch_search(
-    *,
-    symbol: str | None,
-    queries: Sequence[str],
-    settings: RetrieveSettings,
-) -> list[EFTSBatchResult]:
-    start_date, end_date = _date_range(settings)
-    normalized_symbol = _normalize_symbol(symbol)
-    client = create_efts_client(
-        email=settings.email,
-        company_name="SEC NLP Tool",
-    )
-    return await client.batch_search(
-        queries=list(queries),
-        forms=settings.forms,
-        tickers=[normalized_symbol] if normalized_symbol else None,
-        start_date=start_date,
-        end_date=end_date,
-        limit_per_query=settings.efts_candidates,
-    )
+class RetrieveCandidateSearcher:
+    """Run-scoped EFTS candidate searcher that reuses client + event loop."""
+
+    def __init__(self, settings: RetrieveSettings) -> None:
+        self._settings = settings
+        self._start_date, self._end_date = _date_range(settings)
+        self._client = create_efts_client(
+            email=settings.email,
+            company_name="SEC NLP Tool",
+        )
+        self._loop = asyncio.new_event_loop()
+
+    async def _batch_search_async(
+        self,
+        *,
+        symbol: str | None,
+        queries: Sequence[str],
+    ) -> list[EFTSBatchResult]:
+        normalized_symbol = _normalize_symbol(symbol)
+        return await self._client.batch_search(
+            queries=list(queries),
+            forms=self._settings.forms,
+            tickers=[normalized_symbol] if normalized_symbol else None,
+            start_date=self._start_date,
+            end_date=self._end_date,
+            limit_per_query=self._settings.efts_candidates,
+        )
+
+    def search(
+        self,
+        *,
+        symbol: str | None,
+        queries: Sequence[str],
+    ) -> dict[str, list[EFTSHit]]:
+        if not queries:
+            return {}
+
+        normalized_symbol = _normalize_symbol(symbol)
+        symbol_display = normalized_symbol or "<all>"
+
+        try:
+            asyncio.set_event_loop(self._loop)
+            batch_results = self._loop.run_until_complete(
+                self._batch_search_async(
+                    symbol=normalized_symbol,
+                    queries=queries,
+                )
+            )
+        except EFTSAPIError as exc:
+            logger.warning(
+                "EFTS candidate search failed for %s: %s",
+                symbol_display,
+                exc,
+            )
+            return {}
+        except Exception as exc:
+            logger.warning(
+                "Unexpected EFTS candidate search failure for %s: %s",
+                symbol_display,
+                exc,
+            )
+            return {}
+        finally:
+            asyncio.set_event_loop(None)
+
+        symbol_cik = (
+            _resolve_symbol_cik(
+                symbol=normalized_symbol,
+                settings=self._settings,
+            )
+            if normalized_symbol
+            else None
+        )
+
+        candidates: dict[str, list[EFTSHit]] = {}
+        for result in batch_results:
+            if not result.success:
+                logger.debug(
+                    "EFTS batch query failed for %s query=%r: %s",
+                    symbol_display,
+                    result.query,
+                    result.error,
+                )
+                continue
+            raw_hits = list(result.hits)
+            if normalized_symbol is None:
+                candidates[result.query] = raw_hits
+                continue
+            filtered_hits = _filter_hits_for_symbol(
+                hits=raw_hits,
+                symbol=normalized_symbol,
+                symbol_cik=symbol_cik,
+            )
+            if len(filtered_hits) != len(raw_hits):
+                logger.info(
+                    "Filtered %d/%d cross-symbol EFTS hits for %s query=%r",
+                    len(raw_hits) - len(filtered_hits),
+                    len(raw_hits),
+                    normalized_symbol,
+                    result.query,
+                )
+            candidates[result.query] = filtered_hits
+
+        return candidates
+
+    def close(self) -> None:
+        if self._loop.is_closed():
+            return
+        self._loop.close()
+
+    def __enter__(self) -> RetrieveCandidateSearcher:
+        return self
+
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        tb: TracebackType | None,
+    ) -> None:
+        self.close()
 
 
 def run_candidate_search(
@@ -137,76 +238,5 @@ def run_candidate_search(
 ) -> dict[str, list[EFTSHit]]:
     """Run EFTS candidate search for a symbol across queries."""
 
-    if not queries:
-        return {}
-
-    normalized_symbol = _normalize_symbol(symbol)
-    symbol_display = normalized_symbol or "<all>"
-
-    loop = asyncio.new_event_loop()
-    try:
-        asyncio.set_event_loop(loop)
-        batch_results = loop.run_until_complete(
-            _batch_search(
-                symbol=normalized_symbol,
-                queries=queries,
-                settings=settings,
-            )
-        )
-    except EFTSAPIError as exc:
-        logger.warning(
-            "EFTS candidate search failed for %s: %s",
-            symbol_display,
-            exc,
-        )
-        return {}
-    except Exception as exc:
-        logger.warning(
-            "Unexpected EFTS candidate search failure for %s: %s",
-            symbol_display,
-            exc,
-        )
-        return {}
-    finally:
-        asyncio.set_event_loop(None)
-        loop.close()
-
-    symbol_cik = (
-        _resolve_symbol_cik(
-            symbol=normalized_symbol,
-            settings=settings,
-        )
-        if normalized_symbol
-        else None
-    )
-
-    candidates: dict[str, list[EFTSHit]] = {}
-    for result in batch_results:
-        if not result.success:
-            logger.debug(
-                "EFTS batch query failed for %s query=%r: %s",
-                symbol_display,
-                result.query,
-                result.error,
-            )
-            continue
-        raw_hits = list(result.hits)
-        if normalized_symbol is None:
-            candidates[result.query] = raw_hits
-            continue
-        filtered_hits = _filter_hits_for_symbol(
-            hits=raw_hits,
-            symbol=normalized_symbol,
-            symbol_cik=symbol_cik,
-        )
-        if len(filtered_hits) != len(raw_hits):
-            logger.info(
-                "Filtered %d/%d cross-symbol EFTS hits for %s query=%r",
-                len(raw_hits) - len(filtered_hits),
-                len(raw_hits),
-                normalized_symbol,
-                result.query,
-            )
-        candidates[result.query] = filtered_hits
-
-    return candidates
+    with RetrieveCandidateSearcher(settings) as searcher:
+        return searcher.search(symbol=symbol, queries=queries)

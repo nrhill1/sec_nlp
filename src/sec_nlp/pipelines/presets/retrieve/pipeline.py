@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from pathlib import Path
+from time import perf_counter
 from typing import ClassVar, Literal
 
 from langchain_ollama.embeddings import OllamaEmbeddings
@@ -40,12 +41,16 @@ from .io import (
 )
 from .models import RetrievalHit, RetrieveResult
 from .steps import (
+    RetrieveCandidateSearcher,
     download_and_chunk_hits,
     index_retrieval_hits,
+    prune_hits_by_query_terms,
     rank_retrieval_hits,
     rerank_with_embeddings,
     run_candidate_search,
 )
+
+_ORIGINAL_RUN_CANDIDATE_SEARCH = run_candidate_search
 
 
 class RetrievePipeline(BasePipeline):
@@ -132,32 +137,88 @@ class RetrievePipeline(BasePipeline):
                     total=len(symbol_targets),
                 )
                 phase_task = progress.add_task("", total=None, visible=False)
+                aggregate_stage_timings: dict[str, float] = {
+                    "candidate_search": 0.0,
+                    "ranking": 0.0,
+                    "hydrate": 0.0,
+                    "embedding_rerank": 0.0,
+                    "index": 0.0,
+                    "write": 0.0,
+                }
 
-                for search_symbol, output_symbol in symbol_targets:
-                    progress.update(
-                        overall_task,
-                        description=f"Processing {output_symbol}",
-                    )
+                if run_candidate_search is _ORIGINAL_RUN_CANDIDATE_SEARCH:
+                    with RetrieveCandidateSearcher(
+                        self.config
+                    ) as candidate_searcher:
+                        for search_symbol, output_symbol in symbol_targets:
+                            progress.update(
+                                overall_task,
+                                description=f"Processing {output_symbol}",
+                            )
 
-                    (
-                        symbol_outputs,
-                        symbol_meta,
-                        queries_processed,
-                        hits_count,
-                    ) = self._process_symbol(
-                        search_symbol=search_symbol,
-                        output_symbol=output_symbol,
-                        progress=progress,
-                        phase_task=phase_task,
-                    )
+                            (
+                                symbol_outputs,
+                                symbol_meta,
+                                symbol_stage_timings,
+                                queries_processed,
+                                hits_count,
+                            ) = self._process_symbol(
+                                search_symbol=search_symbol,
+                                output_symbol=output_symbol,
+                                candidate_searcher=candidate_searcher,
+                                progress=progress,
+                                phase_task=phase_task,
+                            )
+                            for name, value in symbol_stage_timings.items():
+                                aggregate_stage_timings[name] = (
+                                    aggregate_stage_timings.get(name, 0.0)
+                                    + value
+                                )
 
-                    outputs.extend(symbol_outputs)
-                    metadata[output_symbol] = symbol_meta
-                    total_queries += queries_processed
-                    total_hits += hits_count
+                            outputs.extend(symbol_outputs)
+                            metadata[output_symbol] = symbol_meta
+                            total_queries += queries_processed
+                            total_hits += hits_count
 
-                    progress.update(phase_task, visible=False)
-                    progress.advance(overall_task)
+                            progress.update(phase_task, visible=False)
+                            progress.advance(overall_task)
+                else:
+                    for search_symbol, output_symbol in symbol_targets:
+                        progress.update(
+                            overall_task,
+                            description=f"Processing {output_symbol}",
+                        )
+
+                        (
+                            symbol_outputs,
+                            symbol_meta,
+                            symbol_stage_timings,
+                            queries_processed,
+                            hits_count,
+                        ) = self._process_symbol(
+                            search_symbol=search_symbol,
+                            output_symbol=output_symbol,
+                            candidate_searcher=None,
+                            progress=progress,
+                            phase_task=phase_task,
+                        )
+                        for name, value in symbol_stage_timings.items():
+                            aggregate_stage_timings[name] = (
+                                aggregate_stage_timings.get(name, 0.0) + value
+                            )
+
+                        outputs.extend(symbol_outputs)
+                        metadata[output_symbol] = symbol_meta
+                        total_queries += queries_processed
+                        total_hits += hits_count
+
+                        progress.update(phase_task, visible=False)
+                        progress.advance(overall_task)
+
+            metadata["stage_timings"] = {
+                name: round(value, 6)
+                for name, value in aggregate_stage_timings.items()
+            }
 
             self.config.complete_run(
                 success=True,
@@ -184,80 +245,147 @@ class RetrievePipeline(BasePipeline):
         *,
         search_symbol: str | None,
         output_symbol: str,
+        candidate_searcher: RetrieveCandidateSearcher | None,
         progress: Progress | None = None,
         phase_task: TaskID | None = None,
-    ) -> tuple[list[Path], dict[str, JsonValue], int, int]:
+    ) -> tuple[
+        list[Path],
+        dict[str, JsonValue],
+        dict[str, float],
+        int,
+        int,
+    ]:
+        stage_timings: dict[str, float] = {
+            "candidate_search": 0.0,
+            "ranking": 0.0,
+            "hydrate": 0.0,
+            "embedding_rerank": 0.0,
+            "index": 0.0,
+            "write": 0.0,
+        }
         self._update_phase(
             progress,
             phase_task,
             output_symbol,
             "Candidate search",
         )
-        candidates_by_query = run_candidate_search(
-            symbol=search_symbol,
-            queries=self.config.queries,
-            settings=self.config,
-        )
+        t0 = perf_counter()
+        if (
+            candidate_searcher is not None
+            and run_candidate_search is _ORIGINAL_RUN_CANDIDATE_SEARCH
+        ):
+            candidates_by_query = candidate_searcher.search(
+                symbol=search_symbol,
+                queries=self.config.queries,
+            )
+        else:
+            # Preserve monkeypatch compatibility for unit tests.
+            candidates_by_query = run_candidate_search(
+                symbol=search_symbol,
+                queries=self.config.queries,
+                settings=self.config,
+            )
+        stage_timings["candidate_search"] = perf_counter() - t0
 
         candidate_count = sum(
             len(hits) for hits in candidates_by_query.values()
         )
 
         self._update_phase(progress, phase_task, output_symbol, "Ranking")
+        t0 = perf_counter()
         ranked_hits = rank_retrieval_hits(
             symbol=output_symbol,
             candidates_by_query=candidates_by_query,
             top_k=self.config.top_k,
         )
+        ranked_before_prune = len(ranked_hits)
+        ranked_hits = prune_hits_by_query_terms(
+            hits=ranked_hits,
+            min_hits=self.config.query_term_min_hits,
+            min_ratio=self.config.query_term_min_ratio,
+        )
+        stage_timings["ranking"] = perf_counter() - t0
+        lexical_pruned = max(0, ranked_before_prune - len(ranked_hits))
+
+        hydrate_limit = min(len(ranked_hits), self.config.hydrate_top_n)
+        hydrated_input = ranked_hits[:hydrate_limit]
+        passthrough_hits = ranked_hits[hydrate_limit:]
 
         # Keep the stage boundaries explicit for future retrieve pipeline expansion.
-        ranked_hits = download_and_chunk_hits(
+        t0 = perf_counter()
+        hydrated_hits = download_and_chunk_hits(
             symbol=output_symbol,
-            hits=ranked_hits,
+            hits=hydrated_input,
             settings=self.config,
         )
-        ranked_hits = rerank_with_embeddings(
-            hits=ranked_hits,
+        stage_timings["hydrate"] = perf_counter() - t0
+
+        t0 = perf_counter()
+        reranked_hits = rerank_with_embeddings(
+            hits=hydrated_hits,
             settings=self.config,
             embedder=self._embedder,
         )
+        stage_timings["embedding_rerank"] = perf_counter() - t0
         market_context_metadata = self._market_context_metadata(
             output_symbol=output_symbol,
         )
         market_signals = self._market_signals_for_payload(
             market_context_metadata
         )
-        ranked_hits = index_retrieval_hits(
+        t0 = perf_counter()
+        indexed_hits = index_retrieval_hits(
             symbol=output_symbol,
-            hits=ranked_hits,
+            hits=reranked_hits,
             settings=self.config,
             qdrant_client=self._qdrant_client,
             embedder=self._embedder,
             embedding_dim=self._embedding_dim,
             market_signals=market_signals,
         )
+        stage_timings["index"] = perf_counter() - t0
 
-        self._update_phase(progress, phase_task, output_symbol, "Writing")
-        outputs = self._write_outputs(
-            symbol=output_symbol,
-            hits=ranked_hits,
-            extra_metadata=market_context_metadata,
-        )
+        final_hits = indexed_hits + passthrough_hits
+        final_hits.sort(key=lambda hit: hit.score, reverse=True)
 
         metadata: dict[str, JsonValue] = {
             "queries_processed": len(self.config.queries),
             "candidate_hits": candidate_count,
-            "ranked_hits": len(ranked_hits),
+            "ranked_hits": len(final_hits),
+            "lexical_pruned_hits": lexical_pruned,
+            "hydrated_hits": len(hydrated_input),
+            "passthrough_hits": len(passthrough_hits),
             "chunk_snippets": sum(
-                1 for hit in ranked_hits if hit.chunk_index is not None
+                1 for hit in final_hits if hit.chunk_index is not None
             ),
             "top_k": self.config.top_k,
             "efts_candidates": self.config.efts_candidates,
+            "stage_timings": {
+                name: round(value, 6) for name, value in stage_timings.items()
+            },
         }
         if market_context_metadata:
             metadata["market_context"] = market_context_metadata
 
-        return outputs, metadata, len(self.config.queries), len(ranked_hits)
+        self._update_phase(progress, phase_task, output_symbol, "Writing")
+        t0 = perf_counter()
+        outputs = self._write_outputs(
+            symbol=output_symbol,
+            hits=final_hits,
+            symbol_metadata=metadata,
+        )
+        stage_timings["write"] = perf_counter() - t0
+        metadata["stage_timings"] = {
+            name: round(value, 6) for name, value in stage_timings.items()
+        }
+
+        return (
+            outputs,
+            metadata,
+            stage_timings,
+            len(self.config.queries),
+            len(final_hits),
+        )
 
     def _market_context_metadata(
         self,
@@ -374,7 +502,7 @@ class RetrievePipeline(BasePipeline):
         *,
         symbol: str,
         hits: list[RetrievalHit],
-        extra_metadata: dict[str, JsonValue] | None = None,
+        symbol_metadata: dict[str, JsonValue] | None = None,
     ) -> list[Path]:
         symbol_out = self.config.get_symbol_output_dir(symbol)
         base_stem = build_run_file_stem(symbol, "retrieve", self.config.run_id)
@@ -388,6 +516,25 @@ class RetrievePipeline(BasePipeline):
             run_short_id_raw if isinstance(run_short_id_raw, int) else None
         )
 
+        metadata: dict[str, JsonValue] = {
+            "forms": self.config.forms or ["10-K", "10-Q"],
+            "sections": self.config.sections,
+            "top_k": self.config.top_k,
+            "efts_candidates": self.config.efts_candidates,
+            "download_missing": self.config.download_missing,
+            "rerank_with_embeddings": self.config.rerank_with_embeddings,
+            "embedding_weight": self.config.embedding_weight,
+            "index_results": self.config.index_results,
+            "embedding_cache": self.config.embedding_cache,
+            "embedding_cache_file": str(self.config.embedding_cache_file),
+            "embedding_cache_max_entries": self.config.embedding_cache_max_entries,
+            "chunk_size": self.config.chunk_size,
+            "chunk_overlap": self.config.chunk_overlap,
+            "max_chunks_per_accession": self.config.max_chunks_per_accession,
+        }
+        if symbol_metadata:
+            metadata.update(symbol_metadata)
+
         payload = RankedResultsPayload(
             run_timestamp=str(run_header["run_timestamp"]),
             run_short_id=run_short_id,
@@ -396,25 +543,7 @@ class RetrievePipeline(BasePipeline):
             symbol=symbol,
             queries=self.config.queries,
             hits=hits,
-            metadata={
-                "forms": self.config.forms or ["10-K", "10-Q"],
-                "sections": self.config.sections,
-                "top_k": self.config.top_k,
-                "efts_candidates": self.config.efts_candidates,
-                "download_missing": self.config.download_missing,
-                "rerank_with_embeddings": self.config.rerank_with_embeddings,
-                "embedding_weight": self.config.embedding_weight,
-                "index_results": self.config.index_results,
-                "embedding_cache": self.config.embedding_cache,
-                "embedding_cache_file": str(self.config.embedding_cache_file),
-                "embedding_cache_max_entries": self.config.embedding_cache_max_entries,
-                "chunk_size": self.config.chunk_size,
-                "chunk_overlap": self.config.chunk_overlap,
-                "max_chunks_per_accession": self.config.max_chunks_per_accession,
-                **(
-                    {"market_context": extra_metadata} if extra_metadata else {}
-                ),
-            },
+            metadata=metadata,
         )
 
         outputs: list[Path] = []

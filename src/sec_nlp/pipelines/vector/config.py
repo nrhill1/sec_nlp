@@ -1,7 +1,9 @@
 # src/sec_nlp/pipelines/vector/config.py
 """Vector database configuration and operations for pipelines."""
 
+import os
 from collections.abc import Iterable
+from threading import Lock
 from typing import Literal
 from uuid import uuid4
 
@@ -15,6 +17,37 @@ from tqdm import tqdm
 
 from sec_nlp.core.infra.logger import logger
 from sec_nlp.pipelines.vector.client import create_qdrant_client
+
+type EmbedderCacheKey = tuple[str, str | None]
+type QdrantClientCacheKey = tuple[
+    str | None,
+    str | None,
+    str,
+    int,
+    int,
+    str | None,
+    bool,
+    bool,
+    int,
+]
+
+_EMBEDDER_CACHE: dict[EmbedderCacheKey, tuple[OllamaEmbeddings, int]] = {}
+_QDRANT_CLIENT_CACHE: dict[QdrantClientCacheKey, QdrantClient] = {}
+_EMBEDDER_CACHE_LOCK = Lock()
+_QDRANT_CACHE_LOCK = Lock()
+
+
+def _env_flag_enabled(name: str) -> bool:
+    value = os.getenv(name, "")
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def clear_runtime_caches() -> None:
+    """Clear process-level embedder and Qdrant client caches."""
+    with _EMBEDDER_CACHE_LOCK:
+        _EMBEDDER_CACHE.clear()
+    with _QDRANT_CACHE_LOCK:
+        _QDRANT_CLIENT_CACHE.clear()
 
 
 class VectorConfig(BaseModel):
@@ -121,6 +154,25 @@ class VectorConfig(BaseModel):
 
     def setup_qdrant_client(self) -> QdrantClient:
         """Initialize Qdrant client."""
+        cache_key: QdrantClientCacheKey = (
+            self.qdrant_location,
+            self.qdrant_url,
+            self.qdrant_host,
+            self.qdrant_port,
+            self.qdrant_grpc_port,
+            self.qdrant_api_key,
+            self.qdrant_https,
+            self.qdrant_prefer_grpc,
+            self.qdrant_timeout,
+        )
+        disable_cache = _env_flag_enabled("SEC_NLP_DISABLE_QDRANT_CLIENT_CACHE")
+        if not disable_cache:
+            with _QDRANT_CACHE_LOCK:
+                cached = _QDRANT_CLIENT_CACHE.get(cache_key)
+            if cached is not None:
+                logger.debug("Reusing cached Qdrant client")
+                return cached
+
         location = None if self.qdrant_url else self.qdrant_location
         qdrant = create_qdrant_client(
             location=location,
@@ -133,6 +185,9 @@ class VectorConfig(BaseModel):
             prefer_grpc=self.qdrant_prefer_grpc,
             https=self.qdrant_https,
         )
+        if not disable_cache:
+            with _QDRANT_CACHE_LOCK:
+                _QDRANT_CLIENT_CACHE[cache_key] = qdrant
 
         logger.info("Connected to Qdrant")
         return qdrant
@@ -188,6 +243,21 @@ class VectorConfig(BaseModel):
         """
         from time import perf_counter
 
+        cache_key: EmbedderCacheKey = (
+            self.embedding_model,
+            os.getenv("OLLAMA_BASE_URL"),
+        )
+        disable_cache = _env_flag_enabled("SEC_NLP_DISABLE_EMBEDDER_CACHE")
+        if not disable_cache:
+            with _EMBEDDER_CACHE_LOCK:
+                cached = _EMBEDDER_CACHE.get(cache_key)
+            if cached is not None:
+                logger.debug(
+                    "Reusing cached embedding model: %s",
+                    self.embedding_model,
+                )
+                return cached
+
         logger.info("Loading embedding model: %s", self.embedding_model)
 
         embedder = OllamaEmbeddings(
@@ -215,7 +285,11 @@ class VectorConfig(BaseModel):
             warmup_elapsed,
         )
 
-        return embedder, embedding_dim
+        result = (embedder, embedding_dim)
+        if not disable_cache:
+            with _EMBEDDER_CACHE_LOCK:
+                _EMBEDDER_CACHE[cache_key] = result
+        return result
 
     def create_vector_store(
         self,
