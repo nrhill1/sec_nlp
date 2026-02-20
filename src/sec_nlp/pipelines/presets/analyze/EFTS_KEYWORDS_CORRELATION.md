@@ -7,15 +7,18 @@ This document outlines ideas for integrating keyword extraction (YAKE!, TF-IDF, 
 ## 1. Keyword Extraction Integration
 
 ### Problem
+
 Current EFTS searches rely on user-provided queries. Chunks from filings may contain relevant signals that users don't think to search for.
 
 ### Solution: Automatic Keyword Extraction
 
 #### YAKE! (Yet Another Keyword Extractor)
+
 - **Pros**: Unsupervised, language-agnostic, doesn't require training data
 - **Cons**: May extract overly generic terms
 
 #### TF-IDF Based
+
 - **Pros**: Simple, well-understood, good for corpus-specific terms
 - **Cons**: Requires building a vocabulary from multiple documents
 
@@ -51,21 +54,25 @@ efts:
 ## 2. Market Correlation Analysis
 
 ### Problem
+
 The pipeline outputs filing analysis and market data separately. Users want to understand how filing signals correlate with stock price movements.
 
 ### Correlation Types
 
 #### A. Event-Based Correlation
+
 - **Filing event window**: -5 to +30 days around filing date
 - **Metrics**: Abnormal returns, volatility change, volume spike
 - **Signals**: Sentiment score, risk factor novelty, warranty accrual change
 
 #### B. Cross-Filing Correlation
+
 - Compare filings across time for same company
 - Track sentiment/signal trends vs. stock performance
 - Detect leading indicators
 
 #### C. Peer Correlation
+
 - Compare filing signals across peer group
 - Identify outliers (company with unusual risk disclosure)
 - Correlate peer-relative signals with peer-relative returns
@@ -73,6 +80,7 @@ The pipeline outputs filing analysis and market data separately. Users want to u
 ### Implementation Ideas
 
 1. **Sentiment-Return Correlation**
+
    ```
    correlation(
      filing_sentiment_score[-30:+30 days],
@@ -116,9 +124,11 @@ market_correlation:
 ## 3. EFTS + Keywords for Filing Discovery
 
 ### Use Case
+
 User runs `analyze AAPL --topics warranty` and wants to find similar filings from other companies.
 
 ### Flow
+
 1. Analyze AAPL warranty disclosures
 2. Extract keywords: `["warranty", "accrual", "liability", "product", "repair"]`
 3. Run EFTS batch search with extracted keywords

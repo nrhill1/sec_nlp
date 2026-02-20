@@ -1551,7 +1551,7 @@ class ChatPipeline(BasePipeline):
     def _effective_context_token_budget(self, citation_count: int) -> int:
         configured = max(1, self.config.context_token_budget)
         effective_generation = self._effective_max_new_tokens(citation_count)
-        adaptive_cap = max(512, effective_generation * 8)
+        adaptive_cap = max(512, effective_generation * 4)
         return max(256, min(configured, adaptive_cap))
 
     def _invoke_llm_with_timeout(self, *, llm, prompt: str):
