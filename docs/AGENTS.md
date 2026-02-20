@@ -5,6 +5,7 @@
 **sec-nlp** — NLP tools for SEC filings. Python 3.13+ with Rust extensions via PyO3/maturin.
 
 Source layout:
+
 - `src/sec_nlp/` — Python package (cli, core, pipelines, prompts subpackages)
 - `crates/` — Rust extensions (market, efts, corr, xbrl, entity, newswatch)
 - `tests/` — mirrors `src/sec_nlp/` layout
@@ -37,10 +38,10 @@ When fixing type errors, writing any new code, or modifying existing code:
 6. Use `getattr` only when necessary — prefer accessing using dot notation or `.get()`.
 7. Whenever possible, use dot notation instead of square brackets to access attributes.
 8. No string/byte type annotations.
-9. For Pydantic `model_config`, use frozen and disallow extra whenever possible.
+9. For Pydantic `model_config`, use `frozen=True` and `extra="forbid"` or `"ignore"` whenever possible.
 10. For Pydantic, never use `SkipValidation`.
 11. Do not create new `Protocol` types.
-12. Do not use reserved Python keywords or function names.
+12. Do not use reserved Python keywords or function names for any variables, keys, or class names.
 13. Type annotations and aliases should follow guidelines for Python v3.13.9.
 14. Use the `type` statement for type aliases (e.g. `type JsonDict = dict[str, JsonValue]`).
 15. Import from `collections.abc` (not `typing`) for `Sequence`, `Mapping`, `Callable`, etc.
@@ -94,7 +95,7 @@ The project has six Rust crates in `crates/`, each built as a Python extension v
 - `make rs-m-test`, `make rs-sg-test`, etc. — test individual crates
 - `make rs-m-clippy`, `make rs-sg-clippy`, etc. — lint individual crates
 
-### Guidelines
+### Rust Guidelines
 
 - After modifying Rust code, always run `make build-ext` before running Python tests.
 - Each crate has its own `Cargo.toml` and `Makefile`.
@@ -102,7 +103,7 @@ The project has six Rust crates in `crates/`, each built as a Python extension v
 
 ## Testing
 
-### Guidelines
+### Rules
 
 1. No network use during testing. All HTTP/socket calls must be mocked (`pytest-socket` enforces this).
 2. Tests should be deterministic and not depend on external services.
@@ -159,6 +160,7 @@ Always run `make pre-commit` or `uv run pre-commit run --all-files` before commi
 - `src/sec_nlp/pipelines/presets/analyze/OUTPUTS_ANALYZE.md`, `src/sec_nlp/pipelines/presets/analyze/OUTPUTS_SEARCH_SUMMARY.md` — analyze output format specs
 
 When modifying pipelines or adding features:
+
 1. Update the relevant pipeline doc in `src/sec_nlp/pipelines/presets/<pipeline>/README.md` if behavior changes.
 2. Update `docs/ARCHITECTURE.md` if adding new components or changing data flow.
 3. Keep docstrings current — every public function and class should have one.
