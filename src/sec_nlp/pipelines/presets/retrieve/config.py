@@ -143,6 +143,13 @@ class RetrieveSettings(BasePipelineSettings):
         le=500,
         description="Maximum chunks loaded per accession for query matching.",
     )
+    hydrate_missing_snippets: bool = Field(
+        default=False,
+        description=(
+            "Hydrate filings when EFTS snippet text is missing. "
+            "When disabled, hydration only runs for explicit section targeting."
+        ),
+    )
     snippet_chars: int = Field(
         default=500,
         ge=80,

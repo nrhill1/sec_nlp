@@ -970,6 +970,165 @@ def test_download_and_chunk_hits_preserves_efts_snippet_when_no_html(
     assert enriched[0].chunk_index is None
 
 
+def test_download_and_chunk_hits_skips_hydration_when_snippets_present(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    settings = RetrieveSettings(
+        email="test@example.com",
+        symbols=["ABC"],
+        queries=["warranty"],
+        dl_path=tmp_path / "downloads",
+        out_path=tmp_path / "outputs",
+        download_missing=False,
+    )
+    hit = RetrievalHit(
+        symbol="ABC",
+        query="warranty accrual",
+        accession_number="0000123456-26-000101",
+        form_type="10-K",
+        filed_date="2026-02-11",
+        company_name="ABC Corp",
+        cik="0000123456",
+        score=0.73,
+        edgar_url="https://example.com",
+        snippet="efts snippet text",
+    )
+
+    def _fail_find_html(**kwargs):
+        raise AssertionError(
+            "_find_html_for_accession should not be called for pre-snippeted hits"
+        )
+
+    monkeypatch.setattr(
+        "sec_nlp.pipelines.presets.retrieve.steps.download_chunk._find_html_for_accession",
+        _fail_find_html,
+    )
+
+    enriched = download_and_chunk_hits(
+        symbol="ABC",
+        hits=[hit],
+        settings=settings,
+    )
+
+    assert enriched == [hit]
+
+
+def test_download_and_chunk_hits_skips_missing_snippet_hydration_when_disabled(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    settings = RetrieveSettings(
+        email="test@example.com",
+        symbols=["ABC"],
+        queries=["warranty"],
+        dl_path=tmp_path / "downloads",
+        out_path=tmp_path / "outputs",
+        download_missing=False,
+        hydrate_missing_snippets=False,
+    )
+    hit = RetrievalHit(
+        symbol="ABC",
+        query="warranty accrual",
+        accession_number="0000123456-26-000102",
+        form_type="10-K",
+        filed_date="2026-02-11",
+        company_name="ABC Corp",
+        cik="0000123456",
+        score=0.73,
+        edgar_url="https://example.com",
+        snippet=None,
+    )
+
+    def _fail_find_html(**kwargs):
+        raise AssertionError(
+            "_find_html_for_accession should not be called when missing-snippet hydration is disabled"
+        )
+
+    monkeypatch.setattr(
+        "sec_nlp.pipelines.presets.retrieve.steps.download_chunk._find_html_for_accession",
+        _fail_find_html,
+    )
+
+    enriched = download_and_chunk_hits(
+        symbol="ABC",
+        hits=[hit],
+        settings=settings,
+    )
+
+    assert enriched == [hit]
+
+
+def test_download_and_chunk_hits_hydrates_missing_snippet_when_enabled(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    settings = RetrieveSettings(
+        email="test@example.com",
+        symbols=["ABC"],
+        queries=["warranty"],
+        dl_path=tmp_path / "downloads",
+        out_path=tmp_path / "outputs",
+        download_missing=False,
+        hydrate_missing_snippets=True,
+    )
+    hit = RetrievalHit(
+        symbol="ABC",
+        query="warranty accrual",
+        accession_number="0000123456-26-000103",
+        form_type="10-K",
+        filed_date="2026-02-11",
+        company_name="ABC Corp",
+        cik="0000123456",
+        score=0.73,
+        edgar_url="https://example.com",
+        snippet=None,
+    )
+
+    called = {"value": False}
+    html_path = (
+        settings.dl_path
+        / "sec-edgar-filings"
+        / "ABC"
+        / "10-K"
+        / "0000123456-26-000103"
+        / "doc.html"
+    )
+    html_path.parent.mkdir(parents=True, exist_ok=True)
+    html_path.write_text("<html><body>placeholder</body></html>")
+
+    def _find_html(**kwargs):
+        called["value"] = True
+        return html_path
+
+    monkeypatch.setattr(
+        "sec_nlp.pipelines.presets.retrieve.steps.download_chunk._find_html_for_accession",
+        _find_html,
+    )
+    monkeypatch.setattr(
+        "sec_nlp.pipelines.presets.retrieve.steps.download_chunk.Loader.transform_html",
+        lambda self, html_path, section_filter=None, **kwargs: [
+            Document(
+                page_content="Warranty reserve increased for product returns.",
+                metadata={
+                    "section_type": "item",
+                    "section_number": "1A",
+                    "chunk_index": 0,
+                },
+            )
+        ],
+    )
+
+    enriched = download_and_chunk_hits(
+        symbol="ABC",
+        hits=[hit],
+        settings=settings,
+    )
+
+    assert called["value"] is True
+    assert enriched[0].snippet is not None
+
+
 def test_rerank_with_embeddings_reorders_hits_with_fake_vectors(
     tmp_path: Path,
     monkeypatch,

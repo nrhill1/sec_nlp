@@ -132,6 +132,12 @@ def _clip_snippet(text: str, max_chars: int) -> str:
     return f"{cleaned[: max(0, max_chars - 3)].rstrip()}..."
 
 
+def _has_snippet(value: str | None) -> bool:
+    if value is None:
+        return False
+    return bool(value.strip())
+
+
 def _choose_chunk(
     *,
     candidates: list[_ChunkCandidate],
@@ -273,10 +279,29 @@ def download_and_chunk_hits(
     if not hits:
         return hits
 
+    target_accessions: set[str] | None = None
+    if not settings.sections:
+        if not settings.hydrate_missing_snippets:
+            return hits
+        target_accessions = {
+            hit.accession_number
+            for hit in hits
+            if not _has_snippet(hit.snippet)
+        }
+        # EFTS snippets are usually present; skip expensive chunk extraction
+        # unless section targeting is requested or snippet hydration is needed.
+        if not target_accessions:
+            return hits
+
     hits_by_accession = {hit.accession_number: hit for hit in hits}
     html_paths: dict[str, Path] = {}
     missing: set[str] = set()
     for hit in hits:
+        if (
+            target_accessions is not None
+            and hit.accession_number not in target_accessions
+        ):
+            continue
         html_path = _find_html_for_accession(
             dl_path=settings.dl_path,
             symbol=symbol,
