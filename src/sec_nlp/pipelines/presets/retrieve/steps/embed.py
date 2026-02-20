@@ -380,6 +380,7 @@ def rerank_with_embeddings(
     hits: list[RetrievalHit],
     settings: RetrieveSettings,
     embedder=None,
+    allow_setup_fallback: bool = True,
 ) -> list[RetrievalHit]:
     """Rerank hits using query/snippet embedding similarity when enabled."""
 
@@ -389,6 +390,8 @@ def rerank_with_embeddings(
     try:
         active_embedder = embedder
         if active_embedder is None:
+            if not allow_setup_fallback:
+                return hits
             active_embedder, _ = settings.vdb.setup_embedding_model()
         texts = [hit.snippet or "" for hit in hits]
         doc_vectors = _cached_text_embeddings(

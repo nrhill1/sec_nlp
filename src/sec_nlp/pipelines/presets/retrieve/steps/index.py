@@ -101,6 +101,7 @@ def index_retrieval_hits(
     embedder: OllamaEmbeddings | None = None,
     embedding_dim: int | None = None,
     market_signals: dict[str, JsonValue] | None = None,
+    allow_setup_fallback: bool = True,
 ) -> list[RetrievalHit]:
     """Upsert retrieval hits into Qdrant when indexing is enabled."""
 
@@ -111,7 +112,14 @@ def index_retrieval_hits(
         return hits
 
     try:
-        qdrant = qdrant_client or settings.vdb.setup_qdrant_client()
+        qdrant = qdrant_client
+        if qdrant is None:
+            if not allow_setup_fallback:
+                logger.warning(
+                    "Retrieve indexing skipped: Qdrant client unavailable"
+                )
+                return hits
+            qdrant = settings.vdb.setup_qdrant_client()
         collection_name = _resolve_collection_name(settings)
         has_collection = qdrant.collection_exists(collection_name)
 
@@ -146,6 +154,11 @@ def index_retrieval_hits(
         active_embedder = embedder
         active_embedding_dim = embedding_dim
         if active_embedder is None or active_embedding_dim is None:
+            if not allow_setup_fallback:
+                logger.warning(
+                    "Retrieve indexing skipped: embedding components unavailable"
+                )
+                return hits
             active_embedder, active_embedding_dim = (
                 settings.vdb.setup_embedding_model()
             )

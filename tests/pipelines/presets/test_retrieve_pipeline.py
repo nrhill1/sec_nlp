@@ -1085,7 +1085,9 @@ def test_retrieve_pipeline_reuses_vector_components_across_symbols(
     index_embedder_args: list[SimpleNamespace | None] = []
     index_qdrant_args: list[SimpleNamespace | None] = []
 
-    def _fake_rerank(*, hits, settings, embedder=None):
+    def _fake_rerank(
+        *, hits, settings, embedder=None, allow_setup_fallback=True
+    ):
         rerank_embedder_args.append(embedder)
         return hits
 
@@ -1098,6 +1100,7 @@ def test_retrieve_pipeline_reuses_vector_components_across_symbols(
         embedder=None,
         embedding_dim=None,
         market_signals=None,
+        allow_setup_fallback=True,
     ):
         index_qdrant_args.append(qdrant_client)
         index_embedder_args.append(embedder)
@@ -1121,6 +1124,71 @@ def test_retrieve_pipeline_reuses_vector_components_across_symbols(
     assert rerank_embedder_args == [fake_embedder, fake_embedder]
     assert index_embedder_args == [fake_embedder, fake_embedder]
     assert index_qdrant_args == [fake_qdrant, fake_qdrant]
+
+
+def test_retrieve_pipeline_limits_failed_vector_setup_retries(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    config = RetrieveSettings(
+        email="test@example.com",
+        symbols=["BHP", "RIO"],
+        queries=["supply chain"],
+        dl_path=tmp_path / "downloads",
+        out_path=tmp_path / "outputs",
+        output_format="json",
+        top_k=5,
+        download_missing=False,
+        rerank_with_embeddings=True,
+        index_results=True,
+    )
+
+    candidates = {
+        "supply chain": [
+            _efts_hit(
+                accession="0000123456-26-000202",
+                filed=date(2026, 2, 2),
+                score=0.9,
+                company="Sample Corp",
+            )
+        ]
+    }
+
+    monkeypatch.setattr(
+        "sec_nlp.pipelines.presets.retrieve.pipeline.run_candidate_search",
+        lambda symbol, queries, settings: candidates,
+    )
+    monkeypatch.setattr(
+        "sec_nlp.pipelines.presets.retrieve.pipeline.download_and_chunk_hits",
+        lambda symbol, hits, settings: hits,
+    )
+
+    setup_calls = {"embedder": 0, "qdrant": 0}
+
+    def _failing_setup_embedder(self):
+        setup_calls["embedder"] += 1
+        raise RuntimeError("embedder unavailable")
+
+    def _failing_setup_qdrant(self):
+        setup_calls["qdrant"] += 1
+        raise RuntimeError("qdrant unavailable")
+
+    monkeypatch.setattr(
+        "sec_nlp.pipelines.vector.config.VectorConfig.setup_embedding_model",
+        _failing_setup_embedder,
+    )
+    monkeypatch.setattr(
+        "sec_nlp.pipelines.vector.config.VectorConfig.setup_qdrant_client",
+        _failing_setup_qdrant,
+    )
+
+    pipeline = RetrievePipeline(config=config)
+    result = pipeline.run()
+
+    assert result.success is True
+    # One prewarm attempt in _build_components + one runtime retry.
+    assert setup_calls["embedder"] == 2
+    assert setup_calls["qdrant"] == 2
 
 
 def test_retrieve_pipeline_adds_market_context_to_output_metadata(

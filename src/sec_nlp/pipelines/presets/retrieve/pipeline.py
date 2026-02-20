@@ -66,6 +66,8 @@ class RetrievePipeline(BasePipeline):
     _embedder: OllamaEmbeddings | None = PrivateAttr(default=None)
     _embedding_dim: int | None = PrivateAttr(default=None)
     _qdrant_client: QdrantClient | None = PrivateAttr(default=None)
+    _embedder_init_attempts: int = PrivateAttr(default=0)
+    _qdrant_init_attempts: int = PrivateAttr(default=0)
 
     @classmethod
     def config_model(cls) -> type[RetrieveSettings]:
@@ -76,28 +78,61 @@ class RetrievePipeline(BasePipeline):
         return RetrieveResult
 
     def _build_components(self) -> None:
-        if self.config.rerank_with_embeddings or self.config.index_results:
-            try:
-                self._embedder, self._embedding_dim = (
-                    self.config.vdb.setup_embedding_model()
-                )
-            except Exception as exc:
-                logger.warning(
-                    "Retrieve embedding model prewarm failed; will fallback to lazy setup: %s",
-                    exc,
-                )
-                self._embedder = None
-                self._embedding_dim = None
+        self._ensure_embedding_components()
+        self._ensure_qdrant_client()
 
-        if self.config.index_results:
-            try:
-                self._qdrant_client = self.config.vdb.setup_qdrant_client()
-            except Exception as exc:
+    def _ensure_embedding_components(self) -> None:
+        if not (
+            self.config.rerank_with_embeddings or self.config.index_results
+        ):
+            return
+        if self._embedder is not None and self._embedding_dim is not None:
+            return
+        if self._embedder_init_attempts >= 2:
+            return
+
+        self._embedder_init_attempts += 1
+        try:
+            self._embedder, self._embedding_dim = (
+                self.config.vdb.setup_embedding_model()
+            )
+        except Exception as exc:
+            if self._embedder_init_attempts == 1:
                 logger.warning(
-                    "Retrieve Qdrant preconnect failed; will fallback to lazy setup: %s",
+                    "Retrieve embedding model prewarm failed; retrying once during run: %s",
                     exc,
                 )
-                self._qdrant_client = None
+            else:
+                logger.warning(
+                    "Retrieve embedding model setup failed; skipping embedding-dependent stages for this run: %s",
+                    exc,
+                )
+            self._embedder = None
+            self._embedding_dim = None
+
+    def _ensure_qdrant_client(self) -> None:
+        if not self.config.index_results:
+            return
+        if self._qdrant_client is not None:
+            return
+        if self._qdrant_init_attempts >= 2:
+            return
+
+        self._qdrant_init_attempts += 1
+        try:
+            self._qdrant_client = self.config.vdb.setup_qdrant_client()
+        except Exception as exc:
+            if self._qdrant_init_attempts == 1:
+                logger.warning(
+                    "Retrieve Qdrant preconnect failed; retrying once during run: %s",
+                    exc,
+                )
+            else:
+                logger.warning(
+                    "Retrieve Qdrant setup failed; skipping index stage for this run: %s",
+                    exc,
+                )
+            self._qdrant_client = None
 
     def run(self) -> RetrieveResult:
         try:
@@ -359,10 +394,12 @@ class RetrievePipeline(BasePipeline):
         stage_timings["hydrate"] = perf_counter() - t0
 
         t0 = perf_counter()
+        self._ensure_embedding_components()
         reranked_hits = rerank_with_embeddings(
             hits=hydrated_hits,
             settings=self.config,
             embedder=self._embedder,
+            allow_setup_fallback=False,
         )
         stage_timings["embedding_rerank"] = perf_counter() - t0
         market_context_metadata = self._market_context_metadata(
@@ -372,6 +409,7 @@ class RetrievePipeline(BasePipeline):
             market_context_metadata
         )
         t0 = perf_counter()
+        self._ensure_qdrant_client()
         indexed_hits = index_retrieval_hits(
             symbol=output_symbol,
             hits=reranked_hits,
@@ -380,6 +418,7 @@ class RetrievePipeline(BasePipeline):
             embedder=self._embedder,
             embedding_dim=self._embedding_dim,
             market_signals=market_signals,
+            allow_setup_fallback=False,
         )
         stage_timings["index"] = perf_counter() - t0
 
