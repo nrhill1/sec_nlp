@@ -105,6 +105,12 @@ def test_chat_cli_integration_with_symbol(
         "--market-context-profile",
         "compact",
         "--include-news-context",
+        "--context-token-budget",
+        "4500",
+        "--per-symbol-min-chunks",
+        "2",
+        "--llm-timeout-seconds",
+        "90",
         "--top-k",
         "7",
     ]
@@ -124,6 +130,9 @@ def test_chat_cli_integration_with_symbol(
     assert config.include_market_context is True
     assert config.market_context_profile == "compact"
     assert config.include_news_context is True
+    assert config.context_token_budget == 4500
+    assert config.per_symbol_min_chunks == 2
+    assert config.llm_timeout_seconds == 90
     assert config.top_k == 7
 
 

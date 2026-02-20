@@ -294,39 +294,41 @@ def _cached_text_embeddings(
                 _migrate_legacy_json_cache(conn=conn, legacy_path=cache_file)
 
             cached_vectors = _cache_read(conn=conn, keys=text_keys)
-            touched: list[str] = []
-            missing_indices: list[int] = []
-            missing_keys: list[str] = []
-            missing_texts: list[str] = []
+            touched: set[str] = set()
+            missing_positions: dict[str, list[int]] = {}
+            missing_text_by_key: dict[str, str] = {}
             vectors: list[list[float]] = [[] for _ in texts]
 
             for idx, key in enumerate(text_keys):
                 cached = cached_vectors.get(key)
                 if cached is not None:
                     vectors[idx] = cached
-                    touched.append(key)
+                    touched.add(key)
                     continue
-                missing_indices.append(idx)
-                missing_keys.append(key)
-                missing_texts.append(texts[idx])
+                positions = missing_positions.setdefault(key, [])
+                positions.append(idx)
+                missing_text_by_key.setdefault(key, texts[idx])
 
             now = int(time.time())
-            _cache_touch(conn=conn, keys=touched, updated_at=now)
+            _cache_touch(conn=conn, keys=list(touched), updated_at=now)
 
-            if missing_texts:
+            if missing_text_by_key:
+                missing_items = list(missing_text_by_key.items())
+                missing_keys = [key for key, _ in missing_items]
+                missing_texts = [text for _, text in missing_items]
                 generated = _embed_documents(
                     texts=missing_texts,
                     settings=settings,
                     embedder=embedder,
                 )
                 fresh_entries: dict[str, list[float]] = {}
-                for idx, key, vector in zip(
-                    missing_indices,
+                for key, vector in zip(
                     missing_keys,
                     generated,
                     strict=False,
                 ):
-                    vectors[idx] = vector
+                    for idx in missing_positions.get(key, []):
+                        vectors[idx] = vector
                     if vector:
                         fresh_entries[key] = vector
 
@@ -380,6 +382,7 @@ def rerank_with_embeddings(
     hits: list[RetrievalHit],
     settings: RetrieveSettings,
     embedder=None,
+    allow_setup_fallback: bool = True,
 ) -> list[RetrievalHit]:
     """Rerank hits using query/snippet embedding similarity when enabled."""
 
@@ -389,6 +392,8 @@ def rerank_with_embeddings(
     try:
         active_embedder = embedder
         if active_embedder is None:
+            if not allow_setup_fallback:
+                return hits
             active_embedder, _ = settings.vdb.setup_embedding_model()
         texts = [hit.snippet or "" for hit in hits]
         doc_vectors = _cached_text_embeddings(

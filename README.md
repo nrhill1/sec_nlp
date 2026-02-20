@@ -5,6 +5,7 @@
 SEC/market intelligence toolkit with Python pipeline orchestration and Rust-backed extensions. It supports local LLM analysis, deterministic extraction pipelines, filing retrieval, and timeline/correlation workflows from a single CLI.
 
 ## Highlights
+
 - Local-first filing analysis with Ollama-backed models
 - Deterministic pipelines for XBRL, 13F, insider, news, and event workflows
 - EFTS-first retrieval and optional Qdrant vector indexing/search
@@ -12,6 +13,7 @@ SEC/market intelligence toolkit with Python pipeline orchestration and Rust-back
 - Run-scoped outputs with run registry metadata
 
 ## Requirements
+
 - Python 3.13+
 - `uv` (recommended) or `pip`
 - Ollama for LLM/embedding flows (`analyze`, `chat`, and embedding-indexed workflows)
@@ -19,6 +21,7 @@ SEC/market intelligence toolkit with Python pipeline orchestration and Rust-back
 - Rust toolchain + `maturin` when building extensions from source
 
 ## Pipeline Commands
+
 | Command | Purpose | LLM Required |
 | --- | --- | --- |
 | `analyze` | Topic/query-driven filing analysis with optional market correlation | Yes |
@@ -33,6 +36,7 @@ SEC/market intelligence toolkit with Python pipeline orchestration and Rust-back
 | `chat` | Retrieval-augmented Q&A over indexed filing chunks | Yes |
 
 ## Utility Commands
+
 - `sec-nlp efts` - direct SEC EDGAR Full-Text Search queries
 - `sec-nlp market` - Yahoo-backed market extension lookups (latest/range)
 - `sec-nlp qdrant` - Qdrant container + collection management
@@ -41,14 +45,18 @@ SEC/market intelligence toolkit with Python pipeline orchestration and Rust-back
 - `sec-nlp version` - current package version
 
 ## Quickstart
+
 ### 1) Install
+
 Using `uv`:
+
 ```bash
 uv sync
 uv run sec-nlp --help
 ```
 
 Using `pip`:
+
 ```bash
 python -m venv .venv
 source .venv/bin/activate
@@ -56,11 +64,13 @@ pip install -e .
 ```
 
 ### 2) Build Rust extensions (source checkout)
+
 ```bash
 make build-ext
 ```
 
 ### 3) Set SEC contact email(s)
+
 At minimum, set email for whichever pipeline(s) you run.
 
 ```bash
@@ -78,6 +88,7 @@ SEC_NLP_CHAT_EMAIL=you@example.com
 ```
 
 ### 4) Start local services as needed
+
 ```bash
 ollama serve
 ollama pull llama3.2:1b
@@ -86,11 +97,13 @@ ollama pull mxbai-embed-large
 ```
 
 Optional persistent Qdrant:
+
 ```bash
 sec-nlp qdrant up
 ```
 
 ### 5) Run examples
+
 ```bash
 sec-nlp analyze AAPL --preset quick
 sec-nlp exb DE --exhibit-categories subsidiaries consents
@@ -105,7 +118,9 @@ sec-nlp chat AAPL --question "What did management say about warranty risk?"
 ```
 
 ## Analyze Presets
+
 Use `--preset <name>` with `sec-nlp analyze`.
+
 - `quick`
 - `laptop`
 - `thorough`
@@ -115,12 +130,15 @@ Use `--preset <name>` with `sec-nlp analyze`.
 Run `sec-nlp analyze --help` for full preset effects.
 
 ## Configuration
+
 Config precedence:
+
 1. CLI args
 2. Environment variables
 3. `.env`
 
 Pipeline env prefixes:
+
 - `ANALYZE_`
 - `EXB_`
 - `WARRANTY_`
@@ -133,10 +151,12 @@ Pipeline env prefixes:
 - `SEC_NLP_CHAT_`
 
 Nested fields:
+
 - Env: `__` delimiters, e.g. `ANALYZE_LLM__MODEL_NAME=llama3.2:1b`
 - CLI: dot notation, e.g. `--llm.model-name`, `--search.queries`, `--vdb.collection-name`
 
 ## Outputs and Run Layout
+
 Run-scoped outputs are written under:
 
 ```text
@@ -144,6 +164,7 @@ outputs/<run_timestamp>/<pipeline_type>/<SYMBOL>/...
 ```
 
 Representative artifacts:
+
 - Analyze: `<accession>/analysis.{yaml,json,csv}`, `analysis_summary.yaml`, `search/summary.yaml`
 - Exhibit: `<symbol>_exhibit_index_<run_id>.{yaml,json,csv}`, `<symbol>_exhibit_summary_<run_id>.{yaml,json}`
 - Warranty: `<symbol>_warranty_<accession>_<run_id>.json`, `<symbol>_warranty_combined_<run_id>.csv`
@@ -153,10 +174,12 @@ Representative artifacts:
 - News/Events/Retrieve/Chat: timeline or summary files with run_id-stamped stems in each symbol directory
 
 Run registry database:
+
 - `.cache/sec-nlp/runs.db`
 - Inspect with `sec-nlp runs ls`, `sec-nlp runs info`, `sec-nlp runs stats`
 
 ## Development
+
 ```bash
 make dev
 make lint
@@ -166,6 +189,7 @@ make stubs
 ```
 
 ## Additional Docs
+
 - [docs/README.md](docs/README.md)
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
 - [src/sec_nlp/pipelines/presets/README.md](src/sec_nlp/pipelines/presets/README.md)
@@ -174,4 +198,5 @@ make stubs
 - [docs/PROJECT_STATE.md](docs/PROJECT_STATE.md)
 
 ## License
+
 MIT

@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import sys
 from abc import ABC, abstractmethod
+from collections.abc import Mapping, Sequence
 from datetime import datetime
 from pathlib import Path
+from typing import cast
 
 from pydantic import BaseModel
 from rich.table import Table
@@ -409,10 +411,57 @@ class BasePipelineCommand(BaseModel, ABC):
                 logger.debug("Run registry update skipped")
             return
         try:
-            complete_run(success=bool(result.success))
+            metadata_payload = self._normalize_registry_metadata(
+                result.metadata
+            )
+            complete_run(
+                success=bool(result.success),
+                metadata=metadata_payload,
+            )
         except Exception:
             logger.debug("Run registry update skipped")
 
     def _pipeline_type(self) -> str:
         pipeline_cls = self._get_pipeline_class()
         return getattr(pipeline_cls, "pipeline_type", "")
+
+    @classmethod
+    def _normalize_registry_metadata(
+        cls, value: Mapping[str, object] | None
+    ) -> dict[str, object] | None:
+        if value is None:
+            return None
+        normalized = cls._to_registry_value(value)
+        if isinstance(normalized, dict):
+            return cast(dict[str, object], normalized)
+        return None
+
+    @classmethod
+    def _to_registry_value(cls, value: object) -> object | None:
+        if value is None:
+            return None
+        if isinstance(value, (str, int, float, bool)):
+            return value
+        if isinstance(value, Path):
+            return str(value)
+        if isinstance(value, Mapping):
+            normalized_map: dict[str, object] = {}
+            for raw_key, raw_item in value.items():
+                if not isinstance(raw_key, str):
+                    continue
+                normalized_item = cls._to_registry_value(raw_item)
+                if normalized_item is None:
+                    continue
+                normalized_map[raw_key] = normalized_item
+            return normalized_map
+        if isinstance(value, Sequence) and not isinstance(
+            value, (str, bytes, bytearray)
+        ):
+            normalized_list: list[object] = []
+            for item in value:
+                normalized_item = cls._to_registry_value(item)
+                if normalized_item is None:
+                    continue
+                normalized_list.append(normalized_item)
+            return normalized_list
+        return str(value)

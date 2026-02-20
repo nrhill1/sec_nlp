@@ -106,6 +106,13 @@ def test_retrieve_cli_integration(
         "warranty accrual",
         "--top-k",
         "15",
+        "--hydrate-top-n",
+        "12",
+        "--query-term-min-hits",
+        "2",
+        "--query-term-min-ratio",
+        "0.5",
+        "--no-qdrant-upsert-wait",
         "--output-format",
         "json",
     ]
@@ -116,6 +123,10 @@ def test_retrieve_cli_integration(
     assert config.symbols == ["AAPL"]
     assert config.queries == ["supply chain disruption", "warranty accrual"]
     assert config.top_k == 15
+    assert config.hydrate_top_n == 12
+    assert config.query_term_min_hits == 2
+    assert config.query_term_min_ratio == 0.5
+    assert config.qdrant_upsert_wait is False
     assert config.output_format == "json"
 
 

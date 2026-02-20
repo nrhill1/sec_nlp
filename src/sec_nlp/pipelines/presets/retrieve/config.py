@@ -58,6 +58,37 @@ class RetrieveSettings(BasePipelineSettings):
         le=1000,
         description="Maximum EFTS candidates fetched per query.",
     )
+    hydrate_top_n: int = Field(
+        default=120,
+        ge=1,
+        le=2000,
+        description="Maximum ranked hits to hydrate with filing chunk extraction per symbol.",
+    )
+    query_term_min_hits: int = Field(
+        default=1,
+        ge=0,
+        le=20,
+        description=(
+            "Minimum number of query terms that must appear in the EFTS snippet "
+            "to keep a hit before hydration (0 disables lexical pruning)."
+        ),
+    )
+    query_term_min_ratio: float = Field(
+        default=0.25,
+        ge=0.0,
+        le=1.0,
+        description=(
+            "Minimum ratio of query terms that must appear in the EFTS snippet "
+            "to keep a hit before hydration (0 disables ratio pruning)."
+        ),
+    )
+    stopword_aware_lexical: bool = Field(
+        default=True,
+        description=(
+            "Remove common stopwords from lexical term matching used by snippet "
+            "pruning and hydration chunk selection."
+        ),
+    )
     rerank_with_embeddings: bool = Field(
         default=False,
         description="Enable snippet embedding rerank after chunk hydration.",
@@ -71,6 +102,13 @@ class RetrieveSettings(BasePipelineSettings):
     index_results: bool = Field(
         default=False,
         description="Upsert retrieved snippets into Qdrant for reuse.",
+    )
+    qdrant_upsert_wait: bool = Field(
+        default=True,
+        description=(
+            "Wait for Qdrant write confirmation during retrieve indexing. "
+            "Disable to reduce index latency when immediate consistency is not required."
+        ),
     )
     include_market_signals: bool = Field(
         default=False,
@@ -111,6 +149,13 @@ class RetrieveSettings(BasePipelineSettings):
         ge=1,
         le=500,
         description="Maximum chunks loaded per accession for query matching.",
+    )
+    hydrate_missing_snippets: bool = Field(
+        default=False,
+        description=(
+            "Hydrate filings when EFTS snippet text is missing. "
+            "When disabled, hydration only runs for explicit section targeting."
+        ),
     )
     snippet_chars: int = Field(
         default=500,

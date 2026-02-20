@@ -39,6 +39,7 @@ def _payload(
     settings: RetrieveSettings,
     market_signals: dict[str, JsonValue] | None = None,
 ) -> dict[str, JsonValue]:
+    snippet_text = _snippet_for_index(hit)
     payload: dict[str, JsonValue] = {
         "symbol": symbol,
         "query": hit.query,
@@ -49,7 +50,7 @@ def _payload(
         "cik": hit.cik,
         "score": float(hit.score),
         "edgar_url": hit.edgar_url,
-        "snippet": hit.snippet,
+        "snippet": snippet_text,
         "section_type": hit.section_type,
         "section_number": hit.section_number,
         "chunk_index": hit.chunk_index,
@@ -59,6 +60,15 @@ def _payload(
     if settings.include_market_signals and market_signals:
         payload["market_signals"] = market_signals
     return payload
+
+
+def _snippet_for_index(hit: RetrievalHit) -> str:
+    if isinstance(hit.snippet, str) and hit.snippet.strip():
+        return hit.snippet.strip()
+    return (
+        f"{hit.company_name} {hit.form_type} filing ({hit.filed_date}) "
+        f"matched query: {hit.query}"
+    )
 
 
 def _existing_point_ids(
@@ -91,6 +101,7 @@ def index_retrieval_hits(
     embedder: OllamaEmbeddings | None = None,
     embedding_dim: int | None = None,
     market_signals: dict[str, JsonValue] | None = None,
+    allow_setup_fallback: bool = True,
 ) -> list[RetrievalHit]:
     """Upsert retrieval hits into Qdrant when indexing is enabled."""
 
@@ -101,7 +112,14 @@ def index_retrieval_hits(
         return hits
 
     try:
-        qdrant = qdrant_client or settings.vdb.setup_qdrant_client()
+        qdrant = qdrant_client
+        if qdrant is None:
+            if not allow_setup_fallback:
+                logger.warning(
+                    "Retrieve indexing skipped: Qdrant client unavailable"
+                )
+                return hits
+            qdrant = settings.vdb.setup_qdrant_client()
         collection_name = _resolve_collection_name(settings)
         has_collection = qdrant.collection_exists(collection_name)
 
@@ -136,6 +154,11 @@ def index_retrieval_hits(
         active_embedder = embedder
         active_embedding_dim = embedding_dim
         if active_embedder is None or active_embedding_dim is None:
+            if not allow_setup_fallback:
+                logger.warning(
+                    "Retrieve indexing skipped: embedding components unavailable"
+                )
+                return hits
             active_embedder, active_embedding_dim = (
                 settings.vdb.setup_embedding_model()
             )
@@ -152,7 +175,7 @@ def index_retrieval_hits(
             )
 
         vectors = embed_texts_with_cache(
-            texts=[hit.snippet or "" for hit, _ in keyed_hits],
+            texts=[_snippet_for_index(hit) for hit, _ in keyed_hits],
             settings=settings,
             embedder=active_embedder,
             cache_prefix="snippet",
@@ -181,7 +204,7 @@ def index_retrieval_hits(
         qdrant.upsert(
             collection_name=collection_name,
             points=points,
-            wait=True,
+            wait=settings.qdrant_upsert_wait,
         )
         logger.info(
             "Indexed %d retrieve hits into '%s'",
