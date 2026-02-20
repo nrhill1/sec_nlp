@@ -306,6 +306,12 @@ def _build_summary(iterations: list[PerfIteration]) -> dict[str, JsonValue]:
     for case_name, case_runs in grouped.items():
         elapsed = [item.elapsed_seconds for item in case_runs]
         success_count = sum(1 for item in case_runs if item.success)
+        pipeline = case_runs[0].pipeline if case_runs else ""
+        slo_target_seconds: float | None = None
+        if pipeline == "chat":
+            slo_target_seconds = 20.0
+        elif pipeline == "retrieve":
+            slo_target_seconds = 25.0
         stage_totals: dict[str, float] = {}
         for run in case_runs:
             for stage_name, stage_value in run.stage_timings.items():
@@ -317,16 +323,22 @@ def _build_summary(iterations: list[PerfIteration]) -> dict[str, JsonValue]:
             stage_name: round(total / len(case_runs), 6)
             for stage_name, total in stage_totals.items()
         }
+        p95_seconds = round(_percentile(elapsed, 95), 6)
 
-        summary[case_name] = {
+        case_summary: dict[str, JsonValue] = {
+            "pipeline": pipeline,
             "iterations": len(case_runs),
             "success_count": success_count,
             "mean_seconds": round(mean(elapsed), 6),
-            "p95_seconds": round(_percentile(elapsed, 95), 6),
+            "p95_seconds": p95_seconds,
             "max_seconds": round(max(elapsed), 6),
             "min_seconds": round(min(elapsed), 6),
             "stage_mean_seconds": stage_means,
         }
+        if slo_target_seconds is not None:
+            case_summary["slo_p95_seconds"] = slo_target_seconds
+            case_summary["slo_pass"] = p95_seconds <= slo_target_seconds
+        summary[case_name] = case_summary
     return summary
 
 
@@ -403,6 +415,13 @@ class PerfSuiteConfig(BaseSettings):
     log_level: str = Field(
         default="INFO",
         description="Logging level.",
+    )
+    enforce_slo: bool = Field(
+        default=False,
+        description=(
+            "Fail run mode when any case misses its p95 SLO "
+            "(chat<=20s, retrieve<=25s)."
+        ),
     )
 
     def cli_cmd(self) -> None:
@@ -501,6 +520,33 @@ class PerfSuiteConfig(BaseSettings):
             encoding="utf-8",
         )
         logger.info("Perf suite artifact written to %s", artifact)
+
+        summary = payload.get("summary")
+        if isinstance(summary, Mapping):
+            failed_slo_cases: list[str] = []
+            for case_name, metrics_raw in summary.items():
+                if not isinstance(case_name, str):
+                    continue
+                if not isinstance(metrics_raw, Mapping):
+                    continue
+                slo_pass: JsonValue | None = None
+                for key, value in metrics_raw.items():
+                    if key == "slo_pass":
+                        slo_pass = cast(JsonValue, value)
+                        break
+                if slo_pass is False:
+                    failed_slo_cases.append(case_name)
+            if failed_slo_cases:
+                logger.warning(
+                    "SLO misses detected for %d case(s): %s",
+                    len(failed_slo_cases),
+                    ", ".join(failed_slo_cases),
+                )
+                if self.enforce_slo:
+                    raise ValueError(
+                        "Perf SLO check failed for cases: "
+                        + ", ".join(failed_slo_cases)
+                    )
 
     def _subprocess_env(self) -> dict[str, str]:
         env = dict(os.environ)
