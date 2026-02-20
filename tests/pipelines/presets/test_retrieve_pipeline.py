@@ -1073,6 +1073,7 @@ def test_index_retrieval_hits_upserts_points_with_mock_client(
         def __init__(self) -> None:
             self.created = False
             self.upserted_points = 0
+            self.wait_values: list[bool] = []
 
         def collection_exists(self, collection_name: str) -> bool:
             return False
@@ -1082,6 +1083,7 @@ def test_index_retrieval_hits_upserts_points_with_mock_client(
 
         def upsert(self, *, collection_name: str, points, wait: bool) -> None:
             self.upserted_points = len(points)
+            self.wait_values.append(wait)
 
     fake_client = _FakeQdrant()
 
@@ -1107,6 +1109,81 @@ def test_index_retrieval_hits_upserts_points_with_mock_client(
     assert indexed == hits
     assert fake_client.created is True
     assert fake_client.upserted_points == 1
+    assert fake_client.wait_values == [True]
+
+
+def test_index_retrieval_hits_respects_qdrant_upsert_wait_false(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    settings = RetrieveSettings(
+        email="test@example.com",
+        symbols=["ABC"],
+        queries=["supply chain"],
+        dl_path=tmp_path / "downloads",
+        out_path=tmp_path / "outputs",
+        index_results=True,
+        dry_run=False,
+        qdrant_upsert_wait=False,
+    )
+    hits = [
+        RetrievalHit(
+            symbol="ABC",
+            query="supply chain",
+            accession_number="0000123456-26-000122",
+            form_type="10-K",
+            filed_date="2026-02-13",
+            company_name="ABC Corp",
+            cik="0000123456",
+            score=0.44,
+            edgar_url="https://example.com/5",
+            snippet="supplier diversification progress",
+            section_type="item",
+            section_number="1A",
+            chunk_index=2,
+        )
+    ]
+
+    class _FakeEmbedder:
+        def embed_query(self, query: str) -> list[float]:
+            return [1.0, 0.0]
+
+    class _FakeQdrant:
+        def __init__(self) -> None:
+            self.wait_values: list[bool] = []
+
+        def collection_exists(self, collection_name: str) -> bool:
+            return False
+
+        def create_collection(self, **kwargs) -> None:
+            pass
+
+        def upsert(self, *, collection_name: str, points, wait: bool) -> None:
+            self.wait_values.append(wait)
+
+    fake_client = _FakeQdrant()
+
+    monkeypatch.setattr(
+        "sec_nlp.pipelines.vector.config.VectorConfig.setup_embedding_model",
+        lambda self: (_FakeEmbedder(), 2),
+    )
+    monkeypatch.setattr(
+        "sec_nlp.pipelines.vector.config.VectorConfig.batch_embed_documents",
+        lambda self, embedder, texts, show_progress=False: [[1.0, 0.0]],
+    )
+    monkeypatch.setattr(
+        "sec_nlp.pipelines.vector.config.VectorConfig.setup_qdrant_client",
+        lambda self: fake_client,
+    )
+
+    indexed = index_retrieval_hits(
+        symbol="ABC",
+        hits=hits,
+        settings=settings,
+    )
+
+    assert indexed == hits
+    assert fake_client.wait_values == [False]
 
 
 def test_index_retrieval_hits_skips_existing_points_in_incremental_mode(

@@ -112,6 +112,7 @@ def test_retrieve_cli_integration(
         "2",
         "--query-term-min-ratio",
         "0.5",
+        "--no-qdrant-upsert-wait",
         "--output-format",
         "json",
     ]
@@ -125,6 +126,7 @@ def test_retrieve_cli_integration(
     assert config.hydrate_top_n == 12
     assert config.query_term_min_hits == 2
     assert config.query_term_min_ratio == 0.5
+    assert config.qdrant_upsert_wait is False
     assert config.output_format == "json"
 
 

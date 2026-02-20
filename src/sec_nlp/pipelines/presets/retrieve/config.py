@@ -96,6 +96,13 @@ class RetrieveSettings(BasePipelineSettings):
         default=False,
         description="Upsert retrieved snippets into Qdrant for reuse.",
     )
+    qdrant_upsert_wait: bool = Field(
+        default=True,
+        description=(
+            "Wait for Qdrant write confirmation during retrieve indexing. "
+            "Disable to reduce index latency when immediate consistency is not required."
+        ),
+    )
     include_market_signals: bool = Field(
         default=False,
         description="Attach derived market context metrics to retrieve outputs and indexed payloads.",

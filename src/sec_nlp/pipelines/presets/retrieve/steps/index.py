@@ -204,7 +204,7 @@ def index_retrieval_hits(
         qdrant.upsert(
             collection_name=collection_name,
             points=points,
-            wait=True,
+            wait=settings.qdrant_upsert_wait,
         )
         logger.info(
             "Indexed %d retrieve hits into '%s'",
