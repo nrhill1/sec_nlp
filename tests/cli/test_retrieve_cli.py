@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
-from typing import cast
 from unittest.mock import Mock, patch
 
 from sec_nlp.cli.commands.retrieve import Retrieve
@@ -43,13 +42,15 @@ def test_retrieve_normalizes_numeric_sections(tmp_path: Path) -> None:
     dl_path.mkdir()
     out_path.mkdir()
 
-    cmd = Retrieve(
-        email="test@example.com",
-        dl_path=dl_path,
-        out_path=out_path,
-        symbols=["aapl"],
-        queries=["risk"],
-        sections=cast(list[str], [7, "item 1a"]),
+    cmd = Retrieve.model_validate(
+        {
+            "email": "test@example.com",
+            "dl_path": dl_path,
+            "out_path": out_path,
+            "symbols": ["aapl"],
+            "queries": ["risk"],
+            "sections": [7, "item 1a"],
+        }
     )
 
     assert cmd.sections == ["7", "1A"]
@@ -150,3 +151,37 @@ def test_retrieve_cli_integration_without_symbol(
     config = mock_run_pipeline.call_args[0][0]
     assert config.symbols == []
     assert config.queries == ["supply chain disruption"]
+
+
+@patch("sec_nlp.cli.command.BasePipelineCommand._run_pipeline", autospec=True)
+def test_retrieve_cli_integration_with_market_signals_flag(
+    mock_run_pipeline: Mock, tmp_path: Path
+) -> None:
+    from pydantic_settings import CliApp
+
+    from sec_nlp.cli.commands import Root
+
+    dl_path = tmp_path / "downloads"
+    out_path = tmp_path / "outputs"
+    dl_path.mkdir()
+    out_path.mkdir()
+
+    sys.argv = [
+        "cli",
+        "retrieve",
+        "AAPL",
+        "--email",
+        "test@example.com",
+        "--dl-path",
+        str(dl_path),
+        "--out-path",
+        str(out_path),
+        "--queries",
+        "supply chain disruption",
+        "--include-market-signals",
+    ]
+
+    CliApp.run(Root)
+    assert mock_run_pipeline.called
+    config = mock_run_pipeline.call_args[0][0]
+    assert config.include_market_signals is True

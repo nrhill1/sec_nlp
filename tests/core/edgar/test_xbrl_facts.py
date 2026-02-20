@@ -32,7 +32,7 @@ def test_load_xbrl_module_raises_clear_error(
 def test_parser_methods_and_top_level_extractors_use_extension(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    calls: dict[str, object] = {}
+    calls: dict[str, str] = {}
     raw_fact = SimpleNamespace(
         tag="us-gaap:Revenues",
         namespace="us-gaap",

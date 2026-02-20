@@ -11,7 +11,7 @@ mod types;
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList, PyModule};
 
-use api::{get_price, get_prices, get_range};
+use api::{get_price, get_prices, get_range, get_ranges};
 
 /// Fetch the latest price for a single ticker.
 ///
@@ -26,13 +26,13 @@ fn fetch_price(ticker: &str) -> PyResult<f64> {
 /// Returns a dict mapping ticker -> price.
 /// Results are cached for 5 minutes.
 #[pyfunction]
-fn fetch_prices(py: Python<'_>, tickers: Vec<String>) -> PyResult<PyObject> {
+fn fetch_prices<'py>(py: Python<'py>, tickers: Vec<String>) -> PyResult<Bound<'py, PyDict>> {
     let prices = get_prices(tickers)?;
     let dict = PyDict::new(py);
     for (ticker, price) in prices {
         dict.set_item(ticker, price)?;
     }
-    Ok(dict.into())
+    Ok(dict)
 }
 
 /// Fetch historical quotes for a date range.
@@ -44,13 +44,38 @@ fn fetch_prices(py: Python<'_>, tickers: Vec<String>) -> PyResult<PyObject> {
 /// Returns a list of quote dicts with keys:
 ///     timestamp, open_price, high, low, close, volume, adjclose
 #[pyfunction]
-fn retrieve_range(py: Python<'_>, ticker: &str, date_range: &str) -> PyResult<PyObject> {
+fn retrieve_range<'py>(
+    py: Python<'py>,
+    ticker: &str,
+    date_range: &str,
+) -> PyResult<Bound<'py, PyList>> {
     let quotes = get_range(ticker, date_range)?;
     let list = PyList::empty(py);
     for quote in quotes {
         list.append(quote.to_py_dict(py)?)?;
     }
-    Ok(list.into())
+    Ok(list)
+}
+
+/// Fetch historical quotes for multiple tickers for one date range.
+///
+/// Returns a dict mapping ticker -> list of quote dicts.
+#[pyfunction]
+fn retrieve_ranges<'py>(
+    py: Python<'py>,
+    tickers: Vec<String>,
+    date_range: &str,
+) -> PyResult<Bound<'py, PyDict>> {
+    let ranges = get_ranges(tickers, date_range)?;
+    let dict = PyDict::new(py);
+    for (ticker, quotes) in ranges {
+        let list = PyList::empty(py);
+        for quote in quotes {
+            list.append(quote.to_py_dict(py)?)?;
+        }
+        dict.set_item(ticker, list)?;
+    }
+    Ok(dict)
 }
 
 /// Clear all cached market data.
@@ -65,6 +90,7 @@ fn market(_py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(fetch_price, m)?)?;
     m.add_function(wrap_pyfunction!(fetch_prices, m)?)?;
     m.add_function(wrap_pyfunction!(retrieve_range, m)?)?;
+    m.add_function(wrap_pyfunction!(retrieve_ranges, m)?)?;
     m.add_function(wrap_pyfunction!(clear_cache, m)?)?;
     Ok(())
 }

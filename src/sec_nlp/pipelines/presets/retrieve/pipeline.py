@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from pathlib import Path
-from typing import Any, ClassVar, Literal, cast
+from typing import ClassVar, Literal
 
+from langchain_ollama.embeddings import OllamaEmbeddings
 from pydantic import PrivateAttr
+from qdrant_client import QdrantClient
 from rich.progress import (
     BarColumn,
     Progress,
@@ -19,12 +22,14 @@ from rich.progress import (
 
 from sec_nlp.core.infra.logger import logger
 from sec_nlp.core.infra.rich_console import get_rich_console
+from sec_nlp.core.market_analytics import build_market_context
+from sec_nlp.core.types import as_json_dict
 from sec_nlp.pipelines import BasePipeline
 from sec_nlp.pipelines.output_io import (
     build_run_file_stem,
     build_run_header_fields,
 )
-from sec_nlp.types import JsonDict, ResultDict
+from sec_nlp.types import JsonDict, JsonValue, ResultDict
 
 from .config import RetrieveSettings
 from .io import (
@@ -53,9 +58,9 @@ class RetrievePipeline(BasePipeline):
     requires_llm: ClassVar[bool] = False
 
     config: RetrieveSettings
-    _embedder: Any | None = PrivateAttr(default=None)
+    _embedder: OllamaEmbeddings | None = PrivateAttr(default=None)
     _embedding_dim: int | None = PrivateAttr(default=None)
-    _qdrant_client: Any | None = PrivateAttr(default=None)
+    _qdrant_client: QdrantClient | None = PrivateAttr(default=None)
 
     @classmethod
     def config_model(cls) -> type[RetrieveSettings]:
@@ -156,7 +161,7 @@ class RetrievePipeline(BasePipeline):
 
             self.config.complete_run(
                 success=True,
-                metadata=cast(JsonDict, metadata),
+                metadata=self._registry_metadata(metadata),
             )
             return RetrieveResult(
                 success=True,
@@ -181,7 +186,7 @@ class RetrievePipeline(BasePipeline):
         output_symbol: str,
         progress: Progress | None = None,
         phase_task: TaskID | None = None,
-    ) -> tuple[list[Path], dict[str, int | float | str | None], int, int]:
+    ) -> tuple[list[Path], dict[str, JsonValue], int, int]:
         self._update_phase(
             progress,
             phase_task,
@@ -216,6 +221,12 @@ class RetrievePipeline(BasePipeline):
             settings=self.config,
             embedder=self._embedder,
         )
+        market_context_metadata = self._market_context_metadata(
+            output_symbol=output_symbol,
+        )
+        market_signals = self._market_signals_for_payload(
+            market_context_metadata
+        )
         ranked_hits = index_retrieval_hits(
             symbol=output_symbol,
             hits=ranked_hits,
@@ -223,15 +234,17 @@ class RetrievePipeline(BasePipeline):
             qdrant_client=self._qdrant_client,
             embedder=self._embedder,
             embedding_dim=self._embedding_dim,
+            market_signals=market_signals,
         )
 
         self._update_phase(progress, phase_task, output_symbol, "Writing")
         outputs = self._write_outputs(
             symbol=output_symbol,
             hits=ranked_hits,
+            extra_metadata=market_context_metadata,
         )
 
-        metadata: dict[str, int | float | str | None] = {
+        metadata: dict[str, JsonValue] = {
             "queries_processed": len(self.config.queries),
             "candidate_hits": candidate_count,
             "ranked_hits": len(ranked_hits),
@@ -241,8 +254,97 @@ class RetrievePipeline(BasePipeline):
             "top_k": self.config.top_k,
             "efts_candidates": self.config.efts_candidates,
         }
+        if market_context_metadata:
+            metadata["market_context"] = market_context_metadata
 
         return outputs, metadata, len(self.config.queries), len(ranked_hits)
+
+    def _market_context_metadata(
+        self,
+        *,
+        output_symbol: str,
+    ) -> dict[str, JsonValue]:
+        if not self.config.include_market_signals:
+            return {}
+        if output_symbol == "ALL":
+            return {}
+
+        start_date, end_date = self.config.date_range
+        try:
+            bundle = build_market_context(
+                symbols=[output_symbol],
+                start_date=start_date,
+                end_date=end_date,
+                benchmark="SPY",
+            )
+        except Exception as exc:
+            logger.warning(
+                "Failed to compute market signals for %s: %s",
+                output_symbol,
+                exc,
+            )
+            return {}
+
+        payload = as_json_dict(
+            bundle.model_dump(mode="json", exclude_none=True)
+        )
+        return payload or {}
+
+    @staticmethod
+    def _market_signals_for_payload(
+        market_context: dict[str, JsonValue],
+    ) -> dict[str, JsonValue] | None:
+        metrics_raw = market_context.get("metrics")
+        if not isinstance(metrics_raw, list) or not metrics_raw:
+            return None
+        metric = metrics_raw[0]
+        if not isinstance(metric, dict):
+            return None
+        payload: dict[str, JsonValue] = {
+            "window": market_context.get("window"),
+            "benchmark": market_context.get("benchmark"),
+        }
+        for key, value in metric.items():
+            if isinstance(key, str):
+                normalized = RetrievePipeline._coerce_result_to_json(value)
+                if normalized is not None:
+                    payload[key] = normalized
+        return payload
+
+    @classmethod
+    def _coerce_result_to_json(cls, value) -> JsonValue | None:
+        if isinstance(value, Path):
+            return str(value)
+        if isinstance(value, (str, int, float, bool)) or value is None:
+            return value
+        if isinstance(value, Sequence) and not isinstance(value, str):
+            items: list[JsonValue] = []
+            for item in value:
+                normalized = cls._coerce_result_to_json(item)
+                if normalized is None:
+                    return None
+                items.append(normalized)
+            return items
+        if isinstance(value, Mapping):
+            payload: JsonDict = {}
+            for key, item in value.items():
+                if not isinstance(key, str):
+                    return None
+                normalized = cls._coerce_result_to_json(item)
+                if normalized is None:
+                    return None
+                payload[key] = normalized
+            return payload
+        return None
+
+    @classmethod
+    def _registry_metadata(cls, metadata: ResultDict) -> JsonDict:
+        payload: JsonDict = {}
+        for key, value in metadata.items():
+            normalized = cls._coerce_result_to_json(value)
+            if normalized is not None:
+                payload[key] = normalized
+        return payload
 
     def _update_phase(
         self,
@@ -272,6 +374,7 @@ class RetrievePipeline(BasePipeline):
         *,
         symbol: str,
         hits: list[RetrievalHit],
+        extra_metadata: dict[str, JsonValue] | None = None,
     ) -> list[Path]:
         symbol_out = self.config.get_symbol_output_dir(symbol)
         base_stem = build_run_file_stem(symbol, "retrieve", self.config.run_id)
@@ -308,6 +411,9 @@ class RetrievePipeline(BasePipeline):
                 "chunk_size": self.config.chunk_size,
                 "chunk_overlap": self.config.chunk_overlap,
                 "max_chunks_per_accession": self.config.max_chunks_per_accession,
+                **(
+                    {"market_context": extra_metadata} if extra_metadata else {}
+                ),
             },
         )
 

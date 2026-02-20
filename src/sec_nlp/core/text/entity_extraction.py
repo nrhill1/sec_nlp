@@ -6,7 +6,6 @@ from collections.abc import Mapping
 from functools import lru_cache
 from importlib import import_module
 from types import ModuleType
-from typing import Any, cast
 
 from langchain_core.documents import Document
 from pydantic import BaseModel, ConfigDict
@@ -52,34 +51,77 @@ def _load_entity_module() -> ModuleType:
 
 
 @lru_cache(maxsize=1)
-def _get_entity_tagger() -> Any:
+def _get_entity_tagger():
     return _load_entity_module().EntityTagger()
 
 
-def _field(raw: object, name: str) -> Any:
+def _field(raw, name: str):
     if isinstance(raw, Mapping):
-        return cast("Mapping[str, Any]", raw).get(name)
+        return raw.get(name)
     return getattr(raw, name, None)
 
 
-def _to_entity(raw_entity: object) -> Entity:
-    normalized = _field(raw_entity, "normalized")
+def _coerce_str(value) -> str | None:
+    if value is None:
+        return None
+    if isinstance(value, str):
+        cleaned = value.strip()
+        return cleaned or None
+    return str(value)
+
+
+def _coerce_int(value) -> int | None:
+    if isinstance(value, bool) or value is None:
+        return None
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float):
+        return int(value)
+    if isinstance(value, str):
+        cleaned = value.strip()
+        if not cleaned:
+            return None
+        try:
+            return int(float(cleaned))
+        except ValueError:
+            return None
+    return None
+
+
+def _coerce_float(value) -> float | None:
+    if isinstance(value, bool) or value is None:
+        return None
+    if isinstance(value, (int, float)):
+        return float(value)
+    if isinstance(value, str):
+        cleaned = value.strip()
+        if not cleaned:
+            return None
+        try:
+            return float(cleaned)
+        except ValueError:
+            return None
+    return None
+
+
+def _to_entity(raw_entity) -> Entity:
+    normalized = _coerce_str(_field(raw_entity, "normalized"))
     return Entity(
-        text=str(_field(raw_entity, "text") or ""),
-        entity_type=str(_field(raw_entity, "entity_type") or ""),
-        start=int(_field(raw_entity, "start") or 0),
-        end=int(_field(raw_entity, "end") or 0),
-        normalized="" if normalized is None else str(normalized),
+        text=_coerce_str(_field(raw_entity, "text")) or "",
+        entity_type=_coerce_str(_field(raw_entity, "entity_type")) or "",
+        start=_coerce_int(_field(raw_entity, "start")) or 0,
+        end=_coerce_int(_field(raw_entity, "end")) or 0,
+        normalized=normalized or "",
     )
 
 
-def _to_event(raw_event: object) -> EventMention:
+def _to_event(raw_event) -> EventMention:
     return EventMention(
-        event_type=str(_field(raw_event, "event_type") or ""),
-        text=str(_field(raw_event, "text") or ""),
-        start=int(_field(raw_event, "start") or 0),
-        end=int(_field(raw_event, "end") or 0),
-        confidence=float(_field(raw_event, "confidence") or 0.0),
+        event_type=_coerce_str(_field(raw_event, "event_type")) or "",
+        text=_coerce_str(_field(raw_event, "text")) or "",
+        start=_coerce_int(_field(raw_event, "start")) or 0,
+        end=_coerce_int(_field(raw_event, "end")) or 0,
+        confidence=_coerce_float(_field(raw_event, "confidence")) or 0.0,
     )
 
 

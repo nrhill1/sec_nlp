@@ -13,7 +13,7 @@ ifneq ("$(wildcard $(REPO_ROOT)/.env)","")
 	export
 endif
 ifeq ("$(wildcard $(REPO_ROOT)/.venv/bin/python)","")
-PYTHON_SYS_EXECUTABLE ?= $(shell python3 -c 'import sys; print(sys.executable)')
+PYTHON_SYS_EXECUTABLE ?= $(shell if command -v python3.13 >/dev/null 2>&1; then python3.13 -c 'import sys; print(sys.executable)'; else python3 -c 'import sys; print(sys.executable)'; fi)
 else
 PYTHON_SYS_EXECUTABLE ?= $(REPO_ROOT)/.venv/bin/python
 endif
@@ -72,6 +72,7 @@ clippy:
 .PHONY: test
 test:
 	@PYTHON_SYS_EXECUTABLE=$(PYTHON_SYS_EXECUTABLE) \
+	PYTHONHOME=$$($(PYTHON_SYS_EXECUTABLE) -c 'import sys; print(getattr(sys, "base_prefix", sys.prefix))') \
 	PYO3_PYTHON=$(PYO3_PYTHON) \
 	cargo test --manifest-path $(CARGO_MANIFEST)
 

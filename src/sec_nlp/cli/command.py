@@ -137,7 +137,9 @@ class BasePipelineCommand(BaseModel, ABC):
             subtitle=self._get_header_subtitle(),
             style="box",
         )
-        logger.info(header)
+        # Render pipeline headlines via Rich directly so centering is preserved
+        # regardless of logging formatter prefixes.
+        get_rich_console().print(Text.from_ansi(header))
 
     def _get_header_subtitle(self) -> str:
         pipeline_cls = self._get_pipeline_class()

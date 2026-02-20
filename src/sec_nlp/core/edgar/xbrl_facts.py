@@ -7,7 +7,6 @@ from functools import lru_cache
 from importlib import import_module
 from pathlib import Path
 from types import ModuleType
-from typing import Any, cast
 
 from pydantic import BaseModel, ConfigDict
 
@@ -48,32 +47,83 @@ def _load_xbrl_module() -> ModuleType:
         ) from exc
 
 
-def _field(raw_fact: object, name: str) -> Any:
+def _field(raw_fact, name: str):
     if isinstance(raw_fact, Mapping):
-        return cast("Mapping[str, Any]", raw_fact).get(name)
+        return raw_fact.get(name)
     return getattr(raw_fact, name, None)
 
 
-def _to_fact(raw_fact: object) -> XbrlFact:
+def _coerce_str(value) -> str | None:
+    if value is None:
+        return None
+    if isinstance(value, str):
+        cleaned = value.strip()
+        return cleaned or None
+    return str(value)
+
+
+def _coerce_float(value) -> float | None:
+    if isinstance(value, bool) or value is None:
+        return None
+    if isinstance(value, (int, float)):
+        return float(value)
+    if isinstance(value, str):
+        cleaned = value.strip()
+        if not cleaned:
+            return None
+        try:
+            return float(cleaned)
+        except ValueError:
+            return None
+    return None
+
+
+def _coerce_int(value) -> int | None:
+    if isinstance(value, bool) or value is None:
+        return None
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float):
+        return int(value)
+    if isinstance(value, str):
+        cleaned = value.strip()
+        if not cleaned:
+            return None
+        try:
+            return int(float(cleaned))
+        except ValueError:
+            return None
+    return None
+
+
+def _to_fact(raw_fact) -> XbrlFact:
+    tag = _coerce_str(_field(raw_fact, "tag")) or ""
+    namespace = _coerce_str(_field(raw_fact, "namespace")) or ""
+    local_name = _coerce_str(_field(raw_fact, "local_name")) or ""
+    value = _coerce_float(_field(raw_fact, "value")) or 0.0
+    raw_value = _coerce_str(_field(raw_fact, "raw_value")) or ""
+    scale = _coerce_int(_field(raw_fact, "scale")) or 0
+    context_ref = _coerce_str(_field(raw_fact, "context_ref")) or ""
+
     return XbrlFact(
-        tag=str(_field(raw_fact, "tag") or ""),
-        namespace=str(_field(raw_fact, "namespace") or ""),
-        local_name=str(_field(raw_fact, "local_name") or ""),
-        value=float(_field(raw_fact, "value") or 0.0),
-        raw_value=str(_field(raw_fact, "raw_value") or ""),
-        scale=int(_field(raw_fact, "scale") or 0),
-        decimals=_field(raw_fact, "decimals"),
-        unit=_field(raw_fact, "unit"),
-        context_ref=str(_field(raw_fact, "context_ref") or ""),
-        period_start=_field(raw_fact, "period_start"),
-        period_end=_field(raw_fact, "period_end"),
-        period_instant=_field(raw_fact, "period_instant"),
-        entity_id=_field(raw_fact, "entity_id"),
-        segment=_field(raw_fact, "segment"),
+        tag=tag,
+        namespace=namespace,
+        local_name=local_name,
+        value=value,
+        raw_value=raw_value,
+        scale=scale,
+        decimals=_coerce_int(_field(raw_fact, "decimals")),
+        unit=_coerce_str(_field(raw_fact, "unit")),
+        context_ref=context_ref,
+        period_start=_coerce_str(_field(raw_fact, "period_start")),
+        period_end=_coerce_str(_field(raw_fact, "period_end")),
+        period_instant=_coerce_str(_field(raw_fact, "period_instant")),
+        entity_id=_coerce_str(_field(raw_fact, "entity_id")),
+        segment=_coerce_str(_field(raw_fact, "segment")),
     )
 
 
-def _to_facts(raw_facts: list[object]) -> list[XbrlFact]:
+def _to_facts(raw_facts: list) -> list[XbrlFact]:
     return [_to_fact(raw_fact) for raw_fact in raw_facts]
 
 

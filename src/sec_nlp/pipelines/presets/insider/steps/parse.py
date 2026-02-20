@@ -7,12 +7,13 @@ from pathlib import Path
 from langchain_core.documents import Document
 
 from sec_nlp.core.edgar.insider_parser import InsiderParser
+from sec_nlp.types import JsonValue
 
 from ..models import InsiderTransaction
 from .download import DownloadedInsiderFiling
 
 
-def _coerce_str(value: object) -> str | None:
+def _coerce_str(value: JsonValue) -> str | None:
     if value is None:
         return None
     if isinstance(value, str):
@@ -21,7 +22,7 @@ def _coerce_str(value: object) -> str | None:
     return str(value)
 
 
-def _coerce_int(value: object) -> int | None:
+def _coerce_int(value: JsonValue) -> int | None:
     if isinstance(value, bool):
         return None
     if isinstance(value, int):
@@ -39,7 +40,7 @@ def _coerce_int(value: object) -> int | None:
     return None
 
 
-def _coerce_float(value: object) -> float | None:
+def _coerce_float(value: JsonValue) -> float | None:
     if isinstance(value, bool):
         return None
     if isinstance(value, (int, float)):
@@ -55,7 +56,7 @@ def _coerce_float(value: object) -> float | None:
     return None
 
 
-def _coerce_roles(value: object) -> list[str]:
+def _coerce_roles(value: JsonValue) -> list[str]:
     if not isinstance(value, list):
         return []
     roles: list[str] = []
@@ -69,14 +70,14 @@ def _coerce_roles(value: object) -> list[str]:
     return sorted(set(roles))
 
 
-def _source_name(value: object) -> str | None:
+def _source_name(value: JsonValue) -> str | None:
     source = _coerce_str(value)
     if source is None:
         return None
     return Path(source).name
 
 
-def _tx_date(metadata: dict[str, object]) -> str | None:
+def _tx_date(metadata: dict[str, JsonValue]) -> str | None:
     transaction_date = _coerce_str(metadata.get("transaction_date"))
     if transaction_date is not None:
         return transaction_date

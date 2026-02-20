@@ -102,6 +102,8 @@ def test_chat_cli_integration_with_symbol(
         "--prefetch-queries",
         "neodymium pricing",
         "--include-market-context",
+        "--market-context-profile",
+        "compact",
         "--include-news-context",
         "--top-k",
         "7",
@@ -120,6 +122,7 @@ def test_chat_cli_integration_with_symbol(
     assert config.prefetch_retrieve is True
     assert config.prefetch_queries == ["neodymium pricing"]
     assert config.include_market_context is True
+    assert config.market_context_profile == "compact"
     assert config.include_news_context is True
     assert config.top_k == 7
 

@@ -8,6 +8,7 @@ from datetime import date, datetime
 from pydantic import BaseModel, ConfigDict
 
 from sec_nlp.pipelines.types import AnalysisResultDict
+from sec_nlp.types import JsonValue
 
 _SENTIMENT_WEIGHTS = {
     "positive": 1.0,
@@ -33,7 +34,9 @@ class FilingTrend(BaseModel):
     inflection_points: list[int]
 
 
-def _parse_filing_date(raw_value: object) -> date | None:
+def _parse_filing_date(
+    raw_value: JsonValue | date | datetime,
+) -> date | None:
     if isinstance(raw_value, datetime):
         return raw_value.date()
     if isinstance(raw_value, date):

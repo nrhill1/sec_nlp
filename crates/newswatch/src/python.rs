@@ -45,7 +45,7 @@ impl NewsClient {
                 .await
                 .map_err(|err| err.to_py_err())?;
 
-            Python::with_gil(|py| {
+            Python::attach(|py| {
                 items
                     .into_iter()
                     .map(|item| Py::new(py, item))

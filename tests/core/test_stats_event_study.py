@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from datetime import UTC, date, datetime
 from types import SimpleNamespace
-from typing import cast
 
 import pytest
 
@@ -12,13 +11,14 @@ import sec_nlp.core.stats.event_study as event_study_module
 from sec_nlp.core.market import MarketQuote
 
 
-class _FakeRetriever:
+class _FakeRetriever(event_study_module.MarketRangeRetriever):
     def __init__(self, quotes_by_ticker: dict[str, list[MarketQuote]]) -> None:
         self._quotes_by_ticker = quotes_by_ticker
 
     def retrieve_range(
-        self, ticker: str, _date_range: tuple[date, date]
+        self, ticker: str, date_range: tuple[date, date]
     ) -> list[MarketQuote]:
+        _ = date_range
         return list(self._quotes_by_ticker.get(ticker, []))
 
 
@@ -27,7 +27,8 @@ def _ts(year: int, month: int, day: int) -> int:
 
 
 def test_run_event_study_returns_normalized_metrics(monkeypatch) -> None:
-    calls: dict[str, object] = {}
+    type _CallValue = tuple[list[float] | list[int] | int, ...] | list[float]
+    calls: dict[str, _CallValue] = {}
 
     def fake_corr_event_study(
         prices: list[float],
@@ -77,14 +78,13 @@ def test_run_event_study_returns_normalized_metrics(monkeypatch) -> None:
             ],
         }
     )
-
     result = event_study_module.run_event_study(
         symbol="ACME",
         event_date="2024-01-02",
         benchmark="SPY",
         pre_window=1,
         post_window=2,
-        retriever=cast(event_study_module.MarketRangeRetriever, retriever),
+        retriever=retriever,
     )
 
     assert result.symbol == "ACME"
@@ -127,10 +127,7 @@ def test_run_event_study_requires_overlapping_quotes() -> None:
             benchmark="SPY",
             pre_window=1,
             post_window=1,
-            retriever=cast(
-                event_study_module.MarketRangeRetriever,
-                retriever,
-            ),
+            retriever=retriever,
         )
 
 

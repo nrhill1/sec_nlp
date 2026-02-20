@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from pathlib import Path
 from typing import ClassVar, Literal
 
@@ -11,6 +12,7 @@ from pydantic_settings import SettingsConfigDict
 from sec_nlp.core.edgar.filing_mode import FilingMode
 from sec_nlp.pipelines.base.config import BasePipelineSettings
 from sec_nlp.pipelines.vector.config import VectorConfig
+from sec_nlp.types import ConfigValue
 
 
 class RetrieveSettings(BasePipelineSettings):
@@ -70,6 +72,10 @@ class RetrieveSettings(BasePipelineSettings):
         default=False,
         description="Upsert retrieved snippets into Qdrant for reuse.",
     )
+    include_market_signals: bool = Field(
+        default=False,
+        description="Attach derived market context metrics to retrieve outputs and indexed payloads.",
+    )
     embedding_cache: bool = Field(
         default=True,
         description="Cache snippet embeddings across runs for rerank/index.",
@@ -124,6 +130,22 @@ class RetrieveSettings(BasePipelineSettings):
         default="json",
         description="Output file format to emit.",
     )
+
+    @model_validator(mode="before")
+    @classmethod
+    def disable_dry_run_for_embedding_ops(
+        cls, values: Mapping[str, ConfigValue] | ConfigValue
+    ) -> Mapping[str, ConfigValue] | ConfigValue:
+        """Force dry_run off when features require embeddings/index writes."""
+        if not isinstance(values, Mapping):
+            return values
+
+        merged = dict(values)
+        if bool(merged.get("index_results")) or bool(
+            merged.get("rerank_with_embeddings")
+        ):
+            merged["dry_run"] = False
+        return merged
 
     @field_validator("queries", mode="before")
     @classmethod

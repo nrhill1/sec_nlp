@@ -268,7 +268,7 @@ class SupplyChainMapRunnable(
         return cleaned
 
     @staticmethod
-    def _coerce_metadata_text(value: object) -> str | None:
+    def _coerce_metadata_text(value: JsonValue) -> str | None:
         if isinstance(value, str):
             cleaned = value.strip()
             return cleaned or None

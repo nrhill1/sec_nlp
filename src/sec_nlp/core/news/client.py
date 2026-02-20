@@ -6,7 +6,6 @@ from collections.abc import Mapping
 from functools import lru_cache
 from importlib import import_module
 from types import ModuleType
-from typing import Any, cast
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -39,24 +38,47 @@ def _load_newswatch_module() -> ModuleType:
         ) from exc
 
 
-def _field(raw_item: object, name: str) -> Any:
+def _field(raw_item, name: str):
     if isinstance(raw_item, Mapping):
-        return cast("Mapping[str, Any]", raw_item).get(name)
+        return raw_item.get(name)
     return getattr(raw_item, name, None)
 
 
-def _to_news_item(raw_item: object) -> NewsItem:
+def _coerce_str(value) -> str | None:
+    if value is None:
+        return None
+    if isinstance(value, str):
+        cleaned = value.strip()
+        return cleaned or None
+    return str(value)
+
+
+def _coerce_keywords(value) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    keywords: list[str] = []
+    for item in value:
+        text = _coerce_str(item)
+        if text is not None:
+            keywords.append(text)
+    return keywords
+
+
+def _to_news_item(raw_item) -> NewsItem:
+    title = _coerce_str(_field(raw_item, "title")) or ""
+    url = _coerce_str(_field(raw_item, "url")) or ""
+    source = _coerce_str(_field(raw_item, "source")) or ""
     return NewsItem(
-        title=str(_field(raw_item, "title") or ""),
-        url=str(_field(raw_item, "url") or ""),
-        source=str(_field(raw_item, "source") or ""),
-        published_at=_field(raw_item, "published_at"),
-        matched_keywords=list(_field(raw_item, "matched_keywords") or []),
-        snippet=_field(raw_item, "snippet"),
+        title=title,
+        url=url,
+        source=source,
+        published_at=_coerce_str(_field(raw_item, "published_at")),
+        matched_keywords=_coerce_keywords(_field(raw_item, "matched_keywords")),
+        snippet=_coerce_str(_field(raw_item, "snippet")),
     )
 
 
-def _to_news_items(raw_items: list[object]) -> list[NewsItem]:
+def _to_news_items(raw_items: list) -> list[NewsItem]:
     return [_to_news_item(raw_item) for raw_item in raw_items]
 
 

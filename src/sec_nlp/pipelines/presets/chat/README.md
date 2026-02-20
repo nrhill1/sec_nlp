@@ -15,8 +15,9 @@ If `--question` is omitted and `--interactive` is enabled (default), it starts a
 1. Query Qdrant collections (default: `retrieve`, `analyze`).
 2. Apply optional symbol/form/date filters and reranking (`score` or `mmr`).
 3. Build citations and optional external market/news context.
-4. Generate answer with the configured LLM.
-5. Optionally autosave transcript outputs.
+4. Market context is derived once per request via `build_market_context(...)` and rendered using a profile (`compact` or `standard`).
+5. Generate answer with the configured LLM.
+6. Optionally autosave transcript outputs.
 
 ## Key Configuration
 
@@ -24,7 +25,7 @@ If `--question` is omitted and `--interactive` is enabled (default), it starts a
 - `collections` (default `retrieve`, `analyze`)
 - `top_k`, `max_context_chunks`, `rerank_mode`
 - `prefetch_retrieve` to auto-run retrieve indexing when collections are missing/sparse
-- `include_market_context`, `include_news_context`
+- `include_market_context`, `market_context_profile`, `include_news_context`
 - `strict_citations` and `transcript_autosave`
 
 ## Outputs

@@ -13,7 +13,7 @@ use stop_words::{get, LANGUAGE};
 /// Result of keyword extraction: (keyword, score).
 /// Lower scores indicate more important keywords for YAKE.
 /// Higher scores indicate more important keywords for TF-IDF, RAKE, TextRank.
-#[pyclass(name = "KeywordResult", frozen, module = "efts")]
+#[pyclass(name = "KeywordResult", frozen, module = "efts", skip_from_py_object)]
 #[derive(Debug, Clone)]
 pub struct KeywordResult {
     #[pyo3(get)]
@@ -33,7 +33,7 @@ impl KeywordResult {
 }
 
 /// Result of document ranking: (document_index, score).
-#[pyclass(name = "DocumentScore", frozen, module = "efts")]
+#[pyclass(name = "DocumentScore", frozen, module = "efts", skip_from_py_object)]
 #[derive(Debug, Clone)]
 pub struct DocumentScore {
     #[pyo3(get)]

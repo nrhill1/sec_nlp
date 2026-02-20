@@ -3,9 +3,16 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
+from pathlib import Path
 from typing import TypeGuard
 
-from sec_nlp.types import JsonDict, JsonObject, JsonValue
+from sec_nlp.types import (
+    JsonDict,
+    JsonObject,
+    JsonValue,
+    ResultDict,
+    ResultValue,
+)
 
 
 def is_json_object(value: JsonValue) -> TypeGuard[JsonObject]:
@@ -106,3 +113,40 @@ def coerce_float(value: JsonValue | None) -> float | None:
         except ValueError:
             return None
     return None
+
+
+def coerce_result_json_value(value: ResultValue) -> JsonValue | None:
+    """Convert a ResultValue into JSON-safe shape for run metadata."""
+    if isinstance(value, Path):
+        return str(value)
+    if isinstance(value, (str, int, float, bool)) or value is None:
+        return value
+    if isinstance(value, Sequence) and not isinstance(value, str):
+        items: list[JsonValue] = []
+        for item in value:
+            normalized = coerce_result_json_value(item)
+            if normalized is None:
+                return None
+            items.append(normalized)
+        return items
+    if isinstance(value, Mapping):
+        payload: JsonDict = {}
+        for key, item in value.items():
+            if not isinstance(key, str):
+                return None
+            normalized = coerce_result_json_value(item)
+            if normalized is None:
+                return None
+            payload[key] = normalized
+        return payload
+    return None
+
+
+def coerce_result_json_dict(metadata: ResultDict) -> JsonDict:
+    """Convert ResultDict metadata to JsonDict for registry persistence."""
+    payload: JsonDict = {}
+    for key, value in metadata.items():
+        normalized = coerce_result_json_value(value)
+        if normalized is not None:
+            payload[key] = normalized
+    return payload

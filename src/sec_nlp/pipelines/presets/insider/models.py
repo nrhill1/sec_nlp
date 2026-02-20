@@ -76,11 +76,17 @@ class InsiderAlert(BaseModel):
 
     @field_validator("related_transaction_ids", mode="before")
     @classmethod
-    def _dedupe_related_transaction_ids(cls, value: object) -> list[str]:
+    def _dedupe_related_transaction_ids(
+        cls,
+        value: JsonValue
+        | list[JsonValue]
+        | tuple[JsonValue, ...]
+        | set[JsonValue],
+    ) -> list[str]:
         if value is None:
             return []
         if isinstance(value, str):
-            candidates: list[object] = [value]
+            candidates: list[JsonValue] = [value]
         elif isinstance(value, (list, tuple, set)):
             candidates = list(value)
         else:

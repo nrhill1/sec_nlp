@@ -32,7 +32,7 @@ impl MarketQuote {
     }
 
     /// Convert to Python dict.
-    pub fn to_py_dict(&self, py: Python<'_>) -> PyResult<PyObject> {
+    pub fn to_py_dict<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
         let dict = PyDict::new(py);
         dict.set_item("timestamp", self.timestamp)?;
         dict.set_item("open_price", self.open)?;
@@ -41,7 +41,7 @@ impl MarketQuote {
         dict.set_item("close", self.close)?;
         dict.set_item("volume", self.volume)?;
         dict.set_item("adjclose", self.adjclose)?;
-        Ok(dict.into())
+        Ok(dict)
     }
 }
 

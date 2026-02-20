@@ -7,7 +7,6 @@ import sys
 from datetime import date
 from pathlib import Path
 from types import SimpleNamespace
-from typing import cast
 
 from langchain_core.documents import Document
 
@@ -79,12 +78,17 @@ def test_parse_holding_positions_maps_parser_documents() -> None:
         },
     )
 
-    parser = SimpleNamespace(parse_accession_dir=lambda _path: [doc])
+    class _Parser(HoldingsParser):
+        def parse_accession_dir(self, accession_dir: Path) -> list[Document]:
+            _ = accession_dir
+            return [doc]
+
+    parser = _Parser()
 
     positions = parse_holding_positions(
         symbol="ABC",
         filing=filing,
-        parser=cast(HoldingsParser, parser),
+        parser=parser,
         cusip_filter="000000000",
     )
 
@@ -284,10 +288,11 @@ def test_download_holdings_filings_uses_include_amends_for_13f_amendments(
     )
     filing_dir.mkdir(parents=True)
 
-    calls: list[dict[str, object]] = []
+    type _CallValue = str | int | bool | date | None
+    calls: list[dict[str, _CallValue]] = []
 
     class _FakeDownloader:
-        def __init__(self, *_args: object, **_kwargs: object) -> None:
+        def __init__(self, *_args, **_kwargs) -> None:
             pass
 
         def get(
@@ -296,8 +301,8 @@ def test_download_holdings_filings_uses_include_amends_for_13f_amendments(
             ticker_or_cik: str,
             *,
             limit: int | None = None,
-            after: object = None,
-            before: object = None,
+            after: date | None = None,
+            before: date | None = None,
             include_amends: bool = False,
             download_details: bool = False,
             accession_numbers_to_skip: set[str] | None = None,

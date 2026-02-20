@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import ClassVar, Literal, cast
+from typing import ClassVar, Literal
 
 from rich.progress import (
     BarColumn,
@@ -18,12 +18,13 @@ from rich.progress import (
 
 from sec_nlp.core.infra.logger import logger
 from sec_nlp.core.infra.rich_console import get_rich_console
+from sec_nlp.core.types import coerce_result_json_dict
 from sec_nlp.pipelines import BasePipeline
 from sec_nlp.pipelines.output_io import (
     build_run_file_stem,
     build_run_header_fields,
 )
-from sec_nlp.types import JsonDict, ResultDict
+from sec_nlp.types import ResultDict
 
 from .config import NewsSettings
 from .io import (
@@ -120,7 +121,7 @@ class NewsPipeline(BasePipeline):
 
             self.config.complete_run(
                 success=True,
-                metadata=cast(JsonDict, metadata),
+                metadata=coerce_result_json_dict(metadata),
             )
             return NewsResult(
                 success=True,

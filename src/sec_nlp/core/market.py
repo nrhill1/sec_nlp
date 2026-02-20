@@ -128,10 +128,11 @@ class MarketRetriever:
         )
         self._cache: OrderedDict[CacheKey, MarketCacheEntry] = OrderedDict()
 
-    def _log(self, message: str, *args: str) -> None:
-        logger.debug(message, *args)
-
-    def _log(self, message: str, *args: object) -> None:
+    def _log(
+        self,
+        message: str,
+        *args: str | int | float | bool | None,
+    ) -> None:
         logger.debug(message, *args)
 
     def _cache_enabled(self) -> bool:
@@ -238,6 +239,66 @@ class MarketRetriever:
         quotes = [_normalize_quote(raw_quote) for raw_quote in raw_quotes]
         self._set_cached_quotes(cache_key, now, tuple(quotes))
         return quotes
+
+    def retrieve_ranges(
+        self,
+        tickers: Sequence[str],
+        date_range: Sequence[date | datetime],
+    ) -> dict[str, list[MarketQuote]]:
+        """Fetch OHLCV quotes for multiple tickers within a date range."""
+        normalized = [
+            ticker.strip().upper() for ticker in tickers if ticker.strip()
+        ]
+        if not normalized:
+            return {}
+
+        start_date, end_date = _coerce_date_range(date_range)
+        date_range_text = f"{start_date.isoformat()}..{end_date.isoformat()}"
+        now = monotonic()
+
+        output: dict[str, list[MarketQuote]] = {}
+        missing: list[str] = []
+        for ticker in normalized:
+            cached = self._get_cached_quotes((ticker, date_range_text), now)
+            if cached is not None:
+                output[ticker] = list(cached)
+            else:
+                missing.append(ticker)
+
+        if missing:
+            self._log(
+                "retrieve_ranges tickers=%s range=%s",
+                ", ".join(missing),
+                date_range_text,
+            )
+            fetch_batch = getattr(self._market, "retrieve_ranges", None)
+            if callable(fetch_batch):
+                raw_batch = self._call_with_retry(
+                    "retrieve_ranges",
+                    lambda: fetch_batch(missing, date_range_text),
+                )
+                for ticker, raw_quotes in dict(raw_batch).items():
+                    quotes = [
+                        _normalize_quote(raw_quote) for raw_quote in raw_quotes
+                    ]
+                    output[str(ticker)] = quotes
+                    self._set_cached_quotes(
+                        (str(ticker), date_range_text),
+                        now,
+                        tuple(quotes),
+                    )
+            else:
+                for ticker in missing:
+                    output[ticker] = self.retrieve_range(
+                        ticker, (start_date, end_date)
+                    )
+
+        ordered: dict[str, list[MarketQuote]] = {}
+        for ticker in normalized:
+            quotes = output.get(ticker)
+            if quotes is not None:
+                ordered[ticker] = quotes
+        return ordered
 
 
 def create_market_retriever() -> MarketRetriever:

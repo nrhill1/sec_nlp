@@ -10,8 +10,9 @@ BRANCH := $(shell git rev-parse --abbrev-ref HEAD)
 ROOT_DIR := $(shell dirname $(realpath $(firstword $(MAKEFILE_LIST))))
 
 # Caching
-SCCACHE ?= sccache
-export RUSTC_WRAPPER ?= $(SCCACHE)
+# Default: no rustc wrapper. Opt in with:
+#   RUSTC_WRAPPER=sccache make <target>
+export RUSTC_WRAPPER ?=
 
 # Nested Makefile directories
 PYTHON_DIR := $(ROOT_DIR)/src

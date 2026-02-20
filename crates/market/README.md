@@ -6,6 +6,7 @@ Rust/PyO3 extension used by `sec_nlp.core.market` and the `sec-nlp market` comma
 - `fetch_price(symbol)` - latest close price
 - `fetch_prices([symbols...])` - latest close prices for multiple tickers
 - `retrieve_range(symbol, "YYYY-MM-DD..YYYY-MM-DD")` - OHLCV(+adjclose) range
+- `retrieve_ranges([symbols...], "YYYY-MM-DD..YYYY-MM-DD")` - batched OHLCV(+adjclose) ranges using one Yahoo session per call
 
 ## Build
 
@@ -27,6 +28,10 @@ import market
 latest = market.fetch_price("AAPL")
 latest_batch = market.fetch_prices(["AAPL", "MSFT"])
 history = market.retrieve_range("AAPL", "2025-01-01..2025-01-31")
+history_batch = market.retrieve_ranges(
+    ["AAPL", "MSFT"],
+    "2025-01-01..2025-01-31",
+)
 ```
 
 Range format is inclusive and uses `YYYY-MM-DD..YYYY-MM-DD`.

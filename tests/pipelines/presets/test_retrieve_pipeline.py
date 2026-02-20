@@ -26,6 +26,7 @@ from sec_nlp.pipelines.presets.retrieve.steps import (
     rank_retrieval_hits,
     rerank_with_embeddings,
 )
+from sec_nlp.types import JsonValue
 
 
 def _efts_hit(
@@ -112,13 +113,13 @@ def test_embed_texts_with_cache_uses_sqlite_cache(
     first = embed_steps.embed_texts_with_cache(
         texts=["alpha", "beta"],
         settings=settings,
-        embedder=object(),
+        embedder=SimpleNamespace(),
         cache_prefix="snippet",
     )
     second = embed_steps.embed_texts_with_cache(
         texts=["beta", "alpha"],
         settings=settings,
-        embedder=object(),
+        embedder=SimpleNamespace(),
         cache_prefix="snippet",
     )
 
@@ -173,7 +174,7 @@ def test_embed_texts_with_cache_migrates_legacy_json_cache(
     vectors = embed_steps.embed_texts_with_cache(
         texts=[text],
         settings=settings,
-        embedder=object(),
+        embedder=SimpleNamespace(),
         cache_prefix="snippet",
     )
 
@@ -413,7 +414,8 @@ def test_retrieve_pipeline_runs_unscoped_without_symbols(
         download_missing=False,
     )
 
-    observed: dict[str, object] = {}
+    type _ObservedValue = list[str] | str | None
+    observed: dict[str, _ObservedValue] = {}
 
     def _fake_candidate_search(
         *,
@@ -495,7 +497,7 @@ def test_download_and_chunk_hits_enriches_snippet_and_chunk_metadata(
         lambda **kwargs: html_path,
     )
 
-    captured: dict[str, object] = {}
+    captured_section_filter = {"seen": False}
 
     def _fake_transform_html(
         self,
@@ -504,7 +506,7 @@ def test_download_and_chunk_hits_enriches_snippet_and_chunk_metadata(
         section_filter=None,
         **kwargs,
     ) -> list[Document]:
-        captured["section_filter"] = section_filter
+        captured_section_filter["seen"] = section_filter is not None
         return [
             Document(
                 page_content="General operations and governance update.",
@@ -539,7 +541,7 @@ def test_download_and_chunk_hits_enriches_snippet_and_chunk_metadata(
     assert enriched[0].section_type == "item"
     assert enriched[0].section_number == "1A"
     assert enriched[0].chunk_index == 1
-    assert captured["section_filter"] is not None
+    assert captured_section_filter["seen"] is True
 
 
 def test_download_and_chunk_hits_preserves_efts_snippet_when_no_html(
@@ -891,7 +893,7 @@ def test_index_retrieval_hits_short_circuits_when_all_hits_exist(
 
     def _fake_setup_embedding_model(self):
         embedder_called["value"] = True
-        return object(), 2
+        return SimpleNamespace(), 2
 
     monkeypatch.setattr(
         "sec_nlp.pipelines.vector.config.VectorConfig.setup_embedding_model",
@@ -951,8 +953,8 @@ def test_retrieve_pipeline_reuses_vector_components_across_symbols(
     )
 
     setup_calls = {"embedder": 0, "qdrant": 0}
-    fake_embedder = object()
-    fake_qdrant = object()
+    fake_embedder = SimpleNamespace()
+    fake_qdrant = SimpleNamespace()
 
     def _fake_setup_embedder(self):
         setup_calls["embedder"] += 1
@@ -971,9 +973,9 @@ def test_retrieve_pipeline_reuses_vector_components_across_symbols(
         _fake_setup_qdrant,
     )
 
-    rerank_embedder_args: list[object | None] = []
-    index_embedder_args: list[object | None] = []
-    index_qdrant_args: list[object | None] = []
+    rerank_embedder_args: list[SimpleNamespace | None] = []
+    index_embedder_args: list[SimpleNamespace | None] = []
+    index_qdrant_args: list[SimpleNamespace | None] = []
 
     def _fake_rerank(*, hits, settings, embedder=None):
         rerank_embedder_args.append(embedder)
@@ -987,6 +989,7 @@ def test_retrieve_pipeline_reuses_vector_components_across_symbols(
         qdrant_client=None,
         embedder=None,
         embedding_dim=None,
+        market_signals=None,
     ):
         index_qdrant_args.append(qdrant_client)
         index_embedder_args.append(embedder)
@@ -1010,3 +1013,146 @@ def test_retrieve_pipeline_reuses_vector_components_across_symbols(
     assert rerank_embedder_args == [fake_embedder, fake_embedder]
     assert index_embedder_args == [fake_embedder, fake_embedder]
     assert index_qdrant_args == [fake_qdrant, fake_qdrant]
+
+
+def test_retrieve_pipeline_adds_market_context_to_output_metadata(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    config = RetrieveSettings(
+        email="test@example.com",
+        symbols=["ABC"],
+        queries=["supply chain"],
+        dl_path=tmp_path / "downloads",
+        out_path=tmp_path / "outputs",
+        output_format="json",
+        top_k=5,
+        download_missing=False,
+        include_market_signals=True,
+    )
+    candidates = {
+        "supply chain": [
+            _efts_hit(
+                accession="0000123456-26-000010",
+                filed=date(2026, 2, 2),
+                score=0.88,
+                company="ABC Co",
+            )
+        ]
+    }
+
+    monkeypatch.setattr(
+        "sec_nlp.pipelines.presets.retrieve.pipeline.run_candidate_search",
+        lambda symbol, queries, settings: candidates,
+    )
+    monkeypatch.setattr(
+        "sec_nlp.pipelines.presets.retrieve.pipeline.build_market_context",
+        lambda **kwargs: SimpleNamespace(
+            model_dump=lambda mode="json", exclude_none=True: {
+                "window": "2024-01-01..2024-12-31",
+                "benchmark": "SPY",
+                "symbols": ["ABC"],
+                "metrics": [
+                    {
+                        "symbol": "ABC",
+                        "return_pct": 1.0,
+                        "benchmark_return_pct": 0.5,
+                        "spread_pct": 0.5,
+                        "beta": 1.1,
+                    }
+                ],
+            }
+        ),
+    )
+
+    pipeline = RetrievePipeline(config=config)
+    result = pipeline.run()
+
+    assert result.success is True
+    json_path = next(path for path in result.outputs if path.suffix == ".json")
+    payload = json.loads(json_path.read_text())
+    market_context = payload["metadata"].get("market_context")
+    assert isinstance(market_context, dict)
+    assert market_context["benchmark"] == "SPY"
+    assert market_context["metrics"][0]["symbol"] == "ABC"
+
+
+def test_index_retrieval_hits_includes_market_signals_payload(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    settings = RetrieveSettings(
+        email="test@example.com",
+        symbols=["ABC"],
+        queries=["supply chain"],
+        dl_path=tmp_path / "downloads",
+        out_path=tmp_path / "outputs",
+        index_results=True,
+        include_market_signals=True,
+        dry_run=False,
+    )
+    hits = [
+        RetrievalHit(
+            symbol="ABC",
+            query="supply chain",
+            accession_number="0000123456-26-000130",
+            form_type="10-K",
+            filed_date="2026-02-14",
+            company_name="ABC Corp",
+            cik="0000123456",
+            score=0.9,
+            edgar_url="https://example.com/5",
+            snippet="sample snippet",
+        )
+    ]
+
+    class _FakeEmbedder:
+        pass
+
+    captured_payloads: list[dict[str, JsonValue]] = []
+
+    class _FakeQdrant:
+        def collection_exists(self, collection_name: str) -> bool:
+            return False
+
+        def create_collection(self, **kwargs) -> None:
+            return None
+
+        def upsert(self, *, collection_name: str, points, wait: bool) -> None:
+            for point in points:
+                captured_payloads.append(point.payload)
+
+    monkeypatch.setattr(
+        "sec_nlp.pipelines.vector.config.VectorConfig.setup_embedding_model",
+        lambda self: (_FakeEmbedder(), 2),
+    )
+    monkeypatch.setattr(
+        "sec_nlp.pipelines.vector.config.VectorConfig.batch_embed_documents",
+        lambda self, embedder, texts, show_progress=False: [[1.0, 0.0]],
+    )
+    monkeypatch.setattr(
+        "sec_nlp.pipelines.vector.config.VectorConfig.setup_qdrant_client",
+        lambda self: _FakeQdrant(),
+    )
+
+    index_retrieval_hits(
+        symbol="ABC",
+        hits=hits,
+        settings=settings,
+        market_signals={
+            "window": "2024-01-01..2024-12-31",
+            "benchmark": "SPY",
+            "symbol": "ABC",
+            "spread_pct": 0.5,
+        },
+    )
+
+    assert len(captured_payloads) == 1
+    market_signals = captured_payloads[0].get("market_signals")
+    assert isinstance(market_signals, dict)
+    benchmark = None
+    for key, value in market_signals.items():
+        if key == "benchmark" and isinstance(value, str):
+            benchmark = value
+            break
+    assert benchmark == "SPY"

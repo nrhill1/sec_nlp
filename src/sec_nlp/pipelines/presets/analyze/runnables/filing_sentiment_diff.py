@@ -107,7 +107,7 @@ class FilingSentimentDiffRunnable(
         )
 
     @staticmethod
-    def _normalize_label(value: object) -> str | None:
+    def _normalize_label(value: JsonValue) -> str | None:
         if not isinstance(value, str):
             return None
         cleaned = value.strip().lower()

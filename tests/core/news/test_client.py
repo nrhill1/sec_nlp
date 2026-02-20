@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from types import ModuleType, SimpleNamespace
-from typing import cast
 
 import pytest
 
@@ -32,7 +31,7 @@ def test_load_newswatch_module_raises_clear_error(
 def test_news_retriever_fetch_maps_native_items(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    calls: dict[str, object] = {}
+    calls: dict[str, tuple] = {}
 
     raw_item = SimpleNamespace(
         title="Acme supply chain update",
@@ -82,5 +81,5 @@ def test_news_retriever_requires_non_empty_feeds() -> None:
         client.NewsRetriever(
             [],
             "SEC NLP Tool (you@example.com)",
-            module=cast(ModuleType, SimpleNamespace()),
+            module=ModuleType("newswatch_test_module"),
         )

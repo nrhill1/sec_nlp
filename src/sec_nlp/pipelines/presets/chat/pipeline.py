@@ -4,11 +4,12 @@ from __future__ import annotations
 
 import hashlib
 import re
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 from email.utils import parsedate_to_datetime
 from pathlib import Path
-from typing import ClassVar, Literal, Protocol, cast
+from typing import ClassVar, Literal, Protocol
 
 import numpy as np
 from qdrant_client import QdrantClient
@@ -31,17 +32,18 @@ from rich.progress import (
 
 from sec_nlp.core.infra.logger import logger
 from sec_nlp.core.infra.rich_console import get_rich_console
-from sec_nlp.core.market import MarketExtensionError, create_market_retriever
+from sec_nlp.core.market_analytics import build_market_context
 from sec_nlp.core.news.client import (
     NewswatchExtensionError,
     create_news_retriever,
 )
+from sec_nlp.core.types import as_json_dict
 from sec_nlp.pipelines import BasePipeline
 from sec_nlp.pipelines.output_io import (
     build_run_file_stem,
     build_run_header_fields,
 )
-from sec_nlp.types import JsonDict, JsonValue, ResultDict
+from sec_nlp.types import JsonDict, JsonValue, ResultDict, ResultValue
 
 from ..retrieve import RetrievePipeline, RetrieveSettings
 from .config import ChatSettings
@@ -164,6 +166,41 @@ class ChatPipeline(BasePipeline):
             **external_metadata,
         }
         return metadata
+
+    @classmethod
+    def _result_to_json_value(cls, value: ResultValue) -> JsonValue | None:
+        if isinstance(value, Path):
+            return str(value)
+        if isinstance(value, (str, int, float, bool)) or value is None:
+            return value
+        if isinstance(value, Sequence) and not isinstance(value, str):
+            items: list[JsonValue] = []
+            for item in value:
+                normalized = cls._result_to_json_value(item)
+                if normalized is None:
+                    return None
+                items.append(normalized)
+            return items
+        if isinstance(value, Mapping):
+            payload: JsonDict = {}
+            for key, item in value.items():
+                if not isinstance(key, str):
+                    return None
+                normalized = cls._result_to_json_value(item)
+                if normalized is None:
+                    return None
+                payload[key] = normalized
+            return payload
+        return None
+
+    @classmethod
+    def _registry_metadata(cls, metadata: ResultDict) -> JsonDict:
+        payload: JsonDict = {}
+        for key, value in metadata.items():
+            normalized = cls._result_to_json_value(value)
+            if normalized is not None:
+                payload[key] = normalized
+        return payload
 
     def _symbol_coverage_metadata(
         self,
@@ -328,7 +365,7 @@ class ChatPipeline(BasePipeline):
 
             self.config.complete_run(
                 success=True,
-                metadata=cast(JsonDict, metadata),
+                metadata=self._registry_metadata(metadata),
             )
             return ChatResult(
                 success=True,
@@ -710,7 +747,10 @@ class ChatPipeline(BasePipeline):
 
         if any(vector is None for vector in vectors):
             return chunks
-        matrix = np.vstack(cast(list[np.ndarray], vectors))
+        dense_vectors = [vector for vector in vectors if vector is not None]
+        if len(dense_vectors) != len(vectors):
+            return chunks
+        matrix = np.vstack(dense_vectors)
 
         selected_indices: list[int] = []
         remaining = list(range(len(candidates)))
@@ -862,6 +902,43 @@ class ChatPipeline(BasePipeline):
             return citations[0].symbol.upper()
         return None
 
+    @staticmethod
+    def _citation_symbols(citations: list[ChatCitation]) -> list[str]:
+        symbols = [
+            citation.symbol.upper()
+            for citation in citations
+            if citation.symbol and citation.symbol.strip()
+        ]
+        return list(dict.fromkeys(symbols))
+
+    def _resolve_market_context_symbols(
+        self,
+        citations: list[ChatCitation],
+    ) -> list[str]:
+        symbol_scope = [
+            symbol.upper() for symbol in self.config.symbols if symbol.strip()
+        ]
+        symbol_scope = list(dict.fromkeys(symbol_scope))
+        citation_symbols = self._citation_symbols(citations)
+        max_symbols = self.config.market_context_max_symbols
+
+        if self.config.market_context_scope == "single":
+            symbol = self._external_context_symbol(citations)
+            return [symbol] if symbol else []
+
+        if self.config.market_context_scope == "multi":
+            if citation_symbols:
+                return citation_symbols[:max_symbols]
+            return symbol_scope[:max_symbols]
+
+        # auto mode
+        if len(symbol_scope) <= 1:
+            symbol = self._external_context_symbol(citations)
+            return [symbol] if symbol else []
+        if citation_symbols:
+            return citation_symbols[:max_symbols]
+        return []
+
     def _build_external_context(
         self,
         *,
@@ -871,46 +948,79 @@ class ChatPipeline(BasePipeline):
         symbol_scope = [
             symbol.upper() for symbol in self.config.symbols if symbol.strip()
         ]
-        symbol = self._external_context_symbol(citations)
-        if not symbol:
-            metadata: dict[str, JsonValue] = {
-                "market_context_items": 0,
-                "news_context_items": 0,
-            }
-            if symbol_scope:
-                metadata["symbol_scope"] = symbol_scope
-                if len(set(symbol_scope)) > 1:
-                    metadata["external_context_skipped"] = "multiple_symbols"
-            return "", metadata
 
         sections: list[str] = []
         metadata: dict[str, JsonValue] = {
             "market_context_items": 0,
             "news_context_items": 0,
-            "external_context_symbol": symbol,
         }
         if symbol_scope:
             metadata["symbol_scope"] = symbol_scope
 
         if self.config.include_market_context:
-            lines = self._market_context_lines(symbol=symbol)
+            market_symbols = self._resolve_market_context_symbols(citations)
+            if market_symbols:
+                metadata["market_context_requested_symbols"] = market_symbols
+            lines: list[str] = []
+            covered_symbols: list[str] = []
+            market_context_bundle: dict[str, JsonValue] = {}
+            if market_symbols:
+                (
+                    lines,
+                    covered_symbols,
+                    market_context_bundle,
+                ) = self._market_context_lines(symbols=market_symbols)
             if lines:
                 sections.append("Market context:\n" + "\n".join(lines))
                 metadata["market_context_items"] = len(lines)
+            if market_context_bundle:
+                metadata["market_context_bundle"] = market_context_bundle
+                metadata["market_context_profile"] = (
+                    self.config.market_context_profile
+                )
+            if covered_symbols:
+                metadata["market_context_symbols"] = covered_symbols
+            if market_symbols:
+                missing_symbols = [
+                    symbol
+                    for symbol in market_symbols
+                    if symbol not in covered_symbols
+                ]
+                if missing_symbols:
+                    metadata["market_context_missing_symbols"] = missing_symbols
+            elif (
+                self.config.market_context_scope != "single"
+                and len(symbol_scope) > 1
+            ):
+                metadata["market_context_skipped"] = (
+                    "no_retrieved_symbols_for_multi_scope"
+                )
 
         if self.config.include_news_context:
-            lines = self._news_context_lines(symbol=symbol, question=question)
-            if lines:
-                sections.append(
-                    "News/geopolitics context:\n" + "\n".join(lines)
+            symbol = self._external_context_symbol(citations)
+            if symbol:
+                metadata["external_context_symbol"] = symbol
+                lines = self._news_context_lines(
+                    symbol=symbol, question=question
                 )
-                metadata["news_context_items"] = len(lines)
+                if lines:
+                    sections.append(
+                        "News/geopolitics context:\n" + "\n".join(lines)
+                    )
+                    metadata["news_context_items"] = len(lines)
+            elif len(symbol_scope) > 1:
+                metadata["news_context_skipped"] = "multiple_symbols"
 
         if not sections:
             return "", metadata
         return "\n\n".join(sections), metadata
 
-    def _market_context_lines(self, *, symbol: str) -> list[str]:
+    def _market_context_lines(
+        self, *, symbols: list[str]
+    ) -> tuple[list[str], list[str], dict[str, JsonValue]]:
+        if not symbols:
+            return [], [], {}
+
         end = self._effective_end_date()
         start = max(
             self.config.start_date
@@ -918,49 +1028,89 @@ class ChatPipeline(BasePipeline):
             end - timedelta(days=self.config.market_lookback_days),
         )
         try:
-            retriever = create_market_retriever()
-            symbol_quotes = retriever.retrieve_range(symbol, (start, end))
-            benchmark_quotes = retriever.retrieve_range(
-                self.config.market_benchmark_symbol,
-                (start, end),
+            bundle = build_market_context(
+                symbols=symbols,
+                start_date=start,
+                end_date=end,
+                benchmark=self.config.market_benchmark_symbol,
             )
-        except MarketExtensionError as exc:
-            logger.debug("Market context unavailable: %s", exc)
-            return []
         except Exception as exc:
-            logger.debug("Market context fetch failed: %s", exc)
-            return []
+            logger.debug("Market context unavailable: %s", exc)
+            return [], [], {}
 
-        if len(symbol_quotes) < 2 or len(benchmark_quotes) < 2:
-            return []
+        bundle_payload = as_json_dict(
+            bundle.model_dump(mode="json", exclude_none=True)
+        )
+        if bundle_payload is None:
+            bundle_payload = {}
+        metrics_by_symbol = {metric.symbol: metric for metric in bundle.metrics}
+        covered_symbols = [
+            symbol for symbol in symbols if symbol in metrics_by_symbol
+        ]
+        if not covered_symbols:
+            return [], [], bundle_payload
 
-        start_price = symbol_quotes[0].adjclose
-        end_price = symbol_quotes[-1].adjclose
-        benchmark_start = benchmark_quotes[0].adjclose
-        benchmark_end = benchmark_quotes[-1].adjclose
-        if start_price <= 0.0 or benchmark_start <= 0.0:
-            return []
-
-        symbol_return_pct = ((end_price / start_price) - 1.0) * 100.0
-        benchmark_return_pct = ((benchmark_end / benchmark_start) - 1.0) * 100.0
-        spread_pct = symbol_return_pct - benchmark_return_pct
-        highs = [quote.high for quote in symbol_quotes]
-        lows = [quote.low for quote in symbol_quotes]
-        high_price = max(highs)
-        low_price = min(lows)
-        range_pct = (
-            ((high_price - low_price) / low_price * 100.0)
-            if low_price > 0
-            else 0.0
+        benchmark_return_pct = next(
+            (
+                metric.benchmark_return_pct
+                for metric in bundle.metrics
+                if metric.benchmark_return_pct is not None
+            ),
+            None,
         )
 
-        return [
-            (
-                f"- {symbol}: {start.isoformat()} to {end.isoformat()} "
-                f"return {symbol_return_pct:+.2f}% (benchmark {self.config.market_benchmark_symbol}: {benchmark_return_pct:+.2f}%, spread {spread_pct:+.2f}%)."
-            ),
-            f"- {symbol}: high/low range {range_pct:.2f}% in lookback window.",
-        ]
+        lines: list[str] = []
+        if (
+            benchmark_return_pct is not None
+            and self.config.market_context_profile == "standard"
+        ):
+            lines.append(
+                f"- Benchmark {bundle.benchmark}: {bundle.window} return {benchmark_return_pct:+.2f}%."
+            )
+
+        for symbol in covered_symbols:
+            metric = metrics_by_symbol[symbol]
+            return_pct = (
+                f"{metric.return_pct:+.2f}%"
+                if metric.return_pct is not None
+                else "n/a"
+            )
+            spread_pct = (
+                f"{metric.spread_pct:+.2f}%"
+                if metric.spread_pct is not None
+                else "n/a"
+            )
+            beta_value = (
+                f"{metric.beta:.2f}" if metric.beta is not None else "n/a"
+            )
+            if self.config.market_context_profile == "compact":
+                lines.append(
+                    f"- {symbol}: return {return_pct}, spread vs {bundle.benchmark} {spread_pct}, beta {beta_value}."
+                )
+                continue
+
+            max_drawdown = (
+                f"{metric.max_drawdown:.2f}%"
+                if metric.max_drawdown is not None
+                else "n/a"
+            )
+            lines.append(
+                f"- {symbol}: return {return_pct} (spread vs {bundle.benchmark} {spread_pct}, beta {beta_value}, max drawdown {max_drawdown})."
+            )
+            atr_value = f"{metric.atr:.4f}" if metric.atr is not None else "n/a"
+            std_dev_value = (
+                f"{metric.std_dev:.4f}" if metric.std_dev is not None else "n/a"
+            )
+            volume_spike_value = (
+                f"{metric.volume_spike:.2f}"
+                if metric.volume_spike is not None
+                else "n/a"
+            )
+            lines.append(
+                f"- {symbol}: ATR {atr_value}, return std-dev {std_dev_value}, volume spike {volume_spike_value}, observations {metric.observations}."
+            )
+
+        return lines, covered_symbols, bundle_payload
 
     def _news_context_lines(self, *, symbol: str, question: str) -> list[str]:
         lookback_start = self._effective_end_date() - timedelta(
@@ -1017,7 +1167,7 @@ class ChatPipeline(BasePipeline):
         self,
         *,
         collection: str,
-        point: object,
+        point,
     ) -> _RetrievedChunk | None:
         payload = getattr(point, "payload", None)
         if not isinstance(payload, dict):
@@ -1028,11 +1178,13 @@ class ChatPipeline(BasePipeline):
             return None
 
         metadata = payload.get("metadata")
-        metadata_dict: dict[str, JsonValue]
+        metadata_dict: dict[str, JsonValue] = {}
         if isinstance(metadata, dict):
-            metadata_dict = cast(dict[str, JsonValue], metadata)
-        else:
-            metadata_dict = {}
+            for raw_key, raw_value in metadata.items():
+                if not isinstance(raw_key, str):
+                    continue
+                if isinstance(raw_value, str):
+                    metadata_dict[raw_key] = raw_value
 
         score_raw = getattr(point, "score", None)
         score = float(score_raw) if isinstance(score_raw, (int, float)) else 0.0
@@ -1104,7 +1256,12 @@ class ChatPipeline(BasePipeline):
 
         metadata = payload.get("metadata")
         if isinstance(metadata, dict):
-            metadata_dict = cast(dict[str, JsonValue], metadata)
+            metadata_dict: dict[str, JsonValue] = {}
+            for raw_key, raw_value in metadata.items():
+                if not isinstance(raw_key, str):
+                    continue
+                if isinstance(raw_value, str):
+                    metadata_dict[raw_key] = raw_value
             for key in ("raw_chunk", "page_content", "snippet", "content"):
                 value = metadata_dict.get(key)
                 if isinstance(value, str) and value.strip():
@@ -1119,7 +1276,7 @@ class ChatPipeline(BasePipeline):
         return snippet
 
     @staticmethod
-    def _extract_point_vector(point: object) -> list[float] | None:
+    def _extract_point_vector(point) -> list[float] | None:
         candidate = getattr(point, "vector", None)
         if candidate is None:
             candidate = getattr(point, "vectors", None)
@@ -1370,7 +1527,7 @@ class ChatPipeline(BasePipeline):
             citations=citations,
             citation_ids=citation_ids,
             turns=turns,
-            metadata=cast(dict[str, JsonValue], payload_metadata),
+            metadata=self._registry_metadata(payload_metadata),
         )
 
         outputs: list[Path] = []
