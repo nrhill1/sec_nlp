@@ -168,6 +168,47 @@ def test_embed_texts_with_cache_uses_sqlite_cache(
     assert settings.embedding_cache_path().with_suffix(".sqlite3").exists()
 
 
+def test_embed_texts_with_cache_dedupes_missing_texts(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    settings = RetrieveSettings(
+        email="test@example.com",
+        symbols=["ABC"],
+        queries=["supply chain"],
+        dl_path=tmp_path / "downloads",
+        out_path=tmp_path / "outputs",
+        embedding_cache=True,
+        embedding_cache_file=Path(".retrieve_embedding_cache.json"),
+    )
+
+    calls: list[list[str]] = []
+
+    def _fake_batch_embed_documents(
+        self,
+        embedder,
+        texts: list[str],
+        show_progress: bool = False,
+    ) -> list[list[float]]:
+        calls.append(list(texts))
+        return [[float(len(text))] for text in texts]
+
+    monkeypatch.setattr(
+        "sec_nlp.pipelines.vector.config.VectorConfig.batch_embed_documents",
+        _fake_batch_embed_documents,
+    )
+
+    vectors = embed_steps.embed_texts_with_cache(
+        texts=["alpha", "alpha", "beta", "alpha"],
+        settings=settings,
+        embedder=SimpleNamespace(),
+        cache_prefix="snippet",
+    )
+
+    assert calls == [["alpha", "beta"]]
+    assert vectors == [[5.0], [5.0], [4.0], [5.0]]
+
+
 def test_embed_texts_with_cache_migrates_legacy_json_cache(
     tmp_path: Path,
     monkeypatch,
