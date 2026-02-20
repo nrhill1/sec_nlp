@@ -67,9 +67,11 @@ def _hit_matches_symbol(
         return True
 
     # When EFTS already returns explicit tickers, avoid slower company-name
-    # parsing for non-matches.
-    if hit_tickers and symbol_cik is None:
-        return False
+    # parsing for non-matches and use CIK as the only fallback path.
+    if hit_tickers:
+        if symbol_cik is None:
+            return False
+        return _normalize_cik(hit.cik) == symbol_cik
 
     if symbol_cik is not None and _normalize_cik(hit.cik) == symbol_cik:
         return True
