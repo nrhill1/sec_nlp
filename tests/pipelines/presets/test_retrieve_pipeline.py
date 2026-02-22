@@ -13,6 +13,7 @@ from langchain_core.documents import Document
 from sec_nlp.core.edgar.efts_models import EFTSBatchResult, EFTSHit
 from sec_nlp.core.edgar.filing_mode import FilingMode
 from sec_nlp.pipelines.presets.retrieve import (
+    RetrieveChatSeedBundle,
     RetrievePipeline,
     RetrieveSettings,
 )
@@ -760,6 +761,47 @@ def test_retrieve_pipeline_run_writes_outputs_with_mocked_search(
     assert lines[2].startswith("# run_id:")
     assert lines[3].startswith("# run_short_id_display:")
     assert lines[4].startswith("symbol,query")
+
+
+def test_retrieve_pipeline_run_for_flow_returns_seed_bundle(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    config = RetrieveSettings(
+        email="test@example.com",
+        symbols=["ABC"],
+        queries=["supply chain"],
+        dl_path=tmp_path / "downloads",
+        out_path=tmp_path / "outputs",
+        output_format="json",
+        top_k=5,
+        download_missing=False,
+    )
+    candidates = {
+        "supply chain": [
+            _efts_hit(
+                accession="0000123456-26-000101",
+                filed=date(2026, 2, 3),
+                score=0.88,
+                company="ABC Co",
+            )
+        ]
+    }
+    monkeypatch.setattr(
+        "sec_nlp.pipelines.presets.retrieve.pipeline.run_candidate_search",
+        lambda symbol, queries, settings: candidates,
+    )
+
+    result, bundle = RetrievePipeline(config=config).run_for_flow()
+
+    assert result.success is True
+    assert isinstance(bundle, RetrieveChatSeedBundle)
+    assert bundle.run_id == str(config.run_id)
+    assert bundle.symbols == ["ABC"]
+    assert bundle.queries == ["supply chain"]
+    assert len(bundle.chunks) == 1
+    assert bundle.chunks[0].collection == "retrieve"
+    assert bundle.chunks[0].snippet
 
 
 def test_retrieve_pipeline_runs_unscoped_without_symbols(

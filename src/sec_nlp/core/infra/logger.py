@@ -506,8 +506,11 @@ def log_divider(
     for handler in logger.handlers or logging.getLogger().handlers:
         if isinstance(handler, logging.FileHandler):
             try:
-                handler.stream.write(plain_line)
-                handler.stream.flush()
+                stream = handler.stream
+                if stream is None:
+                    continue
+                stream.write(plain_line)
+                stream.flush()
             except Exception:
                 pass
 

@@ -50,6 +50,7 @@ from sec_nlp.pipelines.output_io import (
 from sec_nlp.types import JsonDict, JsonValue, ResultDict, ResultValue
 
 from ..retrieve import RetrievePipeline, RetrieveSettings
+from .bridge import ChatSeedBundle
 from .config import ChatSettings
 from .io import (
     write_chat_transcript_csv,
@@ -142,17 +143,26 @@ class ChatPipeline(BasePipeline):
         return ChatResult
 
     def _build_components(self) -> None:
-        try:
-            self._embedder, self._embedding_dim = (
-                self.config.vdb.setup_embedding_model()
-            )
-        except Exception as exc:
-            logger.warning(
-                "Chat embedding model prewarm failed; falling back to lazy init: %s",
-                exc,
-            )
-            self._embedder = None
-            self._embedding_dim = None
+        use_seed_only = (
+            self.config.seed_context is not None
+            and self.config.rerank_mode != "mmr"
+        )
+        if not use_seed_only:
+            try:
+                self._embedder, self._embedding_dim = (
+                    self.config.vdb.setup_embedding_model()
+                )
+            except Exception as exc:
+                logger.warning(
+                    "Chat embedding model prewarm failed; falling back to lazy init: %s",
+                    exc,
+                )
+                self._embedder = None
+                self._embedding_dim = None
+
+        if self.config.seed_context is not None:
+            self._qdrant_client = None
+            return
 
         try:
             self._qdrant_client = self.config.vdb.setup_qdrant_client()
@@ -325,13 +335,20 @@ class ChatPipeline(BasePipeline):
                 self._update_phase(
                     progress,
                     phase_task,
-                    "Searching indexed collections",
+                    (
+                        "Using seeded retrieve context"
+                        if self.config.seed_context is not None
+                        else "Searching indexed collections"
+                    ),
                 )
-                chunks = self._search_collections(
-                    question,
-                    progress=progress,
-                    phase_task=phase_task,
-                )
+                if self.config.seed_context is None:
+                    chunks = self._search_collections(
+                        question,
+                        progress=progress,
+                        phase_task=phase_task,
+                    )
+                else:
+                    chunks = self._search_seed_context(question)
                 stage_timings.update(
                     {
                         "vector_search": self._last_search_timings.get(
@@ -424,6 +441,9 @@ class ChatPipeline(BasePipeline):
             metadata = self._base_metadata(
                 external_context=external_context,
                 external_metadata=external_metadata,
+            )
+            metadata.update(
+                self._seed_context_metadata(self.config.seed_context)
             )
             metadata.update(
                 {
@@ -653,6 +673,91 @@ class ChatPipeline(BasePipeline):
         self._last_search_timings = search_timings
         return self._select_context_chunks(deduped)
 
+    def _search_seed_context(self, question: str) -> list[_RetrievedChunk]:
+        seed = self.config.seed_context
+        if seed is None:
+            self._last_search_timings = {"vector_search": 0.0, "rerank": 0.0}
+            return []
+
+        t_vector_start = perf_counter()
+        symbols = [
+            symbol.upper() for symbol in self.config.symbols if symbol.strip()
+        ]
+        allowed_forms = self._normalized_form_filters(self.config.forms)
+        filed_after = self.config.start_date
+        filed_before = self.config.end_date
+
+        seeded_chunks: list[_RetrievedChunk] = []
+        for item in seed.chunks:
+            snippet = item.snippet.strip()
+            if not snippet:
+                continue
+            symbol = (
+                item.symbol.strip().upper()
+                if isinstance(item.symbol, str) and item.symbol.strip()
+                else None
+            )
+            chunk = _RetrievedChunk(
+                collection=item.collection.strip() or "retrieve",
+                score=float(item.score),
+                symbol=symbol,
+                accession_number=item.accession_number,
+                form_type=item.form_type,
+                filed_date=item.filed_date,
+                source=item.source,
+                snippet=snippet,
+                vector=None,
+            )
+            if symbols and (chunk.symbol or "").upper() not in symbols:
+                continue
+            if not self._chunk_matches_filters(
+                chunk,
+                forms=allowed_forms,
+                filed_after=filed_after,
+                filed_before=filed_before,
+            ):
+                continue
+            seeded_chunks.append(chunk)
+
+        seeded_chunks.sort(key=lambda current: current.score, reverse=True)
+        deduped: list[_RetrievedChunk] = []
+        seen: set[tuple[str, str, str]] = set()
+        dedupe_limit = max(self.config.top_k, self.config.rerank_candidates)
+        for chunk in seeded_chunks:
+            key = self._chunk_identity(chunk)
+            if key in seen:
+                continue
+            seen.add(key)
+            deduped.append(chunk)
+            if len(deduped) >= dedupe_limit:
+                break
+
+        search_timings: dict[str, float] = {
+            "vector_search": perf_counter() - t_vector_start,
+            "rerank": 0.0,
+        }
+        if self.config.rerank_mode == "mmr" and deduped:
+            t_rerank_start = perf_counter()
+            embedder = self._embedder
+            if embedder is None:
+                embedder, embedding_dim = (
+                    self.config.vdb.setup_embedding_model()
+                )
+                self._embedder = embedder
+                self._embedding_dim = embedding_dim
+            query_vector = list(embedder.embed_query(question))
+            reranked = self._rerank_chunks_mmr(
+                chunks=deduped,
+                query_vector=query_vector,
+                embedder=embedder,
+            )
+            search_timings["rerank"] = perf_counter() - t_rerank_start
+            self._last_search_timings = search_timings
+            return self._select_context_chunks(reranked)
+
+        self._last_search_timings = search_timings
+        return self._select_context_chunks(deduped)
+
     def _select_context_chunks(
         self, chunks: list[_RetrievedChunk]
     ) -> list[_RetrievedChunk]:
@@ -727,6 +832,22 @@ class ChatPipeline(BasePipeline):
                 ]
             )
         return Filter(should=symbol_conditions)
+
+    @staticmethod
+    def _seed_context_metadata(
+        seed: ChatSeedBundle | None,
+    ) -> dict[str, JsonValue]:
+        if seed is None:
+            return {"seeded_context": False}
+        return {
+            "seeded_context": True,
+            "seeded_context_source": seed.upstream_pipeline,
+            "seeded_context_run_id": seed.upstream_run_id,
+            "seeded_context_short_id": seed.upstream_short_id,
+            "seeded_context_symbols": list(seed.symbols),
+            "seeded_context_queries": list(seed.queries),
+            "seeded_context_chunk_count": len(seed.chunks),
+        }
 
     @staticmethod
     def _snippet_fingerprint(text: str) -> str:

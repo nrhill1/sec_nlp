@@ -10,7 +10,12 @@ from types import SimpleNamespace
 
 import pytest
 
-from sec_nlp.pipelines.presets.chat import ChatPipeline, ChatSettings
+from sec_nlp.pipelines.presets.chat import (
+    ChatPipeline,
+    ChatSeedBundle,
+    ChatSeedChunk,
+    ChatSettings,
+)
 from sec_nlp.pipelines.presets.chat.pipeline import _RetrievedChunk
 from sec_nlp.pipelines.vector.config import VectorConfig
 from sec_nlp.types import JsonValue
@@ -85,6 +90,68 @@ def test_chat_pipeline_run_writes_outputs_with_mocked_retrieval(
     assert lines[2].startswith("# run_id:")
     assert lines[3].startswith("# run_short_id_display:")
     assert lines[4] == "turn_index,role,message,citations"
+
+
+def test_chat_pipeline_uses_seed_context_without_collection_search(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    config = ChatSettings(
+        email="test@example.com",
+        symbols=["CDE"],
+        question="What changed in liquidity risk?",
+        dl_path=tmp_path / "downloads",
+        out_path=tmp_path / "outputs",
+        output_format="json",
+        collections=["retrieve"],
+        forms=["10-K"],
+        seed_context=ChatSeedBundle(
+            upstream_pipeline="retrieve",
+            upstream_run_id="00000000-0000-0000-0000-000000000123",
+            upstream_short_id=123,
+            symbols=["CDE"],
+            queries=["liquidity risk"],
+            chunks=[
+                ChatSeedChunk(
+                    collection="retrieve",
+                    score=0.91,
+                    symbol="CDE",
+                    accession_number="0000215466-24-000003",
+                    form_type="10-K",
+                    filed_date="2024-02-21",
+                    source="https://www.sec.gov/ixviewer/ix.html",
+                    snippet=(
+                        "Liquidity risk increased due to higher debt servicing "
+                        "costs."
+                    ),
+                )
+            ],
+        ),
+    )
+
+    monkeypatch.setattr(
+        ChatPipeline,
+        "_search_collections",
+        lambda self, question, **_: pytest.fail(
+            "seeded context path should bypass collection search"
+        ),
+    )
+    monkeypatch.setattr(
+        ChatPipeline,
+        "_build_answer",
+        lambda self, question, citations, external_context="": (
+            "Liquidity risk increased, primarily from debt costs. [C1]",
+            ["C1"],
+        ),
+    )
+
+    result = ChatPipeline(config=config).run()
+
+    assert result.success is True
+    assert result.hits_retrieved == 1
+    assert result.citations_returned == 1
+    assert result.metadata.get("seeded_context") is True
+    assert result.metadata.get("seeded_context_source") == "retrieve"
 
 
 def test_chunk_matches_filters_by_form_and_date() -> None:

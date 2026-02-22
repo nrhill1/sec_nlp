@@ -16,7 +16,10 @@ from qdrant_client.models import Distance
 from tqdm import tqdm
 
 from sec_nlp.core.infra.logger import logger
-from sec_nlp.pipelines.vector.client import create_qdrant_client
+from sec_nlp.pipelines.vector.client import (
+    create_qdrant_client,
+    format_qdrant_endpoint,
+)
 
 type EmbedderCacheKey = tuple[str, str | None]
 type QdrantClientCacheKey = tuple[
@@ -30,11 +33,15 @@ type QdrantClientCacheKey = tuple[
     bool,
     int,
 ]
+type QdrantClientTarget = tuple[QdrantClient, str]
+type QdrantConnectionAttempt = tuple[str | None, str | None, str, bool]
 
 _EMBEDDER_CACHE: dict[EmbedderCacheKey, tuple[OllamaEmbeddings, int]] = {}
 _QDRANT_CLIENT_CACHE: dict[QdrantClientCacheKey, QdrantClient] = {}
+_QDRANT_ENDPOINT_CACHE: dict[QdrantClientCacheKey, str] = {}
 _EMBEDDER_CACHE_LOCK = Lock()
 _QDRANT_CACHE_LOCK = Lock()
+_QDRANT_DISK_FALLBACK_LOCATION = ".qdrant"
 
 
 def _env_flag_enabled(name: str) -> bool:
@@ -48,6 +55,7 @@ def clear_runtime_caches() -> None:
         _EMBEDDER_CACHE.clear()
     with _QDRANT_CACHE_LOCK:
         _QDRANT_CLIENT_CACHE.clear()
+        _QDRANT_ENDPOINT_CACHE.clear()
 
 
 class VectorConfig(BaseModel):
@@ -154,6 +162,65 @@ class VectorConfig(BaseModel):
 
     def setup_qdrant_client(self) -> QdrantClient:
         """Initialize Qdrant client."""
+        client, _target = self.setup_qdrant_client_with_target()
+        return client
+
+    def _configured_qdrant_target(self) -> str:
+        """Return the configured endpoint before fallback is applied."""
+        location = None if self.qdrant_url else self.qdrant_location
+        return format_qdrant_endpoint(
+            location=location,
+            url=self.qdrant_url,
+            host=self.qdrant_host,
+            port=self.qdrant_port,
+            https=self.qdrant_https,
+        )
+
+    def _connect_qdrant(
+        self,
+        *,
+        location: str | None,
+        url: str | None,
+    ) -> QdrantClient:
+        """Construct a Qdrant client and verify connectivity."""
+        qdrant = create_qdrant_client(
+            location=location,
+            url=url,
+            host=self.qdrant_host,
+            port=self.qdrant_port,
+            grpc_port=self.qdrant_grpc_port,
+            api_key=self.qdrant_api_key,
+            timeout=self.qdrant_timeout,
+            prefer_grpc=self.qdrant_prefer_grpc,
+            https=self.qdrant_https,
+        )
+        # Verify the target is usable before caching it.
+        qdrant.get_collections()
+        return qdrant
+
+    def _connection_attempts(self) -> list[QdrantConnectionAttempt]:
+        """Build ordered Qdrant connection attempts for this config."""
+        location = None if self.qdrant_url else self.qdrant_location
+        if location:
+            normalized_location = location.strip()
+            return [
+                (normalized_location, None, normalized_location, False),
+            ]
+
+        configured_target = self._configured_qdrant_target()
+        return [
+            (None, self.qdrant_url, configured_target, False),
+            (
+                _QDRANT_DISK_FALLBACK_LOCATION,
+                None,
+                _QDRANT_DISK_FALLBACK_LOCATION,
+                True,
+            ),
+            (":memory:", None, ":memory:", True),
+        ]
+
+    def setup_qdrant_client_with_target(self) -> QdrantClientTarget:
+        """Initialize Qdrant client and return the resolved target string."""
         cache_key: QdrantClientCacheKey = (
             self.qdrant_location,
             self.qdrant_url,
@@ -169,28 +236,46 @@ class VectorConfig(BaseModel):
         if not disable_cache:
             with _QDRANT_CACHE_LOCK:
                 cached = _QDRANT_CLIENT_CACHE.get(cache_key)
+                cached_target = _QDRANT_ENDPOINT_CACHE.get(cache_key)
             if cached is not None:
-                logger.debug("Reusing cached Qdrant client")
-                return cached
+                target = cached_target or self._configured_qdrant_target()
+                logger.debug("Reusing cached Qdrant client at %s", target)
+                return cached, target
 
-        location = None if self.qdrant_url else self.qdrant_location
-        qdrant = create_qdrant_client(
-            location=location,
-            url=self.qdrant_url,
-            host=self.qdrant_host,
-            port=self.qdrant_port,
-            grpc_port=self.qdrant_grpc_port,
-            api_key=self.qdrant_api_key,
-            timeout=self.qdrant_timeout,
-            prefer_grpc=self.qdrant_prefer_grpc,
-            https=self.qdrant_https,
+        attempts = self._connection_attempts()
+        configured_target = attempts[0][2]
+        errors: list[str] = []
+        for location, url, target, is_fallback in attempts:
+            try:
+                qdrant = self._connect_qdrant(location=location, url=url)
+            except Exception as exc:
+                errors.append(f"{target}: {type(exc).__name__}: {exc}")
+                continue
+
+            if is_fallback:
+                logger.warning(
+                    "Qdrant endpoint %s unavailable; falling back to %s",
+                    configured_target,
+                    target,
+                )
+
+            if not disable_cache:
+                with _QDRANT_CACHE_LOCK:
+                    _QDRANT_CLIENT_CACHE[cache_key] = qdrant
+                    _QDRANT_ENDPOINT_CACHE[cache_key] = target
+
+            logger.info("Connected to Qdrant at %s", target)
+            return qdrant, target
+
+        if len(attempts) == 1:
+            raise RuntimeError(
+                f"Cannot connect to Qdrant at {configured_target}: {errors[0]}"
+            )
+        joined_errors = "; ".join(errors)
+        raise RuntimeError(
+            "Cannot connect to configured Qdrant endpoint or local fallbacks: "
+            f"{joined_errors}"
         )
-        if not disable_cache:
-            with _QDRANT_CACHE_LOCK:
-                _QDRANT_CLIENT_CACHE[cache_key] = qdrant
-
-        logger.info("Connected to Qdrant")
-        return qdrant
 
     @field_validator("qdrant_location", mode="before")
     @classmethod

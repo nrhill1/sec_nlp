@@ -32,6 +32,7 @@ from sec_nlp.pipelines.output_io import (
 )
 from sec_nlp.types import JsonDict, JsonValue, ResultDict
 
+from .bridge import RetrieveChatSeedBundle, RetrieveChatSeedChunk
 from .config import RetrieveSettings
 from .io import (
     RankedResultsPayload,
@@ -81,6 +82,13 @@ class RetrievePipeline(BasePipeline):
     def _build_components(self) -> None:
         self._ensure_embedding_components()
         self._ensure_qdrant_client()
+
+    def run_for_flow(self) -> tuple[RetrieveResult, RetrieveChatSeedBundle]:
+        """Run retrieve and return an in-memory handoff bundle for chat."""
+        result, bundle = self._run_internal(include_bridge=True)
+        if bundle is not None:
+            return result, bundle
+        return result, self._empty_seed_bundle()
 
     def _ensure_embedding_components(self) -> None:
         if not (
@@ -136,6 +144,12 @@ class RetrievePipeline(BasePipeline):
             self._qdrant_client = None
 
     def run(self) -> RetrieveResult:
+        result, _ = self._run_internal(include_bridge=False)
+        return result
+
+    def _run_internal(
+        self, *, include_bridge: bool
+    ) -> tuple[RetrieveResult, RetrieveChatSeedBundle | None]:
         try:
             self.config.setup_paths()
             if not self.config.queries:
@@ -147,6 +161,7 @@ class RetrievePipeline(BasePipeline):
             metadata: ResultDict = {}
             total_queries = 0
             total_hits = 0
+            bridge_chunks: list[RetrieveChatSeedChunk] = []
             symbol_targets: list[tuple[str | None, str]]
             if self.config.symbols:
                 symbol_targets = [
@@ -222,6 +237,7 @@ class RetrievePipeline(BasePipeline):
                                 symbol_stage_timings,
                                 queries_processed,
                                 hits_count,
+                                symbol_hits,
                             ) = self._process_symbol(
                                 search_symbol=search_symbol,
                                 output_symbol=output_symbol,
@@ -245,6 +261,10 @@ class RetrievePipeline(BasePipeline):
                             metadata[output_symbol] = symbol_meta
                             total_queries += queries_processed
                             total_hits += hits_count
+                            if include_bridge:
+                                bridge_chunks.extend(
+                                    self._hits_to_seed_chunks(symbol_hits)
+                                )
 
                             progress.update(phase_task, visible=False)
                             progress.advance(overall_task)
@@ -261,6 +281,7 @@ class RetrievePipeline(BasePipeline):
                             symbol_stage_timings,
                             queries_processed,
                             hits_count,
+                            symbol_hits,
                         ) = self._process_symbol(
                             search_symbol=search_symbol,
                             output_symbol=output_symbol,
@@ -277,6 +298,10 @@ class RetrievePipeline(BasePipeline):
                         metadata[output_symbol] = symbol_meta
                         total_queries += queries_processed
                         total_hits += hits_count
+                        if include_bridge:
+                            bridge_chunks.extend(
+                                self._hits_to_seed_chunks(symbol_hits)
+                            )
 
                         progress.update(phase_task, visible=False)
                         progress.advance(overall_task)
@@ -290,7 +315,7 @@ class RetrievePipeline(BasePipeline):
                 success=True,
                 metadata=self._registry_metadata(metadata),
             )
-            return RetrieveResult(
+            result = RetrieveResult(
                 success=True,
                 outputs=outputs,
                 metadata=metadata,
@@ -298,13 +323,71 @@ class RetrievePipeline(BasePipeline):
                 queries_processed=total_queries,
                 hits_returned=total_hits,
             )
+            bundle = (
+                RetrieveChatSeedBundle(
+                    run_id=str(self.config.run_id),
+                    run_short_id=self.config.short_id
+                    if self.config.short_id > 0
+                    else None,
+                    symbols=[
+                        output_symbol
+                        for _, output_symbol in symbol_targets
+                        if output_symbol != "ALL"
+                    ],
+                    queries=list(self.config.queries),
+                    chunks=bridge_chunks,
+                )
+                if include_bridge
+                else None
+            )
+            return result, bundle
         except Exception as exc:
             logger.exception("Retrieve pipeline failed")
             self.config.complete_run(success=False)
-            return RetrieveResult(
-                success=False,
-                error=f"{type(exc).__name__}: {exc}",
+            return (
+                RetrieveResult(
+                    success=False,
+                    error=f"{type(exc).__name__}: {exc}",
+                ),
+                self._empty_seed_bundle() if include_bridge else None,
             )
+
+    def _empty_seed_bundle(self) -> RetrieveChatSeedBundle:
+        """Return an empty handoff bundle for unsuccessful retrieve runs."""
+        return RetrieveChatSeedBundle(
+            run_id=str(self.config.run_id),
+            run_short_id=self.config.short_id
+            if self.config.short_id > 0
+            else None,
+            symbols=[],
+            queries=list(self.config.queries),
+            chunks=[],
+        )
+
+    def _hits_to_seed_chunks(
+        self, hits: list[RetrievalHit]
+    ) -> list[RetrieveChatSeedChunk]:
+        """Convert ranked hits into chat-seed chunks without serialization."""
+        collection_name = self.config.vdb.collection_name or "retrieve"
+        chunks: list[RetrieveChatSeedChunk] = []
+        for hit in hits:
+            snippet_raw = hit.snippet or ""
+            snippet = snippet_raw.strip()
+            if not snippet:
+                continue
+            chunks.append(
+                RetrieveChatSeedChunk(
+                    collection=collection_name,
+                    symbol=hit.symbol or None,
+                    accession_number=hit.accession_number or None,
+                    form_type=hit.form_type or None,
+                    filed_date=hit.filed_date or None,
+                    source=hit.edgar_url or None,
+                    score=float(hit.score),
+                    snippet=snippet,
+                )
+            )
+        return chunks
 
     def _process_symbol(
         self,
@@ -322,6 +405,7 @@ class RetrievePipeline(BasePipeline):
         dict[str, float],
         int,
         int,
+        list[RetrievalHit],
     ]:
         stage_timings: dict[str, float] = {
             "candidate_search": 0.0,
@@ -468,6 +552,7 @@ class RetrievePipeline(BasePipeline):
             stage_timings,
             len(self.config.queries),
             len(final_hits),
+            final_hits,
         )
 
     def _market_context_metadata(

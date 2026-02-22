@@ -20,6 +20,7 @@ from .efts import EFTS
 from .events import Events
 from .exb import Exb
 from .financials import Financials
+from .flow import Flow
 from .holdings import Holdings
 from .insider import Insider
 from .market import Market
@@ -51,6 +52,10 @@ class Root(BaseSettings):
 
     chat: CliSubCommand[Chat] = Field(
         description="Run retrieval-augmented chat over indexed filings"
+    )
+
+    flow: CliSubCommand[Flow] = Field(
+        description="Run multi-stage flow specs (retrieve -> chat, etc.)"
     )
 
     warranty: CliSubCommand[Warranty] = Field(

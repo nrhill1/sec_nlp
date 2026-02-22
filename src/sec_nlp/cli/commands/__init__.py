@@ -6,6 +6,7 @@ from .efts import EFTS
 from .events import Events
 from .exb import Exb
 from .financials import Financials
+from .flow import Flow
 from .holdings import Holdings
 from .insider import Insider
 from .market import Market
@@ -24,6 +25,7 @@ __all__: tuple[str, ...] = (
     "Events",
     "Exb",
     "Financials",
+    "Flow",
     "Holdings",
     "Insider",
     "Market",

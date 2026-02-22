@@ -215,6 +215,104 @@ class TestVectorStoreCreation:
         assert first_client is second_client
         mock_factory.assert_called_once()
 
+    def test_setup_qdrant_client_falls_back_to_disk(self) -> None:
+        """Fallback to `.qdrant` when remote host endpoint is unavailable."""
+        remote_client = Mock()
+        remote_client.get_collections.side_effect = RuntimeError(
+            "Connection refused"
+        )
+        disk_client = Mock()
+        disk_client.get_collections.return_value = Mock(collections=[])
+        calls: list[str | None] = []
+
+        def _factory(
+            *,
+            location: str | None,
+            url: str | None,
+            host: str,
+            port: int,
+            grpc_port: int,
+            api_key: str | None,
+            timeout: int,
+            prefer_grpc: bool,
+            https: bool,
+        ) -> Mock:
+            _ = (
+                url,
+                host,
+                port,
+                grpc_port,
+                api_key,
+                timeout,
+                prefer_grpc,
+                https,
+            )
+            calls.append(location)
+            if location is None:
+                return remote_client
+            if location == ".qdrant":
+                return disk_client
+            raise AssertionError(f"Unexpected location: {location}")
+
+        with patch.object(vector_config, "create_qdrant_client", _factory):
+            config = VectorConfig(qdrant_location=None)
+            client, target = config.setup_qdrant_client_with_target()
+
+        assert client is disk_client
+        assert target == ".qdrant"
+        assert calls == [None, ".qdrant"]
+
+    def test_setup_qdrant_client_falls_back_to_memory(self) -> None:
+        """Fallback to `:memory:` when remote and disk targets both fail."""
+        remote_client = Mock()
+        remote_client.get_collections.side_effect = RuntimeError(
+            "Connection refused"
+        )
+        disk_client = Mock()
+        disk_client.get_collections.side_effect = RuntimeError("Wal lock")
+        memory_client = Mock()
+        memory_client.get_collections.return_value = Mock(collections=[])
+        calls: list[str | None] = []
+
+        def _factory(
+            *,
+            location: str | None,
+            url: str | None,
+            host: str,
+            port: int,
+            grpc_port: int,
+            api_key: str | None,
+            timeout: int,
+            prefer_grpc: bool,
+            https: bool,
+        ) -> Mock:
+            _ = (
+                url,
+                host,
+                port,
+                grpc_port,
+                api_key,
+                timeout,
+                prefer_grpc,
+                https,
+            )
+            calls.append(location)
+            if location is None:
+                return remote_client
+            if location == ".qdrant":
+                return disk_client
+            if location == ":memory:":
+                return memory_client
+            raise AssertionError(f"Unexpected location: {location}")
+
+        with patch.object(vector_config, "create_qdrant_client", _factory):
+            config = VectorConfig(qdrant_location=None)
+            client, target = config.setup_qdrant_client_with_target()
+
+        assert client is memory_client
+        assert target == ":memory:"
+        assert calls == [None, ".qdrant", ":memory:"]
+
 
 class TestEmbeddingAlignment:
     """Edge cases for embedding generation alignment."""

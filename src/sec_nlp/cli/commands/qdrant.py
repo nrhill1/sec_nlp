@@ -1,11 +1,14 @@
 # src/sec_nlp/cli/commands/qdrant.py
 """Qdrant collections management CLI commands."""
 
+import json
+import socket
 import subprocess
+import time
 from pathlib import Path
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from pydantic_settings import CliSubCommand
 from qdrant_client import QdrantClient
 from qdrant_client.models import Distance, VectorParams
@@ -20,6 +23,7 @@ from sec_nlp.pipelines.vector.client import (
     create_qdrant_client,
     format_qdrant_endpoint,
 )
+from sec_nlp.types import JsonValue
 
 
 class QdrantBaseConfig(BaseModel):
@@ -28,8 +32,11 @@ class QdrantBaseConfig(BaseModel):
     model_config = ConfigDict(defer_build=True, frozen=True, extra="forbid")
 
     qdrant_location: str | None = Field(
-        default=":memory:",
-        description="Local Qdrant location (e.g., ':memory:' or storage path)",
+        default=None,
+        description=(
+            "Local Qdrant location (e.g., ':memory:' or storage path). "
+            "When unset, qdrant_url or host/port is used."
+        ),
     )
     qdrant_url: str | None = Field(
         default=None,
@@ -68,6 +75,20 @@ class QdrantBaseConfig(BaseModel):
         ge=1,
         description="Qdrant request timeout in seconds",
     )
+
+    @field_validator("qdrant_location", mode="before")
+    @classmethod
+    def _normalize_qdrant_location(cls, value: str | None) -> str | None:
+        """Treat blank strings and explicit null markers as unset."""
+        if value is None:
+            return None
+        if isinstance(value, str) and value.strip().lower() in {
+            "",
+            "none",
+            "null",
+        }:
+            return None
+        return value
 
     def _setup_qdrant_client(self) -> QdrantClient:
         """Initialize a Qdrant client."""
@@ -485,6 +506,30 @@ class QdrantSearch(QdrantBaseConfig):
 
 
 QDRANT_CONTAINER = "sec-nlp-qdrant"
+_QDRANT_HTTP_PORT = 6333
+_QDRANT_GRPC_PORT = 6334
+_STARTUP_POLL_INTERVAL_SECONDS = 0.25
+
+
+def _normalize_json_dict(raw: str | None) -> dict[str, JsonValue] | None:
+    """Parse JSON text into a string-keyed dictionary."""
+    if raw is None:
+        return None
+    payload = raw.strip()
+    if not payload:
+        return None
+    try:
+        parsed = json.loads(payload)
+    except json.JSONDecodeError:
+        logger.debug("Failed to parse JSON payload: %s", payload)
+        return None
+    if not isinstance(parsed, dict):
+        return None
+    typed: dict[str, JsonValue] = {}
+    for key, value in parsed.items():
+        if isinstance(key, str):
+            typed[key] = value
+    return typed
 
 
 class QdrantUp(BaseModel):
@@ -497,13 +542,38 @@ class QdrantUp(BaseModel):
         description="Run in background (detached mode)",
         json_schema_extra={"cli_args": {"aliases": ["-d"]}},
     )
+    readiness_timeout: int = Field(
+        default=20,
+        ge=1,
+        le=300,
+        description="Seconds to wait for localhost:6333 to become reachable",
+    )
 
-    def cli_cmd(self) -> None:
-        """Start Qdrant container."""
-        logger.info(color_text("Starting Qdrant...", color="cyan"))
+    def _run_docker(
+        self, args: list[str], *, check: bool, capture_output: bool
+    ) -> subprocess.CompletedProcess[str]:
+        """Execute a docker command."""
+        return subprocess.run(
+            args,
+            capture_output=capture_output,
+            text=True,
+            check=check,
+        )
 
-        # Check if container already exists
-        result = subprocess.run(
+    def _docker_capture(self, args: list[str]) -> str | None:
+        """Run a docker command and return stdout on success."""
+        result = self._run_docker(args, check=False, capture_output=True)
+        if result.returncode != 0:
+            stderr = result.stderr.strip()
+            if stderr:
+                logger.debug("Command failed (%s): %s", " ".join(args), stderr)
+            return None
+        output = result.stdout.strip()
+        return output or None
+
+    def _container_exists(self) -> bool:
+        """Return True when the Qdrant container already exists."""
+        result = self._run_docker(
             [
                 "docker",
                 "ps",
@@ -514,34 +584,181 @@ class QdrantUp(BaseModel):
                 "{{.Names}}",
             ],
             capture_output=True,
-            text=True,
             check=False,
         )
+        return result.returncode == 0 and QDRANT_CONTAINER in result.stdout
 
-        if QDRANT_CONTAINER in result.stdout:
-            # Container exists, start it
-            subprocess.run(["docker", "start", QDRANT_CONTAINER], check=True)
-        else:
-            # Create and run new container
-            cmd = [
-                "docker",
-                "run",
-                "--name",
-                QDRANT_CONTAINER,
-                "-p",
-                "6333:6333",
-                "-p",
-                "6334:6334",
-                "-v",
-                f"{Path.cwd()}/qdrant_storage:/qdrant/storage:z",
-            ]
-            if self.detach:
-                cmd.append("-d")
-            cmd.append("qdrant/qdrant")
-            subprocess.run(cmd, check=True)
+    def _start_existing_container(self) -> None:
+        """Start an existing Qdrant container."""
+        self._run_docker(
+            ["docker", "start", QDRANT_CONTAINER],
+            capture_output=False,
+            check=True,
+        )
 
+    def _create_container(self) -> None:
+        """Create and start a new Qdrant container."""
+        cmd = [
+            "docker",
+            "run",
+            "--name",
+            QDRANT_CONTAINER,
+            "-p",
+            f"{_QDRANT_HTTP_PORT}:{_QDRANT_HTTP_PORT}",
+            "-p",
+            f"{_QDRANT_GRPC_PORT}:{_QDRANT_GRPC_PORT}",
+            "-v",
+            f"{Path.cwd()}/qdrant_storage:/qdrant/storage:z",
+        ]
         if self.detach:
-            logger.info(color_text("✓ Qdrant started", color="green"))
+            cmd.append("-d")
+        cmd.append("qdrant/qdrant")
+        self._run_docker(cmd, capture_output=False, check=True)
+
+    def _wait_for_localhost_http(self) -> bool:
+        """Poll localhost until Qdrant HTTP port is reachable."""
+        deadline = time.monotonic() + float(self.readiness_timeout)
+        while time.monotonic() < deadline:
+            try:
+                with socket.create_connection(
+                    ("127.0.0.1", _QDRANT_HTTP_PORT), timeout=1.0
+                ):
+                    return True
+            except OSError:
+                time.sleep(_STARTUP_POLL_INTERVAL_SECONDS)
+        return False
+
+    def _docker_inspect_json(
+        self, template: str
+    ) -> dict[str, JsonValue] | None:
+        """Read a JSON dictionary from `docker inspect --format`."""
+        raw = self._docker_capture(
+            ["docker", "inspect", QDRANT_CONTAINER, "--format", template]
+        )
+        return _normalize_json_dict(raw)
+
+    def _summarize_port_bindings(
+        self, port_map: dict[str, JsonValue] | None
+    ) -> str:
+        """Render a compact summary of published Qdrant ports."""
+        if port_map is None:
+            return "<unknown>"
+
+        summaries: list[str] = []
+        for container_port in ("6333/tcp", "6334/tcp"):
+            bindings = port_map.get(container_port)
+            host_bindings: list[str] = []
+            if isinstance(bindings, list):
+                for binding in bindings:
+                    if not isinstance(binding, dict):
+                        continue
+                    host_ip = binding.get("HostIp")
+                    host_port = binding.get("HostPort")
+                    if isinstance(host_ip, str) and isinstance(host_port, str):
+                        normalized_ip = host_ip or "0.0.0.0"
+                        host_bindings.append(f"{normalized_ip}:{host_port}")
+
+            if host_bindings:
+                summaries.append(
+                    f"{container_port} -> {', '.join(host_bindings)}"
+                )
+            else:
+                summaries.append(f"{container_port} -> <not published>")
+
+        return "; ".join(summaries)
+
+    def _summarize_networks(
+        self, network_map: dict[str, JsonValue] | None
+    ) -> str:
+        """Render attached Docker network names."""
+        if network_map is None:
+            return "<unknown>"
+        if not network_map:
+            return "<none>"
+        return ", ".join(sorted(network_map.keys()))
+
+    def _log_runtime_snapshot(self) -> None:
+        """Log runtime Docker port bindings for quick debugging."""
+        docker_port = self._docker_capture(["docker", "port", QDRANT_CONTAINER])
+        if not docker_port:
+            logger.info(bullet_line("Published ports", "<none>"))
+            return
+
+        one_line = "; ".join(
+            line.strip() for line in docker_port.splitlines() if line.strip()
+        )
+        logger.info(bullet_line("Published ports", one_line))
+
+    def _log_unreachable_diagnostics(self) -> None:
+        """Log diagnostics explaining why localhost reachability can fail."""
+        status = self._docker_capture(
+            [
+                "docker",
+                "ps",
+                "--filter",
+                f"name={QDRANT_CONTAINER}",
+                "--format",
+                "{{.Status}}",
+            ]
+        )
+        ports = self._docker_inspect_json("{{json .NetworkSettings.Ports}}")
+        networks = self._docker_inspect_json(
+            "{{json .NetworkSettings.Networks}}"
+        )
+
+        logger.error(
+            color_text(
+                "Qdrant started, but localhost:6333 is still unreachable.",
+                color="red",
+            )
+        )
+        if status:
+            logger.error(bullet_line("Container status", status))
+        logger.error(
+            bullet_line("Published ports", self._summarize_port_bindings(ports))
+        )
+        logger.error(
+            bullet_line("Attached networks", self._summarize_networks(networks))
+        )
+
+        if networks is not None and not networks:
+            logger.error(
+                color_text(
+                    "Qdrant can listen on 0.0.0.0 inside the container while "
+                    "still being unreachable from localhost when the runtime "
+                    "network endpoint is missing.",
+                    color="yellow",
+                )
+            )
+
+        logger.error(
+            color_text(
+                "Try `sec-nlp qdrant restart`. If it persists, run "
+                "`sec-nlp qdrant down --remove` then `sec-nlp qdrant up`.",
+                color="yellow",
+            )
+        )
+
+    def cli_cmd(self) -> None:
+        """Start Qdrant container."""
+        logger.info(color_text("Starting Qdrant...", color="cyan"))
+        if self._container_exists():
+            self._start_existing_container()
+        else:
+            self._create_container()
+
+        if not self.detach:
+            return
+
+        if not self._wait_for_localhost_http():
+            self._log_unreachable_diagnostics()
+            raise RuntimeError(
+                "Qdrant container is running, but localhost:6333 is unreachable."
+            )
+
+        logger.info(color_text("✓ Qdrant started", color="green"))
+        logger.info(bullet_line("Endpoint", "http://localhost:6333"))
+        self._log_runtime_snapshot()
 
 
 class QdrantDown(BaseModel):
