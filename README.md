@@ -42,6 +42,7 @@ SEC/market intelligence toolkit with Python pipeline orchestration and Rust-back
 - `sec-nlp qdrant` - Qdrant container + collection management
 - `sec-nlp runs` - run registry inspection/pruning
 - `sec-nlp clean` - remove downloads/outputs/logs
+- `sec-nlp flow` - run multi-stage flow specs (for example `retrieve -> chat`)
 - `sec-nlp version` - current package version
 
 ## Quickstart
@@ -115,6 +116,35 @@ sec-nlp news AAPL --topics tariffs supply_chain
 sec-nlp events AAPL --event-types merger restatement
 sec-nlp retrieve AAPL --queries "supply chain" "pricing pressure"
 sec-nlp chat AAPL --question "What did management say about warranty risk?"
+```
+
+### 6) Run a single multi-pipeline flow (retrieve -> chat)
+
+Create a flow spec (YAML or JSON), then validate/run it:
+
+```bash
+cat > flow_retrieve_chat.yaml <<'YAML'
+name: retrieve_chat
+defaults:
+  email: you@example.com
+  symbols: [AAPL]
+stages:
+  - id: retrieve_seed
+    pipeline: retrieve
+    overrides:
+      queries: ["supply chain risk", "pricing pressure"]
+      output_format: json
+  - id: chat_answer
+    pipeline: chat
+    seed_from_stage: retrieve_seed
+    overrides:
+      question: "Summarize supply-chain and pricing risks with citations."
+      interactive: false
+      output_format: json
+YAML
+
+sec-nlp flow validate --spec flow_retrieve_chat.yaml
+sec-nlp flow run --spec flow_retrieve_chat.yaml
 ```
 
 ## Analyze Presets

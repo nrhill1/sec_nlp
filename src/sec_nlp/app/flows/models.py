@@ -142,10 +142,12 @@ class FlowSpec(BaseModel):
             raise ValueError("flow spec requires at least one stage")
 
         stage_ids: set[str] = set()
+        stage_pipelines: dict[str, str] = {}
         for stage in self.stages:
             if stage.id in stage_ids:
                 raise ValueError(f"duplicate stage id '{stage.id}'")
             stage_ids.add(stage.id)
+            stage_pipelines[stage.id] = stage.pipeline
 
         for stage in self.stages:
             if stage.seed_from_stage is None:
@@ -157,6 +159,11 @@ class FlowSpec(BaseModel):
             if stage.seed_from_stage not in stage_ids:
                 raise ValueError(
                     f"stage '{stage.id}' references unknown seed stage '{stage.seed_from_stage}'"
+                )
+            upstream_pipeline = stage_pipelines.get(stage.seed_from_stage)
+            if upstream_pipeline != "retrieve":
+                raise ValueError(
+                    f"stage '{stage.id}' seed_from_stage must reference a retrieve stage"
                 )
         return self
 

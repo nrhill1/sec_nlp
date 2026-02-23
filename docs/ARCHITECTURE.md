@@ -4,6 +4,7 @@
 
 ## Code Layout
 - `src/sec_nlp/cli/` - command models, argument normalization, and command dispatch.
+- `src/sec_nlp/app/flows/` - typed multi-stage flow specs, in-memory artifacts, and runnable adapters.
 - `src/sec_nlp/pipelines/base/` - shared pipeline lifecycle, config, validation, and result models.
 - `src/sec_nlp/pipelines/presets/` - production pipeline implementations (`analyze`, `exb`, `warranty`, `financials`, `holdings`, `insider`, `news`, `events`, `retrieve`, `chat`).
 - `src/sec_nlp/pipelines/tools/` - reusable LangChain `StructuredTool` wrappers (`market_context_tool`, `retrieve_hits_tool`, `qdrant_search_tool`, `news_context_tool`).
@@ -13,10 +14,11 @@
 
 ## Runtime Layers
 1. CLI layer: parses/normalizes args and instantiates command config.
-2. Pipeline config layer: immutable Pydantic settings merged from CLI/env/.env.
-3. Pipeline execution layer: per-symbol phase execution with run metadata.
-4. IO/export layer: run-scoped artifacts written in CSV/JSON/YAML.
-5. Observability layer: run registry (SQLite) + optional metrics/tracing.
+2. Flow orchestration layer (optional): executes multi-stage specs and passes typed in-memory artifacts between stages.
+3. Pipeline config layer: immutable Pydantic settings merged from CLI/env/.env.
+4. Pipeline execution layer: per-symbol phase execution with run metadata.
+5. IO/export layer: run-scoped artifacts written in CSV/JSON/YAML.
+6. Observability layer: run registry (SQLite) + optional metrics/tracing.
 
 ## Pipeline Families
 - LLM-centric: `analyze`, `chat`
@@ -25,6 +27,21 @@
 - Timeline/correlation: `news`, `events`
 
 `retrieve` is EFTS-first and uses lexical ranking/pruning (stopword-aware by default) with selective chunk hydration before optional embedding rerank/index.
+
+## Retrieve->Chat Flow Runtime
+The `flow` CLI command supports deterministic single-run multi-stage execution.
+
+Current phase supports `retrieve -> chat` with typed handoff:
+- Retrieve stage emits `RetrieveChatSeedBundle` in memory.
+- Chat stage can accept `seed_context` and skip Qdrant collection search.
+- Artifact handoff avoids JSON round-trip serialization loops.
+
+References:
+- `src/sec_nlp/app/flows/models.py`
+- `src/sec_nlp/app/flows/artifacts.py`
+- `src/sec_nlp/app/flows/runner.py`
+- `src/sec_nlp/app/flows/runnables/retrieve.py`
+- `src/sec_nlp/app/flows/runnables/chat.py`
 
 ## Analyze Flow
 1. Load filings (optionally with EFTS expansion).
