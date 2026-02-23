@@ -19,7 +19,7 @@ from sec_nlp.types import JsonValue
 from .utils import (
     ChatStageConfigValue,
     build_chat_defaults_payload,
-    normalize_stage_metadata,
+    build_stage_result,
 )
 
 
@@ -91,21 +91,10 @@ class ChatFlowRunnable(
         result = ChatPipeline(config=pipeline_config).run()
         elapsed = perf_counter() - started
 
-        metadata = normalize_stage_metadata(result.metadata)
-
-        return FlowStageResult(
-            stage_id=self.stage.id,
-            pipeline=self.stage.pipeline,
-            success=result.success,
-            skipped=False,
-            error=result.error,
+        return build_stage_result(
+            stage=self.stage,
+            pipeline_result=result,
             duration_seconds=elapsed,
             run_id=str(pipeline_config.run_id),
-            run_short_id=(
-                pipeline_config.short_id
-                if pipeline_config.short_id > 0
-                else None
-            ),
-            outputs=[str(path) for path in result.outputs],
-            metadata=metadata,
+            run_short_id=pipeline_config.short_id,
         )

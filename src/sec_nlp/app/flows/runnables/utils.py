@@ -6,8 +6,13 @@ from datetime import date
 from pathlib import Path
 
 from sec_nlp.app.flows.artifacts import ChatSeedBundle
-from sec_nlp.app.flows.models import FlowDefaults
+from sec_nlp.app.flows.models import (
+    FlowDefaults,
+    FlowStageResult,
+    FlowStageSpec,
+)
 from sec_nlp.core.types import coerce_result_json_dict
+from sec_nlp.pipelines.base.result import BasePipelineResult
 from sec_nlp.types import JsonDict, JsonValue, ResultDict
 
 type StageConfigValue = JsonValue | date | Path
@@ -50,3 +55,31 @@ def build_chat_defaults_payload(
 def normalize_stage_metadata(metadata: ResultDict) -> JsonDict:
     """Normalize stage metadata into JSON-safe dictionary payload."""
     return coerce_result_json_dict(metadata)
+
+
+def short_id_or_none(short_id: int) -> int | None:
+    """Convert non-positive short IDs into null."""
+    return short_id if short_id > 0 else None
+
+
+def build_stage_result(
+    *,
+    stage: FlowStageSpec,
+    pipeline_result: BasePipelineResult,
+    duration_seconds: float,
+    run_id: str,
+    run_short_id: int,
+) -> FlowStageResult:
+    """Build canonical flow-stage result payload from a pipeline result."""
+    return FlowStageResult(
+        stage_id=stage.id,
+        pipeline=stage.pipeline,
+        success=pipeline_result.success,
+        skipped=False,
+        error=pipeline_result.error,
+        duration_seconds=duration_seconds,
+        run_id=run_id,
+        run_short_id=short_id_or_none(run_short_id),
+        outputs=[str(path) for path in pipeline_result.outputs],
+        metadata=normalize_stage_metadata(pipeline_result.metadata),
+    )
