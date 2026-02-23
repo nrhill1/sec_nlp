@@ -1,4 +1,4 @@
-# src/sec_nlp/core/llm/ollama.py
+"""Ollama client construction helpers."""
 
 import os
 from typing import TypedDict, Unpack
@@ -7,6 +7,8 @@ from langchain_ollama.llms import OllamaLLM
 
 from sec_nlp.core.infra.logger import logger
 from sec_nlp.types import JsonValue
+
+_DEFAULT_OLLAMA_BASE_URL = "http://localhost:11434"
 
 
 class OllamaKwargs(TypedDict, total=False):
@@ -52,9 +54,7 @@ def build_ollama_llm(
         OllamaLLM: LLM object that implements Runnable[str | PromptValue, str]
     """
 
-    base_url = base_url or os.getenv(
-        "OLLAMA_BASE_URL", "http://localhost:11434"
-    )
+    base_url = resolve_ollama_base_url(base_url)
 
     # Apply performance defaults: keep model resident and offload all layers to GPU
     if "keep_alive" not in kwargs:
@@ -76,3 +76,16 @@ def build_ollama_llm(
     )
 
     return ollama_llm
+
+
+def resolve_ollama_base_url(base_url: str | None = None) -> str:
+    """Resolve Ollama base URL from explicit value or environment."""
+    if base_url is not None and base_url.strip():
+        return base_url
+    configured_url = os.getenv("SEC_NLP_OLLAMA_BASE_URL")
+    if configured_url is not None and configured_url.strip():
+        return configured_url
+    legacy_url = os.getenv("OLLAMA_BASE_URL")
+    if legacy_url is not None and legacy_url.strip():
+        return legacy_url
+    return _DEFAULT_OLLAMA_BASE_URL

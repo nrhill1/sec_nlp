@@ -76,9 +76,10 @@ At minimum, set email for whichever pipeline(s) you run.
 
 ```bash
 # .env examples
-ANALYZE_EMAIL=you@example.com
-EXB_EMAIL=you@example.com
-WARRANTY_EMAIL=you@example.com
+SEC_NLP_OLLAMA_BASE_URL=http://localhost:11434
+SEC_NLP_ANALYZE_EMAIL=you@example.com
+SEC_NLP_EXB_EMAIL=you@example.com
+SEC_NLP_WARRANTY_EMAIL=you@example.com
 SEC_NLP_FINANCIALS_EMAIL=you@example.com
 SEC_NLP_HOLDINGS_EMAIL=you@example.com
 SEC_NLP_INSIDER_EMAIL=you@example.com
@@ -169,9 +170,9 @@ Config precedence:
 
 Pipeline env prefixes:
 
-- `ANALYZE_`
-- `EXB_`
-- `WARRANTY_`
+- `SEC_NLP_ANALYZE_`
+- `SEC_NLP_EXB_`
+- `SEC_NLP_WARRANTY_`
 - `SEC_NLP_FINANCIALS_`
 - `SEC_NLP_HOLDINGS_`
 - `SEC_NLP_INSIDER_`
@@ -180,9 +181,14 @@ Pipeline env prefixes:
 - `SEC_NLP_RETRIEVE_`
 - `SEC_NLP_CHAT_`
 
+Global runtime environment variables:
+
+- `SEC_NLP_OLLAMA_BASE_URL` (preferred)
+- `OLLAMA_BASE_URL` (legacy fallback)
+
 Nested fields:
 
-- Env: `__` delimiters, e.g. `ANALYZE_LLM__MODEL_NAME=llama3.2:1b`
+- Env: `__` delimiters, e.g. `SEC_NLP_ANALYZE_LLM__MODEL_NAME=llama3.2:1b`
 - CLI: dot notation, e.g. `--llm.model-name`, `--search.queries`, `--vdb.collection-name`
 
 ## Outputs and Run Layout

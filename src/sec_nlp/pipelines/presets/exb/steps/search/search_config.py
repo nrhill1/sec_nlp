@@ -11,7 +11,7 @@ class SearchConfig(BaseSettings):
     """Configuration for semantic search after vector upsert."""
 
     model_config = SettingsConfigDict(
-        env_prefix="SEARCH_",
+        env_prefix="SEC_NLP_EXB_SEARCH_",
         frozen=True,
         defer_build=True,
         validate_assignment=False,

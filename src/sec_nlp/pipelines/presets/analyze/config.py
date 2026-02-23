@@ -259,7 +259,7 @@ class AnalyzeConfig(BasePipelineSettings):
     """Configuration for generalized document analysis pipeline."""
 
     model_config = SettingsConfigDict(
-        env_prefix="ANALYZE_",
+        env_prefix="SEC_NLP_ANALYZE_",
     )
 
     pipeline_type: ClassVar[Literal["analyze"]] = "analyze"

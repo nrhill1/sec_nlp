@@ -16,6 +16,7 @@ from qdrant_client.models import Distance
 from tqdm import tqdm
 
 from sec_nlp.core.infra.logger import logger
+from sec_nlp.core.llm.ollama import resolve_ollama_base_url
 from sec_nlp.pipelines.vector.client import (
     create_qdrant_client,
     format_qdrant_endpoint,
@@ -330,7 +331,7 @@ class VectorConfig(BaseModel):
 
         cache_key: EmbedderCacheKey = (
             self.embedding_model,
-            os.getenv("OLLAMA_BASE_URL"),
+            resolve_ollama_base_url(),
         )
         disable_cache = _env_flag_enabled("SEC_NLP_DISABLE_EMBEDDER_CACHE")
         if not disable_cache:
@@ -347,6 +348,7 @@ class VectorConfig(BaseModel):
 
         embedder = OllamaEmbeddings(
             model=self.embedding_model,
+            base_url=resolve_ollama_base_url(),
             validate_model_on_init=True,
         )
 

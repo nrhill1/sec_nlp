@@ -17,7 +17,7 @@ sec-nlp warranty AAPL
 
 ## Key Configuration
 
-- Env prefix: `WARRANTY_`
+- Env prefix: `SEC_NLP_WARRANTY_`
 - Supported mode: annual only (`10-K`)
 - `limit` (filings per symbol)
 - `use_item_8_filter` and item filter tuning fields

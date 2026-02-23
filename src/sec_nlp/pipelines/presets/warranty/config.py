@@ -15,7 +15,7 @@ class WarrantyConfig(BasePipelineSettings):
     """Configuration for SEC warranty data pipeline (XBRL-only, no LLM)."""
 
     model_config = SettingsConfigDict(
-        env_prefix="WARRANTY_",
+        env_prefix="SEC_NLP_WARRANTY_",
     )
 
     pipeline_type: ClassVar[Literal["warranty"]] = "warranty"
