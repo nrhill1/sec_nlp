@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from time import perf_counter
 from uuid import uuid4
 
 from sec_nlp.app.flows.artifacts import FlowArtifactStore
@@ -30,6 +31,7 @@ class FlowRunner:
 
     def run(self) -> FlowRunResult:
         """Execute all stages in order and return aggregate flow result."""
+        flow_started = perf_counter()
         clear_runtime_caches()
         try:
             flow_run_id = str(uuid4())
@@ -88,6 +90,7 @@ class FlowRunner:
                     for result in stage_results
                     if not result.success and not result.skipped
                 ),
+                "duration_seconds": perf_counter() - flow_started,
             }
             return FlowRunResult(
                 flow_run_id=flow_run_id,

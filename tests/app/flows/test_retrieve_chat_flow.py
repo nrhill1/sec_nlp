@@ -119,6 +119,9 @@ def test_flow_runner_passes_retrieve_seed_into_chat(monkeypatch) -> None:
         "retrieve_seed",
         "chat_answer",
     ]
+    duration_value = result.metadata.get("duration_seconds")
+    assert isinstance(duration_value, int | float)
+    assert float(duration_value) >= 0.0
     assert (
         observed["seed_upstream_run_id"]
         == "00000000-0000-0000-0000-000000000001"

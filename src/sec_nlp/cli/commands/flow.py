@@ -39,6 +39,11 @@ class FlowRun(BaseModel):
         )
         logger.info(format_key_value("Flow Run ID", result.flow_run_id))
         logger.info(format_key_value("Stages", str(len(result.stage_results))))
+        duration_raw = result.metadata.get("duration_seconds")
+        if isinstance(duration_raw, int | float):
+            logger.info(
+                format_key_value("Duration", f"{float(duration_raw):.2f}s")
+            )
         logger.info(
             format_status(
                 "Flow completed" if result.success else "Flow failed",
