@@ -53,7 +53,7 @@ stages:
     rerank_with_embeddings: true
     index_results: true
     vdb:
-      collection_name: basket_tech_hq
+      collection_name: industry_tech_high
       embedding_model: qwen3-embedding:4b
       vector_size: 2560
       qdrant_url: http://localhost:6333
@@ -67,7 +67,7 @@ stages:
     interactive: false
     output_format: yaml
     collections:
-    - basket_tech_hq
+    - industry_tech_high
     top_k: 16
     max_context_chunks: 14
     context_token_budget: 10500
@@ -82,7 +82,7 @@ stages:
       max_new_tokens: 1280
       num_ctx: 32768
     vdb:
-      collection_name: basket_tech_hq
+      collection_name: industry_tech_high
       embedding_model: qwen3-embedding:4b
       vector_size: 2560
       qdrant_url: http://localhost:6333

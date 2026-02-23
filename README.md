@@ -155,6 +155,9 @@ Prebuilt flow packs:
 - `/Users/nicolashill/Projects/sec/flow_jobs/merged_basket_high_models`:
   higher-parameter specs that merge runs into one shared collection per basket
   (`qwen3-embedding:4b` + `qwen3:8b`).
+- `/Users/nicolashill/Projects/sec/flow_jobs/industry_tier_jobs`:
+  mixed retrieve/chat/flow presets with standardized industry collections split
+  by low/medium/high model tiers.
 
 ## Analyze Presets
 

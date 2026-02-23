@@ -1,0 +1,75 @@
+name: quantum_medium_flow_preset
+defaults:
+  email: you@example.com
+  symbols:
+  - IONQ
+  - RGTI
+  - QBTS
+  - QUBT
+  - IBM
+  - HON
+  forms:
+  - 10-K
+  - 10-Q
+  - 8-K
+  - 6-K
+  - 20-F
+  start_date: '2021-01-01'
+  dry_run: false
+on_failure: stop
+stages:
+- id: retrieve_seed
+  pipeline: retrieve
+  overrides:
+    queries:
+    - quantum roadmap milestones and error-correction commercialization signals
+    - government contract dependency and budget-cycle timing risk
+    - cash runway dilution exposure and financing path clarity
+    - hybrid workload adoption and enterprise pilot conversion quality
+    - IP moat and competitive differentiation in hardware architecture
+    - manufacturing scale constraints and vendor concentration
+    - partnership durability and backlog conversion confidence
+    output_format: json
+    top_k: 100
+    efts_candidates: 500
+    hydrate_top_n: 150
+    query_term_min_hits: 0
+    query_term_min_ratio: 0.0
+    stopword_aware_lexical: true
+    rerank_with_embeddings: true
+    index_results: true
+    vdb:
+      collection_name: industry_quantum_medium
+      embedding_model: mxbai-embed-large:latest
+      vector_size: 1024
+      qdrant_url: http://localhost:6333
+      qdrant_location: null
+- id: chat_answer
+  pipeline: chat
+  seed_from_stage: retrieve_seed
+  overrides:
+    question: Assess commercialization readiness, funding risk, and contract concentration
+      across this quantum basket using only cited filing evidence.
+    interactive: false
+    output_format: yaml
+    collections:
+    - industry_quantum_medium
+    top_k: 12
+    max_context_chunks: 12
+    context_token_budget: 8000
+    include_market_context: true
+    include_news_context: true
+    rerank_mode: mmr
+    generation_token_cap: 896
+    llm:
+      model_name: ministral-3:3b
+      require_json: false
+      temperature: 0.05
+      max_new_tokens: 896
+      num_ctx: 16384
+    vdb:
+      collection_name: industry_quantum_medium
+      embedding_model: mxbai-embed-large:latest
+      vector_size: 1024
+      qdrant_url: http://localhost:6333
+      qdrant_location: null

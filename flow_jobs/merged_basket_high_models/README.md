@@ -2,7 +2,7 @@
 
 This directory contains 18 retrieve->chat flow specs with:
 
-- merged Qdrant collection per basket (`basket_<basket>_hq`)
+- merged Qdrant collection per basket (`industry_<basket>_high`)
 - higher-parameter embedding model (`qwen3-embedding:4b`, `vector_size=2560`)
 - higher-parameter chat model (`qwen3:8b`)
 - Docker Qdrant target (`http://localhost:6333`)
