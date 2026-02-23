@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import hashlib
 import re
-from collections.abc import Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
@@ -41,13 +40,13 @@ from sec_nlp.core.news.client import (
     NewswatchExtensionError,
     create_news_retriever,
 )
-from sec_nlp.core.types import as_json_dict
+from sec_nlp.core.types import as_json_dict, coerce_result_json_dict
 from sec_nlp.pipelines import BasePipeline
 from sec_nlp.pipelines.output_io import (
     build_run_file_stem,
     build_run_header_fields,
 )
-from sec_nlp.types import JsonDict, JsonValue, ResultDict, ResultValue
+from sec_nlp.types import JsonDict, JsonValue, ResultDict
 
 from ..retrieve import RetrievePipeline, RetrieveSettings
 from .bridge import ChatSeedBundle
@@ -211,40 +210,9 @@ class ChatPipeline(BasePipeline):
         }
         return metadata
 
-    @classmethod
-    def _result_to_json_value(cls, value: ResultValue) -> JsonValue | None:
-        if isinstance(value, Path):
-            return str(value)
-        if isinstance(value, (str, int, float, bool)) or value is None:
-            return value
-        if isinstance(value, Sequence) and not isinstance(value, str):
-            items: list[JsonValue] = []
-            for item in value:
-                normalized = cls._result_to_json_value(item)
-                if normalized is None:
-                    return None
-                items.append(normalized)
-            return items
-        if isinstance(value, Mapping):
-            payload: JsonDict = {}
-            for key, item in value.items():
-                if not isinstance(key, str):
-                    return None
-                normalized = cls._result_to_json_value(item)
-                if normalized is None:
-                    return None
-                payload[key] = normalized
-            return payload
-        return None
-
-    @classmethod
-    def _registry_metadata(cls, metadata: ResultDict) -> JsonDict:
-        payload: JsonDict = {}
-        for key, value in metadata.items():
-            normalized = cls._result_to_json_value(value)
-            if normalized is not None:
-                payload[key] = normalized
-        return payload
+    @staticmethod
+    def _registry_metadata(metadata: ResultDict) -> JsonDict:
+        return coerce_result_json_dict(metadata)
 
     def _symbol_coverage_metadata(
         self,
