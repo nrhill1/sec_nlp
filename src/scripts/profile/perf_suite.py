@@ -12,7 +12,6 @@ from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from statistics import mean
-from typing import cast
 from uuid import uuid4
 
 from pydantic import Field
@@ -354,8 +353,37 @@ def _load_artifact(path: Path) -> dict[str, JsonValue]:
     normalized: JsonDict = {}
     for key, value in payload.items():
         if isinstance(key, str):
-            normalized[key] = cast(JsonValue, value)
+            normalized[key] = _normalize_artifact_value(value)
     return normalized
+
+
+def _normalize_artifact_value(value: object) -> JsonValue:
+    """Normalize loaded artifact values to JsonValue type."""
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return value
+    if isinstance(value, dict):
+        result: dict[str, JsonValue] = {}
+        for k, v in value.items():
+            if isinstance(k, str):
+                result[k] = _normalize_artifact_value(v)
+        return result
+    if isinstance(value, (list, tuple)):
+        return [_normalize_artifact_value(item) for item in value]
+    # Fallback for any other type
+    return str(value)
+
+
+def _build_json_dict(mapping: object) -> dict[str, JsonValue]:
+    """Build a JsonValue dict from a Mapping, filtering for JsonValue types."""
+    result: dict[str, JsonValue] = {}
+    if not isinstance(mapping, Mapping):
+        return result
+    for key, value in mapping.items():
+        if isinstance(key, str) and isinstance(
+            value, (str, int, float, bool, dict, list, type(None))
+        ):
+            result[key] = _normalize_artifact_value(value)
+    return result
 
 
 def _latest_artifacts(output_dir: Path, count: int = 2) -> list[Path]:
@@ -529,10 +557,10 @@ class PerfSuiteConfig(BaseSettings):
                     continue
                 if not isinstance(metrics_raw, Mapping):
                     continue
-                slo_pass: JsonValue | None = None
+                slo_pass: object | None = None
                 for key, value in metrics_raw.items():
                     if key == "slo_pass":
-                        slo_pass = cast(JsonValue, value)
+                        slo_pass = value
                         break
                 if slo_pass is False:
                     failed_slo_cases.append(case_name)
@@ -579,16 +607,12 @@ class PerfSuiteConfig(BaseSettings):
             current_summary_raw, Mapping
         ):
             raise ValueError("Artifacts missing summary payload")
-        baseline_summary: dict[str, JsonValue] = {
-            key: cast(JsonValue, value)
-            for key, value in baseline_summary_raw.items()
-            if isinstance(key, str)
-        }
-        current_summary: dict[str, JsonValue] = {
-            key: cast(JsonValue, value)
-            for key, value in current_summary_raw.items()
-            if isinstance(key, str)
-        }
+        baseline_summary: dict[str, JsonValue] = _build_json_dict(
+            baseline_summary_raw
+        )
+        current_summary: dict[str, JsonValue] = _build_json_dict(
+            current_summary_raw
+        )
 
         logger.info("Comparing %s -> %s", artifacts[0].name, artifacts[1].name)
         for case_name, current_metrics_raw in current_summary.items():
@@ -599,15 +623,15 @@ class PerfSuiteConfig(BaseSettings):
                 logger.info("Case %s: new", case_name)
                 continue
 
-            current_p95: JsonValue | None = None
-            baseline_p95: JsonValue | None = None
+            current_p95: object | None = None
+            baseline_p95: object | None = None
             for key, value in current_metrics_raw.items():
                 if key == "p95_seconds":
-                    current_p95 = cast(JsonValue, value)
+                    current_p95 = value
                     break
             for key, value in baseline_metrics_raw.items():
                 if key == "p95_seconds":
-                    baseline_p95 = cast(JsonValue, value)
+                    baseline_p95 = value
                     break
             if not isinstance(current_p95, (int, float)) or not isinstance(
                 baseline_p95, (int, float)
