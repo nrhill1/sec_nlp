@@ -148,6 +148,14 @@ sec-nlp flow validate --spec flow_retrieve_chat.yaml
 sec-nlp flow run --spec flow_retrieve_chat.yaml
 ```
 
+Prebuilt flow packs:
+
+- `/Users/nicolashill/Projects/sec/flow_jobs/multi_jobs`:
+  30 retrieve->chat specs across baskets and size tiers.
+- `/Users/nicolashill/Projects/sec/flow_jobs/merged_basket_high_models`:
+  higher-parameter specs that merge runs into one shared collection per basket
+  (`qwen3-embedding:4b` + `qwen3:8b`).
+
 ## Analyze Presets
 
 Use `--preset <name>` with `sec-nlp analyze`.

@@ -45,3 +45,5 @@ Notes:
 
 - Replace `you@example.com` per file or via flow defaults before running.
 - Profiles with `index_results: true` write into Qdrant collection names prefixed with `flow_...`.
+- For merged, high-parameter basket collections, use:
+  `/Users/nicolashill/Projects/sec/flow_jobs/merged_basket_high_models/README.md`.
