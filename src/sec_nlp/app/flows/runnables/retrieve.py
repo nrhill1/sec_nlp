@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from datetime import date
-from pathlib import Path
 from time import perf_counter
 
 from langchain_core.runnables import RunnableConfig, RunnableSerializable
@@ -15,39 +13,23 @@ from sec_nlp.app.flows.models import (
     FlowStageResult,
     FlowStageSpec,
 )
-from sec_nlp.core.types import coerce_result_json_value
 from sec_nlp.pipelines.presets.retrieve import (
     RetrievePipeline,
     RetrieveSettings,
 )
 from sec_nlp.types import JsonValue
 
-type StageConfigValue = JsonValue | date | Path
+from .utils import (
+    StageConfigValue,
+    build_stage_defaults_payload,
+    normalize_stage_metadata,
+)
 
 
 class RetrieveFlowInvokeInput(BaseModel):
     """Typed invoke payload for retrieve stage runnable."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
-
-
-def _defaults_payload(defaults: FlowDefaults) -> dict[str, StageConfigValue]:
-    payload: dict[str, StageConfigValue] = {"email": defaults.email}
-    if defaults.symbols:
-        payload["symbols"] = list(defaults.symbols)
-    if defaults.forms is not None:
-        payload["forms"] = list(defaults.forms)
-    if defaults.start_date is not None:
-        payload["start_date"] = defaults.start_date
-    if defaults.end_date is not None:
-        payload["end_date"] = defaults.end_date
-    if defaults.dl_path is not None:
-        payload["dl_path"] = defaults.dl_path
-    if defaults.out_path is not None:
-        payload["out_path"] = defaults.out_path
-    if defaults.dry_run is not None:
-        payload["dry_run"] = defaults.dry_run
-    return payload
 
 
 class RetrieveFlowRunnable(
@@ -82,7 +64,9 @@ class RetrieveFlowRunnable(
         _ = input
         _ = config
         _ = kwargs
-        payload = _defaults_payload(self.defaults)
+        payload: dict[str, StageConfigValue] = build_stage_defaults_payload(
+            self.defaults
+        )
         payload.update(self.stage.overrides)
         started = perf_counter()
         pipeline_config = RetrieveSettings.model_validate(payload)
@@ -92,11 +76,7 @@ class RetrieveFlowRunnable(
         if result.success:
             self.artifacts.put_retrieve_seed(self.stage.id, seed_bundle)
 
-        metadata: dict[str, JsonValue] = {}
-        for key, value in result.metadata.items():
-            normalized = coerce_result_json_value(value)
-            if isinstance(key, str) and normalized is not None:
-                metadata[key] = normalized
+        metadata = normalize_stage_metadata(result.metadata)
 
         return FlowStageResult(
             stage_id=self.stage.id,

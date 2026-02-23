@@ -7,7 +7,6 @@ from abc import ABC, abstractmethod
 from collections.abc import Mapping, Sequence
 from datetime import datetime
 from pathlib import Path
-from typing import cast
 
 from pydantic import BaseModel
 from rich.table import Table
@@ -433,7 +432,13 @@ class BasePipelineCommand(BaseModel, ABC):
             return None
         normalized = cls._to_registry_value(value)
         if isinstance(normalized, dict):
-            return cast(dict[str, object], normalized)
+            # Type narrowing: _to_registry_value returns object | None,
+            # isinstance check confirms it's dict, safe to return
+            result: dict[str, object] = {}
+            for k, v in normalized.items():
+                if isinstance(k, str):
+                    result[k] = v
+            return result if result else None
         return None
 
     @classmethod
