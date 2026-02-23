@@ -8,7 +8,7 @@ from unittest.mock import Mock, patch
 
 from pydantic_settings import CliApp
 
-from sec_nlp.app.flows.models import FlowRunResult
+from sec_nlp.app.flows.models import FlowRunResult, FlowStageResult
 from sec_nlp.cli.commands.flow import FlowRun, FlowValidate
 
 
@@ -74,6 +74,42 @@ def test_flow_run_cli_cmd_uses_runner(
     FlowRun(spec=spec_path).cli_cmd()
 
     assert mock_flow_run.called
+
+
+@patch("sec_nlp.cli.commands.flow.logger")
+@patch("sec_nlp.cli.commands.flow.FlowRunner.run")
+def test_flow_run_logs_chat_answer_snippet(
+    mock_flow_run: Mock,
+    mock_logger: Mock,
+    tmp_path: Path,
+) -> None:
+    spec_path = _write_flow_spec(tmp_path)
+    mock_flow_run.return_value = FlowRunResult(
+        flow_run_id="00000000-0000-0000-0000-00000000abcf",
+        flow_name="test_flow",
+        success=True,
+        stage_results=[
+            FlowStageResult(
+                stage_id="chat_answer",
+                pipeline="chat",
+                success=True,
+                metadata={
+                    "answer_preview": "Liquidity risk rose after debt repricing.",
+                },
+            )
+        ],
+        outputs=[],
+        metadata={},
+    )
+
+    FlowRun(spec=spec_path).cli_cmd()
+
+    info_messages = [
+        str(call.args[0])
+        for call in mock_logger.info.call_args_list
+        if call.args
+    ]
+    assert any("Answer Snippet" in message for message in info_messages)
 
 
 @patch("sec_nlp.cli.commands.flow.FlowRunner.run")

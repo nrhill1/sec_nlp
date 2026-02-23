@@ -52,6 +52,14 @@ class ChatFlowRunnable(
         description="In-memory artifact store shared across flow stages.",
     )
 
+    @staticmethod
+    def _answer_preview(answer: str, *, max_chars: int = 160) -> str:
+        """Build a compact single-line answer preview for flow logging."""
+        normalized = " ".join(answer.split())
+        if len(normalized) <= max_chars:
+            return normalized
+        return f"{normalized[: max_chars - 1].rstrip()}…"
+
     def invoke(
         self,
         input: ChatFlowInvokeInput,
@@ -88,10 +96,17 @@ class ChatFlowRunnable(
         result = ChatPipeline(config=pipeline_config).run()
         elapsed = perf_counter() - started
 
-        return build_stage_result(
+        stage_result = build_stage_result(
             stage=self.stage,
             pipeline_result=result,
             duration_seconds=elapsed,
             run_id=str(pipeline_config.run_id),
             run_short_id=pipeline_config.short_id,
         )
+        if result.success and isinstance(result.answer, str) and result.answer:
+            metadata = dict(stage_result.metadata)
+            metadata["answer_preview"] = self._answer_preview(result.answer)
+            stage_result = stage_result.model_copy(
+                update={"metadata": metadata}
+            )
+        return stage_result

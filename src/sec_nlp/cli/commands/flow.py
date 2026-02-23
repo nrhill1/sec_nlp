@@ -69,6 +69,12 @@ class FlowRun(BaseModel):
                     status=stage_status,
                 )
             )
+            if stage_result.pipeline == "chat":
+                answer_preview = stage_result.metadata.get("answer_preview")
+                if isinstance(answer_preview, str) and answer_preview:
+                    logger.info(
+                        format_key_value("Answer Snippet", answer_preview)
+                    )
             if stage_result.error:
                 logger.info(format_key_value("Reason", stage_result.error))
 

@@ -119,6 +119,13 @@ def test_flow_runner_passes_retrieve_seed_into_chat(monkeypatch) -> None:
         "retrieve_seed",
         "chat_answer",
     ]
+    chat_stage = result.stage_results[1]
+    answer_preview = chat_stage.metadata.get("answer_preview")
+    assert isinstance(answer_preview, str)
+    assert answer_preview.startswith(
+        "Liquidity risk increased due to debt costs."
+    )
+    assert "\n" not in answer_preview
     duration_value = result.metadata.get("duration_seconds")
     assert isinstance(duration_value, int | float)
     assert float(duration_value) >= 0.0
