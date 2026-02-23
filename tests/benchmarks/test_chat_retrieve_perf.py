@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from typing import cast
-
 import pytest
 
 from scripts.profile.perf_suite import (
@@ -13,6 +11,7 @@ from scripts.profile.perf_suite import (
     _safe_output_counts,
     _safe_stage_timings,
 )
+from sec_nlp.core.types import as_json_dict
 from sec_nlp.types import JsonValue
 
 
@@ -54,15 +53,17 @@ def test_build_summary_aggregates_case_iterations() -> None:
 
     summary = _build_summary(iterations)
     case_summary_raw = summary.get("chat_case")
-    assert isinstance(case_summary_raw, dict)
-    case_summary = cast(dict[str, JsonValue], case_summary_raw)
+    assert case_summary_raw is not None
+    case_summary = as_json_dict(case_summary_raw)
+    assert case_summary is not None
     assert case_summary.get("iterations") == 2
     assert case_summary.get("success_count") == 2
     assert case_summary.get("mean_seconds") == 12.0
     assert case_summary.get("p95_seconds") == 13.8
     stage_mean_raw = case_summary.get("stage_mean_seconds")
-    assert isinstance(stage_mean_raw, dict)
-    stage_mean = cast(dict[str, JsonValue], stage_mean_raw)
+    assert stage_mean_raw is not None
+    stage_mean = as_json_dict(stage_mean_raw)
+    assert stage_mean is not None
     assert stage_mean.get("vector_search") == 1.25
     assert stage_mean.get("llm_generate") == 6.0
 
