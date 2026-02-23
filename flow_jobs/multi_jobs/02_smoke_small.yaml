@@ -1,0 +1,59 @@
+name: smoke_small_retrieve_chat
+defaults:
+  email: you@example.com
+  symbols:
+  - CDE
+  - AAPL
+  - FCX
+  forms:
+  - 10-K
+  - 10-Q
+  - 8-K
+  - 6-K
+  - 20-F
+  start_date: '2021-01-01'
+  dry_run: false
+on_failure: stop
+stages:
+- id: retrieve_seed
+  pipeline: retrieve
+  overrides:
+    queries:
+    - risk factors liquidity working capital debt covenant disclosures and trend changes
+    - supply chain customer concentration capital expenditure impacts on revenue visibility
+      and risk factors
+    - guidance margin pressure geopolitical risk commentary with quantified impact
+      where available
+    - tariffs inflation cost control sensitivity and scenario planning
+    - cash flow operational execution remediation liabilities execution milestones
+      and bottlenecks
+    - liquidity cash flow working capital revolving credit debt covenant compliance
+      updates
+    output_format: json
+    top_k: 40
+    efts_candidates: 220
+    hydrate_top_n: 60
+    query_term_min_hits: 1
+    query_term_min_ratio: 0.2
+    stopword_aware_lexical: true
+    rerank_with_embeddings: true
+    index_results: false
+    vdb:
+      collection_name: flow_smoke_small
+- id: chat_answer
+  pipeline: chat
+  seed_from_stage: retrieve_seed
+  overrides:
+    question: What are the most material near-term risk, liquidity, and margin signals
+      across this smoke basket, and which issuer appears most vulnerable?
+    interactive: false
+    output_format: yaml
+    collections:
+    - flow_smoke_small
+    top_k: 10
+    max_context_chunks: 8
+    context_token_budget: 4500
+    include_market_context: true
+    include_news_context: false
+    rerank_mode: score
+    generation_token_cap: 512

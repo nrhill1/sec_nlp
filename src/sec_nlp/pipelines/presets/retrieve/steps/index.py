@@ -105,7 +105,14 @@ def index_retrieval_hits(
 ) -> list[RetrievalHit]:
     """Upsert retrieval hits into Qdrant when indexing is enabled."""
 
-    if not hits or not settings.index_results:
+    if not settings.index_results:
+        return hits
+    if not hits:
+        if not settings.dry_run:
+            logger.warning(
+                "Retrieve indexing warning for %s: no chunks indexed because ranked hits are empty",
+                symbol,
+            )
         return hits
     if settings.dry_run:
         logger.info("Skipping retrieve indexing in dry_run mode")
@@ -199,6 +206,10 @@ def index_retrieval_hits(
             )
 
         if not points:
+            logger.warning(
+                "Retrieve indexing warning for %s: no chunks indexed because no vectors were produced",
+                symbol,
+            )
             return hits
 
         qdrant.upsert(

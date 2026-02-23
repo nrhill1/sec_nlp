@@ -1,0 +1,60 @@
+name: tech_smoke_retrieve_chat
+defaults:
+  email: you@example.com
+  symbols:
+  - AAPL
+  - MSFT
+  - NVDA
+  - AMD
+  - AVGO
+  - ORCL
+  forms:
+  - 10-K
+  - 10-Q
+  - 8-K
+  - 6-K
+  - 20-F
+  start_date: '2021-01-01'
+  dry_run: false
+on_failure: stop
+stages:
+- id: retrieve_seed
+  pipeline: retrieve
+  overrides:
+    queries:
+    - AI data center demand GPU supply cloud consumption enterprise backlog disclosures
+      and trend changes
+    - subscription retention semiconductor lead times inventory normalization impacts
+      on revenue visibility and risk factors
+    - pricing discipline gross margin outlook hyperscaler capex commentary with quantified
+      impact where available
+    - customer concentration export restrictions foundry capacity sensitivity and
+      scenario planning
+    output_format: json
+    top_k: 25
+    efts_candidates: 140
+    hydrate_top_n: 35
+    query_term_min_hits: 1
+    query_term_min_ratio: 0.2
+    stopword_aware_lexical: true
+    rerank_with_embeddings: false
+    index_results: false
+    vdb:
+      collection_name: flow_tech_smoke
+- id: chat_answer
+  pipeline: chat
+  seed_from_stage: retrieve_seed
+  overrides:
+    question: Summarize AI-infrastructure and enterprise demand signals for this tech
+      basket, with emphasis on backlog durability, margin risk, and capex efficiency.
+    interactive: false
+    output_format: yaml
+    collections:
+    - flow_tech_smoke
+    top_k: 8
+    max_context_chunks: 6
+    context_token_budget: 3500
+    include_market_context: false
+    include_news_context: false
+    rerank_mode: score
+    generation_token_cap: 448

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import sqlite3
 from datetime import date
 from pathlib import Path
@@ -1219,6 +1220,53 @@ def test_download_and_chunk_hits_hydrates_missing_snippet_when_enabled(
     assert enriched[0].snippet is not None
 
 
+def test_download_and_chunk_hits_warns_when_no_accessions_downloaded(
+    tmp_path: Path,
+    monkeypatch,
+    caplog,
+) -> None:
+    settings = RetrieveSettings(
+        email="test@example.com",
+        symbols=["ABC"],
+        queries=["warranty"],
+        sections=["1A"],
+        dl_path=tmp_path / "downloads",
+        out_path=tmp_path / "outputs",
+        download_missing=True,
+    )
+    hit = RetrievalHit(
+        symbol="ABC",
+        query="warranty accrual",
+        accession_number="0000123456-26-000109",
+        form_type="10-K",
+        filed_date="2026-02-11",
+        company_name="ABC Corp",
+        cik="0000123456",
+        score=0.73,
+        edgar_url="https://example.com",
+        snippet=None,
+    )
+
+    monkeypatch.setattr(
+        "sec_nlp.pipelines.presets.retrieve.steps.download_chunk._find_html_for_accession",
+        lambda **kwargs: None,
+    )
+    monkeypatch.setattr(
+        "sec_nlp.pipelines.presets.retrieve.steps.download_chunk._download_missing_accessions",
+        lambda **kwargs: None,
+    )
+
+    caplog.set_level(logging.WARNING, logger="sec_nlp")
+    enriched = download_and_chunk_hits(
+        symbol="ABC",
+        hits=[hit],
+        settings=settings,
+    )
+
+    assert enriched == [hit]
+    assert "no accessions downloaded" in caplog.text
+
+
 def test_download_and_chunk_hits_uses_stopword_aware_chunk_matching(
     tmp_path: Path,
     monkeypatch,
@@ -1361,6 +1409,7 @@ def test_index_retrieval_hits_upserts_points_with_mock_client(
         out_path=tmp_path / "outputs",
         index_results=True,
         dry_run=False,
+        incremental=False,
     )
     hits = [
         RetrievalHit(
@@ -1499,6 +1548,104 @@ def test_index_retrieval_hits_respects_qdrant_upsert_wait_false(
 
     assert indexed == hits
     assert fake_client.wait_values == [False]
+
+
+def test_index_retrieval_hits_warns_when_ranked_hits_empty(
+    tmp_path: Path,
+    caplog,
+) -> None:
+    settings = RetrieveSettings(
+        email="test@example.com",
+        symbols=["ABC"],
+        queries=["supply chain"],
+        dl_path=tmp_path / "downloads",
+        out_path=tmp_path / "outputs",
+        index_results=True,
+        dry_run=False,
+        incremental=False,
+    )
+
+    caplog.set_level(logging.WARNING, logger="sec_nlp")
+    indexed = index_retrieval_hits(
+        symbol="ABC",
+        hits=[],
+        settings=settings,
+    )
+
+    assert indexed == []
+    assert "no chunks indexed because ranked hits are empty" in caplog.text
+
+
+def test_index_retrieval_hits_warns_when_no_vectors_produced(
+    tmp_path: Path,
+    monkeypatch,
+    caplog,
+) -> None:
+    settings = RetrieveSettings(
+        email="test@example.com",
+        symbols=["ABC"],
+        queries=["supply chain"],
+        dl_path=tmp_path / "downloads",
+        out_path=tmp_path / "outputs",
+        index_results=True,
+        dry_run=False,
+        incremental=False,
+    )
+    hits = [
+        RetrievalHit(
+            symbol="ABC",
+            query="supply chain",
+            accession_number="0000123456-26-000121",
+            form_type="10-K",
+            filed_date="2026-02-13",
+            company_name="ABC Corp",
+            cik="0000123456",
+            score=0.44,
+            edgar_url="https://example.com/4",
+            snippet="supply agreement terms",
+            section_type="item",
+            section_number="1A",
+            chunk_index=3,
+        )
+    ]
+
+    class _FakeEmbedder:
+        pass
+
+    class _FakeQdrant:
+        def collection_exists(self, collection_name: str) -> bool:
+            return True
+
+        def create_collection(self, **kwargs) -> None:
+            return None
+
+        def upsert(self, *, collection_name: str, points, wait: bool) -> None:
+            raise AssertionError(
+                "upsert should not be called when vectors are empty"
+            )
+
+    monkeypatch.setattr(
+        "sec_nlp.pipelines.vector.config.VectorConfig.setup_embedding_model",
+        lambda self: (_FakeEmbedder(), 2),
+    )
+    monkeypatch.setattr(
+        "sec_nlp.pipelines.vector.config.VectorConfig.batch_embed_documents",
+        lambda self, embedder, texts, show_progress=False: [[]],
+    )
+    monkeypatch.setattr(
+        "sec_nlp.pipelines.vector.config.VectorConfig.setup_qdrant_client",
+        lambda self: _FakeQdrant(),
+    )
+
+    caplog.set_level(logging.WARNING, logger="sec_nlp")
+    indexed = index_retrieval_hits(
+        symbol="ABC",
+        hits=hits,
+        settings=settings,
+    )
+
+    assert indexed == hits
+    assert "no chunks indexed because no vectors were produced" in caplog.text
 
 
 def test_index_retrieval_hits_skips_existing_points_in_incremental_mode(

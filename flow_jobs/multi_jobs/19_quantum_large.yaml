@@ -1,0 +1,74 @@
+name: quantum_large_retrieve_chat
+defaults:
+  email: you@example.com
+  symbols:
+  - IONQ
+  - RGTI
+  - QBTS
+  - QUBT
+  - IBM
+  - HON
+  forms:
+  - 10-K
+  - 10-Q
+  - 8-K
+  - 6-K
+  - 20-F
+  start_date: '2021-01-01'
+  dry_run: false
+on_failure: stop
+stages:
+- id: retrieve_seed
+  pipeline: retrieve
+  overrides:
+    queries:
+    - quantum hardware roadmap error correction qubit fidelity hybrid workloads disclosures
+      and trend changes
+    - government contracts commercial pilots bookings conversion impacts on revenue
+      visibility and risk factors
+    - funding runway dilution risk IP portfolio commentary with quantified impact
+      where available
+    - cloud quantum access talent retention R&D intensity sensitivity and scenario
+      planning
+    - strategic partnerships manufacturing scale go-to-market execution execution
+      milestones and bottlenecks
+    - liquidity cash flow working capital revolving credit debt covenant compliance
+      updates
+    - capital expenditure project timeline budget variance and return-on-investment
+      assumptions
+    - major customer concentration contract renewal risk termination clauses and pricing
+      resets
+    - inflation labor freight energy input costs and gross-margin pass-through dynamics
+    - foreign exchange volatility and hedging strategy implications for near-term
+      guidance
+    - litigation environmental liabilities contingent reserves and remediation cost
+      outlook
+    output_format: json
+    top_k: 95
+    efts_candidates: 480
+    hydrate_top_n: 140
+    query_term_min_hits: 1
+    query_term_min_ratio: 0.2
+    stopword_aware_lexical: true
+    rerank_with_embeddings: true
+    index_results: true
+    vdb:
+      collection_name: flow_quantum_large
+- id: chat_answer
+  pipeline: chat
+  seed_from_stage: retrieve_seed
+  overrides:
+    question: Assess commercialization readiness and funding durability across the
+      quantum basket, and identify which names have the clearest path to scalable
+      revenue.
+    interactive: false
+    output_format: yaml
+    collections:
+    - flow_quantum_large
+    top_k: 14
+    max_context_chunks: 12
+    context_token_budget: 7800
+    include_market_context: true
+    include_news_context: true
+    rerank_mode: mmr
+    generation_token_cap: 896

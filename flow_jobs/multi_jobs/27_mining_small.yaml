@@ -1,0 +1,64 @@
+name: mining_small_retrieve_chat
+defaults:
+  email: you@example.com
+  symbols:
+  - FCX
+  - SCCO
+  - BHP
+  - RIO
+  - VALE
+  - NEM
+  forms:
+  - 10-K
+  - 10-Q
+  - 8-K
+  - 6-K
+  - 20-F
+  start_date: '2021-01-01'
+  dry_run: false
+on_failure: stop
+stages:
+- id: retrieve_seed
+  pipeline: retrieve
+  overrides:
+    queries:
+    - ore grade trends reserve replacement mine plan revisions smelter treatment charges
+      disclosures and trend changes
+    - royalty exposure permitting and ESG labor negotiations impacts on revenue visibility
+      and risk factors
+    - energy input costs transport logistics commodity price sensitivity commentary
+      with quantified impact where available
+    - hedging policy balance sheet leverage project development sensitivity and scenario
+      planning
+    - water rights geopolitical jurisdiction risk production guidance variance execution
+      milestones and bottlenecks
+    - liquidity cash flow working capital revolving credit debt covenant compliance
+      updates
+    output_format: json
+    top_k: 40
+    efts_candidates: 220
+    hydrate_top_n: 60
+    query_term_min_hits: 1
+    query_term_min_ratio: 0.2
+    stopword_aware_lexical: true
+    rerank_with_embeddings: true
+    index_results: false
+    vdb:
+      collection_name: flow_mining_small
+- id: chat_answer
+  pipeline: chat
+  seed_from_stage: retrieve_seed
+  overrides:
+    question: Evaluate operational execution, jurisdiction risk, and margin sensitivity
+      across this mining basket under different commodity-price scenarios.
+    interactive: false
+    output_format: yaml
+    collections:
+    - flow_mining_small
+    top_k: 10
+    max_context_chunks: 8
+    context_token_budget: 4500
+    include_market_context: true
+    include_news_context: false
+    rerank_mode: score
+    generation_token_cap: 512
