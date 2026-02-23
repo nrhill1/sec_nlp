@@ -83,3 +83,23 @@ def build_stage_result(
         outputs=[str(path) for path in pipeline_result.outputs],
         metadata=normalize_stage_metadata(pipeline_result.metadata),
     )
+
+
+def build_unexecuted_stage_result(
+    *,
+    stage: FlowStageSpec,
+    success: bool,
+    skipped: bool,
+    error: str,
+) -> FlowStageResult:
+    """Build a stage result for skipped or pre-execution failure states."""
+    return FlowStageResult(
+        stage_id=stage.id,
+        pipeline=stage.pipeline,
+        success=success,
+        skipped=skipped,
+        error=error,
+        duration_seconds=0.0,
+        outputs=[],
+        metadata={},
+    )

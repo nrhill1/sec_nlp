@@ -17,6 +17,7 @@ from sec_nlp.app.flows.runnables import (
     RetrieveFlowInvokeInput,
     RetrieveFlowRunnable,
 )
+from sec_nlp.app.flows.runnables.utils import build_unexecuted_stage_result
 from sec_nlp.pipelines.vector import clear_runtime_caches
 from sec_nlp.types import JsonValue
 
@@ -40,15 +41,11 @@ class FlowRunner:
             failed_at: int | None = None
             for idx, stage in enumerate(self.spec.stages):
                 if not self._should_run_stage(stage, previous):
-                    skipped = FlowStageResult(
-                        stage_id=stage.id,
-                        pipeline=stage.pipeline,
+                    skipped = build_unexecuted_stage_result(
+                        stage=stage,
                         success=True,
                         skipped=True,
                         error="Skipped because stage condition was not met",
-                        duration_seconds=0.0,
-                        outputs=[],
-                        metadata={},
                     )
                     stage_results.append(skipped)
                     previous = skipped
@@ -66,15 +63,11 @@ class FlowRunner:
             if failed_at is not None and failed_at + 1 < len(self.spec.stages):
                 for stage in self.spec.stages[failed_at + 1 :]:
                     stage_results.append(
-                        FlowStageResult(
-                            stage_id=stage.id,
-                            pipeline=stage.pipeline,
+                        build_unexecuted_stage_result(
+                            stage=stage,
                             success=False,
                             skipped=True,
                             error="Skipped due to previous stage failure",
-                            duration_seconds=0.0,
-                            outputs=[],
-                            metadata={},
                         )
                     )
 

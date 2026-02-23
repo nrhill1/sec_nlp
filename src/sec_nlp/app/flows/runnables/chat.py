@@ -20,6 +20,7 @@ from .utils import (
     ChatStageConfigValue,
     build_chat_defaults_payload,
     build_stage_result,
+    build_unexecuted_stage_result,
 )
 
 
@@ -71,18 +72,14 @@ class ChatFlowRunnable(
                 self.stage.seed_from_stage
             )
             if seed_bundle is None:
-                return FlowStageResult(
-                    stage_id=self.stage.id,
-                    pipeline=self.stage.pipeline,
+                return build_unexecuted_stage_result(
+                    stage=self.stage,
                     success=False,
                     skipped=False,
                     error=(
                         f"Missing seeded artifact from stage "
                         f"'{self.stage.seed_from_stage}'"
                     ),
-                    duration_seconds=0.0,
-                    outputs=[],
-                    metadata={},
                 )
             payload["seed_context"] = seed_bundle
 

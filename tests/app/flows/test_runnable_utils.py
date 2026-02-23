@@ -10,6 +10,7 @@ from sec_nlp.app.flows.runnables.utils import (
     build_chat_defaults_payload,
     build_stage_defaults_payload,
     build_stage_result,
+    build_unexecuted_stage_result,
     normalize_stage_metadata,
     short_id_or_none,
 )
@@ -102,3 +103,29 @@ def test_build_stage_result_converts_paths_and_metadata() -> None:
     assert stage_result.outputs == ["/tmp/output.json"]
     assert stage_result.run_short_id is None
     assert stage_result.metadata["path"] == "/tmp/nested.txt"
+
+
+def test_build_unexecuted_stage_result_respects_skipped_state() -> None:
+    stage = FlowStageSpec(
+        id="chat_answer",
+        pipeline="chat",
+        overrides={},
+    )
+
+    missing_seed = build_unexecuted_stage_result(
+        stage=stage,
+        success=False,
+        skipped=False,
+        error="Missing seeded artifact",
+    )
+    skipped = build_unexecuted_stage_result(
+        stage=stage,
+        success=False,
+        skipped=True,
+        error="Skipped due to previous stage failure",
+    )
+
+    assert missing_seed.success is False
+    assert missing_seed.skipped is False
+    assert skipped.success is False
+    assert skipped.skipped is True
