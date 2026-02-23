@@ -247,7 +247,7 @@ def setup_logging(
     global _logging_configured
 
     if isinstance(level, str):
-        level = logging.__dict__.get(level.upper(), logging.INFO)
+        level = getattr(logging, level.upper(), logging.INFO)
 
     formats: dict[str, str] = {
         "simple": "%(levelname)s - %(message)s",
@@ -369,7 +369,7 @@ class LogContext:
         self.level = (
             level
             if isinstance(level, int)
-            else logging.__dict__.get(level.upper(), logging.INFO)
+            else getattr(logging, level.upper(), logging.INFO)
         )
         self.original_level = logger.level
 
@@ -506,8 +506,11 @@ def log_divider(
     for handler in logger.handlers or logging.getLogger().handlers:
         if isinstance(handler, logging.FileHandler):
             try:
-                handler.stream.write(plain_line)
-                handler.stream.flush()
+                stream = handler.stream
+                if stream is None:
+                    continue
+                stream.write(plain_line)
+                stream.flush()
             except Exception:
                 pass
 

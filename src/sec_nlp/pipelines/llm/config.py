@@ -1,14 +1,13 @@
 # src/sec_nlp/pipelines/llm/config.py
 """LLM configuration for pipelines."""
 
-import os
 from functools import cached_property
 from pathlib import Path
 
 from langchain_ollama.llms import OllamaLLM
 from pydantic import BaseModel, ConfigDict, Field
 
-from sec_nlp.core.llm.ollama import OllamaKwargs
+from sec_nlp.core.llm.ollama import OllamaKwargs, resolve_ollama_base_url
 
 
 class LLMConfig(BaseModel):
@@ -25,9 +24,7 @@ class LLMConfig(BaseModel):
     )
 
     base_url: str | None = Field(
-        default_factory=lambda: os.getenv(
-            "OLLAMA_BASE_URL", "http://localhost:11434"
-        ),
+        default_factory=resolve_ollama_base_url,
         description="Base URL for the Ollama server",
     )
     timeout: int = Field(

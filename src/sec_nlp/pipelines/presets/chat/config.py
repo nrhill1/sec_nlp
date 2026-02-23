@@ -13,6 +13,8 @@ from sec_nlp.pipelines.base.config import BasePipelineSettings
 from sec_nlp.pipelines.llm.config import LLMConfig
 from sec_nlp.pipelines.vector.config import VectorConfig
 
+from .bridge import ChatSeedBundle
+
 
 class ChatHistoryTurn(BaseModel):
     """Single turn used as conversation history input."""
@@ -77,6 +79,14 @@ class ChatSettings(BasePipelineSettings):
                 "action": "extend",
             }
         },
+    )
+    seed_context: ChatSeedBundle | None = Field(
+        default=None,
+        description=(
+            "Optional in-memory seeded context bundle from an upstream flow stage. "
+            "When provided, chat can bypass vector collection search."
+        ),
+        exclude=True,
     )
     top_k: int = Field(
         default=8,

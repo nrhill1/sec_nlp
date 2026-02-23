@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import json
+import logging
 import sqlite3
+from asyncio import AbstractEventLoop
 from datetime import date
 from pathlib import Path
 from types import SimpleNamespace
@@ -13,6 +15,7 @@ from langchain_core.documents import Document
 from sec_nlp.core.edgar.efts_models import EFTSBatchResult, EFTSHit
 from sec_nlp.core.edgar.filing_mode import FilingMode
 from sec_nlp.pipelines.presets.retrieve import (
+    RetrieveChatSeedBundle,
     RetrievePipeline,
     RetrieveSettings,
 )
@@ -396,6 +399,92 @@ def test_candidate_search_filters_cross_symbol_hits() -> None:
     assert filtered[0].cik == "0001326801"
 
 
+def test_candidates_from_batch_results_logs_hit_counts_at_info(
+    tmp_path: Path,
+    caplog,
+) -> None:
+    settings = RetrieveSettings(
+        email="test@example.com",
+        symbols=["MP"],
+        queries=["rare earth"],
+        dl_path=tmp_path / "downloads",
+        out_path=tmp_path / "outputs",
+    )
+    searcher = object.__new__(candidate_search_steps.RetrieveCandidateSearcher)
+    searcher._settings = settings
+    searcher._symbol_cik_cache = {}
+
+    batch_results = [
+        EFTSBatchResult(
+            query="rare earth",
+            hits=[
+                EFTSHit(
+                    accession_number="0001326801-26-000001",
+                    cik="0001326801",
+                    company_name="MP Materials Corp. (MP) (CIK 0001326801)",
+                    tickers=["MP"],
+                    form_type="10-K",
+                    filed_date=date(2026, 2, 1),
+                    score=9.1,
+                ),
+                EFTSHit(
+                    accession_number="0000915913-26-000018",
+                    cik="0000915913",
+                    company_name="ALBEMARLE CORP (ALB) (CIK 0000915913)",
+                    tickers=["ALB"],
+                    form_type="10-K",
+                    filed_date=date(2026, 2, 11),
+                    score=9.2,
+                ),
+            ],
+            total=2,
+            error=None,
+        )
+    ]
+
+    caplog.set_level(logging.INFO, logger="sec_nlp")
+    candidates = searcher._candidates_from_batch_results(
+        normalized_symbol="MP",
+        queries=["rare earth"],
+        batch_results=batch_results,
+    )
+
+    assert len(candidates["rare earth"]) == 1
+    assert "EFTS hits for MP query='rare earth': 1" in caplog.text
+    assert "Filtered " not in caplog.text
+
+
+def test_scope_query_to_symbol_prefixes_missing_symbol() -> None:
+    scoped = candidate_search_steps._scope_query_to_symbol(
+        query="liquidity risk and capex",
+        symbol="CDE",
+    )
+    assert scoped == "CDE liquidity risk and capex"
+
+
+def test_scope_query_to_symbol_keeps_existing_symbol_token() -> None:
+    scoped = candidate_search_steps._scope_query_to_symbol(
+        query="CDE liquidity risk and capex",
+        symbol="CDE",
+    )
+    assert scoped == "CDE liquidity risk and capex"
+
+
+def test_scope_queries_for_symbol_returns_reverse_map() -> None:
+    scoped_queries, reverse_map = (
+        candidate_search_steps._scope_queries_for_symbol(
+            queries=["liquidity risk", "CDE debt covenant"],
+            symbol="CDE",
+        )
+    )
+
+    assert scoped_queries == ["CDE liquidity risk", "CDE debt covenant"]
+    assert reverse_map == {
+        "CDE liquidity risk": "liquidity risk",
+        "CDE debt covenant": "CDE debt covenant",
+    }
+
+
 def test_candidate_search_keeps_hits_when_cik_matches_without_ticker() -> None:
     hits = [
         EFTSHit(
@@ -698,6 +787,66 @@ def test_candidates_from_batch_results_uses_cik_lookup_when_fast_match_empty(
     )
 
 
+def test_candidate_search_many_scopes_queries_and_remaps_keys(
+    monkeypatch,
+) -> None:
+    settings = RetrieveSettings(
+        email="test@example.com",
+        symbols=["CDE", "AAPL"],
+        queries=["liquidity risk"],
+        forms=["10-K"],
+    )
+    searcher = object.__new__(candidate_search_steps.RetrieveCandidateSearcher)
+    searcher._settings = settings
+
+    class _FakeLoop:
+        def run_until_complete(self, coro):
+            coro.close()
+            return [[], []]
+
+    searcher._loop = _FakeLoop()
+    searcher._symbol_cik_cache = {}
+
+    def _fake_candidates_from_batch_results(
+        *,
+        normalized_symbol: str | None,
+        queries,
+        batch_results,
+    ):
+        _ = batch_results
+        assert normalized_symbol is not None
+        hit = _efts_hit(
+            accession=f"{normalized_symbol}-0001",
+            filed=date(2026, 2, 1),
+            score=0.9,
+            company=f"{normalized_symbol} Corp",
+        )
+        return {queries[0]: [hit]}
+
+    searcher._candidates_from_batch_results = (
+        _fake_candidates_from_batch_results
+    )
+
+    def _noop_set_event_loop(loop: AbstractEventLoop | None) -> None:
+        _ = loop
+
+    monkeypatch.setattr(
+        candidate_search_steps.asyncio,
+        "set_event_loop",
+        _noop_set_event_loop,
+    )
+
+    results = searcher.search_many(
+        symbols=["CDE", "AAPL"],
+        queries=["liquidity risk"],
+    )
+
+    assert list(results["CDE"].keys()) == ["liquidity risk"]
+    assert list(results["AAPL"].keys()) == ["liquidity risk"]
+    assert len(results["CDE"]["liquidity risk"]) == 1
+    assert len(results["AAPL"]["liquidity risk"]) == 1
+
+
 def test_retrieve_pipeline_run_writes_outputs_with_mocked_search(
     tmp_path: Path,
     monkeypatch,
@@ -760,6 +909,47 @@ def test_retrieve_pipeline_run_writes_outputs_with_mocked_search(
     assert lines[2].startswith("# run_id:")
     assert lines[3].startswith("# run_short_id_display:")
     assert lines[4].startswith("symbol,query")
+
+
+def test_retrieve_pipeline_run_for_flow_returns_seed_bundle(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    config = RetrieveSettings(
+        email="test@example.com",
+        symbols=["ABC"],
+        queries=["supply chain"],
+        dl_path=tmp_path / "downloads",
+        out_path=tmp_path / "outputs",
+        output_format="json",
+        top_k=5,
+        download_missing=False,
+    )
+    candidates = {
+        "supply chain": [
+            _efts_hit(
+                accession="0000123456-26-000101",
+                filed=date(2026, 2, 3),
+                score=0.88,
+                company="ABC Co",
+            )
+        ]
+    }
+    monkeypatch.setattr(
+        "sec_nlp.pipelines.presets.retrieve.pipeline.run_candidate_search",
+        lambda symbol, queries, settings: candidates,
+    )
+
+    result, bundle = RetrievePipeline(config=config).run_for_flow()
+
+    assert result.success is True
+    assert isinstance(bundle, RetrieveChatSeedBundle)
+    assert bundle.run_id == str(config.run_id)
+    assert bundle.symbols == ["ABC"]
+    assert bundle.queries == ["supply chain"]
+    assert len(bundle.chunks) == 1
+    assert bundle.chunks[0].collection == "retrieve"
+    assert bundle.chunks[0].snippet
 
 
 def test_retrieve_pipeline_runs_unscoped_without_symbols(
@@ -1177,6 +1367,53 @@ def test_download_and_chunk_hits_hydrates_missing_snippet_when_enabled(
     assert enriched[0].snippet is not None
 
 
+def test_download_and_chunk_hits_warns_when_no_accessions_downloaded(
+    tmp_path: Path,
+    monkeypatch,
+    caplog,
+) -> None:
+    settings = RetrieveSettings(
+        email="test@example.com",
+        symbols=["ABC"],
+        queries=["warranty"],
+        sections=["1A"],
+        dl_path=tmp_path / "downloads",
+        out_path=tmp_path / "outputs",
+        download_missing=True,
+    )
+    hit = RetrievalHit(
+        symbol="ABC",
+        query="warranty accrual",
+        accession_number="0000123456-26-000109",
+        form_type="10-K",
+        filed_date="2026-02-11",
+        company_name="ABC Corp",
+        cik="0000123456",
+        score=0.73,
+        edgar_url="https://example.com",
+        snippet=None,
+    )
+
+    monkeypatch.setattr(
+        "sec_nlp.pipelines.presets.retrieve.steps.download_chunk._find_html_for_accession",
+        lambda **kwargs: None,
+    )
+    monkeypatch.setattr(
+        "sec_nlp.pipelines.presets.retrieve.steps.download_chunk._download_missing_accessions",
+        lambda **kwargs: None,
+    )
+
+    caplog.set_level(logging.WARNING, logger="sec_nlp")
+    enriched = download_and_chunk_hits(
+        symbol="ABC",
+        hits=[hit],
+        settings=settings,
+    )
+
+    assert enriched == [hit]
+    assert "no accessions downloaded" in caplog.text
+
+
 def test_download_and_chunk_hits_uses_stopword_aware_chunk_matching(
     tmp_path: Path,
     monkeypatch,
@@ -1319,6 +1556,7 @@ def test_index_retrieval_hits_upserts_points_with_mock_client(
         out_path=tmp_path / "outputs",
         index_results=True,
         dry_run=False,
+        incremental=False,
     )
     hits = [
         RetrievalHit(
@@ -1457,6 +1695,104 @@ def test_index_retrieval_hits_respects_qdrant_upsert_wait_false(
 
     assert indexed == hits
     assert fake_client.wait_values == [False]
+
+
+def test_index_retrieval_hits_warns_when_ranked_hits_empty(
+    tmp_path: Path,
+    caplog,
+) -> None:
+    settings = RetrieveSettings(
+        email="test@example.com",
+        symbols=["ABC"],
+        queries=["supply chain"],
+        dl_path=tmp_path / "downloads",
+        out_path=tmp_path / "outputs",
+        index_results=True,
+        dry_run=False,
+        incremental=False,
+    )
+
+    caplog.set_level(logging.WARNING, logger="sec_nlp")
+    indexed = index_retrieval_hits(
+        symbol="ABC",
+        hits=[],
+        settings=settings,
+    )
+
+    assert indexed == []
+    assert "no chunks indexed because ranked hits are empty" in caplog.text
+
+
+def test_index_retrieval_hits_warns_when_no_vectors_produced(
+    tmp_path: Path,
+    monkeypatch,
+    caplog,
+) -> None:
+    settings = RetrieveSettings(
+        email="test@example.com",
+        symbols=["ABC"],
+        queries=["supply chain"],
+        dl_path=tmp_path / "downloads",
+        out_path=tmp_path / "outputs",
+        index_results=True,
+        dry_run=False,
+        incremental=False,
+    )
+    hits = [
+        RetrievalHit(
+            symbol="ABC",
+            query="supply chain",
+            accession_number="0000123456-26-000121",
+            form_type="10-K",
+            filed_date="2026-02-13",
+            company_name="ABC Corp",
+            cik="0000123456",
+            score=0.44,
+            edgar_url="https://example.com/4",
+            snippet="supply agreement terms",
+            section_type="item",
+            section_number="1A",
+            chunk_index=3,
+        )
+    ]
+
+    class _FakeEmbedder:
+        pass
+
+    class _FakeQdrant:
+        def collection_exists(self, collection_name: str) -> bool:
+            return True
+
+        def create_collection(self, **kwargs) -> None:
+            return None
+
+        def upsert(self, *, collection_name: str, points, wait: bool) -> None:
+            raise AssertionError(
+                "upsert should not be called when vectors are empty"
+            )
+
+    monkeypatch.setattr(
+        "sec_nlp.pipelines.vector.config.VectorConfig.setup_embedding_model",
+        lambda self: (_FakeEmbedder(), 2),
+    )
+    monkeypatch.setattr(
+        "sec_nlp.pipelines.vector.config.VectorConfig.batch_embed_documents",
+        lambda self, embedder, texts, show_progress=False: [[]],
+    )
+    monkeypatch.setattr(
+        "sec_nlp.pipelines.vector.config.VectorConfig.setup_qdrant_client",
+        lambda self: _FakeQdrant(),
+    )
+
+    caplog.set_level(logging.WARNING, logger="sec_nlp")
+    indexed = index_retrieval_hits(
+        symbol="ABC",
+        hits=hits,
+        settings=settings,
+    )
+
+    assert indexed == hits
+    assert "no chunks indexed because no vectors were produced" in caplog.text
 
 
 def test_index_retrieval_hits_skips_existing_points_in_incremental_mode(

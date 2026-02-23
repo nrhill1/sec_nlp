@@ -42,6 +42,7 @@ SEC/market intelligence toolkit with Python pipeline orchestration and Rust-back
 - `sec-nlp qdrant` - Qdrant container + collection management
 - `sec-nlp runs` - run registry inspection/pruning
 - `sec-nlp clean` - remove downloads/outputs/logs
+- `sec-nlp flow` - run multi-stage flow specs (for example `retrieve -> chat`)
 - `sec-nlp version` - current package version
 
 ## Quickstart
@@ -75,9 +76,10 @@ At minimum, set email for whichever pipeline(s) you run.
 
 ```bash
 # .env examples
-ANALYZE_EMAIL=you@example.com
-EXB_EMAIL=you@example.com
-WARRANTY_EMAIL=you@example.com
+SEC_NLP_OLLAMA_BASE_URL=http://localhost:11434
+SEC_NLP_ANALYZE_EMAIL=you@example.com
+SEC_NLP_EXB_EMAIL=you@example.com
+SEC_NLP_WARRANTY_EMAIL=you@example.com
 SEC_NLP_FINANCIALS_EMAIL=you@example.com
 SEC_NLP_HOLDINGS_EMAIL=you@example.com
 SEC_NLP_INSIDER_EMAIL=you@example.com
@@ -117,6 +119,46 @@ sec-nlp retrieve AAPL --queries "supply chain" "pricing pressure"
 sec-nlp chat AAPL --question "What did management say about warranty risk?"
 ```
 
+### 6) Run a single multi-pipeline flow (retrieve -> chat)
+
+Create a flow spec (YAML or JSON), then validate/run it:
+
+```bash
+cat > flow_retrieve_chat.yaml <<'YAML'
+name: retrieve_chat
+defaults:
+  email: you@example.com
+  symbols: [AAPL]
+stages:
+  - id: retrieve_seed
+    pipeline: retrieve
+    overrides:
+      queries: ["supply chain risk", "pricing pressure"]
+      output_format: json
+  - id: chat_answer
+    pipeline: chat
+    seed_from_stage: retrieve_seed
+    overrides:
+      question: "Summarize supply-chain and pricing risks with citations."
+      interactive: false
+      output_format: json
+YAML
+
+sec-nlp flow validate --spec flow_retrieve_chat.yaml
+sec-nlp flow run --spec flow_retrieve_chat.yaml
+```
+
+Prebuilt flow packs:
+
+- `/Users/nicolashill/Projects/sec/flow_jobs/multi_jobs`:
+  30 retrieve->chat specs across baskets and size tiers.
+- `/Users/nicolashill/Projects/sec/flow_jobs/merged_basket_high_models`:
+  higher-parameter specs that merge runs into one shared collection per basket
+  (`qwen3-embedding:4b` + `qwen3:8b`).
+- `/Users/nicolashill/Projects/sec/flow_jobs/industry_tier_jobs`:
+  mixed retrieve/chat/flow presets with standardized industry collections split
+  by low/medium/high model tiers.
+
 ## Analyze Presets
 
 Use `--preset <name>` with `sec-nlp analyze`.
@@ -139,9 +181,9 @@ Config precedence:
 
 Pipeline env prefixes:
 
-- `ANALYZE_`
-- `EXB_`
-- `WARRANTY_`
+- `SEC_NLP_ANALYZE_`
+- `SEC_NLP_EXB_`
+- `SEC_NLP_WARRANTY_`
 - `SEC_NLP_FINANCIALS_`
 - `SEC_NLP_HOLDINGS_`
 - `SEC_NLP_INSIDER_`
@@ -150,9 +192,14 @@ Pipeline env prefixes:
 - `SEC_NLP_RETRIEVE_`
 - `SEC_NLP_CHAT_`
 
+Global runtime environment variables:
+
+- `SEC_NLP_OLLAMA_BASE_URL` (preferred)
+- `OLLAMA_BASE_URL` (legacy fallback)
+
 Nested fields:
 
-- Env: `__` delimiters, e.g. `ANALYZE_LLM__MODEL_NAME=llama3.2:1b`
+- Env: `__` delimiters, e.g. `SEC_NLP_ANALYZE_LLM__MODEL_NAME=llama3.2:1b`
 - CLI: dot notation, e.g. `--llm.model-name`, `--search.queries`, `--vdb.collection-name`
 
 ## Outputs and Run Layout

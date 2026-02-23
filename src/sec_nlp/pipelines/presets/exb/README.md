@@ -18,7 +18,7 @@ sec-nlp exb DE --exhibit-categories contracts subsidiaries consents
 
 ## Key Configuration
 
-- Env prefix: `EXB_`
+- Env prefix: `SEC_NLP_EXB_`
 - `exhibit_categories` / `exhibit_numbers`
 - `contract_categories` and `search_terms`
 - `search_only` to skip indexing and query existing vectors

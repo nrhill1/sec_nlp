@@ -31,7 +31,8 @@ Implementation layout:
 ## How to run
 
 Prereqs:
-- Set `ANALYZE_EMAIL` (required by SEC EDGAR).
+- Set `SEC_NLP_ANALYZE_EMAIL` (required by SEC EDGAR).
+- Env prefix: `SEC_NLP_ANALYZE_`.
 - Start Ollama and pull the LLM/embedding models you plan to use.
 
 Examples:

@@ -5,6 +5,7 @@ This document captures the current command/pipeline surface in the repository an
 ## CLI Surface
 
 ### Pipeline commands
+
 - `analyze`
 - `exb`
 - `warranty`
@@ -17,11 +18,13 @@ This document captures the current command/pipeline surface in the repository an
 - `chat`
 
 ### Utility commands
+
 - `efts`
 - `market`
 - `qdrant`
 - `runs`
 - `clean`
+- `flow`
 - `version`
 
 ## Pipeline Inventory
@@ -104,9 +107,9 @@ outputs/<run_timestamp>/chat/<SYMBOL|ALL>/<symbol>_chat_<run_id>_{transcript|sum
 
 ## Environment Prefixes
 
-- `ANALYZE_`
-- `EXB_`
-- `WARRANTY_`
+- `SEC_NLP_ANALYZE_`
+- `SEC_NLP_EXB_`
+- `SEC_NLP_WARRANTY_`
 - `SEC_NLP_FINANCIALS_`
 - `SEC_NLP_HOLDINGS_`
 - `SEC_NLP_INSIDER_`
@@ -114,6 +117,11 @@ outputs/<run_timestamp>/chat/<SYMBOL|ALL>/<symbol>_chat_<run_id>_{transcript|sum
 - `SEC_NLP_EVENTS_`
 - `SEC_NLP_RETRIEVE_`
 - `SEC_NLP_CHAT_`
+
+Global runtime environment variables:
+
+- `SEC_NLP_OLLAMA_BASE_URL` (preferred)
+- `OLLAMA_BASE_URL` (legacy fallback)
 
 ## Extension Dependencies
 

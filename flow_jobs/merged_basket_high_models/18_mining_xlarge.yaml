@@ -1,0 +1,93 @@
+name: mining_xlarge_merged_hq_retrieve_chat
+defaults:
+  email: you@example.com
+  symbols:
+  - FCX
+  - SCCO
+  - BHP
+  - RIO
+  - VALE
+  - NEM
+  forms:
+  - 10-K
+  - 10-Q
+  - 8-K
+  - 6-K
+  - 20-F
+  start_date: '2021-01-01'
+  dry_run: false
+on_failure: stop
+stages:
+- id: retrieve_seed
+  pipeline: retrieve
+  overrides:
+    queries:
+    - ore grade trends reserve replacement mine plan revisions smelter treatment charges
+      disclosures and trend changes
+    - royalty exposure permitting and ESG labor negotiations impacts on revenue visibility
+      and risk factors
+    - energy input costs transport logistics commodity price sensitivity commentary
+      with quantified impact where available
+    - hedging policy balance sheet leverage project development sensitivity and scenario
+      planning
+    - water rights geopolitical jurisdiction risk production guidance variance execution
+      milestones and bottlenecks
+    - liquidity cash flow working capital revolving credit debt covenant compliance
+      updates
+    - capital expenditure project timeline budget variance and return-on-investment
+      assumptions
+    - major customer concentration contract renewal risk termination clauses and pricing
+      resets
+    - inflation labor freight energy input costs and gross-margin pass-through dynamics
+    - foreign exchange volatility and hedging strategy implications for near-term
+      guidance
+    - litigation environmental liabilities contingent reserves and remediation cost
+      outlook
+    - inventory strategy lead-time management dual sourcing localization and continuity
+      planning
+    - management outlook revisions, guidance confidence bands, and downside risk triggers
+    - board strategy for financing, partnership optionality, and portfolio optimization
+    output_format: json
+    top_k: 170
+    efts_candidates: 850
+    hydrate_top_n: 220
+    query_term_min_hits: 0
+    query_term_min_ratio: 0.0
+    stopword_aware_lexical: true
+    rerank_with_embeddings: true
+    index_results: true
+    vdb:
+      collection_name: industry_mining_high
+      embedding_model: qwen3-embedding:4b
+      vector_size: 2560
+      qdrant_url: http://localhost:6333
+      qdrant_location: null
+- id: chat_answer
+  pipeline: chat
+  seed_from_stage: retrieve_seed
+  overrides:
+    question: Evaluate operational execution, jurisdiction risk, and margin sensitivity
+      across this mining basket under different commodity-price scenarios.
+    interactive: false
+    output_format: yaml
+    collections:
+    - industry_mining_high
+    top_k: 20
+    max_context_chunks: 18
+    context_token_budget: 13500
+    include_market_context: true
+    include_news_context: true
+    rerank_mode: mmr
+    generation_token_cap: 1536
+    llm:
+      model_name: qwen3:8b
+      require_json: false
+      temperature: 0.05
+      max_new_tokens: 1536
+      num_ctx: 32768
+    vdb:
+      collection_name: industry_mining_high
+      embedding_model: qwen3-embedding:4b
+      vector_size: 2560
+      qdrant_url: http://localhost:6333
+      qdrant_location: null

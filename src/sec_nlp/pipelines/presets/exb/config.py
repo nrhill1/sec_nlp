@@ -31,7 +31,7 @@ class ExhibitConfig(BasePipelineSettings):
     """Configuration for SEC exhibit extraction pipeline."""
 
     model_config = SettingsConfigDict(
-        env_prefix="EXB_",
+        env_prefix="SEC_NLP_EXB_",
     )
 
     pipeline_type: ClassVar[Literal["exhibit"]] = "exhibit"

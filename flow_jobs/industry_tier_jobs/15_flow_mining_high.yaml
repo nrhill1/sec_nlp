@@ -1,0 +1,75 @@
+name: mining_high_flow_preset
+defaults:
+  email: you@example.com
+  symbols:
+  - FCX
+  - SCCO
+  - BHP
+  - RIO
+  - VALE
+  - NEM
+  forms:
+  - 10-K
+  - 10-Q
+  - 8-K
+  - 6-K
+  - 20-F
+  start_date: '2021-01-01'
+  dry_run: false
+on_failure: stop
+stages:
+- id: retrieve_seed
+  pipeline: retrieve
+  overrides:
+    queries:
+    - ore grade trend and reserve replacement implications for medium-term output
+    - cost curve position under energy freight and labor inflation
+    - jurisdiction risk permitting challenges and fiscal regime uncertainty
+    - smelter and refining constraints plus treatment charge pressure
+    - water tailings and ESG compliance liabilities with potential capex drag
+    - balance sheet flexibility under commodity downside scenarios
+    - project execution slippage and ramp reliability indicators
+    output_format: json
+    top_k: 150
+    efts_candidates: 850
+    hydrate_top_n: 220
+    query_term_min_hits: 0
+    query_term_min_ratio: 0.0
+    stopword_aware_lexical: true
+    rerank_with_embeddings: true
+    index_results: true
+    vdb:
+      collection_name: industry_mining_high
+      embedding_model: qwen3-embedding:4b
+      vector_size: 2560
+      qdrant_url: http://localhost:6333
+      qdrant_location: null
+- id: chat_answer
+  pipeline: chat
+  seed_from_stage: retrieve_seed
+  overrides:
+    question: Compare cost resilience, project execution risk, and jurisdiction exposure
+      across this mining basket based on filing evidence.
+    interactive: false
+    output_format: yaml
+    collections:
+    - industry_mining_high
+    top_k: 16
+    max_context_chunks: 16
+    context_token_budget: 12000
+    include_market_context: true
+    include_news_context: true
+    rerank_mode: mmr
+    generation_token_cap: 1280
+    llm:
+      model_name: qwen3:8b
+      require_json: false
+      temperature: 0.05
+      max_new_tokens: 1280
+      num_ctx: 32768
+    vdb:
+      collection_name: industry_mining_high
+      embedding_model: qwen3-embedding:4b
+      vector_size: 2560
+      qdrant_url: http://localhost:6333
+      qdrant_location: null

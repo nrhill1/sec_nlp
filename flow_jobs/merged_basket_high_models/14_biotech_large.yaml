@@ -1,0 +1,88 @@
+name: biotech_large_merged_hq_retrieve_chat
+defaults:
+  email: you@example.com
+  symbols:
+  - MRNA
+  - BNTX
+  - CRSP
+  - REGN
+  - VRTX
+  - GILD
+  forms:
+  - 10-K
+  - 10-Q
+  - 8-K
+  - 6-K
+  - 20-F
+  start_date: '2021-01-01'
+  dry_run: false
+on_failure: stop
+stages:
+- id: retrieve_seed
+  pipeline: retrieve
+  overrides:
+    queries:
+    - clinical trial readouts FDA pathway safety signals pipeline prioritization disclosures
+      and trend changes
+    - patent exclusivity manufacturing capacity commercial launch uptake impacts on
+      revenue visibility and risk factors
+    - reimbursement pressure partnership milestones cash runway commentary with quantified
+      impact where available
+    - R&D spend regulatory delays CMC readiness sensitivity and scenario planning
+    - competitive landscape platform validation M&A optionality execution milestones
+      and bottlenecks
+    - liquidity cash flow working capital revolving credit debt covenant compliance
+      updates
+    - capital expenditure project timeline budget variance and return-on-investment
+      assumptions
+    - major customer concentration contract renewal risk termination clauses and pricing
+      resets
+    - inflation labor freight energy input costs and gross-margin pass-through dynamics
+    - foreign exchange volatility and hedging strategy implications for near-term
+      guidance
+    - litigation environmental liabilities contingent reserves and remediation cost
+      outlook
+    output_format: json
+    top_k: 120
+    efts_candidates: 620
+    hydrate_top_n: 180
+    query_term_min_hits: 0
+    query_term_min_ratio: 0.0
+    stopword_aware_lexical: true
+    rerank_with_embeddings: true
+    index_results: true
+    vdb:
+      collection_name: industry_biotech_high
+      embedding_model: qwen3-embedding:4b
+      vector_size: 2560
+      qdrant_url: http://localhost:6333
+      qdrant_location: null
+- id: chat_answer
+  pipeline: chat
+  seed_from_stage: retrieve_seed
+  overrides:
+    question: Compare pipeline quality, regulatory execution risk, and cash-runway
+      resilience across this biotech basket, focusing on the next 12-18 months.
+    interactive: false
+    output_format: yaml
+    collections:
+    - industry_biotech_high
+    top_k: 16
+    max_context_chunks: 14
+    context_token_budget: 10500
+    include_market_context: true
+    include_news_context: true
+    rerank_mode: mmr
+    generation_token_cap: 1280
+    llm:
+      model_name: qwen3:8b
+      require_json: false
+      temperature: 0.05
+      max_new_tokens: 1280
+      num_ctx: 32768
+    vdb:
+      collection_name: industry_biotech_high
+      embedding_model: qwen3-embedding:4b
+      vector_size: 2560
+      qdrant_url: http://localhost:6333
+      qdrant_location: null

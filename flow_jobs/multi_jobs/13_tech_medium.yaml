@@ -1,0 +1,70 @@
+name: tech_medium_retrieve_chat
+defaults:
+  email: you@example.com
+  symbols:
+  - AAPL
+  - MSFT
+  - NVDA
+  - AMD
+  - AVGO
+  - ORCL
+  forms:
+  - 10-K
+  - 10-Q
+  - 8-K
+  - 6-K
+  - 20-F
+  start_date: '2021-01-01'
+  dry_run: false
+on_failure: stop
+stages:
+- id: retrieve_seed
+  pipeline: retrieve
+  overrides:
+    queries:
+    - AI data center demand GPU supply cloud consumption enterprise backlog disclosures
+      and trend changes
+    - subscription retention semiconductor lead times inventory normalization impacts
+      on revenue visibility and risk factors
+    - pricing discipline gross margin outlook hyperscaler capex commentary with quantified
+      impact where available
+    - customer concentration export restrictions foundry capacity sensitivity and
+      scenario planning
+    - platform adoption free cash flow competitive intensity execution milestones
+      and bottlenecks
+    - liquidity cash flow working capital revolving credit debt covenant compliance
+      updates
+    - capital expenditure project timeline budget variance and return-on-investment
+      assumptions
+    - major customer concentration contract renewal risk termination clauses and pricing
+      resets
+    output_format: json
+    top_k: 60
+    efts_candidates: 320
+    hydrate_top_n: 90
+    query_term_min_hits: 0
+    query_term_min_ratio: 0.0
+    stopword_aware_lexical: true
+    rerank_with_embeddings: true
+    index_results: true
+    vdb:
+      collection_name: flow_tech_medium
+      qdrant_url: http://localhost:6333
+      qdrant_location: null
+- id: chat_answer
+  pipeline: chat
+  seed_from_stage: retrieve_seed
+  overrides:
+    question: Summarize AI-infrastructure and enterprise demand signals for this tech
+      basket, with emphasis on backlog durability, margin risk, and capex efficiency.
+    interactive: false
+    output_format: yaml
+    collections:
+    - flow_tech_medium
+    top_k: 12
+    max_context_chunks: 10
+    context_token_budget: 6000
+    include_market_context: true
+    include_news_context: false
+    rerank_mode: score
+    generation_token_cap: 640

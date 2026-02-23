@@ -1,7 +1,6 @@
 # tests/core/llm/test_ollama.py
 """Unit tests for sec_nlp.core.llm.ollama module."""
 
-import os
 from unittest.mock import MagicMock, patch
 
 from sec_nlp.core.llm.ollama import build_ollama_llm
@@ -76,15 +75,45 @@ class TestBuildOllamaLLM:
         assert llm == mock_instance
 
     @patch("sec_nlp.core.llm.ollama.OllamaLLM")
-    def test_build_ollama_llm_with_env_base_url(
-        self, mock_ollama_class: MagicMock
+    def test_build_ollama_llm_with_sec_nlp_env_base_url(
+        self,
+        mock_ollama_class: MagicMock,
+        monkeypatch,
     ) -> None:
-        """Test that OLLAMA_BASE_URL environment variable is used."""
+        """Test that SEC_NLP_OLLAMA_BASE_URL environment variable is used."""
         mock_instance = MagicMock()
         mock_ollama_class.return_value = mock_instance
 
         env_url = "http://ollama.example.com:8080"
-        os.environ["OLLAMA_BASE_URL"] = env_url
+        monkeypatch.setenv("SEC_NLP_OLLAMA_BASE_URL", env_url)
+        monkeypatch.delenv("OLLAMA_BASE_URL", raising=False)
+
+        llm = build_ollama_llm("llama3.2")
+
+        mock_ollama_class.assert_called_once_with(
+            model="llama3.2",
+            base_url=env_url,
+            temperature=0.1,
+            top_k=10,
+            top_p=0.5,
+            keep_alive=-1,
+            num_gpu=-1,
+        )
+        assert llm == mock_instance
+
+    @patch("sec_nlp.core.llm.ollama.OllamaLLM")
+    def test_build_ollama_llm_with_legacy_env_base_url(
+        self,
+        mock_ollama_class: MagicMock,
+        monkeypatch,
+    ) -> None:
+        """Test that legacy OLLAMA_BASE_URL is still supported."""
+        mock_instance = MagicMock()
+        mock_ollama_class.return_value = mock_instance
+
+        env_url = "http://legacy-ollama.example.com:11434"
+        monkeypatch.delenv("SEC_NLP_OLLAMA_BASE_URL", raising=False)
+        monkeypatch.setenv("OLLAMA_BASE_URL", env_url)
 
         llm = build_ollama_llm("llama3.2")
 
@@ -101,13 +130,16 @@ class TestBuildOllamaLLM:
 
     @patch("sec_nlp.core.llm.ollama.OllamaLLM")
     def test_build_ollama_llm_explicit_url_overrides_env(
-        self, mock_ollama_class: MagicMock
+        self,
+        mock_ollama_class: MagicMock,
+        monkeypatch,
     ) -> None:
         """Test that explicit base_url overrides environment variable."""
         mock_instance = MagicMock()
         mock_ollama_class.return_value = mock_instance
 
-        os.environ["OLLAMA_BASE_URL"] = "http://env-server:11434"
+        monkeypatch.setenv("SEC_NLP_OLLAMA_BASE_URL", "http://env-server:11434")
+        monkeypatch.setenv("OLLAMA_BASE_URL", "http://legacy-server:11434")
         explicit_url = "http://explicit-server:11434"
 
         llm = build_ollama_llm("llama3.2", base_url=explicit_url)

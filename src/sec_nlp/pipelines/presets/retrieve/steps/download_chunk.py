@@ -347,6 +347,7 @@ def download_and_chunk_hits(
             hits_by_accession=hits_by_accession,
             settings=settings,
         )
+        resolved_after_download = 0
         for accession in sorted(missing):
             hit = hits_by_accession.get(accession)
             if hit is None:
@@ -359,6 +360,7 @@ def download_and_chunk_hits(
             )
             if html_path is not None:
                 html_paths[accession] = html_path
+                resolved_after_download += 1
                 logger.debug(
                     "Hydration source resolved after download for %s accession=%s path=%s",
                     symbol,
@@ -371,6 +373,12 @@ def download_and_chunk_hits(
                     symbol,
                     accession,
                 )
+        if settings.download_missing and not resolved_after_download:
+            logger.warning(
+                "Retrieve hydration warning for %s: no accessions downloaded for %d missing accession(s)",
+                symbol,
+                len(missing),
+            )
 
     loader = Loader(
         email=settings.email,

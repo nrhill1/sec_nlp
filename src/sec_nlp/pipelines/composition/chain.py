@@ -156,9 +156,10 @@ class PipelineChain(BaseModel):
         chain_start = perf_counter()
         stage_results: list[StageResult] = []
         all_outputs: list[Path] = []
+        stages_metadata: list[ResultDict] = []
         combined_metadata: ResultDict = {
             "chain_name": self.name,
-            "stages": [],
+            "stages": stages_metadata,
         }
 
         if self.verbose:
@@ -255,7 +256,7 @@ class PipelineChain(BaseModel):
                     "outputs": len(output.outputs),
                     "duration": duration,
                 }
-                combined_metadata["stages"].append(stage_meta)
+                stages_metadata.append(stage_meta)
 
                 # Track failure state
                 if not output.success:

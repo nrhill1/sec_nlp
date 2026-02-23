@@ -447,6 +447,8 @@ class PipelineValidator(BaseModel):
 
         try:
             from qdrant_client import QdrantClient
+
+            _ = QdrantClient
         except ImportError as e:
             error_msg = "qdrant-client not installed"
             self.report.add_check(
@@ -460,35 +462,17 @@ class PipelineValidator(BaseModel):
             raise MissingDependencyException(error_msg) from e
 
         try:
-            qdrant_location = vdb_config.qdrant_location
-            qdrant_url = vdb_config.qdrant_url
-            qdrant_host = vdb_config.qdrant_host
-            qdrant_port = vdb_config.qdrant_port
-            api_key = vdb_config.qdrant_api_key
-
-            if qdrant_location:
-                normalized_location = qdrant_location.strip()
-                if normalized_location == ":memory:":
-                    client = QdrantClient(
-                        location=normalized_location, timeout=5
-                    )
-                    target_message = "embedded Qdrant"
-                else:
-                    client = QdrantClient(path=normalized_location, timeout=5)
-                    target_message = "local Qdrant"
-                target = normalized_location
+            client, target = vdb_config.setup_qdrant_client_with_target()
+            collections = client.get_collections()
+            if target == ":memory:":
                 target_label = "location"
-            else:
-                target = (
-                    qdrant_url
-                    if qdrant_url
-                    else f"http://{qdrant_host}:{qdrant_port}"
-                )
-                client = QdrantClient(url=target, api_key=api_key, timeout=5)
+                target_message = "embedded Qdrant"
+            elif "://" in target:
                 target_label = "url"
                 target_message = "Qdrant"
-
-            collections = client.get_collections()
+            else:
+                target_label = "location"
+                target_message = "local Qdrant"
 
             self.report.add_check(
                 ValidationResult(
