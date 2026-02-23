@@ -18,6 +18,8 @@ from rich.text import Text
 from sec_nlp.core.infra.logger import color_text, visible_length
 from sec_nlp.core.infra.rich_console import create_rich_console
 
+type HeaderRenderable = Group | Align | Panel | Rule | Text
+
 
 def _render_rich(renderable) -> str:
     console = create_rich_console(
@@ -61,6 +63,7 @@ def format_section_header(
     width: int | None = None,
     style: Literal["box", "line", "minimal"] = "box",
     color: str = "cyan",
+    centered: bool = True,
 ) -> str:
     """Create a styled section header for CLI output.
 
@@ -70,10 +73,33 @@ def format_section_header(
         width: Box width (defaults to terminal width)
         style: Header style - 'box' (bordered), 'line' (underlined), 'minimal'
         color: Color for the header
+        centered: Center render output within terminal width
 
     Returns:
         Formatted header string
     """
+    return _render_rich(
+        build_section_header_renderable(
+            title,
+            subtitle=subtitle,
+            width=width,
+            style=style,
+            color=color,
+            centered=centered,
+        )
+    )
+
+
+def build_section_header_renderable(
+    title: str,
+    *,
+    subtitle: str | None = None,
+    width: int | None = None,
+    style: Literal["box", "line", "minimal"] = "box",
+    color: str = "cyan",
+    centered: bool = True,
+) -> HeaderRenderable:
+    """Create a Rich renderable section header for direct console printing."""
     term_width = width if width is not None else get_terminal_width()
     title_text = Text(title, style=color)
     subtitle_text = Text(subtitle, style="dim") if subtitle else None
@@ -82,18 +108,22 @@ def format_section_header(
         text = Text.assemble(title_text, "\n") if subtitle_text else title_text
         if subtitle_text:
             text.append(subtitle_text)
-        return _render_rich(Align.center(text))
+        if centered:
+            return Align.center(text)
+        return text
 
     if style == "line":
         rule = Rule(title_text, style=color)
         if subtitle_text:
-            return _render_rich(
-                Group(
+            if centered:
+                return Group(
                     Align.center(rule),
                     Align.center(subtitle_text),
                 )
-            )
-        return _render_rich(Align.center(rule))
+            return Group(rule, subtitle_text)
+        if centered:
+            return Align.center(rule)
+        return rule
 
     body = Text.assemble(title_text)
     if subtitle_text:
@@ -107,7 +137,9 @@ def format_section_header(
         padding=(0, 2),
         width=min(term_width - 4, max(36, len(title) + 12)),
     )
-    return _render_rich(Align.center(panel))
+    if centered:
+        return Align.center(panel)
+    return panel
 
 
 def format_divider(

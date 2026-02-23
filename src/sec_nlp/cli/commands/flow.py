@@ -9,11 +9,12 @@ from pydantic_settings import CliSubCommand, SettingsConfigDict
 
 from sec_nlp.app.flows import FlowRunner, load_flow_spec
 from sec_nlp.cli.formatting import (
+    build_section_header_renderable,
     format_key_value,
-    format_section_header,
     format_status,
 )
 from sec_nlp.core.infra.logger import logger
+from sec_nlp.core.infra.rich_console import get_rich_console
 
 
 class FlowRun(BaseModel):
@@ -32,10 +33,15 @@ class FlowRun(BaseModel):
         spec = load_flow_spec(self.spec)
         runner = FlowRunner(spec=spec)
         result = runner.run()
+        console = get_rich_console()
 
         status = "success" if result.success else "error"
-        logger.info(
-            format_section_header(f"Flow Run: {result.flow_name}", style="box")
+        console.print(
+            build_section_header_renderable(
+                f"Flow Run: {result.flow_name}",
+                style="box",
+                centered=True,
+            )
         )
         logger.info(format_key_value("Flow Run ID", result.flow_run_id))
         logger.info(format_key_value("Stages", str(len(result.stage_results))))
@@ -81,8 +87,13 @@ class FlowValidate(BaseModel):
 
     def cli_cmd(self) -> None:
         spec = load_flow_spec(self.spec)
-        logger.info(
-            format_section_header(f"Flow Spec: {spec.name}", style="box")
+        console = get_rich_console()
+        console.print(
+            build_section_header_renderable(
+                f"Flow Spec: {spec.name}",
+                style="box",
+                centered=True,
+            )
         )
         logger.info(format_key_value("Stages", str(len(spec.stages))))
         logger.info(format_key_value("On Failure", spec.on_failure))

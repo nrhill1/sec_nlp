@@ -3,12 +3,13 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 from langchain_ollama.embeddings import OllamaEmbeddings
 from qdrant_client import QdrantClient
-from qdrant_client.models import Distance
+from qdrant_client.models import Distance, PointStruct, VectorParams
 
 from sec_nlp.pipelines.vector import (
     VectorConfig,
@@ -92,7 +93,9 @@ class TestVectorStoreCreation:
         assert embedder is mock_instance
         assert dim == 2
         mock_embedder_cls.assert_called_once_with(
-            model="custom-embedder", validate_model_on_init=True
+            model="custom-embedder",
+            base_url="http://localhost:11434",
+            validate_model_on_init=True,
         )
         mock_instance.embed_query.assert_called_once_with("test")
 
@@ -312,6 +315,62 @@ class TestVectorStoreCreation:
         assert client is memory_client
         assert target == ":memory:"
         assert calls == [None, ".qdrant", ":memory:"]
+
+    def test_persistent_qdrant_location_keeps_points_between_clients(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """Smoke test persistent local Qdrant storage survives client re-init."""
+        collection_name = "persist_smoke"
+        qdrant_path = tmp_path / "qdrant_store"
+        config = VectorConfig(
+            qdrant_location=str(qdrant_path),
+            qdrant_url=None,
+            collection_name=collection_name,
+            qdrant_timeout=5,
+        )
+
+        first_client = config.setup_qdrant_client()
+        if first_client.collection_exists(collection_name):
+            first_client.delete_collection(collection_name)
+        first_client.create_collection(
+            collection_name=collection_name,
+            vectors_config=VectorParams(size=4, distance=Distance.COSINE),
+        )
+        first_client.upsert(
+            collection_name=collection_name,
+            points=[
+                PointStruct(
+                    id=1,
+                    vector=[0.1, 0.2, 0.3, 0.4],
+                    payload={"symbol": "AAPL"},
+                )
+            ],
+        )
+        assert (
+            first_client.count(
+                collection_name=collection_name, exact=True
+            ).count
+            == 1
+        )
+
+        first_client.close()
+        vector_config.clear_runtime_caches()
+        second_client = config.setup_qdrant_client()
+        assert (
+            second_client.count(
+                collection_name=collection_name, exact=True
+            ).count
+            == 1
+        )
+        retrieved = second_client.retrieve(
+            collection_name=collection_name,
+            ids=[1],
+            with_payload=True,
+            with_vectors=False,
+        )
+        assert len(retrieved) == 1
+        assert retrieved[0].payload == {"symbol": "AAPL"}
 
 
 class TestEmbeddingAlignment:
