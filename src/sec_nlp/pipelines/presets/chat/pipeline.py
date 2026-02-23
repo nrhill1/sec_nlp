@@ -309,6 +309,7 @@ class ChatPipeline(BasePipeline):
                         else "Searching indexed collections"
                     ),
                 )
+                seeded_context_fallback = False
                 if self.config.seed_context is None:
                     chunks = self._search_collections(
                         question,
@@ -317,6 +318,21 @@ class ChatPipeline(BasePipeline):
                     )
                 else:
                     chunks = self._search_seed_context(question)
+                    if not chunks:
+                        logger.warning(
+                            "Seeded context returned no chunks; falling back to indexed collections",
+                        )
+                        self._update_phase(
+                            progress,
+                            phase_task,
+                            "Seed context empty; searching indexed collections",
+                        )
+                        chunks = self._search_collections(
+                            question,
+                            progress=progress,
+                            phase_task=phase_task,
+                        )
+                        seeded_context_fallback = True
                 stage_timings.update(
                     {
                         "vector_search": self._last_search_timings.get(
@@ -342,6 +358,10 @@ class ChatPipeline(BasePipeline):
                     )
                 )
                 stage_timings["external_context"] = perf_counter() - t0
+                if seeded_context_fallback:
+                    coverage_metadata[
+                        "seeded_context_fallback_to_vector_search"
+                    ] = True
                 external_metadata.update(coverage_metadata)
                 missing_symbols = coverage_metadata.get("missing_symbols")
                 if isinstance(missing_symbols, list) and missing_symbols:
@@ -1126,8 +1146,14 @@ class ChatPipeline(BasePipeline):
         return keywords
 
     def _context_symbol(self, citations: list[ChatCitation]) -> str | None:
-        if self.config.symbols:
-            return self.config.symbols[0].upper()
+        configured = [
+            symbol.upper() for symbol in self.config.symbols if symbol.strip()
+        ]
+        unique_configured = list(dict.fromkeys(configured))
+        if len(unique_configured) > 1:
+            return "MULTI"
+        if len(unique_configured) == 1:
+            return unique_configured[0]
         if citations and citations[0].symbol:
             return citations[0].symbol.upper()
         return None
@@ -1863,6 +1889,7 @@ class ChatPipeline(BasePipeline):
         )
         payload_metadata.update(
             {
+                "output_scope_symbol": symbol,
                 "top_k": self.config.top_k,
                 "max_context_chunks": self.config.max_context_chunks,
                 "strict_citations": self.config.strict_citations,

@@ -39,6 +39,33 @@ def _normalize_cik(value: str | None) -> str | None:
     return digits.zfill(10)
 
 
+def _scope_query_to_symbol(*, query: str, symbol: str) -> str:
+    """Prefix query with symbol ticker when not already present."""
+    cleaned = query.strip()
+    if not cleaned:
+        return symbol
+    token = symbol.upper()
+    pattern = rf"\b{re.escape(token)}\b"
+    if re.search(pattern, cleaned, flags=re.IGNORECASE):
+        return cleaned
+    return f"{token} {cleaned}"
+
+
+def _scope_queries_for_symbol(
+    *,
+    queries: Sequence[str],
+    symbol: str,
+) -> tuple[list[str], dict[str, str]]:
+    """Build symbol-scoped EFTS queries and reverse map to originals."""
+    scoped_queries: list[str] = []
+    reverse_map: dict[str, str] = {}
+    for original in queries:
+        scoped = _scope_query_to_symbol(query=original, symbol=symbol)
+        scoped_queries.append(scoped)
+        reverse_map[scoped] = original
+    return scoped_queries, reverse_map
+
+
 @lru_cache(maxsize=4096)
 def _company_name_tickers(company_name: str) -> frozenset[str]:
     if "(" not in company_name:
@@ -178,6 +205,12 @@ class RetrieveCandidateSearcher:
             raw_hits = list(result.hits)
             if normalized_symbol is None:
                 candidates[result.query] = raw_hits
+                logger.info(
+                    "EFTS hits for %s query=%r: %d",
+                    symbol_display,
+                    result.query,
+                    len(raw_hits),
+                )
                 continue
 
             filtered_hits = _filter_hits_for_symbol(
@@ -201,13 +234,19 @@ class RetrieveCandidateSearcher:
                             symbol=normalized_symbol,
                             symbol_cik=symbol_cik,
                         )
-                logger.info(
+                logger.debug(
                     "Filtered %d/%d cross-symbol EFTS hits for %s query=%r",
                     len(raw_hits) - len(filtered_hits),
                     len(raw_hits),
                     normalized_symbol,
                     result.query,
                 )
+            logger.info(
+                "EFTS hits for %s query=%r: %d",
+                normalized_symbol,
+                result.query,
+                len(filtered_hits),
+            )
             candidates[result.query] = filtered_hits
 
         return candidates
@@ -223,13 +262,23 @@ class RetrieveCandidateSearcher:
 
         normalized_symbol = _normalize_symbol(symbol)
         symbol_display = normalized_symbol or "<all>"
+        effective_queries = list(queries)
+        reverse_query_map: dict[str, str] = {}
+        if normalized_symbol is not None:
+            (
+                effective_queries,
+                reverse_query_map,
+            ) = _scope_queries_for_symbol(
+                queries=queries,
+                symbol=normalized_symbol,
+            )
 
         try:
             asyncio.set_event_loop(self._loop)
             batch_results = self._loop.run_until_complete(
                 self._batch_search_async(
                     symbol=normalized_symbol,
-                    queries=queries,
+                    queries=effective_queries,
                 )
             )
         except EFTSAPIError as exc:
@@ -249,11 +298,19 @@ class RetrieveCandidateSearcher:
         finally:
             asyncio.set_event_loop(None)
 
-        return self._candidates_from_batch_results(
+        candidates = self._candidates_from_batch_results(
             normalized_symbol=normalized_symbol,
-            queries=queries,
+            queries=effective_queries,
             batch_results=batch_results,
         )
+        if normalized_symbol is None:
+            return candidates
+
+        remapped: dict[str, list[EFTSHit]] = {query: [] for query in queries}
+        for scoped_query, hits in candidates.items():
+            original_query = reverse_query_map.get(scoped_query, scoped_query)
+            remapped[original_query] = hits
+        return remapped
 
     def search_many(
         self,
@@ -277,9 +334,25 @@ class RetrieveCandidateSearcher:
         if not normalized_symbols:
             return {}
 
+        scoped_queries_by_symbol: dict[str, list[str]] = {}
+        reverse_query_maps: dict[str, dict[str, str]] = {}
+        for symbol in normalized_symbols:
+            (
+                scoped_queries,
+                reverse_map,
+            ) = _scope_queries_for_symbol(
+                queries=queries,
+                symbol=symbol,
+            )
+            scoped_queries_by_symbol[symbol] = scoped_queries
+            reverse_query_maps[symbol] = reverse_map
+
         async def _search_many_async() -> list[object]:
             tasks = [
-                self._batch_search_async(symbol=symbol, queries=queries)
+                self._batch_search_async(
+                    symbol=symbol,
+                    queries=scoped_queries_by_symbol[symbol],
+                )
                 for symbol in normalized_symbols
             ]
             return await asyncio.gather(*tasks, return_exceptions=True)
@@ -308,11 +381,19 @@ class RetrieveCandidateSearcher:
                 )
                 results[symbol] = {query: [] for query in queries}
                 continue
-            results[symbol] = self._candidates_from_batch_results(
+            candidates = self._candidates_from_batch_results(
                 normalized_symbol=symbol,
-                queries=queries,
+                queries=scoped_queries_by_symbol[symbol],
                 batch_results=current,
             )
+            reverse_map = reverse_query_maps[symbol]
+            remapped: dict[str, list[EFTSHit]] = {
+                query: [] for query in queries
+            }
+            for scoped_query, hits in candidates.items():
+                original_query = reverse_map.get(scoped_query, scoped_query)
+                remapped[original_query] = hits
+            results[symbol] = remapped
         return results
 
     def close(self) -> None:

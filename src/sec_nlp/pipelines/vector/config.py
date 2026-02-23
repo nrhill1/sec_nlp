@@ -95,13 +95,16 @@ class VectorConfig(BaseModel):
 
     # Qdrant settings
     qdrant_location: str | None = Field(
-        default=":memory:",
+        default=None,
         description="Local Qdrant location (e.g., ':memory:' or a storage path). "
         "Overrides host/port when set.",
     )
     qdrant_url: str | None = Field(
         default=None,
-        description="Qdrant server URL (e.g., 'http://localhost:6333')",
+        description=(
+            "Optional Qdrant server URL override "
+            "(default target uses host/port, typically localhost:6333)."
+        ),
     )
     qdrant_host: str = Field(
         default="localhost",

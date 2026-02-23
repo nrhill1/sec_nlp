@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import sqlite3
+from asyncio import AbstractEventLoop
 from datetime import date
 from pathlib import Path
 from types import SimpleNamespace
@@ -398,6 +399,92 @@ def test_candidate_search_filters_cross_symbol_hits() -> None:
     assert filtered[0].cik == "0001326801"
 
 
+def test_candidates_from_batch_results_logs_hit_counts_at_info(
+    tmp_path: Path,
+    caplog,
+) -> None:
+    settings = RetrieveSettings(
+        email="test@example.com",
+        symbols=["MP"],
+        queries=["rare earth"],
+        dl_path=tmp_path / "downloads",
+        out_path=tmp_path / "outputs",
+    )
+    searcher = object.__new__(candidate_search_steps.RetrieveCandidateSearcher)
+    searcher._settings = settings
+    searcher._symbol_cik_cache = {}
+
+    batch_results = [
+        EFTSBatchResult(
+            query="rare earth",
+            hits=[
+                EFTSHit(
+                    accession_number="0001326801-26-000001",
+                    cik="0001326801",
+                    company_name="MP Materials Corp. (MP) (CIK 0001326801)",
+                    tickers=["MP"],
+                    form_type="10-K",
+                    filed_date=date(2026, 2, 1),
+                    score=9.1,
+                ),
+                EFTSHit(
+                    accession_number="0000915913-26-000018",
+                    cik="0000915913",
+                    company_name="ALBEMARLE CORP (ALB) (CIK 0000915913)",
+                    tickers=["ALB"],
+                    form_type="10-K",
+                    filed_date=date(2026, 2, 11),
+                    score=9.2,
+                ),
+            ],
+            total=2,
+            error=None,
+        )
+    ]
+
+    caplog.set_level(logging.INFO, logger="sec_nlp")
+    candidates = searcher._candidates_from_batch_results(
+        normalized_symbol="MP",
+        queries=["rare earth"],
+        batch_results=batch_results,
+    )
+
+    assert len(candidates["rare earth"]) == 1
+    assert "EFTS hits for MP query='rare earth': 1" in caplog.text
+    assert "Filtered " not in caplog.text
+
+
+def test_scope_query_to_symbol_prefixes_missing_symbol() -> None:
+    scoped = candidate_search_steps._scope_query_to_symbol(
+        query="liquidity risk and capex",
+        symbol="CDE",
+    )
+    assert scoped == "CDE liquidity risk and capex"
+
+
+def test_scope_query_to_symbol_keeps_existing_symbol_token() -> None:
+    scoped = candidate_search_steps._scope_query_to_symbol(
+        query="CDE liquidity risk and capex",
+        symbol="CDE",
+    )
+    assert scoped == "CDE liquidity risk and capex"
+
+
+def test_scope_queries_for_symbol_returns_reverse_map() -> None:
+    scoped_queries, reverse_map = (
+        candidate_search_steps._scope_queries_for_symbol(
+            queries=["liquidity risk", "CDE debt covenant"],
+            symbol="CDE",
+        )
+    )
+
+    assert scoped_queries == ["CDE liquidity risk", "CDE debt covenant"]
+    assert reverse_map == {
+        "CDE liquidity risk": "liquidity risk",
+        "CDE debt covenant": "CDE debt covenant",
+    }
+
+
 def test_candidate_search_keeps_hits_when_cik_matches_without_ticker() -> None:
     hits = [
         EFTSHit(
@@ -698,6 +785,66 @@ def test_candidates_from_batch_results_uses_cik_lookup_when_fast_match_empty(
     assert (
         candidates["rare earth"][0].accession_number == "0001326801-26-000001"
     )
+
+
+def test_candidate_search_many_scopes_queries_and_remaps_keys(
+    monkeypatch,
+) -> None:
+    settings = RetrieveSettings(
+        email="test@example.com",
+        symbols=["CDE", "AAPL"],
+        queries=["liquidity risk"],
+        forms=["10-K"],
+    )
+    searcher = object.__new__(candidate_search_steps.RetrieveCandidateSearcher)
+    searcher._settings = settings
+
+    class _FakeLoop:
+        def run_until_complete(self, coro):
+            coro.close()
+            return [[], []]
+
+    searcher._loop = _FakeLoop()
+    searcher._symbol_cik_cache = {}
+
+    def _fake_candidates_from_batch_results(
+        *,
+        normalized_symbol: str | None,
+        queries,
+        batch_results,
+    ):
+        _ = batch_results
+        assert normalized_symbol is not None
+        hit = _efts_hit(
+            accession=f"{normalized_symbol}-0001",
+            filed=date(2026, 2, 1),
+            score=0.9,
+            company=f"{normalized_symbol} Corp",
+        )
+        return {queries[0]: [hit]}
+
+    searcher._candidates_from_batch_results = (
+        _fake_candidates_from_batch_results
+    )
+
+    def _noop_set_event_loop(loop: AbstractEventLoop | None) -> None:
+        _ = loop
+
+    monkeypatch.setattr(
+        candidate_search_steps.asyncio,
+        "set_event_loop",
+        _noop_set_event_loop,
+    )
+
+    results = searcher.search_many(
+        symbols=["CDE", "AAPL"],
+        queries=["liquidity risk"],
+    )
+
+    assert list(results["CDE"].keys()) == ["liquidity risk"]
+    assert list(results["AAPL"].keys()) == ["liquidity risk"]
+    assert len(results["CDE"]["liquidity risk"]) == 1
+    assert len(results["AAPL"]["liquidity risk"]) == 1
 
 
 def test_retrieve_pipeline_run_writes_outputs_with_mocked_search(

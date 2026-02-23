@@ -51,13 +51,15 @@ stages:
     top_k: 150
     efts_candidates: 700
     hydrate_top_n: 200
-    query_term_min_hits: 1
-    query_term_min_ratio: 0.2
+    query_term_min_hits: 0
+    query_term_min_ratio: 0.0
     stopword_aware_lexical: true
     rerank_with_embeddings: true
     index_results: true
     vdb:
       collection_name: flow_mining_xlarge
+      qdrant_url: http://localhost:6333
+      qdrant_location: null
 - id: chat_answer
   pipeline: chat
   seed_from_stage: retrieve_seed
