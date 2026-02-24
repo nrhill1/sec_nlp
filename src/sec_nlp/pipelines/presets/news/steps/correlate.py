@@ -1,3 +1,4 @@
+# src/sec_nlp/pipelines/presets/news/steps/correlate.py
 """Correlate headline activity with filings and market moves."""
 
 from __future__ import annotations

@@ -1,3 +1,4 @@
+# tests/core/test_keyword.py
 """Tests for keyword helpers."""
 
 from __future__ import annotations

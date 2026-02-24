@@ -1,3 +1,4 @@
+# src/sec_nlp/core/ingest/types.py
 """Typed results for SEC filing downloads."""
 
 from __future__ import annotations

@@ -1,3 +1,4 @@
+# src/sec_nlp/core/edgar/economic.py
 """Economic indicator integration utilities backed by FRED data."""
 
 from __future__ import annotations

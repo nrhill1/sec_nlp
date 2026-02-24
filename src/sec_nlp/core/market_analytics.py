@@ -1,3 +1,4 @@
+# src/sec_nlp/core/market_analytics.py
 """Derived market analytics for chat/retrieve context enrichment."""
 
 from __future__ import annotations

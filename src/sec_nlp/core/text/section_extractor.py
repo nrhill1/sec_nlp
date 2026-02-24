@@ -1,3 +1,4 @@
+# src/sec_nlp/core/text/section_extractor.py
 # src/sec_nlp/core/section_extractor.py
 """Extract complete sections from SEC documents with boundary detection."""
 

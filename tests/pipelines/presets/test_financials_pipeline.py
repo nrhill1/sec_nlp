@@ -1,3 +1,4 @@
+# tests/pipelines/presets/test_financials_pipeline.py
 """Tests for the financials pipeline and step helpers."""
 
 from __future__ import annotations

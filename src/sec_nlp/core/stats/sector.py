@@ -1,3 +1,4 @@
+# src/sec_nlp/core/stats/sector.py
 """Sector-level correlation helpers built on top of core stats wrappers."""
 
 from __future__ import annotations

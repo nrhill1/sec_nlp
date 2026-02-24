@@ -1,3 +1,4 @@
+# src/sec_nlp/core/ingest/parser.py
 """HTML parsing and chunking utilities for SEC filings."""
 
 from __future__ import annotations

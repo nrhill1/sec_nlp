@@ -1,3 +1,4 @@
+# src/sec_nlp/pipelines/presets/news/steps/match.py
 """Topic relevance scoring for fetched headlines."""
 
 from __future__ import annotations

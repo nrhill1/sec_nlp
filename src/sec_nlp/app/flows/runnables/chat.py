@@ -1,3 +1,4 @@
+# src/sec_nlp/app/flows/runnables/chat.py
 """Chat stage runnable for flow execution."""
 
 from __future__ import annotations

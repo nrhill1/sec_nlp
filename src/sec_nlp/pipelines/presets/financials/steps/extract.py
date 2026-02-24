@@ -1,3 +1,4 @@
+# src/sec_nlp/pipelines/presets/financials/steps/extract.py
 """XBRL extraction + concept normalization for the financials pipeline."""
 
 from __future__ import annotations

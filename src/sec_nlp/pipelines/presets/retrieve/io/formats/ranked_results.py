@@ -1,3 +1,4 @@
+# src/sec_nlp/pipelines/presets/retrieve/io/formats/ranked_results.py
 """Writers for retrieve ranked results outputs."""
 
 from __future__ import annotations

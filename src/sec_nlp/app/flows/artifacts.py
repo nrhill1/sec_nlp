@@ -1,3 +1,4 @@
+# src/sec_nlp/app/flows/artifacts.py
 """Typed in-memory artifact storage for flow stage handoff."""
 
 from __future__ import annotations

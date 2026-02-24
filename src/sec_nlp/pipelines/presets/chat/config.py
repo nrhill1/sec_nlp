@@ -1,3 +1,4 @@
+# src/sec_nlp/pipelines/presets/chat/config.py
 """Config model for RAG chat pipeline."""
 
 from __future__ import annotations

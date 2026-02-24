@@ -1,3 +1,4 @@
+# src/sec_nlp/app/flows/runnables/__init__.py
 """Runnable stage adapters for flow execution."""
 
 from .chat import ChatFlowInvokeInput, ChatFlowRunnable

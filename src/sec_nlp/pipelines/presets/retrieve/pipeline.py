@@ -1,3 +1,4 @@
+# src/sec_nlp/pipelines/presets/retrieve/pipeline.py
 """Pipeline for EFTS-first retrieval and ranked hit exports."""
 
 from __future__ import annotations

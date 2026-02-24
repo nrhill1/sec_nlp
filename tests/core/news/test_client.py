@@ -1,3 +1,4 @@
+# tests/core/news/test_client.py
 """Tests for the newswatch Rust extension Python wrapper."""
 
 from __future__ import annotations

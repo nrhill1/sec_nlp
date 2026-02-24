@@ -1,3 +1,4 @@
+# tests/core/edgar/test_xbrl_facts.py
 """Tests for the XBRL Rust extension Python wrapper."""
 
 from __future__ import annotations

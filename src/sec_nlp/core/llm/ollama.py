@@ -1,3 +1,4 @@
+# src/sec_nlp/core/llm/ollama.py
 """Ollama client construction helpers."""
 
 import os

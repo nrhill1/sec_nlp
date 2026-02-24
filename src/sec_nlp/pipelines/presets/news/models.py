@@ -1,3 +1,4 @@
+# src/sec_nlp/pipelines/presets/news/models.py
 """Data models for news monitoring outputs."""
 
 from __future__ import annotations

@@ -1,3 +1,4 @@
+# src/sec_nlp/pipelines/presets/insider/steps/correlate.py
 """Correlation and alert heuristics for insider transaction data."""
 
 from __future__ import annotations

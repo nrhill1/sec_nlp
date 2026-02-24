@@ -1,3 +1,4 @@
+# src/sec_nlp/pipelines/presets/retrieve/__init__.py
 """Retrieve pipeline preset."""
 
 from .bridge import RetrieveChatSeedBundle, RetrieveChatSeedChunk

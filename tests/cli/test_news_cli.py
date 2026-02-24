@@ -1,3 +1,4 @@
+# tests/cli/test_news_cli.py
 """Tests for news CLI wiring."""
 
 from __future__ import annotations

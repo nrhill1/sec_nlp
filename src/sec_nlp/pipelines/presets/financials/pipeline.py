@@ -1,3 +1,4 @@
+# src/sec_nlp/pipelines/presets/financials/pipeline.py
 """Pipeline for extracting normalized financial statement data."""
 
 from __future__ import annotations

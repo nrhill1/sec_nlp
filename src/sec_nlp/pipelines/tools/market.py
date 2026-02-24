@@ -1,3 +1,4 @@
+# src/sec_nlp/pipelines/tools/market.py
 """LangChain tool wrapper for derived market context analytics."""
 
 from __future__ import annotations

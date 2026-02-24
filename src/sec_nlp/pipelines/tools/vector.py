@@ -1,3 +1,4 @@
+# src/sec_nlp/pipelines/tools/vector.py
 """LangChain tool wrapper for direct Qdrant semantic search."""
 
 from __future__ import annotations

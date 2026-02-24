@@ -1,3 +1,4 @@
+# tests/utils/typing.py
 """Typing helpers for test fixtures and benchmarks."""
 
 from __future__ import annotations

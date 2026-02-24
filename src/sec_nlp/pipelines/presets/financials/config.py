@@ -1,3 +1,4 @@
+# src/sec_nlp/pipelines/presets/financials/config.py
 """Config model for the financials pipeline."""
 
 from __future__ import annotations

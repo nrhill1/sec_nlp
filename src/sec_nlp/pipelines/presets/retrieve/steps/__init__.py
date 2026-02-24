@@ -1,3 +1,4 @@
+# src/sec_nlp/pipelines/presets/retrieve/steps/__init__.py
 """Step helpers for retrieve pipeline."""
 
 from .candidate_search import RetrieveCandidateSearcher, run_candidate_search

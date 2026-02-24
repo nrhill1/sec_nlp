@@ -1,3 +1,4 @@
+# src/sec_nlp/core/text/chunking.py
 """Sentence-based chunking using NLTK sentence tokenization.
 
 Chunk size and overlap are measured in **sentences**, not characters.

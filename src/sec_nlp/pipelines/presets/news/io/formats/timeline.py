@@ -1,3 +1,4 @@
+# src/sec_nlp/pipelines/presets/news/io/formats/timeline.py
 """Writers for news timeline outputs."""
 
 from __future__ import annotations

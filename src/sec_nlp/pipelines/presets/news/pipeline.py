@@ -1,3 +1,4 @@
+# src/sec_nlp/pipelines/presets/news/pipeline.py
 """Pipeline for monitoring company-centric financial news."""
 
 from __future__ import annotations

@@ -1,3 +1,4 @@
+# tests/pipelines/presets/test_insider_pipeline.py
 """Tests for insider pipeline and step helpers."""
 
 from __future__ import annotations

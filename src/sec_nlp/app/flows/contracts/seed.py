@@ -1,3 +1,4 @@
+# src/sec_nlp/app/flows/contracts/seed.py
 """Canonical seeded-context contracts for flow stage handoff."""
 
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field

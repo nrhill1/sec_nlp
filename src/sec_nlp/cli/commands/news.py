@@ -1,3 +1,4 @@
+# src/sec_nlp/cli/commands/news.py
 """News pipeline CLI command."""
 
 from pydantic import Field

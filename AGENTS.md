@@ -49,14 +49,14 @@ When fixing type errors, writing any new code, or modifying existing code:
 
 ### File Headers
 
-Every Python source file should start with a module docstring. Files under `src/` and `tests/` may optionally include a path comment before the docstring:
+Every Python source file must start with a repo-relative path comment followed by a module docstring:
 
 ```python
 # src/sec_nlp/pipelines/utils.py
 """Utility functions for pipelines."""
 ```
 
-The path comment, when present, uses the repo-relative path.
+The path comment must use the exact repo-relative path of the file.
 
 ### Pydantic Models
 
@@ -167,6 +167,5 @@ When modifying pipelines or adding features:
 
 ## Commits
 
-- Include `Co-Authored-By: Warp <agent@warp.dev>` at the end of every commit message.
 - Use concise, imperative commit messages (e.g. `"Fix confidence calibration double-penalty"`).
 - Do not commit unless explicitly asked to.

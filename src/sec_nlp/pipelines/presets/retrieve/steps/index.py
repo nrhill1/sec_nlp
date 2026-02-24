@@ -1,3 +1,4 @@
+# src/sec_nlp/pipelines/presets/retrieve/steps/index.py
 """Qdrant indexing helpers for retrieve pipeline."""
 
 from __future__ import annotations

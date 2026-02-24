@@ -1,3 +1,4 @@
+# src/sec_nlp/pipelines/tools/retrieve.py
 """LangChain tool wrapper for deterministic EFTS retrieval hits."""
 
 from __future__ import annotations

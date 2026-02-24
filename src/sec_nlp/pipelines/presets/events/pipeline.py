@@ -1,3 +1,4 @@
+# src/sec_nlp/pipelines/presets/events/pipeline.py
 """Pipeline for event detection and timeline scoring."""
 
 from __future__ import annotations

@@ -1,3 +1,4 @@
+# src/sec_nlp/app/flows/spec.py
 """Spec loading and validation helpers for flow execution."""
 
 from __future__ import annotations

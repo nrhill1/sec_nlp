@@ -1,3 +1,4 @@
+# tests/core/test_stats_sector.py
 """Tests for sector-level stats correlation helpers."""
 
 from __future__ import annotations

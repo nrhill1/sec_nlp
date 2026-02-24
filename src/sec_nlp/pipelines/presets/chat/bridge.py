@@ -1,3 +1,4 @@
+# src/sec_nlp/pipelines/presets/chat/bridge.py
 """Deprecated chat bridge aliases for flow seeded-context contracts."""
 
 from sec_nlp.app.flows.contracts import FlowSeedBundle, FlowSeedChunk

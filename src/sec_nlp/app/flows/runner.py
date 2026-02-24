@@ -1,3 +1,4 @@
+# src/sec_nlp/app/flows/runner.py
 """Flow runner for local multi-pipeline execution."""
 
 from __future__ import annotations

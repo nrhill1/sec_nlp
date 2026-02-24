@@ -1,3 +1,4 @@
+# src/sec_nlp/pipelines/presets/insider/steps/aggregate.py
 """Aggregation helpers for insider transaction analysis."""
 
 from __future__ import annotations

@@ -1,3 +1,4 @@
+# src/sec_nlp/core/infra/settings.py
 """Project-level settings and root discovery."""
 
 from __future__ import annotations

@@ -1,3 +1,4 @@
+# src/sec_nlp/core/stats/event_study.py
 """Event study orchestration built on top of the `corr` extension."""
 
 from __future__ import annotations

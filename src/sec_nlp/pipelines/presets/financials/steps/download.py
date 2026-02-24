@@ -1,3 +1,4 @@
+# src/sec_nlp/pipelines/presets/financials/steps/download.py
 """Download helpers for the financials pipeline."""
 
 from __future__ import annotations

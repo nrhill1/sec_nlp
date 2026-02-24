@@ -1,3 +1,4 @@
+# src/scripts/profile/perf_suite.py
 """Run and compare chat/retrieve performance suites."""
 
 from __future__ import annotations

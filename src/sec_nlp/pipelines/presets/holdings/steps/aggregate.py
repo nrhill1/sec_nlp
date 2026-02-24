@@ -1,3 +1,4 @@
+# src/sec_nlp/pipelines/presets/holdings/steps/aggregate.py
 """Aggregate ownership metrics for holdings pipeline."""
 
 from __future__ import annotations

@@ -1,3 +1,4 @@
+# src/sec_nlp/pipelines/presets/retrieve/steps/candidate_search.py
 """EFTS candidate retrieval step."""
 
 from __future__ import annotations

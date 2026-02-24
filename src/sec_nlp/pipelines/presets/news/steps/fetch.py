@@ -1,3 +1,4 @@
+# src/sec_nlp/pipelines/presets/news/steps/fetch.py
 """Headline fetch helpers backed by the newswatch Rust extension."""
 
 from __future__ import annotations

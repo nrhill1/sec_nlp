@@ -1,3 +1,4 @@
+# src/sec_nlp/cli/validation.py
 """Specialized formatting utilities for CLI validation errors."""
 
 from __future__ import annotations

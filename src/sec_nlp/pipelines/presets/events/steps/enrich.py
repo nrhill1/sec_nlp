@@ -1,3 +1,4 @@
+# src/sec_nlp/pipelines/presets/events/steps/enrich.py
 """Attach nearby news headlines to detected events."""
 
 from __future__ import annotations

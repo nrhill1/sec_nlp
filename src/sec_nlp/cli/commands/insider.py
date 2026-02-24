@@ -1,3 +1,4 @@
+# src/sec_nlp/cli/commands/insider.py
 """Insider pipeline CLI command."""
 
 from pydantic import Field

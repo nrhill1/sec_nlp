@@ -1,3 +1,4 @@
+# src/sec_nlp/core/ingest/filings.py
 """Helpers for locating, parsing, and extracting SEC filings on disk."""
 
 from __future__ import annotations

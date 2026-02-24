@@ -1,3 +1,4 @@
+# src/sec_nlp/core/edgar/filing_mode.py
 # src/sec_nlp/core/filing_mode.py
 from __future__ import annotations
 

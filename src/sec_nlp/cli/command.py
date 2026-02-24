@@ -1,3 +1,4 @@
+# src/sec_nlp/cli/command.py
 """Shared utilities for CLI pipeline commands."""
 
 from __future__ import annotations

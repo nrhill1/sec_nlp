@@ -1,3 +1,4 @@
+# src/sec_nlp/cli/commands/holdings.py
 """Holdings pipeline CLI command."""
 
 from pydantic import Field

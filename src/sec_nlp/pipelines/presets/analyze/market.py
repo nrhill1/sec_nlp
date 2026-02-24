@@ -1,3 +1,4 @@
+# src/sec_nlp/pipelines/presets/analyze/market.py
 """Optional market enrichment helpers for the analyze pipeline."""
 
 from __future__ import annotations

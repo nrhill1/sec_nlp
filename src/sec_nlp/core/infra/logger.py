@@ -1,3 +1,4 @@
+# src/sec_nlp/core/infra/logger.py
 # src/sec_nlp/core/logger.py
 """Centralized logging configuration."""
 

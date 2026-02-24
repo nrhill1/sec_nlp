@@ -1,3 +1,4 @@
+# src/sec_nlp/core/stats/cross_filing.py
 """Cross-filing trend analysis helpers."""
 
 from __future__ import annotations

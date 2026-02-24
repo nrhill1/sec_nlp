@@ -1,3 +1,4 @@
+# src/sec_nlp/pipelines/presets/events/steps/scan.py
 """Scan current-report filings (8-K/6-K) and detect event mentions."""
 
 from __future__ import annotations

@@ -1,3 +1,4 @@
+# src/sec_nlp/core/text/filters.py
 # src/sec_nlp/core/filters.py
 """Generalized filtering for sections, items, and exhibits in SEC documents."""
 

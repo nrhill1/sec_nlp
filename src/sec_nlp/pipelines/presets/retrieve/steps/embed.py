@@ -1,3 +1,4 @@
+# src/sec_nlp/pipelines/presets/retrieve/steps/embed.py
 """Embedding rerank helpers for retrieve pipeline."""
 
 from __future__ import annotations

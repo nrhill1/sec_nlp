@@ -1,3 +1,4 @@
+# tests/cli/test_chat_cli.py
 """Tests for chat CLI wiring."""
 
 from __future__ import annotations

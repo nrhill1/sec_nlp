@@ -1,3 +1,4 @@
+# src/sec_nlp/pipelines/presets/holdings/steps/diff.py
 """Quarter-over-quarter diff logic for holdings pipeline."""
 
 from __future__ import annotations

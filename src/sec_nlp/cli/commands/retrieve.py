@@ -1,3 +1,4 @@
+# src/sec_nlp/cli/commands/retrieve.py
 """Retrieve pipeline CLI command."""
 
 from pydantic import Field

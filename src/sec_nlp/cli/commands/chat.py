@@ -1,3 +1,4 @@
+# src/sec_nlp/cli/commands/chat.py
 """CLI command for RAG chat over indexed filings."""
 
 from __future__ import annotations

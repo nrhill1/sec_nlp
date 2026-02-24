@@ -1,3 +1,4 @@
+# src/sec_nlp/pipelines/presets/chat/io/formats/transcript.py
 """Writers for chat transcript outputs."""
 
 from __future__ import annotations

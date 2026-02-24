@@ -1,3 +1,4 @@
+# src/sec_nlp/pipelines/tools/news.py
 """LangChain tool wrapper for deterministic news context retrieval."""
 
 from __future__ import annotations

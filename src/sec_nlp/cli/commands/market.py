@@ -1,3 +1,4 @@
+# src/sec_nlp/cli/commands/market.py
 """CLI helpers for the Yahoo-backed market extension."""
 
 from __future__ import annotations

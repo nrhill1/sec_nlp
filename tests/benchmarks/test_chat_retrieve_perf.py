@@ -1,3 +1,4 @@
+# tests/benchmarks/test_chat_retrieve_perf.py
 """Deterministic perf-suite utility tests (no network)."""
 
 from __future__ import annotations

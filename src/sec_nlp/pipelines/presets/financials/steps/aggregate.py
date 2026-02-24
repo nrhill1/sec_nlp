@@ -1,3 +1,4 @@
+# src/sec_nlp/pipelines/presets/financials/steps/aggregate.py
 """Aggregation helpers for financial statement facts."""
 
 from __future__ import annotations

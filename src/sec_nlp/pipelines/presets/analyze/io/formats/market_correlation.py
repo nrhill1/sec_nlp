@@ -1,3 +1,4 @@
+# src/sec_nlp/pipelines/presets/analyze/io/formats/market_correlation.py
 """Market correlation output formatting helpers."""
 
 from __future__ import annotations

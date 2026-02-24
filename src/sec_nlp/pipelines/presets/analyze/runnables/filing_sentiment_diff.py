@@ -1,3 +1,4 @@
+# src/sec_nlp/pipelines/presets/analyze/runnables/filing_sentiment_diff.py
 """Filing sentiment diff runnable for compare-over-time analysis."""
 
 from __future__ import annotations

@@ -1,3 +1,4 @@
+# src/sec_nlp/pipelines/presets/analyze/runnables/supply_chain_map.py
 """Supply chain mapping runnable for exhibit and risk-factor text."""
 
 from __future__ import annotations

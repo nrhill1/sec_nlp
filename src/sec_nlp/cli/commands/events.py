@@ -1,3 +1,4 @@
+# src/sec_nlp/cli/commands/events.py
 """Events pipeline CLI command."""
 
 from pydantic import Field

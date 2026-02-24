@@ -1,3 +1,4 @@
+# src/sec_nlp/pipelines/presets/events/io/formats/timeline.py
 """Writers for events timeline outputs."""
 
 from __future__ import annotations

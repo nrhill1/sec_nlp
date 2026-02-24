@@ -1,3 +1,4 @@
+# src/sec_nlp/pipelines/tools/schemas.py
 """Input/output schemas for reusable LangChain tools."""
 
 from __future__ import annotations

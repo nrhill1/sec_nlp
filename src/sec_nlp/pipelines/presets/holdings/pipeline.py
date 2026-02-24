@@ -1,3 +1,4 @@
+# src/sec_nlp/pipelines/presets/holdings/pipeline.py
 """Pipeline for institutional holdings analysis from 13F filings."""
 
 from __future__ import annotations

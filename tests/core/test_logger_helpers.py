@@ -1,3 +1,4 @@
+# tests/core/test_logger_helpers.py
 from sec_nlp.core.infra.logger import center_block, visible_length
 
 

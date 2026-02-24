@@ -1,3 +1,4 @@
+# tests/cli/test_insider_cli.py
 """Tests for insider CLI wiring."""
 
 from __future__ import annotations

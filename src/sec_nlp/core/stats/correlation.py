@@ -1,3 +1,4 @@
+# src/sec_nlp/core/stats/correlation.py
 """Thin wrapper around the Rust `corr` extension."""
 
 from __future__ import annotations

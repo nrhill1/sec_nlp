@@ -1,3 +1,4 @@
+# src/sec_nlp/pipelines/presets/insider/models.py
 """Data models for insider pipeline."""
 
 from __future__ import annotations

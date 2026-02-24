@@ -1,3 +1,4 @@
+# tests/cli/conftest.py
 import pytest
 
 from sec_nlp.pipelines.base.config import BasePipelineSettings

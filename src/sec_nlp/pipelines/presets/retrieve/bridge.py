@@ -1,3 +1,4 @@
+# src/sec_nlp/pipelines/presets/retrieve/bridge.py
 """Deprecated retrieve bridge aliases for flow seeded-context contracts."""
 
 from sec_nlp.app.flows.contracts import FlowSeedBundle, FlowSeedChunk

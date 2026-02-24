@@ -1,3 +1,4 @@
+# src/sec_nlp/pipelines/presets/financials/io/__init__.py
 """Output helpers for financials pipeline exports."""
 
 from .formats.csv_writer import write_financials_csv

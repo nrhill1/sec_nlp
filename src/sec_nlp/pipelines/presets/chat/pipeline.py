@@ -1,3 +1,4 @@
+# src/sec_nlp/pipelines/presets/chat/pipeline.py
 """Pipeline for RAG chat over indexed filing chunks."""
 
 from __future__ import annotations

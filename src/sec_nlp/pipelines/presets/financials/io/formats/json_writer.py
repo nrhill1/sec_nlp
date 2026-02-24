@@ -1,3 +1,4 @@
+# src/sec_nlp/pipelines/presets/financials/io/formats/json_writer.py
 """JSON/YAML payload writer for financials outputs."""
 
 from __future__ import annotations

@@ -1,3 +1,4 @@
+# tests/core/test_settings.py
 """Tests for project settings and root discovery."""
 
 from __future__ import annotations

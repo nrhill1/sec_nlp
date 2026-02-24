@@ -1,3 +1,4 @@
+# src/sec_nlp/core/market.py
 """Market data retrieval helpers backed by the Rust `market` extension."""
 
 from collections import OrderedDict

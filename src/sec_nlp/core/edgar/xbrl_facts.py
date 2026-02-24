@@ -1,3 +1,4 @@
+# src/sec_nlp/core/edgar/xbrl_facts.py
 """Thin wrapper around the Rust `xbrl` extension."""
 
 from __future__ import annotations

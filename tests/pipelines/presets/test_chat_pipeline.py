@@ -1,3 +1,4 @@
+# tests/pipelines/presets/test_chat_pipeline.py
 """Tests for RAG chat pipeline."""
 
 from __future__ import annotations

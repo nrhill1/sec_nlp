@@ -1,3 +1,4 @@
+# src/sec_nlp/core/types.py
 """Type utilities for JSON coercion and runtime guards."""
 
 from __future__ import annotations

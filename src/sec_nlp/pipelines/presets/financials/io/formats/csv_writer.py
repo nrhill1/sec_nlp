@@ -1,3 +1,4 @@
+# src/sec_nlp/pipelines/presets/financials/io/formats/csv_writer.py
 """CSV writer for financial statement rows."""
 
 from __future__ import annotations

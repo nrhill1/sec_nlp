@@ -1,3 +1,4 @@
+# src/sec_nlp/pipelines/presets/insider/io/formats/alerts.py
 """JSON/YAML payload writers for insider summaries and alerts."""
 
 from __future__ import annotations

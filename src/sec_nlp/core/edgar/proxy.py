@@ -1,3 +1,4 @@
+# src/sec_nlp/core/edgar/proxy.py
 """Proxy statement (DEF 14A) parsing helpers."""
 
 from __future__ import annotations

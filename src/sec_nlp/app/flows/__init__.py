@@ -1,3 +1,4 @@
+# src/sec_nlp/app/flows/__init__.py
 """Flow orchestration primitives for multi-pipeline runs."""
 
 from .models import (

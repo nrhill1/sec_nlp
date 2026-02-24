@@ -1,3 +1,4 @@
+# src/sec_nlp/pipelines/presets/analyze/runnables/earnings_surprise.py
 """Earnings surprise runnable for EPS surprise and post-event CAR metrics."""
 
 from __future__ import annotations

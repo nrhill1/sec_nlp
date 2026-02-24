@@ -1,3 +1,4 @@
+# src/sec_nlp/core/text/entity_extraction.py
 """Entity and event extraction helpers backed by the Rust `entity` extension."""
 
 from __future__ import annotations

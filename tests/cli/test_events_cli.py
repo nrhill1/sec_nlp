@@ -1,3 +1,4 @@
+# tests/cli/test_events_cli.py
 """Tests for events CLI wiring."""
 
 from __future__ import annotations

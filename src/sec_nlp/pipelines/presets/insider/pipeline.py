@@ -1,3 +1,4 @@
+# src/sec_nlp/pipelines/presets/insider/pipeline.py
 """Pipeline for insider transaction analysis from Forms 3/4/5."""
 
 from __future__ import annotations
