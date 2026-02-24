@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import date
 from pathlib import Path
 
-from sec_nlp.app.flows.artifacts import ChatSeedBundle
+from sec_nlp.app.flows.contracts import FlowSeedBundle
 from sec_nlp.app.flows.models import (
     FlowDefaults,
     FlowStageResult,
@@ -16,7 +16,7 @@ from sec_nlp.pipelines.base.result import BasePipelineResult
 from sec_nlp.types import JsonDict, JsonValue, ResultDict
 
 type StageConfigValue = JsonValue | date | Path
-type ChatStageConfigValue = StageConfigValue | ChatSeedBundle
+type ChatStageConfigValue = StageConfigValue | FlowSeedBundle
 
 
 def build_stage_defaults_payload(

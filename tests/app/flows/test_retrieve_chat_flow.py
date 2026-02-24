@@ -40,8 +40,9 @@ def test_flow_runner_passes_retrieve_seed_into_chat(monkeypatch) -> None:
                 hits_returned=1,
             ),
             RetrieveChatSeedBundle(
-                run_id="00000000-0000-0000-0000-000000000001",
-                run_short_id=1,
+                upstream_pipeline="retrieve",
+                upstream_run_id="00000000-0000-0000-0000-000000000001",
+                upstream_short_id=1,
                 symbols=["CDE"],
                 queries=["liquidity risk"],
                 chunks=[
@@ -147,8 +148,9 @@ def test_flow_runner_reports_missing_seed_artifact(monkeypatch) -> None:
         return (
             RetrieveResult(success=False, error="upstream failed"),
             RetrieveChatSeedBundle(
-                run_id="00000000-0000-0000-0000-000000000002",
-                run_short_id=2,
+                upstream_pipeline="retrieve",
+                upstream_run_id="00000000-0000-0000-0000-000000000002",
+                upstream_short_id=2,
                 symbols=[],
                 queries=["liquidity risk"],
                 chunks=[],

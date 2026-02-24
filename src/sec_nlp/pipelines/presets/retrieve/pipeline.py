@@ -325,8 +325,9 @@ class RetrievePipeline(BasePipeline):
             )
             bundle = (
                 RetrieveChatSeedBundle(
-                    run_id=str(self.config.run_id),
-                    run_short_id=self.config.short_id
+                    upstream_pipeline="retrieve",
+                    upstream_run_id=str(self.config.run_id),
+                    upstream_short_id=self.config.short_id
                     if self.config.short_id > 0
                     else None,
                     symbols=[
@@ -355,8 +356,9 @@ class RetrievePipeline(BasePipeline):
     def _empty_seed_bundle(self) -> RetrieveChatSeedBundle:
         """Return an empty handoff bundle for unsuccessful retrieve runs."""
         return RetrieveChatSeedBundle(
-            run_id=str(self.config.run_id),
-            run_short_id=self.config.short_id
+            upstream_pipeline="retrieve",
+            upstream_run_id=str(self.config.run_id),
+            upstream_short_id=self.config.short_id
             if self.config.short_id > 0
             else None,
             symbols=[],

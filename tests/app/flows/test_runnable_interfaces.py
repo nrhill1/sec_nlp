@@ -53,8 +53,9 @@ def test_retrieve_flow_runnable_invoke_uses_typed_input(monkeypatch) -> None:
                 hits_returned=1,
             ),
             RetrieveChatSeedBundle(
-                run_id="00000000-0000-0000-0000-000000000101",
-                run_short_id=101,
+                upstream_pipeline="retrieve",
+                upstream_run_id="00000000-0000-0000-0000-000000000101",
+                upstream_short_id=101,
                 symbols=["CDE"],
                 queries=["liquidity risk"],
                 chunks=[
