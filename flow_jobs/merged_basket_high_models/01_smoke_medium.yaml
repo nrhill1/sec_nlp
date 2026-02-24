@@ -50,7 +50,10 @@ stages:
       qdrant_location: null
 - id: chat_answer
   pipeline: chat
-  seed_from_stage: retrieve_seed
+  inputs:
+  - from_stage: retrieve_seed
+    artifact: retrieve_seed
+    target_field: seed_context
   overrides:
     question: What are the most material near-term risk, liquidity, and margin signals
       across this smoke basket, and which issuer appears most vulnerable?

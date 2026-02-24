@@ -53,7 +53,10 @@ stages:
       qdrant_location: null
 - id: chat_answer
   pipeline: chat
-  seed_from_stage: retrieve_seed
+  inputs:
+  - from_stage: retrieve_seed
+    artifact: retrieve_seed
+    target_field: seed_context
   overrides:
     question: Summarize AI-infrastructure and enterprise demand signals for this tech
       basket, with emphasis on backlog durability, margin risk, and capex efficiency.

@@ -57,7 +57,10 @@ stages:
       qdrant_location: null
 - id: chat_answer
   pipeline: chat
-  seed_from_stage: retrieve_seed
+  inputs:
+  - from_stage: retrieve_seed
+    artifact: retrieve_seed
+    target_field: seed_context
   overrides:
     question: Compare pipeline quality, regulatory execution risk, and cash-runway
       resilience across this biotech basket, focusing on the next 12-18 months.

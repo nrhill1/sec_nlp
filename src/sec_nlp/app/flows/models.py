@@ -18,6 +18,7 @@ from pydantic import (
 from sec_nlp.types import JsonValue
 
 type PipelineName = Literal["retrieve", "chat", "exhibit"]
+type FlowArtifactName = Literal["retrieve_seed", "contract_evidence"]
 
 
 class FlowDefaults(BaseModel):
@@ -104,9 +105,12 @@ class FlowStageSpec(BaseModel):
             description="Execution condition relative to previous stage result.",
         )
     )
-    seed_from_stage: str | None = Field(
-        default=None,
-        description="Optional upstream retrieve stage ID used for chat seeded context.",
+    inputs: list[FlowStageInputBinding] = Field(
+        default_factory=list,
+        description=(
+            "Typed artifact inputs sourced from prior stages and injected into "
+            "this stage at runtime."
+        ),
     )
 
     @field_validator("id")
@@ -115,6 +119,31 @@ class FlowStageSpec(BaseModel):
         cleaned = value.strip()
         if not cleaned:
             raise ValueError("stage id cannot be empty")
+        return cleaned
+
+
+class FlowStageInputBinding(BaseModel):
+    """Typed artifact binding used to wire stage-to-stage data handoffs."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    from_stage: str = Field(
+        description="Source stage ID that produced the artifact.",
+    )
+    artifact: FlowArtifactName = Field(
+        description="Artifact family produced by the source stage.",
+    )
+    target_field: str | None = Field(
+        default=None,
+        description="Optional stage config field name for artifact injection.",
+    )
+
+    @field_validator("from_stage")
+    @classmethod
+    def _validate_from_stage(cls, value: str) -> str:
+        cleaned = value.strip()
+        if not cleaned:
+            raise ValueError("inputs.from_stage cannot be empty")
         return cleaned
 
 
@@ -153,21 +182,29 @@ class FlowSpec(BaseModel):
             stage_pipelines[stage.id] = stage.pipeline
 
         for stage in self.stages:
-            if stage.seed_from_stage is None:
-                continue
-            if stage.pipeline != "chat":
-                raise ValueError(
-                    f"stage '{stage.id}' sets seed_from_stage but is not chat"
-                )
-            if stage.seed_from_stage not in stage_ids:
-                raise ValueError(
-                    f"stage '{stage.id}' references unknown seed stage '{stage.seed_from_stage}'"
-                )
-            upstream_pipeline = stage_pipelines.get(stage.seed_from_stage)
-            if upstream_pipeline != "retrieve":
-                raise ValueError(
-                    f"stage '{stage.id}' seed_from_stage must reference a retrieve stage"
-                )
+            for binding in stage.inputs:
+                if binding.from_stage not in stage_ids:
+                    raise ValueError(
+                        f"stage '{stage.id}' references unknown input stage "
+                        f"'{binding.from_stage}'"
+                    )
+                upstream_pipeline = stage_pipelines.get(binding.from_stage)
+                if (
+                    binding.artifact == "retrieve_seed"
+                    and upstream_pipeline != "retrieve"
+                ):
+                    raise ValueError(
+                        f"stage '{stage.id}' retrieve_seed input must reference "
+                        "a retrieve stage"
+                    )
+                if (
+                    binding.artifact == "contract_evidence"
+                    and upstream_pipeline != "exhibit"
+                ):
+                    raise ValueError(
+                        f"stage '{stage.id}' contract_evidence input must "
+                        "reference an exhibit stage"
+                    )
         return self
 
 

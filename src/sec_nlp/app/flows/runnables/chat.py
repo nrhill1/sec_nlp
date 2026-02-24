@@ -11,6 +11,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from sec_nlp.app.flows.artifacts import FlowArtifactStore
 from sec_nlp.app.flows.models import (
     FlowDefaults,
+    FlowStageInputBinding,
     FlowStageResult,
     FlowStageSpec,
 )
@@ -46,11 +47,17 @@ class ChatFlowRunnable(
     stage: FlowStageSpec = Field(
         description="Flow stage specification for this runnable execution.",
     )
-    defaults: FlowDefaults = Field(
-        description="Shared defaults merged into stage config payloads.",
+    defaults: FlowDefaults | None = Field(
+        default=None,
+        description="Optional shared defaults merged into stage config payloads.",
     )
     artifacts: FlowArtifactStore = Field(
         description="In-memory artifact store shared across flow stages.",
+    )
+    compiled_config: ChatSettings | None = Field(
+        default=None,
+        description="Prevalidated chat settings compiled once per flow run.",
+        exclude=True,
     )
 
     @staticmethod
@@ -61,9 +68,53 @@ class ChatFlowRunnable(
             return normalized
         return f"{normalized[: max_chars - 1].rstrip()}…"
 
+    @staticmethod
+    def _resolve_seed_binding(
+        stage: FlowStageSpec,
+    ) -> tuple[str | None, str | None]:
+        """Resolve retrieve-seed source stage and validate chat input bindings."""
+        resolved: str | None = None
+        for binding in stage.inputs:
+            binding_error = ChatFlowRunnable._validate_input_binding(
+                stage=stage,
+                binding=binding,
+            )
+            if binding_error is not None:
+                return None, binding_error
+            if resolved is not None:
+                return (
+                    None,
+                    f"chat stage '{stage.id}' accepts at most one retrieve_seed input",
+                )
+            resolved = binding.from_stage
+
+        return resolved, None
+
+    @staticmethod
+    def _validate_input_binding(
+        *,
+        stage: FlowStageSpec,
+        binding: FlowStageInputBinding,
+    ) -> str | None:
+        """Validate one input binding against current chat-stage capabilities."""
+        if binding.artifact != "retrieve_seed":
+            return (
+                f"chat stage '{stage.id}' does not support input artifact "
+                f"'{binding.artifact}'"
+            )
+        if (
+            binding.target_field is not None
+            and binding.target_field != "seed_context"
+        ):
+            return (
+                f"chat stage '{stage.id}' retrieve_seed binding target_field "
+                "must be 'seed_context'"
+            )
+        return None
+
     def invoke(
         self,
-        input: ChatFlowInvokeInput,
+        input: ChatFlowInvokeInput | None = None,
         config: RunnableConfig | None = None,
         **kwargs: JsonValue,
     ) -> FlowStageResult:
@@ -71,29 +122,49 @@ class ChatFlowRunnable(
         _ = input
         _ = config
         _ = kwargs
-        payload: dict[str, ChatStageConfigValue] = build_chat_defaults_payload(
-            self.defaults
-        )
-        payload.update(self.stage.overrides)
-
-        if self.stage.seed_from_stage is not None:
-            seed_bundle = self.artifacts.get_chat_seed(
-                self.stage.seed_from_stage
+        seed_source, seed_error = self._resolve_seed_binding(self.stage)
+        if seed_error is not None:
+            return build_unexecuted_stage_result(
+                stage=self.stage,
+                success=False,
+                skipped=False,
+                error=seed_error,
             )
+
+        seed_bundle = None
+        if seed_source is not None:
+            seed_bundle = self.artifacts.get_chat_seed(seed_source)
             if seed_bundle is None:
                 return build_unexecuted_stage_result(
                     stage=self.stage,
                     success=False,
                     skipped=False,
                     error=(
-                        f"Missing seeded artifact from stage "
-                        f"'{self.stage.seed_from_stage}'"
+                        f"Missing seeded artifact from stage '{seed_source}'"
                     ),
                 )
-            payload["seed_context"] = seed_bundle
 
         started = perf_counter()
-        pipeline_config = ChatSettings.model_validate(payload)
+        if self.compiled_config is not None:
+            pipeline_config = self.compiled_config
+            if seed_bundle is not None:
+                pipeline_config = pipeline_config.model_copy(
+                    update={"seed_context": seed_bundle}
+                )
+        else:
+            if self.defaults is None:
+                raise ValueError(
+                    "chat runnable requires defaults when compiled_config "
+                    "is not supplied"
+                )
+            payload: dict[str, ChatStageConfigValue] = (
+                build_chat_defaults_payload(self.defaults)
+            )
+            payload.update(self.stage.overrides)
+            if seed_bundle is not None:
+                payload["seed_context"] = seed_bundle
+            pipeline_config = ChatSettings.model_validate(payload)
+
         result = ChatPipeline(config=pipeline_config).run()
         elapsed = perf_counter() - started
 

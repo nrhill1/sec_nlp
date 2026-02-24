@@ -6,6 +6,7 @@ from __future__ import annotations
 import pytest
 
 from sec_nlp.app.flows.artifacts import FlowArtifactStore
+from sec_nlp.app.flows.compiled import CompiledStage
 from sec_nlp.app.flows.models import (
     FlowDefaults,
     FlowSpec,
@@ -35,16 +36,14 @@ def test_flow_runner_uses_registry_for_stage_dispatch(monkeypatch) -> None:
     invoked: list[str] = []
 
     def _fake_invoke(
-        stage: FlowStageSpec,
-        defaults: FlowDefaults,
+        stage: CompiledStage,
         artifacts: FlowArtifactStore,
     ) -> FlowStageResult:
-        _ = defaults
         _ = artifacts
-        invoked.append(stage.id)
+        invoked.append(stage.stage.id)
         return FlowStageResult(
-            stage_id=stage.id,
-            pipeline=stage.pipeline,
+            stage_id=stage.stage.id,
+            pipeline=stage.stage.pipeline,
             success=True,
             outputs=[],
             metadata={},

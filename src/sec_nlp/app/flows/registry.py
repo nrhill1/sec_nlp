@@ -7,23 +7,19 @@ from collections.abc import Callable
 from dataclasses import dataclass
 
 from sec_nlp.app.flows.artifacts import FlowArtifactStore
-from sec_nlp.app.flows.models import (
-    FlowDefaults,
-    FlowStageResult,
-    FlowStageSpec,
-    PipelineName,
-)
+from sec_nlp.app.flows.compiled import CompiledStage
+from sec_nlp.app.flows.models import FlowStageResult, PipelineName
 from sec_nlp.app.flows.runnables import (
-    ChatFlowInvokeInput,
     ChatFlowRunnable,
-    ExhibitFlowInvokeInput,
     ExhibitFlowRunnable,
-    RetrieveFlowInvokeInput,
     RetrieveFlowRunnable,
 )
+from sec_nlp.pipelines.presets.chat import ChatSettings
+from sec_nlp.pipelines.presets.exb import ExhibitConfig
+from sec_nlp.pipelines.presets.retrieve import RetrieveSettings
 
 type StageInvokeCallable = Callable[
-    [FlowStageSpec, FlowDefaults, FlowArtifactStore], FlowStageResult
+    [CompiledStage, FlowArtifactStore], FlowStageResult
 ]
 
 
@@ -36,39 +32,45 @@ class FlowStageAdapter:
 
 
 def _invoke_retrieve_stage(
-    stage: FlowStageSpec,
-    defaults: FlowDefaults,
+    stage: CompiledStage,
     artifacts: FlowArtifactStore,
 ) -> FlowStageResult:
+    if not isinstance(stage.settings, RetrieveSettings):
+        raise ValueError("retrieve stage received non-retrieve settings")
+
     return RetrieveFlowRunnable(
-        stage=stage,
-        defaults=defaults,
+        stage=stage.stage,
         artifacts=artifacts,
-    ).invoke(RetrieveFlowInvokeInput())
+        compiled_config=stage.settings,
+    ).invoke()
 
 
 def _invoke_chat_stage(
-    stage: FlowStageSpec,
-    defaults: FlowDefaults,
+    stage: CompiledStage,
     artifacts: FlowArtifactStore,
 ) -> FlowStageResult:
+    if not isinstance(stage.settings, ChatSettings):
+        raise ValueError("chat stage received non-chat settings")
+
     return ChatFlowRunnable(
-        stage=stage,
-        defaults=defaults,
+        stage=stage.stage,
         artifacts=artifacts,
-    ).invoke(ChatFlowInvokeInput())
+        compiled_config=stage.settings,
+    ).invoke()
 
 
 def _invoke_exhibit_stage(
-    stage: FlowStageSpec,
-    defaults: FlowDefaults,
+    stage: CompiledStage,
     artifacts: FlowArtifactStore,
 ) -> FlowStageResult:
+    if not isinstance(stage.settings, ExhibitConfig):
+        raise ValueError("exhibit stage received non-exhibit settings")
+
     return ExhibitFlowRunnable(
-        stage=stage,
-        defaults=defaults,
+        stage=stage.stage,
         artifacts=artifacts,
-    ).invoke(ExhibitFlowInvokeInput())
+        compiled_config=stage.settings,
+    ).invoke()
 
 
 _FLOW_STAGE_ADAPTERS: dict[str, FlowStageAdapter] = {

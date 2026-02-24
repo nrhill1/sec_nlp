@@ -57,7 +57,10 @@ stages:
       qdrant_location: null
 - id: chat_answer
   pipeline: chat
-  seed_from_stage: retrieve_seed
+  inputs:
+  - from_stage: retrieve_seed
+    artifact: retrieve_seed
+    target_field: seed_context
   overrides:
     question: Compare NdPr supply-chain risk, processing bottlenecks, and pricing
       power across the REM basket, highlighting the strongest and weakest positioning.

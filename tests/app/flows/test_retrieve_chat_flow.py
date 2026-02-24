@@ -5,10 +5,13 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from sec_nlp.app.flows.artifacts import FlowArtifactStore
+from sec_nlp.app.flows.compiled import CompiledStage
 from sec_nlp.app.flows.contracts import ContractEvidenceBundle
 from sec_nlp.app.flows.models import (
     FlowDefaults,
     FlowSpec,
+    FlowStageInputBinding,
     FlowStageResult,
     FlowStageSpec,
 )
@@ -106,7 +109,13 @@ def test_flow_runner_passes_retrieve_seed_into_chat(monkeypatch) -> None:
             FlowStageSpec(
                 id="chat_answer",
                 pipeline="chat",
-                seed_from_stage="retrieve_seed",
+                inputs=[
+                    FlowStageInputBinding(
+                        from_stage="retrieve_seed",
+                        artifact="retrieve_seed",
+                        target_field="seed_context",
+                    )
+                ],
                 overrides={
                     "question": "What changed in liquidity risk?",
                     "output_format": "json",
@@ -140,6 +149,109 @@ def test_flow_runner_passes_retrieve_seed_into_chat(monkeypatch) -> None:
     )
     assert observed["seed_symbols"] == ["CDE"]
     assert observed["seed_queries"] == ["liquidity risk"]
+
+
+def test_flow_runner_passes_seed_via_inputs_binding(monkeypatch) -> None:
+    """Flow runner should resolve seeded chat context from `inputs` binding."""
+    observed: dict[str, object] = {}
+
+    def _fake_retrieve_run_for_flow(
+        self: RetrievePipeline,
+    ) -> tuple[RetrieveResult, RetrieveChatSeedBundle]:
+        _ = self
+        return (
+            RetrieveResult(
+                success=True,
+                outputs=[Path("/tmp/retrieve_summary.json")],
+                metadata={"hits_returned": 1},
+                symbols_processed=1,
+                queries_processed=1,
+                hits_returned=1,
+            ),
+            RetrieveChatSeedBundle(
+                upstream_pipeline="retrieve",
+                upstream_run_id="00000000-0000-0000-0000-000000000003",
+                upstream_short_id=3,
+                symbols=["CDE"],
+                queries=["liquidity risk"],
+                chunks=[
+                    RetrieveChatSeedChunk(
+                        collection="retrieve",
+                        symbol="CDE",
+                        accession_number="0000215466-24-000003",
+                        form_type="10-K",
+                        filed_date="2024-02-21",
+                        source="https://www.sec.gov/ixviewer/ix.html",
+                        score=0.9,
+                        snippet="Liquidity risk increased in fiscal year 2024.",
+                    )
+                ],
+            ),
+        )
+
+    def _fake_chat_run(self: ChatPipeline) -> ChatResult:
+        seed = self.config.seed_context
+        assert isinstance(seed, ChatSeedBundle)
+        observed["seed_upstream_run_id"] = seed.upstream_run_id
+        return ChatResult(
+            success=True,
+            outputs=[Path("/tmp/chat_summary.json")],
+            metadata={"seeded_context": True},
+            turns_processed=1,
+            hits_retrieved=1,
+            citations_returned=1,
+            answer="Answer. [C1]",
+            citation_ids=["C1"],
+        )
+
+    monkeypatch.setattr(
+        RetrievePipeline,
+        "run_for_flow",
+        _fake_retrieve_run_for_flow,
+    )
+    monkeypatch.setattr(ChatPipeline, "run", _fake_chat_run)
+
+    spec = FlowSpec(
+        name="retrieve-chat-seeded-inputs",
+        defaults=FlowDefaults(
+            email="test@example.com",
+            symbols=["CDE"],
+        ),
+        stages=[
+            FlowStageSpec(
+                id="retrieve_seed",
+                pipeline="retrieve",
+                overrides={
+                    "queries": ["liquidity risk"],
+                    "output_format": "json",
+                },
+            ),
+            FlowStageSpec(
+                id="chat_answer",
+                pipeline="chat",
+                inputs=[
+                    FlowStageInputBinding(
+                        from_stage="retrieve_seed",
+                        artifact="retrieve_seed",
+                        target_field="seed_context",
+                    )
+                ],
+                overrides={
+                    "question": "What changed in liquidity risk?",
+                    "output_format": "json",
+                    "interactive": False,
+                    "collections": ["retrieve"],
+                },
+            ),
+        ],
+    )
+
+    result = FlowRunner(spec=spec).run()
+
+    assert result.success is True
+    assert observed["seed_upstream_run_id"] == (
+        "00000000-0000-0000-0000-000000000003"
+    )
 
 
 def test_flow_runner_reports_missing_seed_artifact(monkeypatch) -> None:
@@ -186,7 +298,13 @@ def test_flow_runner_reports_missing_seed_artifact(monkeypatch) -> None:
             FlowStageSpec(
                 id="chat_answer",
                 pipeline="chat",
-                seed_from_stage="retrieve_seed",
+                inputs=[
+                    FlowStageInputBinding(
+                        from_stage="retrieve_seed",
+                        artifact="retrieve_seed",
+                        target_field="seed_context",
+                    )
+                ],
                 overrides={
                     "question": "What changed in liquidity risk?",
                     "output_format": "json",
@@ -222,13 +340,13 @@ def test_flow_runner_scopes_vector_caches_to_single_flow_run(
 
     def _fake_run_stage(
         self: FlowRunner,
-        stage: FlowStageSpec,
-        artifacts: object,
+        stage: CompiledStage,
+        artifacts: FlowArtifactStore,
     ) -> FlowStageResult:
         _ = (self, artifacts)
         return FlowStageResult(
-            stage_id=stage.id,
-            pipeline=stage.pipeline,
+            stage_id=stage.stage.id,
+            pipeline=stage.stage.pipeline,
             success=True,
             skipped=False,
             duration_seconds=0.0,

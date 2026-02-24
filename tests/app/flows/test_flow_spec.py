@@ -5,13 +5,18 @@ from __future__ import annotations
 
 import pytest
 
-from sec_nlp.app.flows.models import FlowDefaults, FlowSpec, FlowStageSpec
+from sec_nlp.app.flows.models import (
+    FlowDefaults,
+    FlowSpec,
+    FlowStageInputBinding,
+    FlowStageSpec,
+)
 
 
 def test_flow_spec_seed_stage_must_be_retrieve() -> None:
     with pytest.raises(
         ValueError,
-        match="seed_from_stage must reference a retrieve stage",
+        match="retrieve_seed input must reference a retrieve stage",
     ):
         FlowSpec(
             name="invalid-seed-upstream",
@@ -28,7 +33,13 @@ def test_flow_spec_seed_stage_must_be_retrieve() -> None:
                 FlowStageSpec(
                     id="chat_answer",
                     pipeline="chat",
-                    seed_from_stage="chat_seed_source",
+                    inputs=[
+                        FlowStageInputBinding(
+                            from_stage="chat_seed_source",
+                            artifact="retrieve_seed",
+                            target_field="seed_context",
+                        )
+                    ],
                     overrides={
                         "question": "Summarize with citations.",
                         "interactive": False,
@@ -51,7 +62,13 @@ def test_flow_spec_allows_chat_seeded_from_retrieve() -> None:
             FlowStageSpec(
                 id="chat_answer",
                 pipeline="chat",
-                seed_from_stage="retrieve_seed",
+                inputs=[
+                    FlowStageInputBinding(
+                        from_stage="retrieve_seed",
+                        artifact="retrieve_seed",
+                        target_field="seed_context",
+                    )
+                ],
                 overrides={
                     "question": "Summarize with citations.",
                     "interactive": False,
@@ -59,7 +76,40 @@ def test_flow_spec_allows_chat_seeded_from_retrieve() -> None:
             ),
         ],
     )
-    assert spec.stages[1].seed_from_stage == "retrieve_seed"
+    assert len(spec.stages[1].inputs) == 1
+    assert spec.stages[1].inputs[0].from_stage == "retrieve_seed"
+    assert spec.stages[1].inputs[0].artifact == "retrieve_seed"
+
+
+def test_flow_spec_allows_chat_seeded_with_inputs_binding() -> None:
+    spec = FlowSpec(
+        name="valid-seed-input-binding",
+        defaults=FlowDefaults(email="test@example.com", symbols=["CDE"]),
+        stages=[
+            FlowStageSpec(
+                id="retrieve_seed",
+                pipeline="retrieve",
+                overrides={"queries": ["liquidity risk"]},
+            ),
+            FlowStageSpec(
+                id="chat_answer",
+                pipeline="chat",
+                inputs=[
+                    FlowStageInputBinding(
+                        from_stage="retrieve_seed",
+                        artifact="retrieve_seed",
+                        target_field="seed_context",
+                    )
+                ],
+                overrides={
+                    "question": "Summarize with citations.",
+                    "interactive": False,
+                },
+            ),
+        ],
+    )
+    assert len(spec.stages[1].inputs) == 1
+    assert spec.stages[1].inputs[0].target_field == "seed_context"
 
 
 def test_flow_spec_allows_exhibit_stage() -> None:
@@ -75,3 +125,35 @@ def test_flow_spec_allows_exhibit_stage() -> None:
         ],
     )
     assert spec.stages[0].pipeline == "exhibit"
+
+
+def test_flow_spec_rejects_contract_input_from_non_exhibit_stage() -> None:
+    with pytest.raises(
+        ValueError,
+        match="contract_evidence input must reference an exhibit stage",
+    ):
+        FlowSpec(
+            name="invalid-contract-input",
+            defaults=FlowDefaults(email="test@example.com", symbols=["CDE"]),
+            stages=[
+                FlowStageSpec(
+                    id="retrieve_seed",
+                    pipeline="retrieve",
+                    overrides={"queries": ["liquidity risk"]},
+                ),
+                FlowStageSpec(
+                    id="chat_answer",
+                    pipeline="chat",
+                    inputs=[
+                        FlowStageInputBinding(
+                            from_stage="retrieve_seed",
+                            artifact="contract_evidence",
+                        )
+                    ],
+                    overrides={
+                        "question": "Summarize with citations.",
+                        "interactive": False,
+                    },
+                ),
+            ],
+        )

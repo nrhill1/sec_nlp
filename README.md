@@ -137,7 +137,10 @@ stages:
       output_format: json
   - id: chat_answer
     pipeline: chat
-    seed_from_stage: retrieve_seed
+    inputs:
+    - from_stage: retrieve_seed
+      artifact: retrieve_seed
+      target_field: seed_context
     overrides:
       question: "Summarize supply-chain and pricing risks with citations."
       interactive: false

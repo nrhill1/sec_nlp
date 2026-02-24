@@ -45,16 +45,22 @@ class ExhibitFlowRunnable(
     stage: FlowStageSpec = Field(
         description="Flow stage specification for this runnable execution.",
     )
-    defaults: FlowDefaults = Field(
-        description="Shared defaults merged into stage config payloads.",
+    defaults: FlowDefaults | None = Field(
+        default=None,
+        description="Optional shared defaults merged into stage config payloads.",
     )
     artifacts: FlowArtifactStore = Field(
         description="In-memory artifact store shared across flow stages.",
     )
+    compiled_config: ExhibitConfig | None = Field(
+        default=None,
+        description="Prevalidated exhibit settings compiled once per flow run.",
+        exclude=True,
+    )
 
     def invoke(
         self,
-        input: ExhibitFlowInvokeInput,
+        input: ExhibitFlowInvokeInput | None = None,
         config: RunnableConfig | None = None,
         **kwargs: JsonValue,
     ) -> FlowStageResult:
@@ -62,12 +68,21 @@ class ExhibitFlowRunnable(
         _ = input
         _ = config
         _ = kwargs
-        payload: dict[str, StageConfigValue] = build_stage_defaults_payload(
-            self.defaults
-        )
-        payload.update(self.stage.overrides)
         started = perf_counter()
-        pipeline_config = ExhibitConfig.model_validate(payload)
+        if self.compiled_config is not None:
+            pipeline_config = self.compiled_config
+        else:
+            if self.defaults is None:
+                raise ValueError(
+                    "exhibit runnable requires defaults when "
+                    "compiled_config is not supplied"
+                )
+            payload: dict[str, StageConfigValue] = build_stage_defaults_payload(
+                self.defaults
+            )
+            payload.update(self.stage.overrides)
+            pipeline_config = ExhibitConfig.model_validate(payload)
+
         pipeline = ExhibitPipeline(config=pipeline_config)
         result, evidence_bundle = pipeline.run_for_flow()
         elapsed = perf_counter() - started

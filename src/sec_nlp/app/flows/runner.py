@@ -7,6 +7,7 @@ from time import perf_counter
 from uuid import uuid4
 
 from sec_nlp.app.flows.artifacts import FlowArtifactStore
+from sec_nlp.app.flows.compiled import CompiledStage, compile_flow_stages
 from sec_nlp.app.flows.models import (
     FlowRunResult,
     FlowSpec,
@@ -34,10 +35,12 @@ class FlowRunner:
             artifacts = FlowArtifactStore()
             stage_results: list[FlowStageResult] = []
             outputs: list[str] = []
+            compiled_stages = compile_flow_stages(self.spec)
 
             previous: FlowStageResult | None = None
             failed_at: int | None = None
-            for idx, stage in enumerate(self.spec.stages):
+            for idx, compiled_stage in enumerate(compiled_stages):
+                stage = compiled_stage.stage
                 if not self._should_run_stage(stage, previous):
                     skipped = build_unexecuted_stage_result(
                         stage=stage,
@@ -49,7 +52,7 @@ class FlowRunner:
                     previous = skipped
                     continue
 
-                stage_result = self._run_stage(stage, artifacts)
+                stage_result = self._run_stage(compiled_stage, artifacts)
                 stage_results.append(stage_result)
                 outputs.extend(stage_result.outputs)
                 previous = stage_result
@@ -58,11 +61,11 @@ class FlowRunner:
                     failed_at = idx
                     break
 
-            if failed_at is not None and failed_at + 1 < len(self.spec.stages):
-                for stage in self.spec.stages[failed_at + 1 :]:
+            if failed_at is not None and failed_at + 1 < len(compiled_stages):
+                for compiled_stage in compiled_stages[failed_at + 1 :]:
                     stage_results.append(
                         build_unexecuted_stage_result(
-                            stage=stage,
+                            stage=compiled_stage.stage,
                             success=False,
                             skipped=True,
                             error="Skipped due to previous stage failure",
@@ -101,11 +104,11 @@ class FlowRunner:
 
     def _run_stage(
         self,
-        stage: FlowStageSpec,
+        stage: CompiledStage,
         artifacts: FlowArtifactStore,
     ) -> FlowStageResult:
-        adapter = resolve_stage_adapter(stage.pipeline)
-        return adapter.invoke(stage, self.spec.defaults, artifacts)
+        adapter = resolve_stage_adapter(stage.stage.pipeline)
+        return adapter.invoke(stage, artifacts)
 
     @staticmethod
     def _should_run_stage(

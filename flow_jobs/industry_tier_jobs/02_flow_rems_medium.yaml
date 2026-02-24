@@ -46,7 +46,10 @@ stages:
       qdrant_location: null
 - id: chat_answer
   pipeline: chat
-  seed_from_stage: retrieve_seed
+  inputs:
+  - from_stage: retrieve_seed
+    artifact: retrieve_seed
+    target_field: seed_context
   overrides:
     question: Compare NdPr supply security, pricing leverage, and balance-sheet risk
       across this REM basket using filing-grounded evidence.
