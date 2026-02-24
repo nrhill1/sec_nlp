@@ -13,14 +13,7 @@ from sec_nlp.app.flows.models import (
     FlowStageResult,
     FlowStageSpec,
 )
-from sec_nlp.app.flows.runnables import (
-    ChatFlowInvokeInput,
-    ChatFlowRunnable,
-    ExhibitFlowInvokeInput,
-    ExhibitFlowRunnable,
-    RetrieveFlowInvokeInput,
-    RetrieveFlowRunnable,
-)
+from sec_nlp.app.flows.registry import resolve_stage_adapter
 from sec_nlp.app.flows.runnables.utils import build_unexecuted_stage_result
 from sec_nlp.pipelines.vector import clear_runtime_caches
 from sec_nlp.types import JsonValue
@@ -111,25 +104,8 @@ class FlowRunner:
         stage: FlowStageSpec,
         artifacts: FlowArtifactStore,
     ) -> FlowStageResult:
-        if stage.pipeline == "retrieve":
-            return RetrieveFlowRunnable(
-                stage=stage,
-                defaults=self.spec.defaults,
-                artifacts=artifacts,
-            ).invoke(RetrieveFlowInvokeInput())
-        if stage.pipeline == "chat":
-            return ChatFlowRunnable(
-                stage=stage,
-                defaults=self.spec.defaults,
-                artifacts=artifacts,
-            ).invoke(ChatFlowInvokeInput())
-        if stage.pipeline == "exhibit":
-            return ExhibitFlowRunnable(
-                stage=stage,
-                defaults=self.spec.defaults,
-                artifacts=artifacts,
-            ).invoke(ExhibitFlowInvokeInput())
-        raise ValueError(f"Unsupported flow pipeline '{stage.pipeline}'")
+        adapter = resolve_stage_adapter(stage.pipeline)
+        return adapter.invoke(stage, self.spec.defaults, artifacts)
 
     @staticmethod
     def _should_run_stage(

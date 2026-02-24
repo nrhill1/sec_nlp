@@ -17,6 +17,8 @@ from pydantic import (
 
 from sec_nlp.types import JsonValue
 
+type PipelineName = Literal["retrieve", "chat", "exhibit"]
+
 
 class FlowDefaults(BaseModel):
     """Shared defaults merged into each stage configuration."""
@@ -89,7 +91,7 @@ class FlowStageSpec(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     id: str = Field(description="Stable stage identifier in this flow.")
-    pipeline: Literal["retrieve", "chat", "exhibit"] = Field(
+    pipeline: PipelineName = Field(
         description="Pipeline executed by this stage.",
     )
     overrides: dict[str, JsonValue] = Field(
