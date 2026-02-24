@@ -7,7 +7,8 @@ from pathlib import Path
 from pydantic import BaseModel, Field
 from pydantic_settings import CliSubCommand, SettingsConfigDict
 
-from sec_nlp.app.flows import FlowRunner, load_flow_spec
+from sec_nlp.app.flows.runner import FlowRunner
+from sec_nlp.app.flows.spec import load_flow_spec
 from sec_nlp.cli.formatting import (
     build_section_header_renderable,
     format_key_value,

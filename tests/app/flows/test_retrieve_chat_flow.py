@@ -4,13 +4,13 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from sec_nlp.app.flows import (
+from sec_nlp.app.flows.models import (
     FlowDefaults,
-    FlowRunner,
     FlowSpec,
     FlowStageResult,
     FlowStageSpec,
 )
+from sec_nlp.app.flows.runner import FlowRunner
 from sec_nlp.pipelines.presets.chat import ChatPipeline
 from sec_nlp.pipelines.presets.chat.bridge import ChatSeedBundle
 from sec_nlp.pipelines.presets.chat.models import ChatResult
