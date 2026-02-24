@@ -206,7 +206,7 @@ class RetrieveCandidateSearcher:
             raw_hits = list(result.hits)
             if normalized_symbol is None:
                 candidates[result.query] = raw_hits
-                logger.info(
+                logger.debug(
                     "EFTS hits for %s query=%r: %d",
                     symbol_display,
                     result.query,
@@ -242,7 +242,7 @@ class RetrieveCandidateSearcher:
                     normalized_symbol,
                     result.query,
                 )
-            logger.info(
+            logger.debug(
                 "EFTS hits for %s query=%r: %d",
                 normalized_symbol,
                 result.query,
@@ -251,6 +251,51 @@ class RetrieveCandidateSearcher:
             candidates[result.query] = filtered_hits
 
         return candidates
+
+    @staticmethod
+    def _truncate_query(query: str, *, max_chars: int = 56) -> str:
+        """Truncate query text for compact console summaries."""
+        normalized = " ".join(query.split())
+        if len(normalized) <= max_chars:
+            return normalized
+        return f"{normalized[: max_chars - 1].rstrip()}…"
+
+    @classmethod
+    def _log_query_hit_summary(
+        cls,
+        *,
+        symbol: str,
+        candidates_by_query: dict[str, list[EFTSHit]],
+        max_queries: int = 5,
+    ) -> None:
+        """Emit a compact one-line summary of EFTS hits per symbol."""
+        total_hits = sum(len(hits) for hits in candidates_by_query.values())
+        query_count = len(candidates_by_query)
+        if query_count == 0:
+            logger.info("EFTS summary for %s: 0 hits across 0 queries", symbol)
+            return
+
+        ranked = sorted(
+            candidates_by_query.items(),
+            key=lambda item: len(item[1]),
+            reverse=True,
+        )
+        snippets: list[str] = []
+        for query, hits in ranked[:max_queries]:
+            snippets.append(
+                f"{len(hits)}:{cls._truncate_query(query, max_chars=44)}"
+            )
+        remaining = max(0, len(ranked) - max_queries)
+        if remaining > 0:
+            snippets.append(f"+{remaining} more")
+
+        logger.info(
+            "EFTS summary for %s: %d hits across %d queries [%s]",
+            symbol,
+            total_hits,
+            query_count,
+            "; ".join(snippets),
+        )
 
     def search(
         self,
@@ -305,12 +350,20 @@ class RetrieveCandidateSearcher:
             batch_results=batch_results,
         )
         if normalized_symbol is None:
+            self._log_query_hit_summary(
+                symbol=symbol_display,
+                candidates_by_query=candidates,
+            )
             return candidates
 
         remapped: dict[str, list[EFTSHit]] = {query: [] for query in queries}
         for scoped_query, hits in candidates.items():
             original_query = reverse_query_map.get(scoped_query, scoped_query)
             remapped[original_query] = hits
+        self._log_query_hit_summary(
+            symbol=normalized_symbol,
+            candidates_by_query=remapped,
+        )
         return remapped
 
     def search_many(
@@ -394,6 +447,10 @@ class RetrieveCandidateSearcher:
             for scoped_query, hits in candidates.items():
                 original_query = reverse_map.get(scoped_query, scoped_query)
                 remapped[original_query] = hits
+            self._log_query_hit_summary(
+                symbol=symbol,
+                candidates_by_query=remapped,
+            )
             results[symbol] = remapped
         return results
 
