@@ -16,6 +16,8 @@ from sec_nlp.app.flows.models import (
 from sec_nlp.app.flows.runnables import (
     ChatFlowInvokeInput,
     ChatFlowRunnable,
+    ExhibitFlowInvokeInput,
+    ExhibitFlowRunnable,
     RetrieveFlowInvokeInput,
     RetrieveFlowRunnable,
 )
@@ -121,6 +123,12 @@ class FlowRunner:
                 defaults=self.spec.defaults,
                 artifacts=artifacts,
             ).invoke(ChatFlowInvokeInput())
+        if stage.pipeline == "exhibit":
+            return ExhibitFlowRunnable(
+                stage=stage,
+                defaults=self.spec.defaults,
+                artifacts=artifacts,
+            ).invoke(ExhibitFlowInvokeInput())
         raise ValueError(f"Unsupported flow pipeline '{stage.pipeline}'")
 
     @staticmethod

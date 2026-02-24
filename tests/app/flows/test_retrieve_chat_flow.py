@@ -5,6 +5,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from sec_nlp.app.flows.contracts import ContractEvidenceBundle
 from sec_nlp.app.flows.models import (
     FlowDefaults,
     FlowSpec,
@@ -15,6 +16,8 @@ from sec_nlp.app.flows.runner import FlowRunner
 from sec_nlp.pipelines.presets.chat import ChatPipeline
 from sec_nlp.pipelines.presets.chat.bridge import ChatSeedBundle
 from sec_nlp.pipelines.presets.chat.models import ChatResult
+from sec_nlp.pipelines.presets.exb import ExhibitPipeline
+from sec_nlp.pipelines.presets.exb.models import ExhibitResult
 from sec_nlp.pipelines.presets.retrieve import RetrievePipeline
 from sec_nlp.pipelines.presets.retrieve.bridge import (
     RetrieveChatSeedBundle,
@@ -262,3 +265,55 @@ def test_flow_runner_scopes_vector_caches_to_single_flow_run(
 
     assert result.success is True
     assert len(clear_calls) == 2
+
+
+def test_flow_runner_executes_exhibit_stage(monkeypatch) -> None:
+    """Flow runner should execute exhibit stage via runnable dispatch."""
+
+    def _fake_exhibit_run_for_flow(
+        self: ExhibitPipeline,
+    ) -> tuple[ExhibitResult, ContractEvidenceBundle]:
+        _ = self
+        return (
+            ExhibitResult(
+                success=True,
+                outputs=[Path("/tmp/exhibit_summary.yaml")],
+                metadata={"chunks_indexed": 3},
+            ),
+            ContractEvidenceBundle(
+                upstream_pipeline="exhibit",
+                upstream_run_id="00000000-0000-0000-0000-000000000401",
+                upstream_short_id=401,
+                symbols=["CDE"],
+                queries=["supply agreement"],
+                chunks=[],
+            ),
+        )
+
+    monkeypatch.setattr(
+        ExhibitPipeline,
+        "run_for_flow",
+        _fake_exhibit_run_for_flow,
+    )
+
+    spec = FlowSpec(
+        name="exhibit-only",
+        defaults=FlowDefaults(
+            email="test@example.com",
+            symbols=["CDE"],
+        ),
+        stages=[
+            FlowStageSpec(
+                id="exhibit_seed",
+                pipeline="exhibit",
+                overrides={"output_format": "json", "dry_run": True},
+            ),
+        ],
+    )
+
+    result = FlowRunner(spec=spec).run()
+
+    assert result.success is True
+    assert len(result.stage_results) == 1
+    assert result.stage_results[0].stage_id == "exhibit_seed"
+    assert result.stage_results[0].pipeline == "exhibit"

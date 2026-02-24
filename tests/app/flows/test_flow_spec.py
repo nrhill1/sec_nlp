@@ -60,3 +60,18 @@ def test_flow_spec_allows_chat_seeded_from_retrieve() -> None:
         ],
     )
     assert spec.stages[1].seed_from_stage == "retrieve_seed"
+
+
+def test_flow_spec_allows_exhibit_stage() -> None:
+    spec = FlowSpec(
+        name="exhibit-only",
+        defaults=FlowDefaults(email="test@example.com", symbols=["CDE"]),
+        stages=[
+            FlowStageSpec(
+                id="exhibit_seed",
+                pipeline="exhibit",
+                overrides={"output_format": "json"},
+            )
+        ],
+    )
+    assert spec.stages[0].pipeline == "exhibit"

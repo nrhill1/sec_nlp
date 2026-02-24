@@ -8,10 +8,15 @@ from pathlib import Path
 from langchain_core.runnables import RunnableSerializable
 
 from sec_nlp.app.flows.artifacts import FlowArtifactStore
+from sec_nlp.app.flows.contracts import ContractEvidenceBundle
 from sec_nlp.app.flows.models import FlowDefaults, FlowStageSpec
 from sec_nlp.app.flows.runnables.chat import (
     ChatFlowInvokeInput,
     ChatFlowRunnable,
+)
+from sec_nlp.app.flows.runnables.exhibit import (
+    ExhibitFlowInvokeInput,
+    ExhibitFlowRunnable,
 )
 from sec_nlp.app.flows.runnables.retrieve import (
     RetrieveFlowInvokeInput,
@@ -19,6 +24,8 @@ from sec_nlp.app.flows.runnables.retrieve import (
 )
 from sec_nlp.pipelines.presets.chat import ChatPipeline
 from sec_nlp.pipelines.presets.chat.models import ChatResult
+from sec_nlp.pipelines.presets.exb import ExhibitPipeline
+from sec_nlp.pipelines.presets.exb.models import ExhibitResult
 from sec_nlp.pipelines.presets.retrieve import RetrievePipeline
 from sec_nlp.pipelines.presets.retrieve.bridge import (
     RetrieveChatSeedBundle,
@@ -37,6 +44,10 @@ def test_retrieve_flow_runnable_is_runnable_serializable() -> None:
 
 def test_chat_flow_runnable_is_runnable_serializable() -> None:
     assert issubclass(ChatFlowRunnable, RunnableSerializable)
+
+
+def test_exhibit_flow_runnable_is_runnable_serializable() -> None:
+    assert issubclass(ExhibitFlowRunnable, RunnableSerializable)
 
 
 def test_retrieve_flow_runnable_invoke_uses_typed_input(monkeypatch) -> None:
@@ -129,3 +140,47 @@ def test_chat_flow_runnable_invoke_uses_typed_input(monkeypatch) -> None:
     assert result.success is True
     assert result.stage_id == "chat_answer"
     assert result.pipeline == "chat"
+
+
+def test_exhibit_flow_runnable_invoke_uses_typed_input(monkeypatch) -> None:
+    def _fake_exhibit_run_for_flow(
+        self: ExhibitPipeline,
+    ) -> tuple[ExhibitResult, ContractEvidenceBundle]:
+        _ = self
+        return (
+            ExhibitResult(
+                success=True,
+                outputs=[Path("/tmp/exhibit_summary.yaml")],
+                metadata={"chunks_indexed": 2},
+            ),
+            ContractEvidenceBundle(
+                upstream_pipeline="exhibit",
+                upstream_run_id="00000000-0000-0000-0000-000000000301",
+                upstream_short_id=301,
+                symbols=["CDE"],
+                queries=["offtake agreement"],
+                chunks=[],
+            ),
+        )
+
+    monkeypatch.setattr(
+        ExhibitPipeline,
+        "run_for_flow",
+        _fake_exhibit_run_for_flow,
+    )
+
+    runnable = ExhibitFlowRunnable(
+        stage=FlowStageSpec(
+            id="exhibit_seed",
+            pipeline="exhibit",
+            overrides={"output_format": "json", "dry_run": True},
+        ),
+        defaults=_flow_defaults(),
+        artifacts=FlowArtifactStore(),
+    )
+
+    result = runnable.invoke(ExhibitFlowInvokeInput())
+
+    assert result.success is True
+    assert result.stage_id == "exhibit_seed"
+    assert result.pipeline == "exhibit"

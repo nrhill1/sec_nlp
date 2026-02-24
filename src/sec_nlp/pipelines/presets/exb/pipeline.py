@@ -11,6 +11,7 @@ from qdrant_client import QdrantClient
 from qdrant_client.models import Distance, VectorParams
 from tqdm import tqdm
 
+from sec_nlp.app.flows.contracts import ContractEvidenceBundle
 from sec_nlp.core.infra.logger import log_divider, logger
 from sec_nlp.core.ingest.loader import Loader
 from sec_nlp.core.text.keyword import KeywordMatcher
@@ -27,6 +28,7 @@ from sec_nlp.pipelines.vector import upload_documents
 from sec_nlp.pipelines.vector.query import scroll_exists
 from sec_nlp.types import JsonValue, ResultDict
 
+from .bridge import build_contract_evidence_bundle
 from .config import ExhibitConfig
 from .io.exhibit_summary import write_exhibit_summary
 from .io.outputs import write_exhibit_outputs
@@ -187,6 +189,20 @@ class ExhibitPipeline(BasePipeline):
         return "exhibit"
 
     def run(self) -> ExhibitResult:
+        """Execute the exhibit pipeline and return standard result payload."""
+        result, _ = self._run_internal(include_bridge=False)
+        return result
+
+    def run_for_flow(self) -> tuple[ExhibitResult, ContractEvidenceBundle]:
+        """Execute exhibit pipeline and return flow handoff contract evidence."""
+        result, evidence_bundle = self._run_internal(include_bridge=True)
+        if evidence_bundle is not None:
+            return result, evidence_bundle
+        return result, self._empty_contract_bundle()
+
+    def _run_internal(
+        self, *, include_bridge: bool
+    ) -> tuple[ExhibitResult, ContractEvidenceBundle | None]:
         """
         Execute the exhibit pipeline.
 
@@ -207,6 +223,12 @@ class ExhibitPipeline(BasePipeline):
                 "run_id": str(self.config.run_id),
                 "short_id": self.config.short_id,
             }
+            bridge_chunks = []
+            bridge_symbols: list[str] = []
+            bridge_queries = list(self.config.candidate_queries)
+            short_id = (
+                self.config.short_id if self.config.short_id > 0 else None
+            )
 
             # Skip chunking/indexing if search_only mode
             if not self.config.search_only:
@@ -222,9 +244,26 @@ class ExhibitPipeline(BasePipeline):
                 ) as pbar:
                     for symbol in pbar:
                         pbar.set_description(f"Processing {symbol}")
-                        symbol_outputs = self._process_symbol(symbol)
+                        (
+                            symbol_outputs,
+                            bridge_docs,
+                        ) = self._process_symbol_internal(
+                            symbol,
+                            include_bridge=include_bridge,
+                        )
                         all_outputs.extend(symbol_outputs)
                         metadata[symbol] = len(symbol_outputs)
+                        if include_bridge and bridge_docs:
+                            symbol_bundle = build_contract_evidence_bundle(
+                                symbol=symbol,
+                                docs=bridge_docs,
+                                run_id=str(self.config.run_id),
+                                run_short_id=short_id,
+                                queries=bridge_queries,
+                            )
+                            if symbol_bundle.chunks:
+                                bridge_symbols.append(symbol)
+                                bridge_chunks.extend(symbol_bundle.chunks)
             else:
                 logger.info("Skipping chunking/indexing (search_only mode)")
 
@@ -237,21 +276,50 @@ class ExhibitPipeline(BasePipeline):
                 metadata["search_queries"] = list(self.config.search.queries)
 
             self.config.complete_run(success=True)
-            return ExhibitResult(
+            result = ExhibitResult(
                 success=True,
                 outputs=all_outputs,
                 metadata=metadata,
             )
+            evidence_bundle = (
+                ContractEvidenceBundle(
+                    upstream_pipeline="exhibit",
+                    upstream_run_id=str(self.config.run_id),
+                    upstream_short_id=short_id,
+                    symbols=bridge_symbols,
+                    queries=bridge_queries,
+                    chunks=bridge_chunks,
+                )
+                if include_bridge
+                else None
+            )
+            return result, evidence_bundle
 
         except Exception as e:
             logger.exception("Pipeline execution failed")
             self.config.complete_run(success=False)
-            return ExhibitResult(
-                success=False,
-                error=f"{type(e).__name__}: {e}",
+            return (
+                ExhibitResult(
+                    success=False,
+                    error=f"{type(e).__name__}: {e}",
+                ),
+                self._empty_contract_bundle() if include_bridge else None,
             )
 
     def _process_symbol(self, symbol: str) -> list[Path]:
+        """Process a single symbol and return output file paths."""
+        output_files, _ = self._process_symbol_internal(
+            symbol,
+            include_bridge=False,
+        )
+        return output_files
+
+    def _process_symbol_internal(
+        self,
+        symbol: str,
+        *,
+        include_bridge: bool,
+    ) -> tuple[list[Path], list[Document]]:
         """Process a single symbol."""
         log_divider(logger, color="cyan")
         logger.info("Processing symbol: %s \n", symbol)
@@ -279,7 +347,7 @@ class ExhibitPipeline(BasePipeline):
                     "Candidate-first found no accessions for %s; skipping symbol",
                     symbol,
                 )
-                return []
+                return [], []
 
         self._loader.add_symbol(symbol)
         keyword_terms = []
@@ -303,7 +371,7 @@ class ExhibitPipeline(BasePipeline):
 
         if not exhibit_docs:
             logger.warning("No exhibit sections found for %s", symbol)
-            return []
+            return [], []
 
         # Drop link-only reference stubs (e.g., “incorporated by reference” anchor lists)
         before_stub = len(exhibit_docs)
@@ -330,7 +398,7 @@ class ExhibitPipeline(BasePipeline):
             )
             if summary_outputs:
                 logger.info("Finished processing %s", symbol)
-            return summary_outputs
+            return summary_outputs, []
 
         stats.log(symbol=symbol, filtered_chunk_count=len(filtered_docs))
 
@@ -355,7 +423,7 @@ class ExhibitPipeline(BasePipeline):
                 )
             if not filtered_docs:
                 logger.info("All exhibit chunks already indexed for %s", symbol)
-                return []
+                return [], []
 
         logger.info(
             "Indexing %d chunks for %s",
@@ -399,7 +467,21 @@ class ExhibitPipeline(BasePipeline):
         )
         logger.info("Finished processing %s", symbol)
 
-        return output_files
+        bridge_docs = filtered_docs if include_bridge else []
+        return output_files, bridge_docs
+
+    def _empty_contract_bundle(self) -> ContractEvidenceBundle:
+        """Return empty contract evidence bundle for unsuccessful flow runs."""
+        return ContractEvidenceBundle(
+            upstream_pipeline="exhibit",
+            upstream_run_id=str(self.config.run_id),
+            upstream_short_id=self.config.short_id
+            if self.config.short_id > 0
+            else None,
+            symbols=[],
+            queries=list(self.config.candidate_queries),
+            chunks=[],
+        )
 
     def _run_semantic_search(self) -> list[Path]:
         """Run semantic search queries if configured.

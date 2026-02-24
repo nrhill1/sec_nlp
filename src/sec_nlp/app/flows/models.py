@@ -89,7 +89,7 @@ class FlowStageSpec(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     id: str = Field(description="Stable stage identifier in this flow.")
-    pipeline: Literal["retrieve", "chat"] = Field(
+    pipeline: Literal["retrieve", "chat", "exhibit"] = Field(
         description="Pipeline executed by this stage.",
     )
     overrides: dict[str, JsonValue] = Field(
