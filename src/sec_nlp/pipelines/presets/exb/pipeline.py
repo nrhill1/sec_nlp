@@ -31,6 +31,7 @@ from .config import ExhibitConfig
 from .io.exhibit_summary import write_exhibit_summary
 from .io.outputs import write_exhibit_outputs
 from .models import ExhibitResult
+from .steps.candidates import build_candidate_accessions
 from .steps.extract.exhibits import collect_exhibit_documents
 from .steps.search.payloads import (
     SearchManifestMetaPayload,
@@ -255,6 +256,31 @@ class ExhibitPipeline(BasePipeline):
         log_divider(logger, color="cyan")
         logger.info("Processing symbol: %s \n", symbol)
 
+        allowed_accessions: set[str] | None = None
+        if self.config.candidate_first and self.config.has_contract_exhibits():
+            allowed_accessions = build_candidate_accessions(
+                symbol=symbol,
+                config=self.config,
+            )
+            if allowed_accessions:
+                logger.info(
+                    "Candidate-first narrowed %s to %d accessions",
+                    symbol,
+                    len(allowed_accessions),
+                )
+            elif self.config.candidate_fallback_full_scan:
+                logger.warning(
+                    "Candidate-first found no accessions for %s; falling back to full scan",
+                    symbol,
+                )
+                allowed_accessions = None
+            else:
+                logger.warning(
+                    "Candidate-first found no accessions for %s; skipping symbol",
+                    symbol,
+                )
+                return []
+
         self._loader.add_symbol(symbol)
         keyword_terms = []
         if self.config.has_contract_exhibits():
@@ -272,6 +298,7 @@ class ExhibitPipeline(BasePipeline):
             keyword_categories=keyword_categories,
             adaptive_chunk_size=self._adaptive_chunk_size,
             skip_prefilter=False,
+            allowed_accessions=allowed_accessions,
         )
 
         if not exhibit_docs:

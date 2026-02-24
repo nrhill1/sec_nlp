@@ -218,6 +218,66 @@ class ExhibitConfig(BasePipelineSettings):
             "Keywords to search for in contract exhibits (used for scoring/ordering chunks)"
         ),
     )
+    candidate_first: bool = Field(
+        default=False,
+        description=(
+            "Use retrieve/EFTS candidate search to narrow accessions before exhibit parsing."
+        ),
+    )
+    candidate_fallback_full_scan: bool = Field(
+        default=True,
+        description=(
+            "When candidate-first finds no accessions, fall back to full exhibit scan."
+        ),
+    )
+    candidate_queries: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Optional candidate queries for accession narrowing. "
+            "Defaults to search_terms + category keywords when empty."
+        ),
+        json_schema_extra={
+            "cli_args": {"nargs": "+", "action": "extend"},
+        },
+    )
+    candidate_query_cap: int = Field(
+        default=16,
+        ge=1,
+        le=100,
+        description="Maximum number of candidate queries used per symbol.",
+    )
+    efts_candidates: int = Field(
+        default=200,
+        ge=1,
+        le=1000,
+        description="Maximum EFTS candidates fetched per candidate query.",
+    )
+    candidate_top_k: int = Field(
+        default=120,
+        ge=1,
+        le=200,
+        description="Maximum ranked candidate hits kept per symbol.",
+    )
+    candidate_query_term_min_hits: int = Field(
+        default=1,
+        ge=0,
+        le=20,
+        description=(
+            "Minimum query-term overlap required in EFTS snippets for candidate retention."
+        ),
+    )
+    candidate_query_term_min_ratio: float = Field(
+        default=0.25,
+        ge=0.0,
+        le=1.0,
+        description=(
+            "Minimum query-term overlap ratio required in EFTS snippets for candidate retention."
+        ),
+    )
+    candidate_stopword_aware_lexical: bool = Field(
+        default=True,
+        description="Enable stopword-aware lexical pruning for candidate ranking.",
+    )
 
     def pipeline_label(self) -> str:
         return "Exhibit"
@@ -228,6 +288,32 @@ class ExhibitConfig(BasePipelineSettings):
         if isinstance(v, str):
             v = [part for part in v.replace(",", " ").split() if part]
         return [term.strip() for term in v]
+
+    @field_validator("candidate_queries", mode="before")
+    @classmethod
+    def normalize_candidate_queries(
+        cls, v: list[str] | str | None
+    ) -> list[str]:
+        if v is None:
+            return []
+        if isinstance(v, str):
+            values = [v]
+        else:
+            values = list(v)
+
+        normalized: list[str] = []
+        seen: set[str] = set()
+        for raw in values:
+            for part in str(raw).split("||"):
+                cleaned = part.strip()
+                if not cleaned:
+                    continue
+                key = cleaned.casefold()
+                if key in seen:
+                    continue
+                seen.add(key)
+                normalized.append(cleaned)
+        return normalized
 
     @field_validator("mode")
     @classmethod

@@ -57,6 +57,7 @@ def collect_exhibit_documents(
     keyword_categories: KeywordMatcher.KeywordCategories,
     adaptive_chunk_size: Callable[[int], int],
     skip_prefilter: bool = False,
+    allowed_accessions: set[str] | None = None,
 ) -> tuple[list[Document], ExhibitStats]:
     """Parse exhibit content (full submissions + downloaded HTML) into chunks."""
     start_date, end_date = config.date_range
@@ -114,6 +115,11 @@ def collect_exhibit_documents(
     full_submission_files = list(filing_dir.rglob("full-submission.txt"))
     all_exhibit_documents = []
     for full_sub_file in full_submission_files:
+        if (
+            allowed_accessions is not None
+            and full_sub_file.parent.name not in allowed_accessions
+        ):
+            continue
         exhibits = exhibit_downloader.parse_full_submission(
             full_sub_file, accession_number=full_sub_file.parent.name
         )
@@ -124,6 +130,11 @@ def collect_exhibit_documents(
             continue
 
         accession_number = accession_dir.name
+        if (
+            allowed_accessions is not None
+            and accession_number not in allowed_accessions
+        ):
+            continue
         try:
             cik = loader._symbol_to_cik.get(symbol)
             if not cik:
@@ -177,6 +188,11 @@ def collect_exhibit_documents(
                 continue
 
             doc_accession_number = exhibit_doc.accession_number
+            if (
+                allowed_accessions is not None
+                and doc_accession_number not in allowed_accessions
+            ):
+                continue
             doc_exhibit_number = exhibit_doc.exhibit_number
 
             log_document_metadata(
@@ -262,6 +278,12 @@ def collect_exhibit_documents(
 
     for html_file in html_files:
         try:
+            accession_number = html_file.parent.name
+            if (
+                allowed_accessions is not None
+                and accession_number not in allowed_accessions
+            ):
+                continue
             with open(html_file, encoding="utf-8", errors="ignore") as f:
                 html_content = f.read()
 
@@ -302,7 +324,6 @@ def collect_exhibit_documents(
                     stats.prefilter_skips[reason] += 1
                     continue
 
-            accession_number = html_file.parent.name
             filing_date = loader._get_filing_date_from_dir(html_file.parent)
             stats.accession_numbers.add(accession_number)
 

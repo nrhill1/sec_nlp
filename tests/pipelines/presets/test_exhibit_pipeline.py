@@ -146,6 +146,36 @@ class TestExhibitPipeline:
             for doc in filtered
         )
 
+    def test_process_symbol_passes_candidate_accessions(
+        self, mock_config: ExhibitConfig, mock_dependencies: None
+    ) -> None:
+        """Candidate-first mode should pass narrowed accession list to extract step."""
+        config = mock_config.model_copy(
+            update={
+                "candidate_first": True,
+                "candidate_fallback_full_scan": False,
+            }
+        )
+        pipeline = ExhibitPipeline(config=config)
+
+        with (
+            patch(
+                "sec_nlp.pipelines.presets.exb.pipeline.build_candidate_accessions",
+                return_value={"0001234567-26-000001"},
+            ) as candidate_mock,
+            patch(
+                "sec_nlp.pipelines.presets.exb.pipeline.collect_exhibit_documents",
+                return_value=([], MagicMock()),
+            ) as collect_mock,
+        ):
+            outputs = pipeline._process_symbol("CAT")
+
+        assert outputs == []
+        assert candidate_mock.called
+        assert collect_mock.call_args.kwargs["allowed_accessions"] == {
+            "0001234567-26-000001"
+        }
+
 
 class TestExhibitContractResult:
     """Tests for ExhibitContractResult model."""

@@ -15,6 +15,7 @@ sec-nlp exb DE --exhibit-categories contracts subsidiaries consents
 3. Optionally upload vectors to Qdrant.
 4. Write exhibit index + summary artifacts.
 5. Optionally run semantic search queries (`search.queries`).
+6. Optional candidate-first mode can narrow processing to top EFTS accessions.
 
 ## Key Configuration
 
@@ -24,6 +25,9 @@ sec-nlp exb DE --exhibit-categories contracts subsidiaries consents
 - `search_only` to skip indexing and query existing vectors
 - `dry_run` to skip vector upload
 - `export_format` (`yaml`, `json`, `csv`, `both`; default `yaml`)
+- `candidate_first` to reuse retrieve EFTS/ranking logic for accession narrowing
+- `candidate_queries`, `candidate_top_k`, `efts_candidates`
+- `candidate_fallback_full_scan` for safe fallback when no candidate accessions are found
 
 ## Outputs
 
