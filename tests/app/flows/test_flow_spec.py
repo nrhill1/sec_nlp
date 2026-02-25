@@ -127,6 +127,37 @@ def test_flow_spec_allows_exhibit_stage() -> None:
     assert spec.stages[0].pipeline == "exhibit"
 
 
+def test_flow_spec_allows_chat_contract_input_from_exhibit() -> None:
+    spec = FlowSpec(
+        name="exhibit-chat-contract-seed",
+        defaults=FlowDefaults(email="test@example.com", symbols=["CDE"]),
+        stages=[
+            FlowStageSpec(
+                id="exhibit_seed",
+                pipeline="exhibit",
+                overrides={"dry_run": True},
+            ),
+            FlowStageSpec(
+                id="chat_answer",
+                pipeline="chat",
+                inputs=[
+                    FlowStageInputBinding(
+                        from_stage="exhibit_seed",
+                        artifact="contract_evidence",
+                        target_field="seed_context",
+                    )
+                ],
+                overrides={
+                    "question": "Summarize key contract obligations.",
+                    "interactive": False,
+                },
+            ),
+        ],
+    )
+    assert len(spec.stages[1].inputs) == 1
+    assert spec.stages[1].inputs[0].artifact == "contract_evidence"
+
+
 def test_flow_spec_rejects_contract_input_from_non_exhibit_stage() -> None:
     with pytest.raises(
         ValueError,
@@ -155,5 +186,29 @@ def test_flow_spec_rejects_contract_input_from_non_exhibit_stage() -> None:
                         "interactive": False,
                     },
                 ),
+            ],
+        )
+
+
+def test_flow_spec_rejects_inputs_for_non_chat_stage() -> None:
+    with pytest.raises(
+        ValueError,
+        match="does not accept input bindings yet",
+    ):
+        FlowSpec(
+            name="invalid-retrieve-inputs",
+            defaults=FlowDefaults(email="test@example.com", symbols=["CDE"]),
+            stages=[
+                FlowStageSpec(
+                    id="retrieve_seed",
+                    pipeline="retrieve",
+                    inputs=[
+                        FlowStageInputBinding(
+                            from_stage="retrieve_seed",
+                            artifact="retrieve_seed",
+                        )
+                    ],
+                    overrides={"queries": ["liquidity risk"]},
+                )
             ],
         )

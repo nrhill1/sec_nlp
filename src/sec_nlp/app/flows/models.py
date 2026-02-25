@@ -182,6 +182,11 @@ class FlowSpec(BaseModel):
             stage_pipelines[stage.id] = stage.pipeline
 
         for stage in self.stages:
+            if stage.pipeline != "chat" and stage.inputs:
+                raise ValueError(
+                    f"stage '{stage.id}' ({stage.pipeline}) does not accept "
+                    "input bindings yet"
+                )
             for binding in stage.inputs:
                 if binding.from_stage not in stage_ids:
                     raise ValueError(

@@ -9,6 +9,11 @@ from langchain_core.runnables import RunnableConfig, RunnableSerializable
 from pydantic import BaseModel, ConfigDict, Field
 
 from sec_nlp.app.flows.artifacts import FlowArtifactStore
+from sec_nlp.app.flows.contracts import (
+    ContractEvidenceBundle,
+    FlowSeedBundle,
+    FlowSeedChunk,
+)
 from sec_nlp.app.flows.models import (
     FlowDefaults,
     FlowStageInputBinding,
@@ -71,9 +76,9 @@ class ChatFlowRunnable(
     @staticmethod
     def _resolve_seed_binding(
         stage: FlowStageSpec,
-    ) -> tuple[str | None, str | None]:
-        """Resolve retrieve-seed source stage and validate chat input bindings."""
-        resolved: str | None = None
+    ) -> tuple[FlowStageInputBinding | None, str | None]:
+        """Resolve a single chat input binding for seeded context injection."""
+        resolved: FlowStageInputBinding | None = None
         for binding in stage.inputs:
             binding_error = ChatFlowRunnable._validate_input_binding(
                 stage=stage,
@@ -84,9 +89,9 @@ class ChatFlowRunnable(
             if resolved is not None:
                 return (
                     None,
-                    f"chat stage '{stage.id}' accepts at most one retrieve_seed input",
+                    f"chat stage '{stage.id}' accepts at most one input binding",
                 )
-            resolved = binding.from_stage
+            resolved = binding
 
         return resolved, None
 
@@ -97,7 +102,7 @@ class ChatFlowRunnable(
         binding: FlowStageInputBinding,
     ) -> str | None:
         """Validate one input binding against current chat-stage capabilities."""
-        if binding.artifact != "retrieve_seed":
+        if binding.artifact not in {"retrieve_seed", "contract_evidence"}:
             return (
                 f"chat stage '{stage.id}' does not support input artifact "
                 f"'{binding.artifact}'"
@@ -107,10 +112,41 @@ class ChatFlowRunnable(
             and binding.target_field != "seed_context"
         ):
             return (
-                f"chat stage '{stage.id}' retrieve_seed binding target_field "
+                f"chat stage '{stage.id}' input binding target_field "
                 "must be 'seed_context'"
             )
         return None
+
+    @staticmethod
+    def _seed_from_contract_evidence(
+        evidence: ContractEvidenceBundle,
+    ) -> FlowSeedBundle:
+        """Convert exhibit contract evidence bundle into chat seeded chunks."""
+        chunks: list[FlowSeedChunk] = []
+        for contract_chunk in evidence.chunks:
+            snippet = contract_chunk.snippet.strip()
+            if not snippet:
+                continue
+            chunks.append(
+                FlowSeedChunk(
+                    collection="exhibit",
+                    score=float(contract_chunk.score),
+                    symbol=contract_chunk.symbol,
+                    accession_number=contract_chunk.accession_number,
+                    form_type=contract_chunk.form_type,
+                    filed_date=contract_chunk.filed_date,
+                    source=contract_chunk.source,
+                    snippet=snippet,
+                )
+            )
+        return FlowSeedBundle(
+            upstream_pipeline=evidence.upstream_pipeline,
+            upstream_run_id=evidence.upstream_run_id,
+            upstream_short_id=evidence.upstream_short_id,
+            symbols=list(evidence.symbols),
+            queries=list(evidence.queries),
+            chunks=chunks,
+        )
 
     def invoke(
         self,
@@ -122,7 +158,7 @@ class ChatFlowRunnable(
         _ = input
         _ = config
         _ = kwargs
-        seed_source, seed_error = self._resolve_seed_binding(self.stage)
+        seed_binding, seed_error = self._resolve_seed_binding(self.stage)
         if seed_error is not None:
             return build_unexecuted_stage_result(
                 stage=self.stage,
@@ -131,16 +167,28 @@ class ChatFlowRunnable(
                 error=seed_error,
             )
 
-        seed_bundle = None
-        if seed_source is not None:
-            seed_bundle = self.artifacts.get_chat_seed(seed_source)
+        seed_bundle: FlowSeedBundle | None = None
+        if seed_binding is not None:
+            if seed_binding.artifact == "retrieve_seed":
+                seed_bundle = self.artifacts.get_chat_seed(
+                    seed_binding.from_stage
+                )
+            elif seed_binding.artifact == "contract_evidence":
+                contract_bundle = self.artifacts.get_contract_evidence(
+                    seed_binding.from_stage
+                )
+                if contract_bundle is not None:
+                    seed_bundle = self._seed_from_contract_evidence(
+                        contract_bundle
+                    )
             if seed_bundle is None:
                 return build_unexecuted_stage_result(
                     stage=self.stage,
                     success=False,
                     skipped=False,
                     error=(
-                        f"Missing seeded artifact from stage '{seed_source}'"
+                        f"Missing {seed_binding.artifact} artifact from stage "
+                        f"'{seed_binding.from_stage}'"
                     ),
                 )
 

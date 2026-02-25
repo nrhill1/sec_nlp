@@ -7,7 +7,10 @@ from pathlib import Path
 
 from sec_nlp.app.flows.artifacts import FlowArtifactStore
 from sec_nlp.app.flows.compiled import CompiledStage
-from sec_nlp.app.flows.contracts import ContractEvidenceBundle
+from sec_nlp.app.flows.contracts import (
+    ContractEvidenceBundle,
+    ContractEvidenceChunk,
+)
 from sec_nlp.app.flows.models import (
     FlowDefaults,
     FlowSpec,
@@ -323,7 +326,7 @@ def test_flow_runner_reports_missing_seed_artifact(monkeypatch) -> None:
     assert result.stage_results[1].success is False
     assert (
         result.stage_results[1].error
-        == "Missing seeded artifact from stage 'retrieve_seed'"
+        == "Missing retrieve_seed artifact from stage 'retrieve_seed'"
     )
 
 
@@ -435,3 +438,102 @@ def test_flow_runner_executes_exhibit_stage(monkeypatch) -> None:
     assert len(result.stage_results) == 1
     assert result.stage_results[0].stage_id == "exhibit_seed"
     assert result.stage_results[0].pipeline == "exhibit"
+
+
+def test_flow_runner_passes_contract_evidence_into_chat(monkeypatch) -> None:
+    """Flow runner should map exhibit contract evidence into chat seed context."""
+    observed: dict[str, object] = {}
+
+    def _fake_exhibit_run_for_flow(
+        self: ExhibitPipeline,
+    ) -> tuple[ExhibitResult, ContractEvidenceBundle]:
+        _ = self
+        return (
+            ExhibitResult(
+                success=True,
+                outputs=[Path("/tmp/exhibit_summary.yaml")],
+                metadata={"chunks_indexed": 1},
+            ),
+            ContractEvidenceBundle(
+                upstream_pipeline="exhibit",
+                upstream_run_id="00000000-0000-0000-0000-000000000402",
+                upstream_short_id=402,
+                symbols=["CDE"],
+                queries=["supply agreement"],
+                chunks=[
+                    ContractEvidenceChunk(
+                        symbol="CDE",
+                        accession_number="0000215466-24-000003",
+                        form_type="8-K",
+                        filed_date="2024-02-21",
+                        source="https://www.sec.gov/ixviewer/ix.html",
+                        score=0.87,
+                        snippet="Supplier must provide NdPr oxide volumes quarterly.",
+                    )
+                ],
+            ),
+        )
+
+    def _fake_chat_run(self: ChatPipeline) -> ChatResult:
+        seed = self.config.seed_context
+        assert isinstance(seed, ChatSeedBundle)
+        observed["seed_source"] = seed.upstream_pipeline
+        observed["seed_run_id"] = seed.upstream_run_id
+        observed["seed_chunk_collection"] = seed.chunks[0].collection
+        observed["seed_chunk_score"] = seed.chunks[0].score
+        return ChatResult(
+            success=True,
+            outputs=[Path("/tmp/chat_summary.json")],
+            metadata={"seeded_context": True},
+            turns_processed=1,
+            hits_retrieved=1,
+            citations_returned=1,
+            answer="Contract includes quarterly delivery obligations. [C1]",
+            citation_ids=["C1"],
+        )
+
+    monkeypatch.setattr(
+        ExhibitPipeline,
+        "run_for_flow",
+        _fake_exhibit_run_for_flow,
+    )
+    monkeypatch.setattr(ChatPipeline, "run", _fake_chat_run)
+
+    spec = FlowSpec(
+        name="exhibit-chat-contract-seed",
+        defaults=FlowDefaults(
+            email="test@example.com",
+            symbols=["CDE"],
+        ),
+        stages=[
+            FlowStageSpec(
+                id="exhibit_seed",
+                pipeline="exhibit",
+                overrides={"output_format": "json", "dry_run": True},
+            ),
+            FlowStageSpec(
+                id="chat_answer",
+                pipeline="chat",
+                inputs=[
+                    FlowStageInputBinding(
+                        from_stage="exhibit_seed",
+                        artifact="contract_evidence",
+                        target_field="seed_context",
+                    )
+                ],
+                overrides={
+                    "question": "Summarize material delivery obligations.",
+                    "interactive": False,
+                    "output_format": "json",
+                },
+            ),
+        ],
+    )
+
+    result = FlowRunner(spec=spec).run()
+
+    assert result.success is True
+    assert observed["seed_source"] == "exhibit"
+    assert observed["seed_run_id"] == "00000000-0000-0000-0000-000000000402"
+    assert observed["seed_chunk_collection"] == "exhibit"
+    assert observed["seed_chunk_score"] == 0.87
