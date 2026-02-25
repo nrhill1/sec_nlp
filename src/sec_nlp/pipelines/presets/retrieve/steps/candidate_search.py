@@ -260,15 +260,24 @@ class RetrieveCandidateSearcher:
             return normalized
         return f"{normalized[: max_chars - 1].rstrip()}…"
 
+    @staticmethod
+    def _hit_bar(*, hits: int, max_hits: int, width: int = 10) -> str:
+        """Build a compact fixed-width ASCII bar for per-query hit counts."""
+        if width <= 0 or max_hits <= 0 or hits <= 0:
+            return "." * max(0, width)
+        ratio = min(1.0, hits / max_hits)
+        filled = max(1, int(round(ratio * width)))
+        return ("#" * filled) + ("." * (width - filled))
+
     @classmethod
     def _log_query_hit_summary(
         cls,
         *,
         symbol: str,
         candidates_by_query: dict[str, list[EFTSHit]],
-        max_queries: int = 5,
+        max_queries: int = 3,
     ) -> None:
-        """Emit a compact one-line summary of EFTS hits per symbol."""
+        """Emit a compact multi-line summary of EFTS hits per symbol."""
         total_hits = sum(len(hits) for hits in candidates_by_query.values())
         query_count = len(candidates_by_query)
         if query_count == 0:
@@ -296,6 +305,17 @@ class RetrieveCandidateSearcher:
             query_count,
             "; ".join(snippets),
         )
+        max_hits = len(ranked[0][1]) if ranked else 0
+        for idx, (query, hits) in enumerate(ranked[:max_queries], start=1):
+            logger.info(
+                "  %d) %3d |%s| %s",
+                idx,
+                len(hits),
+                cls._hit_bar(hits=len(hits), max_hits=max_hits, width=10),
+                cls._truncate_query(query, max_chars=52),
+            )
+        if remaining > 0:
+            logger.info("  ... +%d additional queries", remaining)
 
     def search(
         self,

@@ -456,6 +456,7 @@ def test_candidates_from_batch_results_logs_compact_summary_at_info(
 
     assert len(candidates["rare earth"]) == 1
     assert "EFTS summary for MP: 1 hits across 1 queries" in caplog.text
+    assert "1)   1 |##########| rare earth" in caplog.text
     assert "EFTS hits for MP query='rare earth': 1" not in caplog.text
     assert "Filtered " not in caplog.text
 
