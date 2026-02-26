@@ -42,10 +42,7 @@ from sec_nlp.core.news.client import (
 )
 from sec_nlp.core.types import as_json_dict, coerce_result_json_dict
 from sec_nlp.pipelines import BasePipeline
-from sec_nlp.pipelines.output_io import (
-    build_run_file_stem,
-    build_run_header_fields,
-)
+from sec_nlp.pipelines.output_io import build_run_output_context
 from sec_nlp.types import JsonValue, ResultDict
 
 from ..retrieve import RetrievePipeline, RetrieveSettings
@@ -1750,17 +1747,16 @@ class ChatPipeline(BasePipeline):
         symbol = self._context_symbol(citations) or "ALL"
 
         symbol_out = self.config.get_symbol_output_dir(symbol)
-        base_stem = build_run_file_stem(symbol, "chat", self.config.run_id)
-        run_header = build_run_header_fields(
+        output_context = build_run_output_context(
+            symbol=symbol,
+            suffix="chat",
             run_timestamp=self.config.run_timestamp,
             run_id=self.config.run_id,
             run_short_id=self.config.short_id,
         )
-
-        run_short_id_raw = run_header.get("run_short_id")
-        run_short_id = (
-            run_short_id_raw if isinstance(run_short_id_raw, int) else None
-        )
+        base_stem = output_context.base_stem
+        run_header = output_context.run_header
+        run_short_id = output_context.run_short_id
 
         payload_metadata = self._base_metadata(
             external_context=external_context,
