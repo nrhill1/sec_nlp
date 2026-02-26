@@ -14,7 +14,7 @@ from sec_nlp.pipelines.base.config import BasePipelineSettings
 from sec_nlp.pipelines.llm.config import LLMConfig
 from sec_nlp.pipelines.vector.config import VectorConfig
 
-from .bridge import ChatSeedBundle
+from .bridge import ChatRetrievedChunk, ChatSeedBundle
 
 
 class ChatHistoryTurn(BaseModel):
@@ -86,6 +86,14 @@ class ChatSettings(BasePipelineSettings):
         description=(
             "Optional in-memory seeded context bundle from an upstream flow stage. "
             "When provided, chat can bypass vector collection search."
+        ),
+        exclude=True,
+    )
+    seed_chunks: list[ChatRetrievedChunk] = Field(
+        default_factory=list,
+        description=(
+            "Optional prebuilt retrieval chunks injected by flow runtime to "
+            "bypass seed model conversion."
         ),
         exclude=True,
     )

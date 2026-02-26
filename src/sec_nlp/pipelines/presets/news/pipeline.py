@@ -62,9 +62,6 @@ class NewsPipeline(BasePipeline):
     def result_model(cls) -> type[NewsResult]:
         return NewsResult
 
-    def _build_components(self) -> None:
-        return
-
     def run(self) -> NewsResult:
         try:
             self.config.setup_paths()

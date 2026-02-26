@@ -959,6 +959,47 @@ def test_retrieve_pipeline_run_for_flow_returns_seed_bundle(
     assert bundle.chunks[0].snippet
 
 
+def test_retrieve_pipeline_run_for_flow_with_chunks(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    config = RetrieveSettings(
+        email="test@example.com",
+        symbols=["ABC"],
+        queries=["supply chain"],
+        dl_path=tmp_path / "downloads",
+        out_path=tmp_path / "outputs",
+        output_format="json",
+        top_k=5,
+        download_missing=False,
+    )
+    candidates = {
+        "supply chain": [
+            _efts_hit(
+                accession="0000123456-26-000101",
+                filed=date(2026, 2, 3),
+                score=0.88,
+                company="ABC Co",
+            )
+        ]
+    }
+    monkeypatch.setattr(
+        "sec_nlp.pipelines.presets.retrieve.pipeline.run_candidate_search",
+        lambda symbol, queries, settings: candidates,
+    )
+
+    result, bundle, chunks = RetrievePipeline(
+        config=config
+    ).run_for_flow_with_chunks()
+
+    assert result.success is True
+    assert isinstance(bundle, RetrieveChatSeedBundle)
+    assert len(bundle.chunks) == 1
+    assert len(chunks) == 1
+    assert chunks[0].collection == "retrieve"
+    assert chunks[0].snippet
+
+
 def test_retrieve_pipeline_runs_unscoped_without_symbols(
     tmp_path: Path,
     monkeypatch,

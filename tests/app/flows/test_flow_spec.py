@@ -20,7 +20,7 @@ def test_flow_spec_seed_stage_must_be_retrieve() -> None:
     ):
         FlowSpec(
             name="invalid-seed-upstream",
-            defaults=FlowDefaults(email="test@example.com", symbols=["CDE"]),
+            defaults=FlowDefaults(email="test@example.com"),
             stages=[
                 FlowStageSpec(
                     id="chat_seed_source",
@@ -52,7 +52,7 @@ def test_flow_spec_seed_stage_must_be_retrieve() -> None:
 def test_flow_spec_allows_chat_seeded_from_retrieve() -> None:
     spec = FlowSpec(
         name="valid-seed-upstream",
-        defaults=FlowDefaults(email="test@example.com", symbols=["CDE"]),
+        defaults=FlowDefaults(email="test@example.com"),
         stages=[
             FlowStageSpec(
                 id="retrieve_seed",
@@ -84,7 +84,7 @@ def test_flow_spec_allows_chat_seeded_from_retrieve() -> None:
 def test_flow_spec_allows_chat_seeded_with_inputs_binding() -> None:
     spec = FlowSpec(
         name="valid-seed-input-binding",
-        defaults=FlowDefaults(email="test@example.com", symbols=["CDE"]),
+        defaults=FlowDefaults(email="test@example.com"),
         stages=[
             FlowStageSpec(
                 id="retrieve_seed",
@@ -115,7 +115,7 @@ def test_flow_spec_allows_chat_seeded_with_inputs_binding() -> None:
 def test_flow_spec_allows_exhibit_stage() -> None:
     spec = FlowSpec(
         name="exhibit-only",
-        defaults=FlowDefaults(email="test@example.com", symbols=["CDE"]),
+        defaults=FlowDefaults(email="test@example.com"),
         stages=[
             FlowStageSpec(
                 id="exhibit_seed",
@@ -130,7 +130,7 @@ def test_flow_spec_allows_exhibit_stage() -> None:
 def test_flow_spec_allows_chat_contract_input_from_exhibit() -> None:
     spec = FlowSpec(
         name="exhibit-chat-contract-seed",
-        defaults=FlowDefaults(email="test@example.com", symbols=["CDE"]),
+        defaults=FlowDefaults(email="test@example.com"),
         stages=[
             FlowStageSpec(
                 id="exhibit_seed",
@@ -165,7 +165,7 @@ def test_flow_spec_rejects_contract_input_from_non_exhibit_stage() -> None:
     ):
         FlowSpec(
             name="invalid-contract-input",
-            defaults=FlowDefaults(email="test@example.com", symbols=["CDE"]),
+            defaults=FlowDefaults(email="test@example.com"),
             stages=[
                 FlowStageSpec(
                     id="retrieve_seed",
@@ -197,7 +197,7 @@ def test_flow_spec_rejects_inputs_for_non_chat_stage() -> None:
     ):
         FlowSpec(
             name="invalid-retrieve-inputs",
-            defaults=FlowDefaults(email="test@example.com", symbols=["CDE"]),
+            defaults=FlowDefaults(email="test@example.com"),
             stages=[
                 FlowStageSpec(
                     id="retrieve_seed",
@@ -211,4 +211,14 @@ def test_flow_spec_rejects_inputs_for_non_chat_stage() -> None:
                     overrides={"queries": ["liquidity risk"]},
                 )
             ],
+        )
+
+
+def test_flow_defaults_reject_legacy_non_email_fields() -> None:
+    with pytest.raises(ValueError, match="symbols"):
+        FlowDefaults.model_validate(
+            {
+                "email": "test@example.com",
+                "symbols": ["CDE"],
+            }
         )

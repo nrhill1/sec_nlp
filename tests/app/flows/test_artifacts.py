@@ -5,6 +5,7 @@ from sec_nlp.app.flows.artifacts import FlowArtifactStore
 from sec_nlp.app.flows.contracts import (
     ContractEvidenceBundle,
     ContractEvidenceChunk,
+    FlowRetrievedChunk,
     FlowSeedBundle,
     FlowSeedChunk,
 )
@@ -58,3 +59,27 @@ def test_contract_evidence_roundtrip() -> None:
     artifact = store.stage_artifact("exb_stage")
     assert artifact == bundle
     assert store.has_artifact("exb_stage")
+
+
+def test_retrieve_seed_chunks_roundtrip() -> None:
+    store = FlowArtifactStore()
+    chunks = [
+        FlowRetrievedChunk(
+            collection="retrieve",
+            score=0.88,
+            symbol="AEM",
+            accession_number="0000000000-00-000002",
+            form_type="10-K",
+            filed_date="2025-12-31",
+            source="https://www.sec.gov/example",
+            snippet="Liquidity risk increased due to refinancing costs.",
+            vector=None,
+        )
+    ]
+    store.put_retrieve_seed_chunks("retrieve_stage", chunks)
+
+    loaded = store.get_retrieve_seed_chunks("retrieve_stage")
+    assert loaded is not None
+    assert len(loaded) == 1
+    assert loaded[0].collection == "retrieve"
+    assert store.has_artifact("retrieve_stage")

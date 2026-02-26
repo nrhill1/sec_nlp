@@ -13,7 +13,7 @@ from .events import (
     HeadlineBundle,
     OwnershipSignalBundle,
 )
-from .seed import FlowSeedBundle, FlowSeedChunk
+from .seed import FlowRetrievedChunk, FlowSeedBundle, FlowSeedChunk
 
 type FlowArtifactValue = (
     FlowSeedBundle
@@ -36,6 +36,7 @@ __all__: tuple[str, ...] = (
     "EventTimelineBundle",
     "FinancialStatementBundle",
     "FlowArtifactValue",
+    "FlowRetrievedChunk",
     "FlowSeedBundle",
     "FlowSeedChunk",
     "HeadlineBundle",

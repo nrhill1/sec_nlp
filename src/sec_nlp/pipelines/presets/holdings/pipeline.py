@@ -74,9 +74,6 @@ class HoldingsPipeline(BasePipeline):
     def result_model(cls) -> type[HoldingsResult]:
         return HoldingsResult
 
-    def _build_components(self) -> None:
-        self._parser = None
-
     def _get_parser(self) -> HoldingsParser:
         if self._parser is None:
             self._parser = HoldingsParser()

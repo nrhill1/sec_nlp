@@ -1,6 +1,8 @@
 # src/sec_nlp/app/flows/contracts/seed.py
 """Canonical seeded-context contracts for flow stage handoff."""
 
+from dataclasses import dataclass
+
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 
 
@@ -83,3 +85,18 @@ class FlowSeedBundle(BaseModel):
     def run_short_id(self) -> int | None:
         """Backward-compatible accessor for legacy retrieve bridge fields."""
         return self.upstream_short_id
+
+
+@dataclass(slots=True, frozen=True)
+class FlowRetrievedChunk:
+    """Prebuilt chat retrieval chunk used for zero-copy flow handoff."""
+
+    collection: str
+    score: float
+    symbol: str | None
+    accession_number: str | None
+    form_type: str | None
+    filed_date: str | None
+    source: str | None
+    snippet: str
+    vector: list[float] | None = None

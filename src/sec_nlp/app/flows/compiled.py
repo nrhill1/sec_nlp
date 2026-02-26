@@ -6,15 +6,12 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from sec_nlp.app.flows.models import FlowDefaults, FlowSpec, FlowStageSpec
-from sec_nlp.app.flows.runnables.utils import (
-    ChatStageConfigValue,
-    StageConfigValue,
-    build_chat_defaults_payload,
-    build_stage_defaults_payload,
-)
 from sec_nlp.pipelines.presets.chat import ChatSettings
 from sec_nlp.pipelines.presets.exb import ExhibitConfig
 from sec_nlp.pipelines.presets.retrieve import RetrieveSettings
+from sec_nlp.types import JsonValue
+
+type StageConfigValue = JsonValue
 
 type CompiledStageSettings = RetrieveSettings | ChatSettings | ExhibitConfig
 
@@ -25,6 +22,13 @@ class CompiledStage:
 
     stage: FlowStageSpec
     settings: CompiledStageSettings
+
+
+def build_stage_defaults_payload(
+    defaults: FlowDefaults,
+) -> dict[str, StageConfigValue]:
+    """Build stage config payload from flow defaults."""
+    return {"email": defaults.email}
 
 
 def compile_stage(
@@ -44,9 +48,7 @@ def compile_stage(
         )
 
     if stage.pipeline == "chat":
-        payload: dict[str, ChatStageConfigValue] = build_chat_defaults_payload(
-            defaults
-        )
+        payload = build_stage_defaults_payload(defaults)
         payload.update(stage.overrides)
         return CompiledStage(
             stage=stage,

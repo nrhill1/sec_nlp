@@ -61,9 +61,6 @@ class EventsPipeline(BasePipeline):
     def result_model(cls) -> type[EventsResult]:
         return EventsResult
 
-    def _build_components(self) -> None:
-        return
-
     def run(self) -> EventsResult:
         try:
             self.config.setup_paths()

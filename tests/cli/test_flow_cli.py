@@ -22,7 +22,6 @@ def _write_flow_spec(tmp_path: Path) -> Path:
                 "name: test_flow",
                 "defaults:",
                 "  email: test@example.com",
-                "  symbols: [CDE]",
                 "stages:",
                 "  - id: retrieve_seed",
                 "    pipeline: retrieve",

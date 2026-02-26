@@ -6,6 +6,7 @@ from __future__ import annotations
 from sec_nlp.app.flows.contracts import (
     ContractEvidenceBundle,
     FlowArtifactValue,
+    FlowRetrievedChunk,
     FlowSeedBundle,
 )
 
@@ -15,6 +16,9 @@ class FlowArtifactStore:
 
     def __init__(self) -> None:
         self._seed_by_stage: dict[str, FlowSeedBundle] = {}
+        self._seed_chunks_by_stage: dict[
+            str, tuple[FlowRetrievedChunk, ...]
+        ] = {}
         self._contract_evidence_by_stage: dict[str, ContractEvidenceBundle] = {}
 
     def put_retrieve_seed(self, stage_id: str, bundle: FlowSeedBundle) -> None:
@@ -28,6 +32,21 @@ class FlowArtifactStore:
     def get_chat_seed(self, stage_id: str) -> FlowSeedBundle | None:
         """Return seeded bundle for chat stage execution."""
         return self._seed_by_stage.get(stage_id)
+
+    def put_retrieve_seed_chunks(
+        self,
+        stage_id: str,
+        chunks: list[FlowRetrievedChunk],
+    ) -> None:
+        """Store prebuilt retrieve chunks for zero-copy chat handoff."""
+        self._seed_chunks_by_stage[stage_id] = tuple(chunks)
+
+    def get_retrieve_seed_chunks(
+        self,
+        stage_id: str,
+    ) -> tuple[FlowRetrievedChunk, ...] | None:
+        """Load prebuilt retrieve chunks for chat handoff."""
+        return self._seed_chunks_by_stage.get(stage_id)
 
     def put_contract_evidence(
         self, stage_id: str, bundle: ContractEvidenceBundle
@@ -45,6 +64,7 @@ class FlowArtifactStore:
         """Return True when any artifact exists for the provided stage ID."""
         return (
             stage_id in self._seed_by_stage
+            or stage_id in self._seed_chunks_by_stage
             or stage_id in self._contract_evidence_by_stage
         )
 

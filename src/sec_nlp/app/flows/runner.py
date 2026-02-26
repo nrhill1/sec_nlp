@@ -8,20 +8,33 @@ from uuid import uuid4
 
 from sec_nlp.app.flows.artifacts import FlowArtifactStore
 from sec_nlp.app.flows.compiled import CompiledStage, compile_flow_stages
+from sec_nlp.app.flows.contracts import (
+    ContractEvidenceBundle,
+    FlowRetrievedChunk,
+    FlowSeedBundle,
+    FlowSeedChunk,
+)
 from sec_nlp.app.flows.models import (
     FlowRunResult,
     FlowSpec,
+    FlowStageInputBinding,
     FlowStageResult,
     FlowStageSpec,
 )
-from sec_nlp.app.flows.registry import resolve_stage_adapter
-from sec_nlp.app.flows.runnables.utils import build_unexecuted_stage_result
+from sec_nlp.core.types import coerce_result_json_dict
+from sec_nlp.pipelines.base.result import BasePipelineResult
+from sec_nlp.pipelines.presets.chat import ChatPipeline, ChatSettings
+from sec_nlp.pipelines.presets.exb import ExhibitConfig, ExhibitPipeline
+from sec_nlp.pipelines.presets.retrieve import (
+    RetrievePipeline,
+    RetrieveSettings,
+)
 from sec_nlp.pipelines.vector import clear_runtime_caches
 from sec_nlp.types import JsonValue
 
 
 class FlowRunner:
-    """Execute a flow spec with stage-level runnable adapters."""
+    """Execute a flow spec with direct compiled-stage pipeline dispatch."""
 
     def __init__(self, *, spec: FlowSpec) -> None:
         self.spec = spec
@@ -42,7 +55,7 @@ class FlowRunner:
             for idx, compiled_stage in enumerate(compiled_stages):
                 stage = compiled_stage.stage
                 if not self._should_run_stage(stage, previous):
-                    skipped = build_unexecuted_stage_result(
+                    skipped = self._build_unexecuted_stage_result(
                         stage=stage,
                         success=True,
                         skipped=True,
@@ -64,7 +77,7 @@ class FlowRunner:
             if failed_at is not None and failed_at + 1 < len(compiled_stages):
                 for compiled_stage in compiled_stages[failed_at + 1 :]:
                     stage_results.append(
-                        build_unexecuted_stage_result(
+                        self._build_unexecuted_stage_result(
                             stage=compiled_stage.stage,
                             success=False,
                             skipped=True,
@@ -107,8 +120,261 @@ class FlowRunner:
         stage: CompiledStage,
         artifacts: FlowArtifactStore,
     ) -> FlowStageResult:
-        adapter = resolve_stage_adapter(stage.stage.pipeline)
-        return adapter.invoke(stage, artifacts)
+        if stage.stage.pipeline == "retrieve":
+            return self._run_retrieve_stage(stage, artifacts)
+        if stage.stage.pipeline == "chat":
+            return self._run_chat_stage(stage, artifacts)
+        if stage.stage.pipeline == "exhibit":
+            return self._run_exhibit_stage(stage, artifacts)
+        raise ValueError(f"Unsupported flow pipeline '{stage.stage.pipeline}'")
+
+    @classmethod
+    def _build_stage_result(
+        cls,
+        *,
+        stage: FlowStageSpec,
+        pipeline_result: BasePipelineResult,
+        duration_seconds: float,
+        run_id: str,
+        run_short_id: int,
+    ) -> FlowStageResult:
+        return FlowStageResult(
+            stage_id=stage.id,
+            pipeline=stage.pipeline,
+            success=pipeline_result.success,
+            skipped=False,
+            error=pipeline_result.error,
+            duration_seconds=duration_seconds,
+            run_id=run_id,
+            run_short_id=run_short_id if run_short_id > 0 else None,
+            outputs=[str(path) for path in pipeline_result.outputs],
+            metadata=coerce_result_json_dict(pipeline_result.metadata),
+        )
+
+    @staticmethod
+    def _build_unexecuted_stage_result(
+        *,
+        stage: FlowStageSpec,
+        success: bool,
+        skipped: bool,
+        error: str,
+    ) -> FlowStageResult:
+        return FlowStageResult(
+            stage_id=stage.id,
+            pipeline=stage.pipeline,
+            success=success,
+            skipped=skipped,
+            error=error,
+            duration_seconds=0.0,
+            outputs=[],
+            metadata={},
+        )
+
+    @staticmethod
+    def _resolve_seed_binding(
+        stage: FlowStageSpec,
+    ) -> tuple[FlowStageInputBinding | None, str | None]:
+        resolved: FlowStageInputBinding | None = None
+        for binding in stage.inputs:
+            binding_error = FlowRunner._validate_input_binding(
+                stage=stage,
+                binding=binding,
+            )
+            if binding_error is not None:
+                return None, binding_error
+            if resolved is not None:
+                return (
+                    None,
+                    f"chat stage '{stage.id}' accepts at most one input binding",
+                )
+            resolved = binding
+
+        return resolved, None
+
+    @staticmethod
+    def _validate_input_binding(
+        *,
+        stage: FlowStageSpec,
+        binding: FlowStageInputBinding,
+    ) -> str | None:
+        if binding.artifact not in {"retrieve_seed", "contract_evidence"}:
+            return (
+                f"chat stage '{stage.id}' does not support input artifact "
+                f"'{binding.artifact}'"
+            )
+        if (
+            binding.target_field is not None
+            and binding.target_field != "seed_context"
+        ):
+            return (
+                f"chat stage '{stage.id}' input binding target_field "
+                "must be 'seed_context'"
+            )
+        return None
+
+    @staticmethod
+    def _seed_from_contract_evidence(
+        evidence: ContractEvidenceBundle,
+    ) -> FlowSeedBundle:
+        chunks: list[FlowSeedChunk] = []
+        for contract_chunk in evidence.chunks:
+            snippet = contract_chunk.snippet.strip()
+            if not snippet:
+                continue
+            chunks.append(
+                FlowSeedChunk(
+                    collection="exhibit",
+                    score=float(contract_chunk.score),
+                    symbol=contract_chunk.symbol,
+                    accession_number=contract_chunk.accession_number,
+                    form_type=contract_chunk.form_type,
+                    filed_date=contract_chunk.filed_date,
+                    source=contract_chunk.source,
+                    snippet=snippet,
+                )
+            )
+        return FlowSeedBundle(
+            upstream_pipeline=evidence.upstream_pipeline,
+            upstream_run_id=evidence.upstream_run_id,
+            upstream_short_id=evidence.upstream_short_id,
+            symbols=list(evidence.symbols),
+            queries=list(evidence.queries),
+            chunks=chunks,
+        )
+
+    @staticmethod
+    def _answer_preview(answer: str, *, max_chars: int = 160) -> str:
+        normalized = " ".join(answer.split())
+        if len(normalized) <= max_chars:
+            return normalized
+        return f"{normalized[: max_chars - 1].rstrip()}…"
+
+    @classmethod
+    def _run_retrieve_stage(
+        cls,
+        stage: CompiledStage,
+        artifacts: FlowArtifactStore,
+    ) -> FlowStageResult:
+        if not isinstance(stage.settings, RetrieveSettings):
+            raise ValueError("retrieve stage received non-retrieve settings")
+
+        started = perf_counter()
+        pipeline = RetrievePipeline(config=stage.settings)
+        result, seed_bundle, seed_chunks = pipeline.run_for_flow_with_chunks()
+        elapsed = perf_counter() - started
+        if result.success:
+            artifacts.put_retrieve_seed(stage.stage.id, seed_bundle)
+            artifacts.put_retrieve_seed_chunks(stage.stage.id, seed_chunks)
+
+        return cls._build_stage_result(
+            stage=stage.stage,
+            pipeline_result=result,
+            duration_seconds=elapsed,
+            run_id=str(stage.settings.run_id),
+            run_short_id=stage.settings.short_id,
+        )
+
+    @classmethod
+    def _run_chat_stage(
+        cls,
+        stage: CompiledStage,
+        artifacts: FlowArtifactStore,
+    ) -> FlowStageResult:
+        if not isinstance(stage.settings, ChatSettings):
+            raise ValueError("chat stage received non-chat settings")
+
+        seed_binding, seed_error = cls._resolve_seed_binding(stage.stage)
+        if seed_error is not None:
+            return cls._build_unexecuted_stage_result(
+                stage=stage.stage,
+                success=False,
+                skipped=False,
+                error=seed_error,
+            )
+
+        seed_bundle: FlowSeedBundle | None = None
+        seed_chunks: tuple[FlowRetrievedChunk, ...] = ()
+        if seed_binding is not None:
+            if seed_binding.artifact == "retrieve_seed":
+                seed_bundle = artifacts.get_chat_seed(seed_binding.from_stage)
+                seed_chunks = (
+                    artifacts.get_retrieve_seed_chunks(seed_binding.from_stage)
+                    or ()
+                )
+            elif seed_binding.artifact == "contract_evidence":
+                contract_bundle = artifacts.get_contract_evidence(
+                    seed_binding.from_stage
+                )
+                if contract_bundle is not None:
+                    seed_bundle = cls._seed_from_contract_evidence(
+                        contract_bundle
+                    )
+
+            if seed_bundle is None and not seed_chunks:
+                return cls._build_unexecuted_stage_result(
+                    stage=stage.stage,
+                    success=False,
+                    skipped=False,
+                    error=(
+                        f"Missing {seed_binding.artifact} artifact from stage "
+                        f"'{seed_binding.from_stage}'"
+                    ),
+                )
+
+        type PipelineConfigUpdateValue = (
+            FlowSeedBundle | list[FlowRetrievedChunk]
+        )
+        config_updates: dict[str, PipelineConfigUpdateValue] = {}
+        if seed_bundle is not None:
+            config_updates["seed_context"] = seed_bundle
+        if seed_chunks:
+            config_updates["seed_chunks"] = list(seed_chunks)
+
+        pipeline_config = (
+            stage.settings.model_copy(update=config_updates)
+            if config_updates
+            else stage.settings
+        )
+        started = perf_counter()
+        result = ChatPipeline(config=pipeline_config).run()
+        elapsed = perf_counter() - started
+
+        stage_result = cls._build_stage_result(
+            stage=stage.stage,
+            pipeline_result=result,
+            duration_seconds=elapsed,
+            run_id=str(pipeline_config.run_id),
+            run_short_id=pipeline_config.short_id,
+        )
+        if result.success and isinstance(result.answer, str) and result.answer:
+            metadata = dict(stage_result.metadata)
+            metadata["answer_preview"] = cls._answer_preview(result.answer)
+            return stage_result.model_copy(update={"metadata": metadata})
+        return stage_result
+
+    @classmethod
+    def _run_exhibit_stage(
+        cls,
+        stage: CompiledStage,
+        artifacts: FlowArtifactStore,
+    ) -> FlowStageResult:
+        if not isinstance(stage.settings, ExhibitConfig):
+            raise ValueError("exhibit stage received non-exhibit settings")
+
+        started = perf_counter()
+        pipeline = ExhibitPipeline(config=stage.settings)
+        result, evidence_bundle = pipeline.run_for_flow()
+        elapsed = perf_counter() - started
+        if result.success:
+            artifacts.put_contract_evidence(stage.stage.id, evidence_bundle)
+
+        return cls._build_stage_result(
+            stage=stage.stage,
+            pipeline_result=result,
+            duration_seconds=elapsed,
+            run_id=str(stage.settings.run_id),
+            run_short_id=stage.settings.short_id,
+        )
 
     @staticmethod
     def _should_run_stage(

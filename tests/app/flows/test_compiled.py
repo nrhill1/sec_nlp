@@ -8,7 +8,7 @@ from pathlib import Path
 from sec_nlp.app.flows.artifacts import FlowArtifactStore
 from sec_nlp.app.flows.compiled import compile_flow_stages
 from sec_nlp.app.flows.models import FlowDefaults, FlowSpec, FlowStageSpec
-from sec_nlp.app.flows.runnables.chat import ChatFlowRunnable
+from sec_nlp.app.flows.runner import FlowRunner
 from sec_nlp.pipelines.presets.chat import ChatPipeline, ChatSettings
 from sec_nlp.pipelines.presets.chat.models import ChatResult
 from sec_nlp.pipelines.presets.exb import ExhibitConfig
@@ -19,12 +19,12 @@ from sec_nlp.types import JsonValue
 def test_compile_flow_stages_returns_typed_settings() -> None:
     spec = FlowSpec(
         name="compile-typed",
-        defaults=FlowDefaults(email="test@example.com", symbols=["CDE"]),
+        defaults=FlowDefaults(email="test@example.com"),
         stages=[
             FlowStageSpec(
                 id="retrieve_seed",
                 pipeline="retrieve",
-                overrides={"queries": ["liquidity risk"]},
+                overrides={"queries": ["liquidity risk"], "symbols": ["CDE"]},
             ),
             FlowStageSpec(
                 id="chat_answer",
@@ -32,12 +32,13 @@ def test_compile_flow_stages_returns_typed_settings() -> None:
                 overrides={
                     "question": "What changed in liquidity risk?",
                     "interactive": False,
+                    "symbols": ["CDE"],
                 },
             ),
             FlowStageSpec(
                 id="exhibit_seed",
                 pipeline="exhibit",
-                overrides={"dry_run": True},
+                overrides={"dry_run": True, "symbols": ["CDE"]},
             ),
         ],
     )
@@ -48,9 +49,12 @@ def test_compile_flow_stages_returns_typed_settings() -> None:
     assert isinstance(compiled[0].settings, RetrieveSettings)
     assert isinstance(compiled[1].settings, ChatSettings)
     assert isinstance(compiled[2].settings, ExhibitConfig)
+    assert compiled[0].settings.symbols == ["CDE"]
+    assert compiled[1].settings.symbols == ["CDE"]
+    assert compiled[2].settings.symbols == ["CDE"]
 
 
-def test_chat_runnable_uses_compiled_config_without_revalidation(
+def test_flow_runner_stage_uses_compiled_config_without_revalidation(
     monkeypatch,
 ) -> None:
     settings = ChatSettings.model_validate(
@@ -63,6 +67,25 @@ def test_chat_runnable_uses_compiled_config_without_revalidation(
             "collections": ["retrieve"],
         }
     )
+    stage = compile_flow_stages(
+        FlowSpec(
+            name="compiled-stage",
+            defaults=FlowDefaults(email="test@example.com"),
+            stages=[
+                FlowStageSpec(
+                    id="chat_answer",
+                    pipeline="chat",
+                    overrides={
+                        "question": "What changed in liquidity risk?",
+                        "interactive": False,
+                        "output_format": "json",
+                        "collections": ["retrieve"],
+                        "symbols": ["CDE"],
+                    },
+                )
+            ],
+        )
+    )[0]
 
     def _fail_if_called(*args: JsonValue, **kwargs: JsonValue) -> None:
         _ = (args, kwargs)
@@ -84,16 +107,27 @@ def test_chat_runnable_uses_compiled_config_without_revalidation(
         )
 
     monkeypatch.setattr(ChatPipeline, "run", _fake_chat_run)
+    # Keep a prevalidated settings instance to ensure stage execution does not
+    # call ChatSettings.model_validate again.
+    stage = stage.__class__(stage=stage.stage, settings=settings)
 
-    runnable = ChatFlowRunnable(
-        stage=FlowStageSpec(
-            id="chat_answer",
-            pipeline="chat",
-            overrides={},
-        ),
-        artifacts=FlowArtifactStore(),
-        compiled_config=settings,
+    runner = FlowRunner(
+        spec=FlowSpec(
+            name="compiled-stage",
+            defaults=FlowDefaults(email="test@example.com"),
+            stages=[
+                FlowStageSpec(
+                    id="placeholder",
+                    pipeline="chat",
+                    overrides={
+                        "question": "placeholder",
+                        "interactive": False,
+                        "collections": ["retrieve"],
+                        "symbols": ["CDE"],
+                    },
+                )
+            ],
+        )
     )
-
-    result = runnable.invoke()
+    result = runner._run_stage(stage, FlowArtifactStore())
     assert result.success is True

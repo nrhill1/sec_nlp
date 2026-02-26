@@ -66,9 +66,6 @@ class FinancialsPipeline(BasePipeline):
     def result_model(cls) -> type[FinancialsResult]:
         return FinancialsResult
 
-    def _build_components(self) -> None:
-        self._parser = None
-
     def _get_parser(self) -> XbrlParser:
         if self._parser is None:
             self._parser = create_xbrl_parser()

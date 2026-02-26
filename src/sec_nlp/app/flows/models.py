@@ -3,8 +3,6 @@
 
 from __future__ import annotations
 
-from datetime import date
-from pathlib import Path
 from typing import Literal
 
 from pydantic import (
@@ -29,61 +27,6 @@ class FlowDefaults(BaseModel):
     email: str = Field(
         description="SEC contact email used by downstream pipelines."
     )
-    symbols: list[str] = Field(
-        default_factory=list,
-        description="Default ticker scope for flow stages.",
-    )
-    forms: list[str] | None = Field(
-        default=None,
-        description="Optional default form filters applied to stages.",
-    )
-    start_date: date | None = Field(
-        default=None,
-        description="Optional start date shared by stages.",
-    )
-    end_date: date | None = Field(
-        default=None,
-        description="Optional end date shared by stages.",
-    )
-    dl_path: Path | None = Field(
-        default=None,
-        description="Optional shared downloads path.",
-    )
-    out_path: Path | None = Field(
-        default=None,
-        description="Optional shared outputs path.",
-    )
-    dry_run: bool | None = Field(
-        default=None,
-        description="Optional shared dry-run default for stages.",
-    )
-
-    @field_validator("symbols", mode="before")
-    @classmethod
-    def _normalize_symbols(cls, value: list[str] | str) -> list[str]:
-        if isinstance(value, str):
-            value = [part for part in value.replace(",", " ").split() if part]
-        normalized: list[str] = []
-        seen: set[str] = set()
-        for raw in value:
-            symbol = raw.strip().upper()
-            if not symbol or symbol in seen:
-                continue
-            seen.add(symbol)
-            normalized.append(symbol)
-        return normalized
-
-    @model_validator(mode="after")
-    def _validate_dates(self) -> FlowDefaults:
-        if (
-            self.start_date is not None
-            and self.end_date is not None
-            and self.start_date > self.end_date
-        ):
-            raise ValueError(
-                "defaults.start_date cannot be after defaults.end_date"
-            )
-        return self
 
 
 class FlowStageSpec(BaseModel):

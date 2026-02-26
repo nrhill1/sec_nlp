@@ -1,21 +1,6 @@
 name: tech_high_flow_preset
 defaults:
   email: you@example.com
-  symbols:
-  - AAPL
-  - MSFT
-  - NVDA
-  - AMD
-  - AVGO
-  - ORCL
-  forms:
-  - 10-K
-  - 10-Q
-  - 8-K
-  - 6-K
-  - 20-F
-  start_date: '2021-01-01'
-  dry_run: false
 on_failure: stop
 stages:
 - id: retrieve_seed
@@ -44,6 +29,21 @@ stages:
       vector_size: 2560
       qdrant_url: http://localhost:6333
       qdrant_location: null
+    symbols: &id001
+    - AAPL
+    - MSFT
+    - NVDA
+    - AMD
+    - AVGO
+    - ORCL
+    forms: &id002
+    - 10-K
+    - 10-Q
+    - 8-K
+    - 6-K
+    - 20-F
+    start_date: '2021-01-01'
+    dry_run: false
 - id: chat_answer
   pipeline: chat
   inputs:
@@ -76,3 +76,7 @@ stages:
       vector_size: 2560
       qdrant_url: http://localhost:6333
       qdrant_location: null
+    symbols: *id001
+    forms: *id002
+    start_date: '2021-01-01'
+    dry_run: false

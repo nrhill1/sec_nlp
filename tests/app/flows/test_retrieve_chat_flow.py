@@ -20,7 +20,10 @@ from sec_nlp.app.flows.models import (
 )
 from sec_nlp.app.flows.runner import FlowRunner
 from sec_nlp.pipelines.presets.chat import ChatPipeline
-from sec_nlp.pipelines.presets.chat.bridge import ChatSeedBundle
+from sec_nlp.pipelines.presets.chat.bridge import (
+    ChatRetrievedChunk,
+    ChatSeedBundle,
+)
 from sec_nlp.pipelines.presets.chat.models import ChatResult
 from sec_nlp.pipelines.presets.exb import ExhibitPipeline
 from sec_nlp.pipelines.presets.exb.models import ExhibitResult
@@ -38,7 +41,11 @@ def test_flow_runner_passes_retrieve_seed_into_chat(monkeypatch) -> None:
 
     def _fake_retrieve_run_for_flow(
         self: RetrievePipeline,
-    ) -> tuple[RetrieveResult, RetrieveChatSeedBundle]:
+    ) -> tuple[
+        RetrieveResult,
+        RetrieveChatSeedBundle,
+        list[ChatRetrievedChunk],
+    ]:
         _ = self
         return (
             RetrieveResult(
@@ -68,6 +75,19 @@ def test_flow_runner_passes_retrieve_seed_into_chat(monkeypatch) -> None:
                     )
                 ],
             ),
+            [
+                ChatRetrievedChunk(
+                    collection="retrieve",
+                    score=0.9,
+                    symbol="CDE",
+                    accession_number="0000215466-24-000003",
+                    form_type="10-K",
+                    filed_date="2024-02-21",
+                    source="https://www.sec.gov/ixviewer/ix.html",
+                    snippet="Liquidity risk increased in fiscal year 2024.",
+                    vector=None,
+                )
+            ],
         )
 
     def _fake_chat_run(self: ChatPipeline) -> ChatResult:
@@ -89,17 +109,14 @@ def test_flow_runner_passes_retrieve_seed_into_chat(monkeypatch) -> None:
 
     monkeypatch.setattr(
         RetrievePipeline,
-        "run_for_flow",
+        "run_for_flow_with_chunks",
         _fake_retrieve_run_for_flow,
     )
     monkeypatch.setattr(ChatPipeline, "run", _fake_chat_run)
 
     spec = FlowSpec(
         name="retrieve-chat-seeded",
-        defaults=FlowDefaults(
-            email="test@example.com",
-            symbols=["CDE"],
-        ),
+        defaults=FlowDefaults(email="test@example.com"),
         stages=[
             FlowStageSpec(
                 id="retrieve_seed",
@@ -107,6 +124,7 @@ def test_flow_runner_passes_retrieve_seed_into_chat(monkeypatch) -> None:
                 overrides={
                     "queries": ["liquidity risk"],
                     "output_format": "json",
+                    "symbols": ["CDE"],
                 },
             ),
             FlowStageSpec(
@@ -124,6 +142,7 @@ def test_flow_runner_passes_retrieve_seed_into_chat(monkeypatch) -> None:
                     "output_format": "json",
                     "interactive": False,
                     "collections": ["retrieve"],
+                    "symbols": ["CDE"],
                 },
             ),
         ],
@@ -160,7 +179,11 @@ def test_flow_runner_passes_seed_via_inputs_binding(monkeypatch) -> None:
 
     def _fake_retrieve_run_for_flow(
         self: RetrievePipeline,
-    ) -> tuple[RetrieveResult, RetrieveChatSeedBundle]:
+    ) -> tuple[
+        RetrieveResult,
+        RetrieveChatSeedBundle,
+        list[ChatRetrievedChunk],
+    ]:
         _ = self
         return (
             RetrieveResult(
@@ -190,6 +213,19 @@ def test_flow_runner_passes_seed_via_inputs_binding(monkeypatch) -> None:
                     )
                 ],
             ),
+            [
+                ChatRetrievedChunk(
+                    collection="retrieve",
+                    score=0.9,
+                    symbol="CDE",
+                    accession_number="0000215466-24-000003",
+                    form_type="10-K",
+                    filed_date="2024-02-21",
+                    source="https://www.sec.gov/ixviewer/ix.html",
+                    snippet="Liquidity risk increased in fiscal year 2024.",
+                    vector=None,
+                )
+            ],
         )
 
     def _fake_chat_run(self: ChatPipeline) -> ChatResult:
@@ -209,17 +245,14 @@ def test_flow_runner_passes_seed_via_inputs_binding(monkeypatch) -> None:
 
     monkeypatch.setattr(
         RetrievePipeline,
-        "run_for_flow",
+        "run_for_flow_with_chunks",
         _fake_retrieve_run_for_flow,
     )
     monkeypatch.setattr(ChatPipeline, "run", _fake_chat_run)
 
     spec = FlowSpec(
         name="retrieve-chat-seeded-inputs",
-        defaults=FlowDefaults(
-            email="test@example.com",
-            symbols=["CDE"],
-        ),
+        defaults=FlowDefaults(email="test@example.com"),
         stages=[
             FlowStageSpec(
                 id="retrieve_seed",
@@ -227,6 +260,7 @@ def test_flow_runner_passes_seed_via_inputs_binding(monkeypatch) -> None:
                 overrides={
                     "queries": ["liquidity risk"],
                     "output_format": "json",
+                    "symbols": ["CDE"],
                 },
             ),
             FlowStageSpec(
@@ -244,6 +278,7 @@ def test_flow_runner_passes_seed_via_inputs_binding(monkeypatch) -> None:
                     "output_format": "json",
                     "interactive": False,
                     "collections": ["retrieve"],
+                    "symbols": ["CDE"],
                 },
             ),
         ],
@@ -262,7 +297,11 @@ def test_flow_runner_reports_missing_seed_artifact(monkeypatch) -> None:
 
     def _fake_retrieve_run_for_flow(
         self: RetrievePipeline,
-    ) -> tuple[RetrieveResult, RetrieveChatSeedBundle]:
+    ) -> tuple[
+        RetrieveResult,
+        RetrieveChatSeedBundle,
+        list[ChatRetrievedChunk],
+    ]:
         _ = self
         return (
             RetrieveResult(success=False, error="upstream failed"),
@@ -274,20 +313,18 @@ def test_flow_runner_reports_missing_seed_artifact(monkeypatch) -> None:
                 queries=["liquidity risk"],
                 chunks=[],
             ),
+            [],
         )
 
     monkeypatch.setattr(
         RetrievePipeline,
-        "run_for_flow",
+        "run_for_flow_with_chunks",
         _fake_retrieve_run_for_flow,
     )
 
     spec = FlowSpec(
         name="retrieve-chat-missing-seed",
-        defaults=FlowDefaults(
-            email="test@example.com",
-            symbols=["CDE"],
-        ),
+        defaults=FlowDefaults(email="test@example.com"),
         on_failure="continue",
         stages=[
             FlowStageSpec(
@@ -296,6 +333,7 @@ def test_flow_runner_reports_missing_seed_artifact(monkeypatch) -> None:
                 overrides={
                     "queries": ["liquidity risk"],
                     "output_format": "json",
+                    "symbols": ["CDE"],
                 },
             ),
             FlowStageSpec(
@@ -313,6 +351,7 @@ def test_flow_runner_reports_missing_seed_artifact(monkeypatch) -> None:
                     "output_format": "json",
                     "interactive": False,
                     "collections": ["retrieve"],
+                    "symbols": ["CDE"],
                 },
             ),
         ],
@@ -361,15 +400,12 @@ def test_flow_runner_scopes_vector_caches_to_single_flow_run(
 
     spec = FlowSpec(
         name="cache-scope",
-        defaults=FlowDefaults(
-            email="test@example.com",
-            symbols=["CDE"],
-        ),
+        defaults=FlowDefaults(email="test@example.com"),
         stages=[
             FlowStageSpec(
                 id="retrieve_seed",
                 pipeline="retrieve",
-                overrides={"queries": ["liquidity risk"]},
+                overrides={"queries": ["liquidity risk"], "symbols": ["CDE"]},
             ),
             FlowStageSpec(
                 id="chat_answer",
@@ -377,6 +413,7 @@ def test_flow_runner_scopes_vector_caches_to_single_flow_run(
                 overrides={
                     "question": "What changed in liquidity risk?",
                     "interactive": False,
+                    "symbols": ["CDE"],
                 },
             ),
         ],
@@ -419,15 +456,16 @@ def test_flow_runner_executes_exhibit_stage(monkeypatch) -> None:
 
     spec = FlowSpec(
         name="exhibit-only",
-        defaults=FlowDefaults(
-            email="test@example.com",
-            symbols=["CDE"],
-        ),
+        defaults=FlowDefaults(email="test@example.com"),
         stages=[
             FlowStageSpec(
                 id="exhibit_seed",
                 pipeline="exhibit",
-                overrides={"output_format": "json", "dry_run": True},
+                overrides={
+                    "output_format": "json",
+                    "dry_run": True,
+                    "symbols": ["CDE"],
+                },
             ),
         ],
     )
@@ -501,15 +539,16 @@ def test_flow_runner_passes_contract_evidence_into_chat(monkeypatch) -> None:
 
     spec = FlowSpec(
         name="exhibit-chat-contract-seed",
-        defaults=FlowDefaults(
-            email="test@example.com",
-            symbols=["CDE"],
-        ),
+        defaults=FlowDefaults(email="test@example.com"),
         stages=[
             FlowStageSpec(
                 id="exhibit_seed",
                 pipeline="exhibit",
-                overrides={"output_format": "json", "dry_run": True},
+                overrides={
+                    "output_format": "json",
+                    "dry_run": True,
+                    "symbols": ["CDE"],
+                },
             ),
             FlowStageSpec(
                 id="chat_answer",
@@ -525,6 +564,7 @@ def test_flow_runner_passes_contract_evidence_into_chat(monkeypatch) -> None:
                     "question": "Summarize material delivery obligations.",
                     "interactive": False,
                     "output_format": "json",
+                    "symbols": ["CDE"],
                 },
             ),
         ],

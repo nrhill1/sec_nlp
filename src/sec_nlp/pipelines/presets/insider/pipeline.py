@@ -77,9 +77,6 @@ class InsiderPipeline(BasePipeline):
     def result_model(cls) -> type[InsiderResult]:
         return InsiderResult
 
-    def _build_components(self) -> None:
-        self._parser = None
-
     def _get_parser(self) -> InsiderParser:
         if self._parser is None:
             self._parser = InsiderParser()

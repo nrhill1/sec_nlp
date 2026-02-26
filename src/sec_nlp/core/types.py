@@ -66,12 +66,17 @@ def coerce_json_dict(value: JsonValue) -> JsonDict | None:
 
 def coerce_json_value(value: JsonValue) -> JsonValue | None:
     """Normalize a JsonValue into a JSON-serializable shape."""
+    return coerce_unknown_json_value(value)
+
+
+def coerce_unknown_json_value(value: object) -> JsonValue | None:
+    """Normalize an unknown value into a JSON-serializable shape."""
     if isinstance(value, (str, int, float, bool)) or value is None:
         return value
     if isinstance(value, Sequence) and not isinstance(value, str):
         items: list[JsonValue] = []
         for item in value:
-            normalized = coerce_json_value(item)
+            normalized = coerce_unknown_json_value(item)
             if normalized is None:
                 return None
             items.append(normalized)
@@ -81,7 +86,7 @@ def coerce_json_value(value: JsonValue) -> JsonValue | None:
         for key, item in value.items():
             if not isinstance(key, str):
                 return None
-            normalized_item = coerce_json_value(item)
+            normalized_item = coerce_unknown_json_value(item)
             if normalized_item is None:
                 return None
             normalized_dict[key] = normalized_item

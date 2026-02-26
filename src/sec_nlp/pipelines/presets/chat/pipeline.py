@@ -6,7 +6,6 @@ from __future__ import annotations
 import hashlib
 import re
 from concurrent.futures import ThreadPoolExecutor
-from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 from email.utils import parsedate_to_datetime
 from pathlib import Path
@@ -47,10 +46,10 @@ from sec_nlp.pipelines.output_io import (
     build_run_file_stem,
     build_run_header_fields,
 )
-from sec_nlp.types import JsonDict, JsonValue, ResultDict
+from sec_nlp.types import JsonValue, ResultDict
 
 from ..retrieve import RetrievePipeline, RetrieveSettings
-from .bridge import ChatSeedBundle
+from .bridge import ChatRetrievedChunk, ChatSeedBundle
 from .config import ChatSettings
 from .io import (
     write_chat_transcript_csv,
@@ -58,6 +57,7 @@ from .io import (
     write_chat_transcript_yaml,
 )
 from .models import ChatCitation, ChatResult, ChatTranscriptPayload, ChatTurn
+from .run_stages import build_chat_stage_runnables, create_initial_chat_state
 
 _CITATION_RE = re.compile(r"\[(C\d+)\]")
 _WHITESPACE_RE = re.compile(r"\s+")
@@ -95,17 +95,7 @@ _STOPWORDS = {
 }
 
 
-@dataclass(slots=True, frozen=True)
-class _RetrievedChunk:
-    collection: str
-    score: float
-    symbol: str | None
-    accession_number: str | None
-    form_type: str | None
-    filed_date: str | None
-    source: str | None
-    snippet: str
-    vector: list[float] | None = None
+_RetrievedChunk = ChatRetrievedChunk
 
 
 class _SnippetEmbedder(Protocol):
@@ -145,8 +135,8 @@ class ChatPipeline(BasePipeline):
     def _build_components(self) -> None:
         use_seed_only = (
             self.config.seed_context is not None
-            and self.config.rerank_mode != "mmr"
-        )
+            or len(self.config.seed_chunks) > 0
+        ) and self.config.rerank_mode != "mmr"
         if not use_seed_only:
             try:
                 self._embedder, self._embedding_dim = (
@@ -160,7 +150,7 @@ class ChatPipeline(BasePipeline):
                 self._embedder = None
                 self._embedding_dim = None
 
-        if self.config.seed_context is not None:
+        if self.config.seed_context is not None or self.config.seed_chunks:
             self._qdrant_client = None
             return
 
@@ -210,10 +200,6 @@ class ChatPipeline(BasePipeline):
             **external_metadata,
         }
         return metadata
-
-    @staticmethod
-    def _registry_metadata(metadata: ResultDict) -> JsonDict:
-        return coerce_result_json_dict(metadata)
 
     def _symbol_coverage_metadata(
         self,
@@ -267,7 +253,6 @@ class ChatPipeline(BasePipeline):
                     "Chat pipeline requires a question (--question or --query)."
                 )
 
-            outputs: list[Path] = []
             self._last_search_timings = {"vector_search": 0.0, "rerank": 0.0}
             self._last_answer_timings = {
                 "prompt_build": 0.0,
@@ -275,14 +260,6 @@ class ChatPipeline(BasePipeline):
             }
             self._last_llm_max_new_tokens = None
             self._last_context_token_budget = None
-            stage_timings: dict[str, float] = {
-                "vector_search": 0.0,
-                "rerank": 0.0,
-                "external_context": 0.0,
-                "prompt_build": 0.0,
-                "llm_generate": 0.0,
-                "write": 0.0,
-            }
             console = get_rich_console()
             with Progress(
                 SpinnerColumn(),
@@ -300,144 +277,29 @@ class ChatPipeline(BasePipeline):
                     total=5,
                 )
                 phase_task = progress.add_task("", total=None, visible=False)
-
-                self._update_phase(
-                    progress,
-                    phase_task,
-                    (
-                        "Using seeded retrieve context"
-                        if self.config.seed_context is not None
-                        else "Searching indexed collections"
-                    ),
-                )
-                seeded_context_fallback = False
-                if self.config.seed_context is None:
-                    chunks = self._search_collections(
-                        question,
-                        progress=progress,
-                        phase_task=phase_task,
-                    )
-                else:
-                    chunks = self._search_seed_context(question)
-                    if not chunks:
-                        logger.warning(
-                            "Seeded context returned no chunks; falling back to indexed collections",
-                        )
-                        self._update_phase(
-                            progress,
-                            phase_task,
-                            "Seed context empty; searching indexed collections",
-                        )
-                        chunks = self._search_collections(
-                            question,
-                            progress=progress,
-                            phase_task=phase_task,
-                        )
-                        seeded_context_fallback = True
-                stage_timings.update(
-                    {
-                        "vector_search": self._last_search_timings.get(
-                            "vector_search", 0.0
-                        ),
-                        "rerank": self._last_search_timings.get("rerank", 0.0),
-                    }
-                )
-                progress.advance(overall_task)
-
-                self._update_phase(
-                    progress,
-                    phase_task,
-                    "Preparing citations and context",
-                )
-                citations = self._to_citations(chunks)
-                coverage_metadata = self._symbol_coverage_metadata(citations)
-                t0 = perf_counter()
-                external_context, external_metadata = (
-                    self._build_external_context(
-                        question=question,
-                        citations=citations,
-                    )
-                )
-                stage_timings["external_context"] = perf_counter() - t0
-                if seeded_context_fallback:
-                    coverage_metadata[
-                        "seeded_context_fallback_to_vector_search"
-                    ] = True
-                external_metadata.update(coverage_metadata)
-                missing_symbols = coverage_metadata.get("missing_symbols")
-                if isinstance(missing_symbols, list) and missing_symbols:
-                    logger.warning(
-                        "No retrieved filing chunks for %d symbols: %s",
-                        len(missing_symbols),
-                        ", ".join(str(symbol) for symbol in missing_symbols),
-                    )
-                progress.advance(overall_task)
-
-                self._update_phase(
-                    progress,
-                    phase_task,
-                    "Generating answer",
-                )
-                answer, used_citation_ids = self._build_answer(
+                stage_state = create_initial_chat_state(
                     question=question,
-                    citations=citations,
-                    external_context=external_context,
+                    progress=progress,
+                    overall_task=overall_task,
+                    phase_task=phase_task,
                 )
-                stage_timings.update(
-                    {
-                        "prompt_build": self._last_answer_timings.get(
-                            "prompt_build", 0.0
-                        ),
-                        "llm_generate": self._last_answer_timings.get(
-                            "llm_generate", 0.0
-                        ),
-                    }
+                stage_state = self.run_stages(
+                    initial_state=stage_state,
+                    stages=build_chat_stage_runnables(self),
                 )
-                progress.advance(overall_task)
-
-                self._update_phase(
-                    progress,
-                    phase_task,
-                    "Building transcript",
-                )
-                turns = self._build_turns(
-                    question=question,
-                    answer=answer,
-                    citation_ids=used_citation_ids,
-                )
-                progress.advance(overall_task)
-
-                self._update_phase(
-                    progress,
-                    phase_task,
-                    "Writing outputs",
-                )
-                if self.config.transcript_autosave:
-                    t0 = perf_counter()
-                    outputs = self._write_outputs(
-                        question=question,
-                        answer=answer,
-                        citations=citations,
-                        citation_ids=used_citation_ids,
-                        turns=turns,
-                        external_context=external_context,
-                        external_metadata=external_metadata,
-                    )
-                    stage_timings["write"] = perf_counter() - t0
-                progress.advance(overall_task)
                 progress.update(phase_task, visible=False)
 
             metadata = self._base_metadata(
-                external_context=external_context,
-                external_metadata=external_metadata,
+                external_context=stage_state.external_context,
+                external_metadata=stage_state.external_metadata,
             )
             metadata.update(
                 self._seed_context_metadata(self.config.seed_context)
             )
             metadata.update(
                 {
-                    "hits_retrieved": len(citations),
-                    "citations_returned": len(used_citation_ids),
+                    "hits_retrieved": len(stage_state.citations),
+                    "citations_returned": len(stage_state.used_citation_ids),
                     "strict_citations": self.config.strict_citations,
                     "symbol_scope": self.config.symbols,
                     "llm_model_name": self.config.llm.model_name,
@@ -453,29 +315,29 @@ class ChatPipeline(BasePipeline):
                         self._last_context_token_budget
                         if self._last_context_token_budget is not None
                         else self._effective_context_token_budget(
-                            len(citations)
+                            len(stage_state.citations)
                         )
                     ),
                     "stage_timings": {
                         name: round(value, 6)
-                        for name, value in stage_timings.items()
+                        for name, value in stage_state.stage_timings.items()
                     },
                 }
             )
 
             self.config.complete_run(
                 success=True,
-                metadata=self._registry_metadata(metadata),
+                metadata=coerce_result_json_dict(metadata),
             )
             return ChatResult(
                 success=True,
-                outputs=outputs,
+                outputs=stage_state.outputs,
                 metadata=metadata,
-                turns_processed=len(turns),
-                hits_retrieved=len(citations),
-                citations_returned=len(used_citation_ids),
-                answer=answer,
-                citation_ids=used_citation_ids,
+                turns_processed=len(stage_state.turns),
+                hits_retrieved=len(stage_state.citations),
+                citations_returned=len(stage_state.used_citation_ids),
+                answer=stage_state.answer,
+                citation_ids=stage_state.used_citation_ids,
             )
         except Exception as exc:
             logger.exception("Chat pipeline failed")
@@ -664,7 +526,7 @@ class ChatPipeline(BasePipeline):
 
     def _search_seed_context(self, question: str) -> list[_RetrievedChunk]:
         seed = self.config.seed_context
-        if seed is None:
+        if seed is None and not self.config.seed_chunks:
             self._last_search_timings = {"vector_search": 0.0, "rerank": 0.0}
             return []
 
@@ -677,36 +539,52 @@ class ChatPipeline(BasePipeline):
         filed_before = self.config.end_date
 
         seeded_chunks: list[_RetrievedChunk] = []
-        for item in seed.chunks:
-            snippet = item.snippet.strip()
-            if not snippet:
-                continue
-            symbol = (
-                item.symbol.strip().upper()
-                if isinstance(item.symbol, str) and item.symbol.strip()
-                else None
-            )
-            chunk = _RetrievedChunk(
-                collection=item.collection.strip() or "retrieve",
-                score=float(item.score),
-                symbol=symbol,
-                accession_number=item.accession_number,
-                form_type=item.form_type,
-                filed_date=item.filed_date,
-                source=item.source,
-                snippet=snippet,
-                vector=None,
-            )
-            if symbols and (chunk.symbol or "").upper() not in symbols:
-                continue
-            if not self._chunk_matches_filters(
-                chunk,
-                forms=allowed_forms,
-                filed_after=filed_after,
-                filed_before=filed_before,
-            ):
-                continue
-            seeded_chunks.append(chunk)
+        if self.config.seed_chunks:
+            for chunk in self.config.seed_chunks:
+                snippet = chunk.snippet.strip()
+                if not snippet:
+                    continue
+                if symbols and (chunk.symbol or "").upper() not in symbols:
+                    continue
+                if not self._chunk_matches_filters(
+                    chunk,
+                    forms=allowed_forms,
+                    filed_after=filed_after,
+                    filed_before=filed_before,
+                ):
+                    continue
+                seeded_chunks.append(chunk)
+        elif seed is not None:
+            for item in seed.chunks:
+                snippet = item.snippet.strip()
+                if not snippet:
+                    continue
+                symbol = (
+                    item.symbol.strip().upper()
+                    if isinstance(item.symbol, str) and item.symbol.strip()
+                    else None
+                )
+                chunk = _RetrievedChunk(
+                    collection=item.collection.strip() or "retrieve",
+                    score=float(item.score),
+                    symbol=symbol,
+                    accession_number=item.accession_number,
+                    form_type=item.form_type,
+                    filed_date=item.filed_date,
+                    source=item.source,
+                    snippet=snippet,
+                    vector=None,
+                )
+                if symbols and (chunk.symbol or "").upper() not in symbols:
+                    continue
+                if not self._chunk_matches_filters(
+                    chunk,
+                    forms=allowed_forms,
+                    filed_after=filed_after,
+                    filed_before=filed_before,
+                ):
+                    continue
+                seeded_chunks.append(chunk)
 
         seeded_chunks.sort(key=lambda current: current.score, reverse=True)
         deduped: list[_RetrievedChunk] = []
@@ -1910,7 +1788,7 @@ class ChatPipeline(BasePipeline):
             citations=citations,
             citation_ids=citation_ids,
             turns=turns,
-            metadata=self._registry_metadata(payload_metadata),
+            metadata=coerce_result_json_dict(payload_metadata),
         )
 
         outputs: list[Path] = []

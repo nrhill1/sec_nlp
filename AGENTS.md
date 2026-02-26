@@ -49,7 +49,7 @@ When fixing type errors, writing any new code, or modifying existing code:
 
 ### File Headers
 
-Every Python source file must start with a repo-relative path comment followed by a module docstring:
+Every Python source file (including all `__init__.py` files and tests) must start with a repo-relative path comment followed by a module docstring:
 
 ```python
 # src/sec_nlp/pipelines/utils.py

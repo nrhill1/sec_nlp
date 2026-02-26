@@ -5,6 +5,7 @@ import inspect
 from pathlib import Path
 
 import pytest
+from langchain_core.runnables import Runnable
 
 from sec_nlp.pipelines import (
     BasePipeline,
@@ -384,6 +385,88 @@ class TestBasePipeline:
 
         assert run_called is True
         assert isinstance(result, ConcreteResult)
+
+    def test_pipeline_is_runnable_and_invoke_calls_run(self) -> None:
+        """Test BasePipeline subclasses satisfy Runnable.invoke semantics."""
+
+        class ConcreteResult(BasePipelineResult):
+            pipeline_type = "test"
+
+            def summary_fields(self) -> dict[str, JsonValue]:
+                return {"success": self.success}
+
+        class ConcreteConfig(BasePipelineSettings):
+            pipeline_type = "test"
+
+            def pipeline_label(self) -> str:
+                return "Test"
+
+        run_called = False
+
+        class ConcretePipeline(BasePipeline):
+            pipeline_type = "test"
+            description = "Test"
+
+            @classmethod
+            def config_model(cls) -> type[ConcreteConfig]:
+                return ConcreteConfig
+
+            @classmethod
+            def result_model(cls) -> type[ConcreteResult]:
+                return ConcreteResult
+
+            def run(self) -> ConcreteResult:
+                nonlocal run_called
+                run_called = True
+                return ConcreteResult()
+
+            def _build_components(self) -> None:
+                pass
+
+        pipeline = ConcretePipeline(config=ConcreteConfig())
+        assert isinstance(pipeline, Runnable)
+
+        result = pipeline.invoke()
+
+        assert run_called is True
+        assert isinstance(result, ConcreteResult)
+
+    def test_pipeline_invoke_rejects_non_null_input(self) -> None:
+        """Test invoke() rejects non-null input for pipeline runnables."""
+
+        class ConcreteResult(BasePipelineResult):
+            pipeline_type = "test"
+
+            def summary_fields(self) -> dict[str, JsonValue]:
+                return {"success": self.success}
+
+        class ConcreteConfig(BasePipelineSettings):
+            pipeline_type = "test"
+
+            def pipeline_label(self) -> str:
+                return "Test"
+
+        class ConcretePipeline(BasePipeline):
+            pipeline_type = "test"
+            description = "Test"
+
+            @classmethod
+            def config_model(cls) -> type[ConcreteConfig]:
+                return ConcreteConfig
+
+            @classmethod
+            def result_model(cls) -> type[ConcreteResult]:
+                return ConcreteResult
+
+            def run(self) -> ConcreteResult:
+                return ConcreteResult()
+
+            def _build_components(self) -> None:
+                pass
+
+        pipeline = ConcretePipeline(config=ConcreteConfig())
+        with pytest.raises(ValueError, match="does not accept input"):
+            pipeline.invoke(input="invalid")
 
     def test_pipeline_requires_config_model_method(self) -> None:
         """Test that pipeline raises TypeError if config_model() is missing."""

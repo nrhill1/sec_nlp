@@ -2,8 +2,10 @@
 """Abstract base classes for all pipelines."""
 
 from abc import ABC, abstractmethod
-from typing import ClassVar
+from collections.abc import Sequence
+from typing import ClassVar, TypeVar
 
+from langchain_core.runnables import Runnable, RunnableConfig
 from pydantic import BaseModel, ConfigDict, field_validator
 
 from sec_nlp.core.infra.logger import logger
@@ -15,9 +17,14 @@ from .result import BasePipelineResult
 __all__: tuple[str, ...] = ("BasePipeline",)
 
 _CLASSVAR_UNSET = "__UNSET__"
+StageStateT = TypeVar("StageStateT")
 
 
-class BasePipeline(BaseModel, ABC):
+class BasePipeline(
+    BaseModel,
+    Runnable[ConfigValue | None, BasePipelineResult],
+    ABC,
+):
     """
     Abstract base class for all pipeline types.
 
@@ -41,6 +48,7 @@ class BasePipeline(BaseModel, ABC):
     requires_llm: ClassVar[bool] = False
     requires_vector_db: ClassVar[bool] = False
 
+    name: str | None = None
     config: BasePipelineSettings
 
     @classmethod
@@ -88,6 +96,33 @@ class BasePipeline(BaseModel, ABC):
         """Run the pipeline with CliApp.run(<pipeline_class>)"""
         return self.run()
 
+    def invoke(
+        self,
+        input: ConfigValue | None = None,
+        config: RunnableConfig | None = None,
+        **kwargs: ConfigValue,
+    ) -> BasePipelineResult:
+        """LangChain Runnable entrypoint mapped to run()."""
+        _ = config
+        _ = kwargs
+        if input is not None:
+            raise ValueError(
+                f"{self.__class__.__name__}.invoke() does not accept input"
+            )
+        return self.run()
+
+    def run_stages(
+        self,
+        *,
+        initial_state: StageStateT,
+        stages: Sequence[Runnable[StageStateT, StageStateT]],
+    ) -> StageStateT:
+        """Run pipeline stages in order using runnable stage adapters."""
+        state = initial_state
+        for stage in stages:
+            state = stage.invoke(state)
+        return state
+
     def _validate_requirements(self) -> None:
         """
         Validate pipeline requirements are met.
@@ -119,11 +154,11 @@ class BasePipeline(BaseModel, ABC):
             Result object with outputs and metadata
         """
 
-    @abstractmethod
     def _build_components(self) -> None:
         """
         Build pipeline components that depend on config.
         """
+        return
 
     @classmethod
     @abstractmethod

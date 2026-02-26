@@ -3,7 +3,6 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
 from pathlib import Path
 from time import perf_counter
 from typing import ClassVar, Literal
@@ -25,14 +24,19 @@ from rich.progress import (
 from sec_nlp.core.infra.logger import logger
 from sec_nlp.core.infra.rich_console import get_rich_console
 from sec_nlp.core.market_analytics import build_market_context
-from sec_nlp.core.types import as_json_dict, coerce_result_json_dict
+from sec_nlp.core.types import (
+    as_json_dict,
+    coerce_result_json_dict,
+    coerce_unknown_json_value,
+)
 from sec_nlp.pipelines import BasePipeline
 from sec_nlp.pipelines.output_io import (
     build_run_file_stem,
     build_run_header_fields,
 )
-from sec_nlp.types import JsonDict, JsonValue, ResultDict
+from sec_nlp.types import JsonValue, ResultDict
 
+from ..chat.bridge import ChatRetrievedChunk
 from .bridge import RetrieveChatSeedBundle, RetrieveChatSeedChunk
 from .config import RetrieveSettings
 from .io import (
@@ -86,10 +90,31 @@ class RetrievePipeline(BasePipeline):
 
     def run_for_flow(self) -> tuple[RetrieveResult, RetrieveChatSeedBundle]:
         """Run retrieve and return an in-memory handoff bundle for chat."""
-        result, bundle = self._run_internal(include_bridge=True)
+        result, bundle, _ = self._run_internal(
+            include_bridge=True,
+            include_prebuilt_chunks=False,
+        )
         if bundle is not None:
             return result, bundle
         return result, self._empty_seed_bundle()
+
+    def run_for_flow_with_chunks(
+        self,
+    ) -> tuple[
+        RetrieveResult,
+        RetrieveChatSeedBundle,
+        list[ChatRetrievedChunk],
+    ]:
+        """Run retrieve and return flow bundle plus prebuilt chat chunks."""
+        result, bundle, chunks = self._run_internal(
+            include_bridge=True,
+            include_prebuilt_chunks=True,
+        )
+        if bundle is None:
+            bundle = self._empty_seed_bundle()
+        if chunks is None:
+            chunks = []
+        return result, bundle, chunks
 
     def _ensure_embedding_components(self) -> None:
         if not (
@@ -145,12 +170,22 @@ class RetrievePipeline(BasePipeline):
             self._qdrant_client = None
 
     def run(self) -> RetrieveResult:
-        result, _ = self._run_internal(include_bridge=False)
+        result, _, _ = self._run_internal(
+            include_bridge=False,
+            include_prebuilt_chunks=False,
+        )
         return result
 
     def _run_internal(
-        self, *, include_bridge: bool
-    ) -> tuple[RetrieveResult, RetrieveChatSeedBundle | None]:
+        self,
+        *,
+        include_bridge: bool,
+        include_prebuilt_chunks: bool,
+    ) -> tuple[
+        RetrieveResult,
+        RetrieveChatSeedBundle | None,
+        list[ChatRetrievedChunk] | None,
+    ]:
         try:
             self.config.setup_paths()
             if not self.config.queries:
@@ -163,6 +198,7 @@ class RetrievePipeline(BasePipeline):
             total_queries = 0
             total_hits = 0
             bridge_chunks: list[RetrieveChatSeedChunk] = []
+            prebuilt_chunks: list[ChatRetrievedChunk] = []
             symbol_targets: list[tuple[str | None, str]]
             if self.config.symbols:
                 symbol_targets = [
@@ -266,6 +302,10 @@ class RetrievePipeline(BasePipeline):
                                 bridge_chunks.extend(
                                     self._hits_to_seed_chunks(symbol_hits)
                                 )
+                            if include_prebuilt_chunks:
+                                prebuilt_chunks.extend(
+                                    self._hits_to_chat_chunks(symbol_hits)
+                                )
 
                             progress.update(phase_task, visible=False)
                             progress.advance(overall_task)
@@ -303,6 +343,10 @@ class RetrievePipeline(BasePipeline):
                             bridge_chunks.extend(
                                 self._hits_to_seed_chunks(symbol_hits)
                             )
+                        if include_prebuilt_chunks:
+                            prebuilt_chunks.extend(
+                                self._hits_to_chat_chunks(symbol_hits)
+                            )
 
                         progress.update(phase_task, visible=False)
                         progress.advance(overall_task)
@@ -314,7 +358,7 @@ class RetrievePipeline(BasePipeline):
 
             self.config.complete_run(
                 success=True,
-                metadata=self._registry_metadata(metadata),
+                metadata=coerce_result_json_dict(metadata),
             )
             result = RetrieveResult(
                 success=True,
@@ -342,7 +386,11 @@ class RetrievePipeline(BasePipeline):
                 if include_bridge
                 else None
             )
-            return result, bundle
+            return (
+                result,
+                bundle,
+                prebuilt_chunks if include_prebuilt_chunks else None,
+            )
         except Exception as exc:
             logger.exception("Retrieve pipeline failed")
             self.config.complete_run(success=False)
@@ -352,6 +400,7 @@ class RetrievePipeline(BasePipeline):
                     error=f"{type(exc).__name__}: {exc}",
                 ),
                 self._empty_seed_bundle() if include_bridge else None,
+                [] if include_prebuilt_chunks else None,
             )
 
     def _empty_seed_bundle(self) -> RetrieveChatSeedBundle:
@@ -388,6 +437,33 @@ class RetrievePipeline(BasePipeline):
                     source=hit.edgar_url or None,
                     score=float(hit.score),
                     snippet=snippet,
+                )
+            )
+        return chunks
+
+    def _hits_to_chat_chunks(
+        self,
+        hits: list[RetrievalHit],
+    ) -> list[ChatRetrievedChunk]:
+        """Convert ranked hits into prebuilt chat chunks for zero-copy handoff."""
+        collection_name = self.config.vdb.collection_name or "retrieve"
+        chunks: list[ChatRetrievedChunk] = []
+        for hit in hits:
+            snippet_raw = hit.snippet or ""
+            snippet = snippet_raw.strip()
+            if not snippet:
+                continue
+            chunks.append(
+                ChatRetrievedChunk(
+                    collection=collection_name,
+                    score=float(hit.score),
+                    symbol=hit.symbol or None,
+                    accession_number=hit.accession_number or None,
+                    form_type=hit.form_type or None,
+                    filed_date=hit.filed_date or None,
+                    source=hit.edgar_url or None,
+                    snippet=snippet,
+                    vector=None,
                 )
             )
         return chunks
@@ -605,40 +681,10 @@ class RetrievePipeline(BasePipeline):
         }
         for key, value in metric.items():
             if isinstance(key, str):
-                normalized = RetrievePipeline._coerce_result_to_json(value)
+                normalized = coerce_unknown_json_value(value)
                 if normalized is not None:
                     payload[key] = normalized
         return payload
-
-    @classmethod
-    def _coerce_result_to_json(cls, value) -> JsonValue | None:
-        if isinstance(value, Path):
-            return str(value)
-        if isinstance(value, (str, int, float, bool)) or value is None:
-            return value
-        if isinstance(value, Sequence) and not isinstance(value, str):
-            items: list[JsonValue] = []
-            for item in value:
-                normalized = cls._coerce_result_to_json(item)
-                if normalized is None:
-                    return None
-                items.append(normalized)
-            return items
-        if isinstance(value, Mapping):
-            payload: JsonDict = {}
-            for key, item in value.items():
-                if not isinstance(key, str):
-                    return None
-                normalized = cls._coerce_result_to_json(item)
-                if normalized is None:
-                    return None
-                payload[key] = normalized
-            return payload
-        return None
-
-    @staticmethod
-    def _registry_metadata(metadata: ResultDict) -> JsonDict:
-        return coerce_result_json_dict(metadata)
 
     def _update_phase(
         self,
