@@ -12,6 +12,8 @@ from sec_nlp.app.flows.compiled import CompiledStage
 from sec_nlp.app.flows.contracts import ContractEvidenceBundle
 from sec_nlp.app.flows.models import FlowDefaults, FlowSpec, FlowStageSpec
 from sec_nlp.app.flows.runner import FlowRunner
+from sec_nlp.pipelines.presets.analyze import AnalyzeConfig, AnalyzePipeline
+from sec_nlp.pipelines.presets.analyze.models import AnalyzeResult
 from sec_nlp.pipelines.presets.chat import ChatPipeline, ChatSettings
 from sec_nlp.pipelines.presets.chat.models import ChatResult
 from sec_nlp.pipelines.presets.exb import ExhibitConfig, ExhibitPipeline
@@ -22,6 +24,8 @@ from sec_nlp.pipelines.presets.retrieve import (
 )
 from sec_nlp.pipelines.presets.retrieve.bridge import RetrieveChatSeedBundle
 from sec_nlp.pipelines.presets.retrieve.models import RetrieveResult
+from sec_nlp.pipelines.presets.warranty import WarrantyConfig, WarrantyPipeline
+from sec_nlp.pipelines.presets.warranty.models import WarrantyResult
 
 
 def _runner() -> FlowRunner:
@@ -157,6 +161,66 @@ def test_run_stage_dispatches_supported_exhibit(monkeypatch) -> None:
                 "email": "test@example.com",
                 "symbols": ["CDE"],
                 "output_format": "json",
+            }
+        ),
+    )
+    result = _runner()._run_stage(stage, FlowArtifactStore())
+    assert result.success is True
+
+
+def test_run_stage_dispatches_supported_analyze(monkeypatch) -> None:
+    def _fake_analyze_run(self: AnalyzePipeline) -> AnalyzeResult:
+        _ = self
+        return AnalyzeResult(
+            success=True,
+            outputs=[Path("/tmp/analyze_summary.json")],
+            metadata={},
+        )
+
+    monkeypatch.setattr(AnalyzePipeline, "run", _fake_analyze_run)
+    monkeypatch.setattr(AnalyzePipeline, "_build_components", lambda self: None)
+    stage = CompiledStage(
+        stage=FlowStageSpec(
+            id="analyze_stage",
+            pipeline="analyze",
+            overrides={},
+        ),
+        settings=AnalyzeConfig.model_validate(
+            {
+                "email": "test@example.com",
+                "symbols": ["CDE"],
+                "search": {"queries": []},
+                "vector_mode": "off",
+            }
+        ),
+    )
+    result = _runner()._run_stage(stage, FlowArtifactStore())
+    assert result.success is True
+
+
+def test_run_stage_dispatches_supported_warranty(monkeypatch) -> None:
+    def _fake_warranty_run(self: WarrantyPipeline) -> WarrantyResult:
+        _ = self
+        return WarrantyResult(
+            success=True,
+            outputs=[Path("/tmp/warranty_summary.json")],
+            metadata={},
+        )
+
+    monkeypatch.setattr(WarrantyPipeline, "run", _fake_warranty_run)
+    monkeypatch.setattr(
+        WarrantyPipeline, "_build_components", lambda self: None
+    )
+    stage = CompiledStage(
+        stage=FlowStageSpec(
+            id="warranty_stage",
+            pipeline="warranty",
+            overrides={},
+        ),
+        settings=WarrantyConfig.model_validate(
+            {
+                "email": "test@example.com",
+                "symbols": ["CDE"],
             }
         ),
     )

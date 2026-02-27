@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import ClassVar, Literal
 
 from langchain_core.documents import Document
+from langchain_core.runnables import Runnable
 from pydantic import PrivateAttr
 from tqdm import tqdm
 
@@ -30,6 +31,11 @@ from .io.payloads import (
     WarrantySummaryPayload,
 )
 from .models import WarrantyResult
+from .run_stages import (
+    WarrantyRunState,
+    build_warranty_stage_chain,
+    create_initial_warranty_state,
+)
 from .steps.aggregate.deduplication import (
     aggregate_period_records,
     dedupe_period_records,
@@ -52,6 +58,9 @@ class WarrantyPipeline(BasePipeline):
 
     _loader: Loader = PrivateAttr()
     _section_filter: SectionFilter | None = PrivateAttr(default=None)
+    _stage_chain: Runnable[WarrantyRunState, WarrantyRunState] | None = (
+        PrivateAttr(default=None)
+    )
 
     @classmethod
     def config_model(cls) -> type[WarrantyConfig]:
@@ -103,6 +112,7 @@ class WarrantyPipeline(BasePipeline):
                 f"Downloads: {self.config.dl_path.resolve()}\n"
             ) from e
         logger.info("Warranty pipeline configured for XBRL-only extraction")
+        self._stage_chain = build_warranty_stage_chain(self)
 
     def run(self) -> WarrantyResult:
         """Execute the warranty pipeline."""
@@ -151,66 +161,21 @@ class WarrantyPipeline(BasePipeline):
         Responsible for locating HTML/XBRL files for the ticker inside the
         configured date window, then delegating to `_process_filing` for each.
         """
-        from sec_edgar_downloader import Downloader
-
-        logger.info("Processing symbol: %s", symbol)
-
-        self._loader.add_symbol(symbol)
-
         start_date, end_date = self.config.date_range
-
-        # Download filings if needed
-        downloader = Downloader(
-            "SEC NLP Tool",
-            self.config.email,
-            str(self.config.dl_path),
+        stage_chain = self._stage_chain
+        if stage_chain is None:
+            stage_chain = build_warranty_stage_chain(self)
+            self._stage_chain = stage_chain
+        state = create_initial_warranty_state(
+            symbol=symbol,
+            start_date=start_date,
+            end_date=end_date,
         )
-        try:
-            n = downloader.get(
-                self.config.mode.form,
-                symbol,
-                after=start_date,
-                before=end_date,
-                limit=self.config.limit,
-                download_details=True,
-            )
-            if n:
-                logger.info("Downloaded %d filings for %s", n, symbol)
-        except Exception as e:
-            logger.warning("Download failed for %s: %s", symbol, e)
-
-        # Get HTML filing paths from base download folder
-        # (sec_edgar_downloader creates sec-edgar-filings/SYMBOL/FORM inside dl_path)
-        try:
-            html_paths = self._loader.html_paths_for_symbol(
-                symbol=symbol,
-                mode=self.config.mode,
-                base=self.config.dl_path,
-                limit=self.config.limit,
-                start_date=start_date,
-                end_date=end_date,
-            )
-        except FileNotFoundError:
-            logger.warning(
-                "No filings found for %s in %s", symbol, self.config.dl_path
-            )
-            return []
-
-        if not html_paths:
-            logger.warning("No filings found for %s", symbol)
-            return []
-
-        logger.info("Found %d filings for %s", len(html_paths), symbol)
-
-        # Process each filing separately
-        output_files: list[Path] = []
-        for html_path in html_paths:
-            filing_outputs = self._process_filing(
-                symbol, html_path, start_date, end_date
-            )
-            output_files.extend(filing_outputs)
-
-        return output_files
+        final_state = self.run_stage_chain(
+            initial_state=state,
+            stage_chain=stage_chain,
+        )
+        return final_state.output_files
 
     def _process_filing(
         self,

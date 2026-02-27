@@ -15,7 +15,13 @@ from pydantic import (
 
 from sec_nlp.types import JsonValue
 
-type PipelineName = Literal["retrieve", "chat", "exhibit"]
+type PipelineName = Literal[
+    "retrieve",
+    "chat",
+    "exhibit",
+    "analyze",
+    "warranty",
+]
 type FlowArtifactName = Literal["retrieve_seed", "contract_evidence"]
 
 

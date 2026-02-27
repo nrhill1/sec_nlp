@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import ClassVar, Literal, TypedDict
 
 from langchain_core.documents import Document
+from langchain_core.runnables import Runnable
 from langchain_qdrant import QdrantVectorStore
 from pydantic import PrivateAttr
 from qdrant_client import QdrantClient
@@ -17,24 +18,27 @@ from sec_nlp.core.ingest.loader import Loader
 from sec_nlp.core.text.keyword import KeywordMatcher
 from sec_nlp.pipelines import BasePipeline
 from sec_nlp.pipelines.chunk_filters import limit_docs_per_accession
-from sec_nlp.pipelines.metadata.exhibit import prepare_vector_docs
 from sec_nlp.pipelines.observability.telemetry import (
-    log_chunk_length_stats,
     log_filter_stats,
 )
 from sec_nlp.pipelines.output_io import write_json
 from sec_nlp.pipelines.utils import slugify
-from sec_nlp.pipelines.vector import upload_documents
 from sec_nlp.pipelines.vector.query import scroll_exists
 from sec_nlp.types import JsonValue, ResultDict
 
 from .bridge import build_contract_evidence_bundle
 from .config import ExhibitConfig
-from .io.exhibit_summary import write_exhibit_summary
-from .io.outputs import write_exhibit_outputs
 from .models import ExhibitResult
+from .run_stages import (
+    ExhibitRunState,
+    build_exhibit_stage_chain,
+    create_initial_exhibit_state,
+)
 from .steps.candidates import build_candidate_accessions
-from .steps.extract.exhibits import collect_exhibit_documents
+from .steps.extract.exhibits import (
+    ExhibitStats,
+    collect_exhibit_documents,
+)
 from .steps.search.payloads import (
     SearchManifestMetaPayload,
     SearchManifestPayload,
@@ -49,30 +53,6 @@ class SearchRecord(TypedDict):
     output_file: str | None
     num_results: int
     top_symbols: list[str]
-
-
-CONTRACT_KEYWORD_CATEGORY_TERMS = {
-    "exclusivity": ["exclusive"],
-    "cost": ["cost", "pricing", "cost-"],
-    "aftermarket": [
-        "aftermarket",
-        "repair",
-        "replacement",
-        "maintenance",
-        "service",
-    ],
-    "components": ["component", "engine", "part"],
-    "supply": [
-        "supplier",
-        "supply",
-        "offtake",
-        "purchase",
-        "distribution",
-        "contract",
-        "agreement",
-        "schedule",
-    ],
-}
 
 
 def _normalize_symbol(value: JsonValue) -> str:
@@ -108,6 +88,9 @@ class ExhibitPipeline(BasePipeline):
 
     # Semantic Search
     _search: ExhibitSearch | None = PrivateAttr(default=None)
+    _stage_chain: Runnable[ExhibitRunState, ExhibitRunState] | None = (
+        PrivateAttr(default=None)
+    )
 
     @classmethod
     def config_model(cls) -> type[ExhibitConfig]:
@@ -181,6 +164,7 @@ class ExhibitPipeline(BasePipeline):
                 raise RuntimeError(
                     f"{type(e).__name__}: Failed to initialize vector store: {e}\n"
                 ) from e
+        self._stage_chain = build_exhibit_stage_chain(self)
 
     def _collection_name(self):
         collection_name = self.config.vdb.collection_name
@@ -314,51 +298,23 @@ class ExhibitPipeline(BasePipeline):
         )
         return output_files
 
-    def _process_symbol_internal(
-        self,
-        symbol: str,
-        *,
-        include_bridge: bool,
-    ) -> tuple[list[Path], list[Document]]:
-        """Process a single symbol."""
-        log_divider(logger, color="cyan")
-        logger.info("Processing symbol: %s \n", symbol)
-
-        allowed_accessions: set[str] | None = None
-        if self.config.candidate_first and self.config.has_contract_exhibits():
-            allowed_accessions = build_candidate_accessions(
-                symbol=symbol,
-                config=self.config,
-            )
-            if allowed_accessions:
-                logger.info(
-                    "Candidate-first narrowed %s to %d accessions",
-                    symbol,
-                    len(allowed_accessions),
-                )
-            elif self.config.candidate_fallback_full_scan:
-                logger.warning(
-                    "Candidate-first found no accessions for %s; falling back to full scan",
-                    symbol,
-                )
-                allowed_accessions = None
-            else:
-                logger.warning(
-                    "Candidate-first found no accessions for %s; skipping symbol",
-                    symbol,
-                )
-                return [], []
-
-        self._loader.add_symbol(symbol)
-        keyword_terms = []
-        if self.config.has_contract_exhibits():
-            keyword_terms = [t.lower() for t in self.config.search_terms if t]
-        keyword_categories = KeywordMatcher.build_keyword_categories(
-            keyword_terms,
-            category_terms=CONTRACT_KEYWORD_CATEGORY_TERMS,
+    def _build_candidate_accessions(self, symbol: str) -> set[str]:
+        """Build candidate-first accession set for one symbol."""
+        return build_candidate_accessions(
+            symbol=symbol,
+            config=self.config,
         )
 
-        exhibit_docs, stats = collect_exhibit_documents(
+    def _collect_exhibit_documents(
+        self,
+        *,
+        symbol: str,
+        keyword_terms: list[str],
+        keyword_categories: KeywordMatcher.KeywordCategories,
+        allowed_accessions: set[str] | None,
+    ) -> tuple[list[Document], ExhibitStats]:
+        """Collect exhibit documents for one symbol."""
+        return collect_exhibit_documents(
             loader=self._loader,
             symbol=symbol,
             config=self.config,
@@ -369,106 +325,28 @@ class ExhibitPipeline(BasePipeline):
             allowed_accessions=allowed_accessions,
         )
 
-        if not exhibit_docs:
-            logger.warning("No exhibit sections found for %s", symbol)
+    def _process_symbol_internal(
+        self,
+        symbol: str,
+        *,
+        include_bridge: bool,
+    ) -> tuple[list[Path], list[Document]]:
+        """Process a single symbol."""
+        stage_chain = self._stage_chain
+        if stage_chain is None:
+            stage_chain = build_exhibit_stage_chain(self)
+            self._stage_chain = stage_chain
+        state = create_initial_exhibit_state(
+            symbol=symbol,
+            include_bridge=include_bridge,
+        )
+        final_state = self.run_stage_chain(
+            initial_state=state,
+            stage_chain=stage_chain,
+        )
+        if final_state.skip_symbol:
             return [], []
-
-        # Drop link-only reference stubs (e.g., “incorporated by reference” anchor lists)
-        before_stub = len(exhibit_docs)
-        exhibit_docs = [
-            d for d in exhibit_docs if not self._is_reference_stub(d)
-        ]
-        if len(exhibit_docs) != before_stub:
-            logger.info(
-                "Dropped %d link-only reference chunks for %s",
-                before_stub - len(exhibit_docs),
-                symbol,
-            )
-
-        filtered_docs = self._filter_chunks(symbol, exhibit_docs)
-
-        if not filtered_docs:
-            logger.warning(
-                "No exhibit chunks remaining after filtering for %s", symbol
-            )
-            summary_outputs = write_exhibit_summary(
-                symbol=symbol,
-                docs=exhibit_docs,
-                config=self.config,
-            )
-            if summary_outputs:
-                logger.info("Finished processing %s", symbol)
-            return summary_outputs, []
-
-        stats.log(symbol=symbol, filtered_chunk_count=len(filtered_docs))
-
-        log_chunk_length_stats(
-            label=None,
-            symbol=symbol,
-            accession=None,
-            docs=filtered_docs,
-            keyword_field="keyword_score",
-        )
-
-        # Filter out chunks from accessions already in the vector database
-        if not self.config.dry_run and self._qdrant_client:
-            filtered_docs, skipped_count = self._filter_indexed_accessions(
-                filtered_docs
-            )
-            if skipped_count > 0:
-                logger.info(
-                    "Skipped %d chunks from already-indexed accessions for %s",
-                    skipped_count,
-                    symbol,
-                )
-            if not filtered_docs:
-                logger.info("All exhibit chunks already indexed for %s", symbol)
-                return [], []
-
-        logger.info(
-            "Indexing %d chunks for %s",
-            len(filtered_docs),
-            symbol,
-        )
-
-        # Store chunks in vector database
-        if not self.config.dry_run and self._vector_store:
-            vector_docs = prepare_vector_docs(
-                filtered_docs,
-                symbol=symbol,
-            )
-
-            if vector_docs:
-                upload_documents(
-                    vector_store=self._vector_store,
-                    documents=vector_docs,
-                    symbol=symbol,
-                    batch_size=32,
-                    desc=f"Uploading vectors for {symbol}",
-                )
-                logger.info(
-                    "Stored %d chunks in vector database for %s",
-                    len(vector_docs),
-                    symbol,
-                )
-
-        # Write results to output files
-        output_files = write_exhibit_outputs(
-            symbol=symbol,
-            docs=filtered_docs,
-            config=self.config,
-        )
-        output_files.extend(
-            write_exhibit_summary(
-                symbol=symbol,
-                docs=exhibit_docs,
-                config=self.config,
-            )
-        )
-        logger.info("Finished processing %s", symbol)
-
-        bridge_docs = filtered_docs if include_bridge else []
-        return output_files, bridge_docs
+        return final_state.output_files, final_state.bridge_docs
 
     def _empty_contract_bundle(self) -> ContractEvidenceBundle:
         """Return empty contract evidence bundle for unsuccessful flow runs."""

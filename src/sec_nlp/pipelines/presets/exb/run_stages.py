@@ -20,12 +20,34 @@ from sec_nlp.pipelines.vector import upload_documents
 
 from .io.exhibit_summary import write_exhibit_summary
 from .io.outputs import write_exhibit_outputs
-from .pipeline import CONTRACT_KEYWORD_CATEGORY_TERMS
-from .steps.candidates import build_candidate_accessions
-from .steps.extract.exhibits import ExhibitStats, collect_exhibit_documents
+from .steps.extract.exhibits import ExhibitStats
 
 if TYPE_CHECKING:
     from .pipeline import ExhibitPipeline
+
+
+CONTRACT_KEYWORD_CATEGORY_TERMS = {
+    "exclusivity": ["exclusive"],
+    "cost": ["cost", "pricing", "cost-"],
+    "aftermarket": [
+        "aftermarket",
+        "repair",
+        "replacement",
+        "maintenance",
+        "service",
+    ],
+    "components": ["component", "engine", "part"],
+    "supply": [
+        "supplier",
+        "supply",
+        "offtake",
+        "purchase",
+        "distribution",
+        "contract",
+        "agreement",
+        "schedule",
+    ],
+}
 
 
 @dataclass(slots=True)
@@ -74,9 +96,8 @@ class CandidateAccessionsStage(PipelineStageRunnable[ExhibitRunState]):
         ):
             return state
 
-        state.allowed_accessions = build_candidate_accessions(
-            symbol=state.symbol,
-            config=self.pipeline.config,
+        state.allowed_accessions = self.pipeline._build_candidate_accessions(
+            state.symbol
         )
         if state.allowed_accessions:
             logger.info(
@@ -125,15 +146,13 @@ class CollectExhibitDocsStage(PipelineStageRunnable[ExhibitRunState]):
             category_terms=CONTRACT_KEYWORD_CATEGORY_TERMS,
         )
 
-        state.exhibit_docs, state.stats = collect_exhibit_documents(
-            loader=self.pipeline._loader,
-            symbol=state.symbol,
-            config=self.pipeline.config,
-            keyword_terms=state.keyword_terms,
-            keyword_categories=state.keyword_categories,
-            adaptive_chunk_size=self.pipeline._adaptive_chunk_size,
-            skip_prefilter=False,
-            allowed_accessions=state.allowed_accessions,
+        state.exhibit_docs, state.stats = (
+            self.pipeline._collect_exhibit_documents(
+                symbol=state.symbol,
+                keyword_terms=state.keyword_terms,
+                keyword_categories=state.keyword_categories,
+                allowed_accessions=state.allowed_accessions,
+            )
         )
         if state.exhibit_docs:
             return state
