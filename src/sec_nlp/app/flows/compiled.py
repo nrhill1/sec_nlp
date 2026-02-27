@@ -6,14 +6,22 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from sec_nlp.app.flows.models import FlowDefaults, FlowSpec, FlowStageSpec
+from sec_nlp.pipelines.presets.analyze import AnalyzeConfig
 from sec_nlp.pipelines.presets.chat import ChatSettings
 from sec_nlp.pipelines.presets.exb import ExhibitConfig
 from sec_nlp.pipelines.presets.retrieve import RetrieveSettings
+from sec_nlp.pipelines.presets.warranty import WarrantyConfig
 from sec_nlp.types import JsonValue
 
 type StageConfigValue = JsonValue
 
-type CompiledStageSettings = RetrieveSettings | ChatSettings | ExhibitConfig
+type CompiledStageSettings = (
+    RetrieveSettings
+    | ChatSettings
+    | ExhibitConfig
+    | AnalyzeConfig
+    | WarrantyConfig
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -24,46 +32,29 @@ class CompiledStage:
     settings: CompiledStageSettings
 
 
-def build_stage_defaults_payload(
-    defaults: FlowDefaults,
-) -> dict[str, StageConfigValue]:
-    """Build stage config payload from flow defaults."""
-    return {"email": defaults.email}
-
-
 def compile_stage(
     *,
     stage: FlowStageSpec,
     defaults: FlowDefaults,
 ) -> CompiledStage:
     """Compile one stage into a prevalidated pipeline settings object."""
-    if stage.pipeline == "retrieve":
-        payload: dict[str, StageConfigValue] = build_stage_defaults_payload(
-            defaults
-        )
-        payload.update(stage.overrides)
-        return CompiledStage(
-            stage=stage,
-            settings=RetrieveSettings.model_validate(payload),
-        )
+    pipeline_to_model = {
+        "retrieve": RetrieveSettings,
+        "chat": ChatSettings,
+        "exhibit": ExhibitConfig,
+        "analyze": AnalyzeConfig,
+        "warranty": WarrantyConfig,
+    }
+    settings_model = pipeline_to_model.get(stage.pipeline)
+    if settings_model is None:
+        raise ValueError(f"Unsupported flow pipeline '{stage.pipeline}'")
 
-    if stage.pipeline == "chat":
-        payload = build_stage_defaults_payload(defaults)
-        payload.update(stage.overrides)
-        return CompiledStage(
-            stage=stage,
-            settings=ChatSettings.model_validate(payload),
-        )
-
-    if stage.pipeline == "exhibit":
-        payload = build_stage_defaults_payload(defaults)
-        payload.update(stage.overrides)
-        return CompiledStage(
-            stage=stage,
-            settings=ExhibitConfig.model_validate(payload),
-        )
-
-    raise ValueError(f"Unsupported flow pipeline '{stage.pipeline}'")
+    payload: dict[str, StageConfigValue] = {"email": defaults.email}
+    payload.update(stage.overrides)
+    return CompiledStage(
+        stage=stage,
+        settings=settings_model.model_validate(payload),
+    )
 
 
 def compile_flow_stages(spec: FlowSpec) -> tuple[CompiledStage, ...]:

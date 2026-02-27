@@ -5,19 +5,27 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from sec_nlp.app.flows.compiled import build_stage_defaults_payload
+from sec_nlp.app.flows.compiled import compile_stage
 from sec_nlp.app.flows.models import FlowDefaults, FlowStageSpec
 from sec_nlp.app.flows.runner import FlowRunner
 from sec_nlp.core.types import as_json_dict, coerce_result_json_dict
+from sec_nlp.pipelines.presets.retrieve import RetrieveSettings
 from sec_nlp.pipelines.presets.retrieve.models import RetrieveResult
 
 
-def test_build_stage_defaults_payload_is_email_only() -> None:
+def test_compile_stage_applies_email_default() -> None:
     defaults = FlowDefaults(email="test@example.com")
+    stage = FlowStageSpec(
+        id="retrieve_seed",
+        pipeline="retrieve",
+        overrides={},
+    )
 
-    payload = build_stage_defaults_payload(defaults)
+    compiled = compile_stage(stage=stage, defaults=defaults)
 
-    assert payload == {"email": "test@example.com"}
+    settings = compiled.settings
+    assert isinstance(settings, RetrieveSettings)
+    assert settings.email == "test@example.com"
 
 
 def test_coerce_result_json_dict_converts_paths() -> None:
