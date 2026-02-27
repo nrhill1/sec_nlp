@@ -10,6 +10,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+from rich.progress import Progress
 
 from sec_nlp.pipelines.presets.chat import (
     ChatPipeline,
@@ -18,6 +19,10 @@ from sec_nlp.pipelines.presets.chat import (
     ChatSettings,
 )
 from sec_nlp.pipelines.presets.chat.pipeline import _RetrievedChunk
+from sec_nlp.pipelines.presets.chat.run_stages import (
+    build_chat_stage_chain,
+    create_initial_chat_state,
+)
 from sec_nlp.pipelines.vector.config import VectorConfig
 from sec_nlp.types import JsonValue
 
@@ -1124,3 +1129,45 @@ def test_chat_pipeline_run_requires_question(tmp_path: Path) -> None:
     assert result.success is False
     assert result.error is not None
     assert "requires a question" in result.error
+
+
+def test_chat_stage_chain_preserves_state_identity(
+    tmp_path: Path, monkeypatch
+) -> None:
+    config = ChatSettings(
+        email="test@example.com",
+        symbols=["CDE"],
+        question="What changed?",
+        dl_path=tmp_path / "downloads",
+        out_path=tmp_path / "outputs",
+        transcript_autosave=False,
+    )
+    pipeline = ChatPipeline(config=config)
+    monkeypatch.setattr(
+        ChatPipeline,
+        "_search_collections",
+        lambda self, question, **_kwargs: [],
+    )
+    monkeypatch.setattr(
+        ChatPipeline,
+        "_build_answer",
+        lambda self, question, citations, external_context="": ("answer", []),
+    )
+
+    chain = build_chat_stage_chain(pipeline)
+    progress = Progress()
+    overall_task = progress.add_task("chat", total=5)
+    phase_task = progress.add_task("phase", total=None, visible=False)
+    initial_state = create_initial_chat_state(
+        question="What changed?",
+        progress=progress,
+        overall_task=overall_task,
+        phase_task=phase_task,
+    )
+    initial_state_id = id(initial_state)
+    final_state = pipeline.run_stage_chain(
+        initial_state=initial_state,
+        stage_chain=chain,
+    )
+
+    assert id(final_state) == initial_state_id

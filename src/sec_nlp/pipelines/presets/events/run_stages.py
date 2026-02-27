@@ -7,8 +7,11 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from langchain_core.runnables import RunnableLambda
+from langchain_core.runnables import Runnable
+from pydantic import Field
 from rich.progress import Progress, TaskID
+
+from sec_nlp.pipelines.base.stages import PipelineStageRunnable
 
 from .models import DetectedEvent
 from .steps import (
@@ -53,13 +56,13 @@ def create_initial_events_state(
     )
 
 
-@dataclass(slots=True)
-class EventsStageRunner:
-    """Bound stage methods to avoid per-stage lambda/closure allocations."""
+class ScanEventsStage(PipelineStageRunnable[EventsRunState]):
+    """Scan filings and produce event candidates."""
 
-    pipeline: EventsPipeline
+    pipeline: EventsPipeline = Field(exclude=True, repr=False)
+    name: str = Field(default="scan_events")
 
-    def scan(self, state: EventsRunState) -> EventsRunState:
+    def _run(self, state: EventsRunState) -> EventsRunState:
         self.pipeline._update_phase(
             state.progress,
             state.phase_task,
@@ -74,7 +77,14 @@ class EventsStageRunner:
         )
         return state
 
-    def enrich(self, state: EventsRunState) -> EventsRunState:
+
+class EnrichEventsStage(PipelineStageRunnable[EventsRunState]):
+    """Attach related news to scanned events."""
+
+    pipeline: EventsPipeline = Field(exclude=True, repr=False)
+    name: str = Field(default="enrich_events")
+
+    def _run(self, state: EventsRunState) -> EventsRunState:
         self.pipeline._update_phase(
             state.progress,
             state.phase_task,
@@ -88,7 +98,14 @@ class EventsStageRunner:
         )
         return state
 
-    def score(self, state: EventsRunState) -> EventsRunState:
+
+class ScoreEventsStage(PipelineStageRunnable[EventsRunState]):
+    """Score impact metrics for enriched events."""
+
+    pipeline: EventsPipeline = Field(exclude=True, repr=False)
+    name: str = Field(default="score_events")
+
+    def _run(self, state: EventsRunState) -> EventsRunState:
         self.pipeline._update_phase(
             state.progress,
             state.phase_task,
@@ -102,7 +119,14 @@ class EventsStageRunner:
         )
         return state
 
-    def write(self, state: EventsRunState) -> EventsRunState:
+
+class WriteEventsOutputsStage(PipelineStageRunnable[EventsRunState]):
+    """Write event outputs and metadata."""
+
+    pipeline: EventsPipeline = Field(exclude=True, repr=False)
+    name: str = Field(default="write_outputs")
+
+    def _run(self, state: EventsRunState) -> EventsRunState:
         self.pipeline._update_phase(
             state.progress,
             state.phase_task,
@@ -123,16 +147,35 @@ class EventsStageRunner:
         return state
 
 
-def build_events_stage_runnables(
+def build_events_stage_chain(
     pipeline: EventsPipeline,
-) -> tuple[RunnableLambda[EventsRunState, EventsRunState], ...]:
-    """Build deterministic events stage runnables."""
-    runner = EventsStageRunner(pipeline)
-    return pipeline.build_stage_runnables(
-        named_stages=(
-            ("scan_events", runner.scan),
-            ("enrich_events", runner.enrich),
-            ("score_events", runner.score),
-            ("write_outputs", runner.write),
-        )
+) -> Runnable[EventsRunState, EventsRunState]:
+    """Build deterministic events stage chain."""
+    types_namespace = {"EventsPipeline": pipeline.__class__}
+    ScanEventsStage.model_rebuild(
+        _types_namespace=types_namespace,
+        force=True,
     )
+    EnrichEventsStage.model_rebuild(
+        _types_namespace=types_namespace,
+        force=True,
+    )
+    ScoreEventsStage.model_rebuild(
+        _types_namespace=types_namespace,
+        force=True,
+    )
+    WriteEventsOutputsStage.model_rebuild(
+        _types_namespace=types_namespace,
+        force=True,
+    )
+    stages: tuple[PipelineStageRunnable[EventsRunState], ...] = (
+        ScanEventsStage(pipeline=pipeline),
+        EnrichEventsStage(pipeline=pipeline),
+        ScoreEventsStage(pipeline=pipeline),
+        WriteEventsOutputsStage(pipeline=pipeline),
+    )
+    configured_stages = tuple(
+        stage.configured(pipeline_type=pipeline.pipeline_type)
+        for stage in stages
+    )
+    return pipeline.build_stage_chain(stages=configured_stages)

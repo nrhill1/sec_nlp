@@ -7,8 +7,11 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from langchain_core.runnables import RunnableLambda
+from langchain_core.runnables import Runnable
+from pydantic import Field
 from rich.progress import Progress, TaskID
+
+from sec_nlp.pipelines.base.stages import PipelineStageRunnable
 
 from .models import NewsCorrelation, NewsHeadline, NewsTimelineEntry
 from .steps import (
@@ -53,13 +56,13 @@ def create_initial_news_state(
     )
 
 
-@dataclass(slots=True)
-class NewsStageRunner:
-    """Bound stage methods to avoid per-stage lambda/closure allocations."""
+class ResolveAliasesStage(PipelineStageRunnable[NewsRunState]):
+    """Resolve symbol aliases used by matching logic."""
 
-    pipeline: NewsPipeline
+    pipeline: NewsPipeline = Field(exclude=True, repr=False)
+    name: str = Field(default="resolve_aliases")
 
-    def resolve_aliases(self, state: NewsRunState) -> NewsRunState:
+    def _run(self, state: NewsRunState) -> NewsRunState:
         self.pipeline._update_phase(
             state.progress,
             state.phase_task,
@@ -72,7 +75,14 @@ class NewsStageRunner:
         )
         return state
 
-    def fetch(self, state: NewsRunState) -> NewsRunState:
+
+class FetchItemsStage(PipelineStageRunnable[NewsRunState]):
+    """Fetch raw news items for one symbol."""
+
+    pipeline: NewsPipeline = Field(exclude=True, repr=False)
+    name: str = Field(default="fetch_items")
+
+    def _run(self, state: NewsRunState) -> NewsRunState:
         self.pipeline._update_phase(
             state.progress,
             state.phase_task,
@@ -85,7 +95,14 @@ class NewsStageRunner:
         )
         return state
 
-    def match(self, state: NewsRunState) -> NewsRunState:
+
+class MatchItemsStage(PipelineStageRunnable[NewsRunState]):
+    """Filter and match fetched items against configured topics."""
+
+    pipeline: NewsPipeline = Field(exclude=True, repr=False)
+    name: str = Field(default="match_items")
+
+    def _run(self, state: NewsRunState) -> NewsRunState:
         self.pipeline._update_phase(
             state.progress,
             state.phase_task,
@@ -102,7 +119,14 @@ class NewsStageRunner:
         )
         return state
 
-    def correlate(self, state: NewsRunState) -> NewsRunState:
+
+class CorrelateItemsStage(PipelineStageRunnable[NewsRunState]):
+    """Correlate matched headlines with timeline and market data."""
+
+    pipeline: NewsPipeline = Field(exclude=True, repr=False)
+    name: str = Field(default="correlate_items")
+
+    def _run(self, state: NewsRunState) -> NewsRunState:
         self.pipeline._update_phase(
             state.progress,
             state.phase_task,
@@ -118,7 +142,14 @@ class NewsStageRunner:
         )
         return state
 
-    def write(self, state: NewsRunState) -> NewsRunState:
+
+class WriteOutputsStage(PipelineStageRunnable[NewsRunState]):
+    """Write symbol-level outputs and metadata."""
+
+    pipeline: NewsPipeline = Field(exclude=True, repr=False)
+    name: str = Field(default="write_outputs")
+
+    def _run(self, state: NewsRunState) -> NewsRunState:
         self.pipeline._update_phase(
             state.progress,
             state.phase_task,
@@ -145,17 +176,40 @@ class NewsStageRunner:
         return state
 
 
-def build_news_stage_runnables(
+def build_news_stage_chain(
     pipeline: NewsPipeline,
-) -> tuple[RunnableLambda[NewsRunState, NewsRunState], ...]:
-    """Build deterministic news stage runnables."""
-    runner = NewsStageRunner(pipeline)
-    return pipeline.build_stage_runnables(
-        named_stages=(
-            ("resolve_aliases", runner.resolve_aliases),
-            ("fetch_items", runner.fetch),
-            ("match_items", runner.match),
-            ("correlate_items", runner.correlate),
-            ("write_outputs", runner.write),
-        )
+) -> Runnable[NewsRunState, NewsRunState]:
+    """Build deterministic news stage chain."""
+    types_namespace = {"NewsPipeline": pipeline.__class__}
+    ResolveAliasesStage.model_rebuild(
+        _types_namespace=types_namespace,
+        force=True,
     )
+    FetchItemsStage.model_rebuild(
+        _types_namespace=types_namespace,
+        force=True,
+    )
+    MatchItemsStage.model_rebuild(
+        _types_namespace=types_namespace,
+        force=True,
+    )
+    CorrelateItemsStage.model_rebuild(
+        _types_namespace=types_namespace,
+        force=True,
+    )
+    WriteOutputsStage.model_rebuild(
+        _types_namespace=types_namespace,
+        force=True,
+    )
+    stages: tuple[PipelineStageRunnable[NewsRunState], ...] = (
+        ResolveAliasesStage(pipeline=pipeline),
+        FetchItemsStage(pipeline=pipeline),
+        MatchItemsStage(pipeline=pipeline),
+        CorrelateItemsStage(pipeline=pipeline),
+        WriteOutputsStage(pipeline=pipeline),
+    )
+    configured_stages = tuple(
+        stage.configured(pipeline_type=pipeline.pipeline_type)
+        for stage in stages
+    )
+    return pipeline.build_stage_chain(stages=configured_stages)

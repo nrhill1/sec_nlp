@@ -6,6 +6,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import ClassVar, Literal
 
+from langchain_core.runnables import Runnable
 from pydantic import PrivateAttr
 from rich.progress import (
     BarColumn,
@@ -35,7 +36,8 @@ from .io import (
 )
 from .models import FinancialsResult
 from .run_stages import (
-    build_financials_stage_runnables,
+    FinancialsRunState,
+    build_financials_stage_chain,
     create_initial_financials_state,
 )
 
@@ -52,6 +54,9 @@ class FinancialsPipeline(BasePipeline):
     config: FinancialsSettings
 
     _parser: XbrlParser | None = PrivateAttr(default=None)
+    _stage_chain: Runnable[FinancialsRunState, FinancialsRunState] | None = (
+        PrivateAttr(default=None)
+    )
 
     @classmethod
     def config_model(cls) -> type[FinancialsSettings]:
@@ -65,6 +70,9 @@ class FinancialsPipeline(BasePipeline):
         if self._parser is None:
             self._parser = create_xbrl_parser()
         return self._parser
+
+    def _build_components(self) -> None:
+        self._stage_chain = build_financials_stage_chain(self)
 
     def run(self) -> FinancialsResult:
         try:
@@ -90,7 +98,10 @@ class FinancialsPipeline(BasePipeline):
                     total=len(self.config.symbols),
                 )
                 phase_task = progress.add_task("", total=None, visible=False)
-                stage_runnables = build_financials_stage_runnables(self)
+                stage_chain = self._stage_chain
+                if stage_chain is None:
+                    stage_chain = build_financials_stage_chain(self)
+                    self._stage_chain = stage_chain
 
                 for symbol in self.config.symbols:
                     normalized_symbol = symbol.upper()
@@ -104,9 +115,9 @@ class FinancialsPipeline(BasePipeline):
                         progress=progress,
                         phase_task=phase_task,
                     )
-                    symbol_state = self.run_stages(
+                    symbol_state = self.run_stage_chain(
                         initial_state=symbol_state,
-                        stages=stage_runnables,
+                        stage_chain=stage_chain,
                     )
                     outputs.extend(symbol_state.outputs)
                     metadata[normalized_symbol] = symbol_state.metadata

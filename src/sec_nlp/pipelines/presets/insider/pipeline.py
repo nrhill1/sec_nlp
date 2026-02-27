@@ -6,6 +6,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import ClassVar, Literal
 
+from langchain_core.runnables import Runnable
 from pydantic import PrivateAttr
 from rich.progress import (
     BarColumn,
@@ -42,15 +43,12 @@ from .models import (
     InsiderResult,
     InsiderTransaction,
 )
-from .steps import (
-    TradeCluster,
-    build_insider_ledgers,
-    compute_net_buy_ratio,
-    correlate_insider_activity,
-    download_insider_filings,
-    find_trade_clusters,
-    parse_insider_transactions,
+from .run_stages import (
+    InsiderRunState,
+    build_insider_stage_chain,
+    create_initial_insider_state,
 )
+from .steps import TradeCluster
 
 
 class InsiderPipeline(BasePipeline):
@@ -65,6 +63,9 @@ class InsiderPipeline(BasePipeline):
     config: InsiderSettings
 
     _parser: InsiderParser | None = PrivateAttr(default=None)
+    _stage_chain: Runnable[InsiderRunState, InsiderRunState] | None = (
+        PrivateAttr(default=None)
+    )
 
     @classmethod
     def config_model(cls) -> type[InsiderSettings]:
@@ -78,6 +79,9 @@ class InsiderPipeline(BasePipeline):
         if self._parser is None:
             self._parser = InsiderParser()
         return self._parser
+
+    def _build_components(self) -> None:
+        self._stage_chain = build_insider_stage_chain(self)
 
     def run(self) -> InsiderResult:
         try:
@@ -104,6 +108,10 @@ class InsiderPipeline(BasePipeline):
                     total=len(self.config.symbols),
                 )
                 phase_task = progress.add_task("", total=None, visible=False)
+                stage_chain = self._stage_chain
+                if stage_chain is None:
+                    stage_chain = build_insider_stage_chain(self)
+                    self._stage_chain = stage_chain
 
                 for symbol in self.config.symbols:
                     normalized_symbol = symbol.upper()
@@ -112,18 +120,20 @@ class InsiderPipeline(BasePipeline):
                         description=f"Processing {normalized_symbol}",
                     )
 
-                    symbol_outputs, symbol_meta, tx_count, alert_count = (
-                        self._process_symbol(
-                            normalized_symbol,
-                            progress=progress,
-                            phase_task=phase_task,
-                        )
+                    symbol_state = create_initial_insider_state(
+                        symbol=normalized_symbol,
+                        progress=progress,
+                        phase_task=phase_task,
+                    )
+                    symbol_state = self.run_stage_chain(
+                        initial_state=symbol_state,
+                        stage_chain=stage_chain,
                     )
 
-                    outputs.extend(symbol_outputs)
-                    metadata[normalized_symbol] = symbol_meta
-                    total_transactions += tx_count
-                    total_alerts += alert_count
+                    outputs.extend(symbol_state.outputs)
+                    metadata[normalized_symbol] = symbol_state.metadata
+                    total_transactions += len(symbol_state.transactions)
+                    total_alerts += len(symbol_state.alerts)
 
                     progress.update(phase_task, visible=False)
                     progress.advance(overall_task)
@@ -147,82 +157,6 @@ class InsiderPipeline(BasePipeline):
                 success=False,
                 error=f"{type(exc).__name__}: {exc}",
             )
-
-    def _process_symbol(
-        self,
-        symbol: str,
-        *,
-        progress: Progress | None = None,
-        phase_task: TaskID | None = None,
-    ) -> tuple[list[Path], dict[str, int | float | str | None], int, int]:
-        self._update_phase(progress, phase_task, symbol, "Downloading")
-        filings = download_insider_filings(symbol=symbol, settings=self.config)
-        parser = self._get_parser()
-
-        self._update_phase(
-            progress,
-            phase_task,
-            symbol,
-            "Parsing",
-            total=len(filings),
-        )
-        transactions: list[InsiderTransaction] = []
-        for filing in filings:
-            transactions.extend(
-                parse_insider_transactions(
-                    symbol=symbol,
-                    filing=filing,
-                    parser=parser,
-                )
-            )
-            if progress is not None and phase_task is not None:
-                progress.advance(phase_task)
-
-        self._update_phase(progress, phase_task, symbol, "Aggregating")
-        ledgers = build_insider_ledgers(transactions)
-        clusters = find_trade_clusters(
-            transactions,
-            window_days=self.config.alert_window_days,
-            cluster_threshold=self.config.alert_cluster_threshold,
-        )
-        net_buy_ratio = compute_net_buy_ratio(transactions)
-
-        self._update_phase(progress, phase_task, symbol, "Correlating")
-        alerts, correlation_meta = correlate_insider_activity(
-            symbol=symbol,
-            transactions=transactions,
-            clusters=clusters,
-            settings=self.config,
-        )
-
-        self._update_phase(progress, phase_task, symbol, "Writing")
-        outputs = self._write_outputs(
-            symbol=symbol,
-            filings_processed=len(filings),
-            transactions=transactions,
-            ledgers=ledgers,
-            alerts=alerts,
-            net_buy_ratio=net_buy_ratio,
-            clusters=clusters,
-            correlation_meta=correlation_meta,
-        )
-
-        metadata: dict[str, int | float | str | None] = {
-            "filings_processed": len(filings),
-            "transactions_processed": len(transactions),
-            "ledger_rows": len(ledgers),
-            "clusters_detected": len(clusters),
-            "alerts_generated": len(alerts),
-            "net_buy_ratio": net_buy_ratio,
-            "material_filings_considered": int(
-                correlation_meta.get("material_filings_considered", 0)
-            ),
-            "market_windows_evaluated": int(
-                correlation_meta.get("market_windows_evaluated", 0)
-            ),
-        }
-
-        return outputs, metadata, len(transactions), len(alerts)
 
     def _update_phase(
         self,

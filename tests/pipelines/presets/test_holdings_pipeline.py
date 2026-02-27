@@ -15,6 +15,10 @@ from sec_nlp.core.edgar.holdings_parser import HoldingsParser
 from sec_nlp.pipelines.presets.holdings.config import HoldingsSettings
 from sec_nlp.pipelines.presets.holdings.models import HoldingPosition
 from sec_nlp.pipelines.presets.holdings.pipeline import HoldingsPipeline
+from sec_nlp.pipelines.presets.holdings.run_stages import (
+    build_holdings_stage_chain,
+    create_initial_holdings_state,
+)
 from sec_nlp.pipelines.presets.holdings.steps.aggregate import (
     build_ownership_summary,
 )
@@ -237,11 +241,11 @@ def test_pipeline_run_writes_outputs_with_mocked_steps(
     ]
 
     monkeypatch.setattr(
-        "sec_nlp.pipelines.presets.holdings.pipeline.download_holdings_filings",
+        "sec_nlp.pipelines.presets.holdings.run_stages.download_holdings_filings",
         lambda symbol, settings: [filing],
     )
     monkeypatch.setattr(
-        "sec_nlp.pipelines.presets.holdings.pipeline.parse_holding_positions",
+        "sec_nlp.pipelines.presets.holdings.run_stages.parse_holding_positions",
         lambda symbol, filing, parser, cusip_filter=None: positions,
     )
 
@@ -342,3 +346,43 @@ def test_download_holdings_filings_uses_include_amends_for_13f_amendments(
     assert calls[0]["download_details"] is True
     assert len(filings) == 1
     assert filings[0].form_type == "13F-HR"
+
+
+def test_holdings_stage_chain_preserves_state_identity(
+    tmp_path: Path, monkeypatch
+) -> None:
+    config = HoldingsSettings(
+        email="test@example.com",
+        symbols=["ABC"],
+        dl_path=tmp_path / "downloads",
+        out_path=tmp_path / "outputs",
+        output_format="json",
+    )
+    pipeline = HoldingsPipeline(config=config)
+    monkeypatch.setattr(
+        HoldingsPipeline,
+        "_write_outputs",
+        lambda self, **_kwargs: [],
+    )
+    monkeypatch.setattr(
+        "sec_nlp.pipelines.presets.holdings.run_stages.download_holdings_filings",
+        lambda symbol, settings: [],
+    )
+    monkeypatch.setattr(
+        "sec_nlp.pipelines.presets.holdings.run_stages.parse_holding_positions",
+        lambda symbol, filing, parser, cusip_filter=None: [],
+    )
+
+    chain = build_holdings_stage_chain(pipeline)
+    initial_state = create_initial_holdings_state(
+        symbol="ABC",
+        progress=None,
+        phase_task=None,
+    )
+    initial_state_id = id(initial_state)
+    final_state = pipeline.run_stage_chain(
+        initial_state=initial_state,
+        stage_chain=chain,
+    )
+
+    assert id(final_state) == initial_state_id

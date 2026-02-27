@@ -7,8 +7,11 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from langchain_core.runnables import RunnableLambda
+from langchain_core.runnables import Runnable
+from pydantic import Field
 from rich.progress import Progress, TaskID
+
+from sec_nlp.pipelines.base.stages import PipelineStageRunnable
 
 from .models import FinancialFact, FinancialStatement
 from .steps import (
@@ -53,13 +56,13 @@ def create_initial_financials_state(
     )
 
 
-@dataclass(slots=True)
-class FinancialsStageRunner:
-    """Bound stage methods to avoid per-stage lambda/closure allocations."""
+class DownloadFilingsStage(PipelineStageRunnable[FinancialsRunState]):
+    """Download filing accession directories for one symbol."""
 
-    pipeline: FinancialsPipeline
+    pipeline: FinancialsPipeline = Field(exclude=True, repr=False)
+    name: str = Field(default="download_filings")
 
-    def download(self, state: FinancialsRunState) -> FinancialsRunState:
+    def _run(self, state: FinancialsRunState) -> FinancialsRunState:
         self.pipeline._update_phase(
             state.progress,
             state.phase_task,
@@ -72,7 +75,14 @@ class FinancialsStageRunner:
         )
         return state
 
-    def extract(self, state: FinancialsRunState) -> FinancialsRunState:
+
+class ExtractFactsStage(PipelineStageRunnable[FinancialsRunState]):
+    """Extract normalized financial facts from downloaded filings."""
+
+    pipeline: FinancialsPipeline = Field(exclude=True, repr=False)
+    name: str = Field(default="extract_facts")
+
+    def _run(self, state: FinancialsRunState) -> FinancialsRunState:
         self.pipeline._update_phase(
             state.progress,
             state.phase_task,
@@ -94,7 +104,14 @@ class FinancialsStageRunner:
                 state.progress.advance(state.phase_task)
         return state
 
-    def aggregate(self, state: FinancialsRunState) -> FinancialsRunState:
+
+class AggregateFinancialsStage(PipelineStageRunnable[FinancialsRunState]):
+    """Aggregate extracted facts into statement rows."""
+
+    pipeline: FinancialsPipeline = Field(exclude=True, repr=False)
+    name: str = Field(default="aggregate_financials")
+
+    def _run(self, state: FinancialsRunState) -> FinancialsRunState:
         self.pipeline._update_phase(
             state.progress,
             state.phase_task,
@@ -107,7 +124,14 @@ class FinancialsStageRunner:
         )
         return state
 
-    def build_delta(self, state: FinancialsRunState) -> FinancialsRunState:
+
+class BuildDeltaReportStage(PipelineStageRunnable[FinancialsRunState]):
+    """Compute period-over-period deltas when enabled."""
+
+    pipeline: FinancialsPipeline = Field(exclude=True, repr=False)
+    name: str = Field(default="build_delta_report")
+
+    def _run(self, state: FinancialsRunState) -> FinancialsRunState:
         self.pipeline._update_phase(
             state.progress,
             state.phase_task,
@@ -121,7 +145,14 @@ class FinancialsStageRunner:
         )
         return state
 
-    def write(self, state: FinancialsRunState) -> FinancialsRunState:
+
+class WriteFinancialsOutputsStage(PipelineStageRunnable[FinancialsRunState]):
+    """Write financial output artifacts and summary metadata."""
+
+    pipeline: FinancialsPipeline = Field(exclude=True, repr=False)
+    name: str = Field(default="write_outputs")
+
+    def _run(self, state: FinancialsRunState) -> FinancialsRunState:
         self.pipeline._update_phase(
             state.progress,
             state.phase_task,
@@ -142,17 +173,40 @@ class FinancialsStageRunner:
         return state
 
 
-def build_financials_stage_runnables(
+def build_financials_stage_chain(
     pipeline: FinancialsPipeline,
-) -> tuple[RunnableLambda[FinancialsRunState, FinancialsRunState], ...]:
-    """Build deterministic financials stage runnables."""
-    runner = FinancialsStageRunner(pipeline)
-    return pipeline.build_stage_runnables(
-        named_stages=(
-            ("download_filings", runner.download),
-            ("extract_facts", runner.extract),
-            ("aggregate_financials", runner.aggregate),
-            ("build_delta_report", runner.build_delta),
-            ("write_outputs", runner.write),
-        )
+) -> Runnable[FinancialsRunState, FinancialsRunState]:
+    """Build deterministic financials stage chain."""
+    types_namespace = {"FinancialsPipeline": pipeline.__class__}
+    DownloadFilingsStage.model_rebuild(
+        _types_namespace=types_namespace,
+        force=True,
     )
+    ExtractFactsStage.model_rebuild(
+        _types_namespace=types_namespace,
+        force=True,
+    )
+    AggregateFinancialsStage.model_rebuild(
+        _types_namespace=types_namespace,
+        force=True,
+    )
+    BuildDeltaReportStage.model_rebuild(
+        _types_namespace=types_namespace,
+        force=True,
+    )
+    WriteFinancialsOutputsStage.model_rebuild(
+        _types_namespace=types_namespace,
+        force=True,
+    )
+    stages: tuple[PipelineStageRunnable[FinancialsRunState], ...] = (
+        DownloadFilingsStage(pipeline=pipeline),
+        ExtractFactsStage(pipeline=pipeline),
+        AggregateFinancialsStage(pipeline=pipeline),
+        BuildDeltaReportStage(pipeline=pipeline),
+        WriteFinancialsOutputsStage(pipeline=pipeline),
+    )
+    configured_stages = tuple(
+        stage.configured(pipeline_type=pipeline.pipeline_type)
+        for stage in stages
+    )
+    return pipeline.build_stage_chain(stages=configured_stages)

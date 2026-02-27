@@ -6,6 +6,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import ClassVar, Literal
 
+from langchain_core.runnables import Runnable
 from pydantic import PrivateAttr
 from rich.progress import (
     BarColumn,
@@ -42,11 +43,10 @@ from .models import (
     HoldingsResult,
     OwnershipSummary,
 )
-from .steps import (
-    build_holdings_diffs,
-    build_ownership_summary,
-    download_holdings_filings,
-    parse_holding_positions,
+from .run_stages import (
+    HoldingsRunState,
+    build_holdings_stage_chain,
+    create_initial_holdings_state,
 )
 
 
@@ -62,6 +62,9 @@ class HoldingsPipeline(BasePipeline):
     config: HoldingsSettings
 
     _parser: HoldingsParser | None = PrivateAttr(default=None)
+    _stage_chain: Runnable[HoldingsRunState, HoldingsRunState] | None = (
+        PrivateAttr(default=None)
+    )
 
     @classmethod
     def config_model(cls) -> type[HoldingsSettings]:
@@ -75,6 +78,9 @@ class HoldingsPipeline(BasePipeline):
         if self._parser is None:
             self._parser = HoldingsParser()
         return self._parser
+
+    def _build_components(self) -> None:
+        self._stage_chain = build_holdings_stage_chain(self)
 
     def run(self) -> HoldingsResult:
         try:
@@ -101,6 +107,10 @@ class HoldingsPipeline(BasePipeline):
                     total=len(self.config.symbols),
                 )
                 phase_task = progress.add_task("", total=None, visible=False)
+                stage_chain = self._stage_chain
+                if stage_chain is None:
+                    stage_chain = build_holdings_stage_chain(self)
+                    self._stage_chain = stage_chain
 
                 for symbol in self.config.symbols:
                     normalized_symbol = symbol.upper()
@@ -108,20 +118,19 @@ class HoldingsPipeline(BasePipeline):
                         overall_task,
                         description=f"Processing {normalized_symbol}",
                     )
-                    (
-                        symbol_outputs,
-                        symbol_meta,
-                        positions_count,
-                        diffs_count,
-                    ) = self._process_symbol(
-                        normalized_symbol,
+                    symbol_state = create_initial_holdings_state(
+                        symbol=normalized_symbol,
                         progress=progress,
                         phase_task=phase_task,
                     )
-                    outputs.extend(symbol_outputs)
-                    metadata[normalized_symbol] = symbol_meta
-                    total_positions += positions_count
-                    total_diffs += diffs_count
+                    symbol_state = self.run_stage_chain(
+                        initial_state=symbol_state,
+                        stage_chain=stage_chain,
+                    )
+                    outputs.extend(symbol_state.outputs)
+                    metadata[normalized_symbol] = symbol_state.metadata
+                    total_positions += len(symbol_state.positions)
+                    total_diffs += len(symbol_state.diffs)
 
                     progress.update(phase_task, visible=False)
                     progress.advance(overall_task)
@@ -145,68 +154,6 @@ class HoldingsPipeline(BasePipeline):
                 success=False,
                 error=f"{type(exc).__name__}: {exc}",
             )
-
-    def _process_symbol(
-        self,
-        symbol: str,
-        *,
-        progress: Progress | None = None,
-        phase_task: TaskID | None = None,
-    ) -> tuple[list[Path], dict[str, int | float | str | None], int, int]:
-        self._update_phase(progress, phase_task, symbol, "Downloading")
-        filings = download_holdings_filings(symbol=symbol, settings=self.config)
-        parser = self._get_parser()
-
-        self._update_phase(
-            progress,
-            phase_task,
-            symbol,
-            "Parsing",
-            total=len(filings),
-        )
-        positions: list[HoldingPosition] = []
-        for filing in filings:
-            positions.extend(
-                parse_holding_positions(
-                    symbol=symbol,
-                    filing=filing,
-                    parser=parser,
-                    cusip_filter=self.config.cusip,
-                )
-            )
-            if progress is not None and phase_task is not None:
-                progress.advance(phase_task)
-
-        self._update_phase(progress, phase_task, symbol, "Diffing")
-        diffs = build_holdings_diffs(symbol=symbol, positions=positions)
-        self._update_phase(progress, phase_task, symbol, "Aggregating")
-        summary = build_ownership_summary(
-            symbol=symbol,
-            positions=positions,
-            top_holders=self.config.top_holders,
-            cusip_filter=self.config.cusip,
-        )
-
-        self._update_phase(progress, phase_task, symbol, "Writing")
-        outputs = self._write_outputs(
-            symbol=symbol,
-            filings_processed=len(filings),
-            positions=positions,
-            diffs=diffs,
-            summary=summary,
-        )
-
-        metadata: dict[str, int | float | str | None] = {
-            "filings_processed": len(filings),
-            "positions_processed": len(positions),
-            "diffs_generated": len(diffs),
-            "latest_accession": summary.latest_accession,
-            "total_value_thousands": summary.total_value_thousands,
-            "concentration_hhi": summary.concentration_hhi,
-            "filtered_positions": summary.filtered_positions,
-        }
-
-        return outputs, metadata, len(positions), len(diffs)
 
     def _update_phase(
         self,

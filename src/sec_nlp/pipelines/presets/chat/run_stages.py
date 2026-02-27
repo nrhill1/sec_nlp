@@ -8,10 +8,12 @@ from pathlib import Path
 from time import perf_counter
 from typing import TYPE_CHECKING
 
-from langchain_core.runnables import RunnableLambda
+from langchain_core.runnables import Runnable
+from pydantic import Field
 from rich.progress import Progress, TaskID
 
 from sec_nlp.core.infra.logger import logger
+from sec_nlp.pipelines.base.stages import PipelineStageRunnable
 from sec_nlp.types import JsonValue
 
 from .bridge import ChatRetrievedChunk
@@ -66,13 +68,13 @@ def create_initial_chat_state(
     )
 
 
-@dataclass(slots=True)
-class ChatStageRunner:
-    """Bound stage methods to avoid per-stage lambda/closure allocations."""
+class SearchContextStage(PipelineStageRunnable[ChatRunState]):
+    """Retrieve candidate chunks from seeded context or vector DB."""
 
-    pipeline: ChatPipeline
+    pipeline: ChatPipeline = Field(exclude=True, repr=False)
+    name: str = Field(default="search_context")
 
-    def search_context(self, state: ChatRunState) -> ChatRunState:
+    def _run(self, state: ChatRunState) -> ChatRunState:
         self.pipeline._update_phase(
             state.progress,
             state.phase_task,
@@ -118,7 +120,14 @@ class ChatStageRunner:
         state.progress.advance(state.overall_task)
         return state
 
-    def prepare_context(self, state: ChatRunState) -> ChatRunState:
+
+class PrepareContextStage(PipelineStageRunnable[ChatRunState]):
+    """Build citation list and external context block."""
+
+    pipeline: ChatPipeline = Field(exclude=True, repr=False)
+    name: str = Field(default="prepare_context")
+
+    def _run(self, state: ChatRunState) -> ChatRunState:
         self.pipeline._update_phase(
             state.progress,
             state.phase_task,
@@ -149,7 +158,14 @@ class ChatStageRunner:
         state.progress.advance(state.overall_task)
         return state
 
-    def generate_answer(self, state: ChatRunState) -> ChatRunState:
+
+class GenerateAnswerStage(PipelineStageRunnable[ChatRunState]):
+    """Generate answer text and used citation ids."""
+
+    pipeline: ChatPipeline = Field(exclude=True, repr=False)
+    name: str = Field(default="generate_answer")
+
+    def _run(self, state: ChatRunState) -> ChatRunState:
         self.pipeline._update_phase(
             state.progress,
             state.phase_task,
@@ -175,7 +191,14 @@ class ChatStageRunner:
         state.progress.advance(state.overall_task)
         return state
 
-    def build_turns(self, state: ChatRunState) -> ChatRunState:
+
+class BuildTurnsStage(PipelineStageRunnable[ChatRunState]):
+    """Build transcript turn structure."""
+
+    pipeline: ChatPipeline = Field(exclude=True, repr=False)
+    name: str = Field(default="build_turns")
+
+    def _run(self, state: ChatRunState) -> ChatRunState:
         self.pipeline._update_phase(
             state.progress,
             state.phase_task,
@@ -189,7 +212,14 @@ class ChatStageRunner:
         state.progress.advance(state.overall_task)
         return state
 
-    def write_outputs(self, state: ChatRunState) -> ChatRunState:
+
+class WriteChatOutputsStage(PipelineStageRunnable[ChatRunState]):
+    """Write transcript and summary outputs when enabled."""
+
+    pipeline: ChatPipeline = Field(exclude=True, repr=False)
+    name: str = Field(default="write_outputs")
+
+    def _run(self, state: ChatRunState) -> ChatRunState:
         self.pipeline._update_phase(
             state.progress,
             state.phase_task,
@@ -211,17 +241,40 @@ class ChatStageRunner:
         return state
 
 
-def build_chat_stage_runnables(
+def build_chat_stage_chain(
     pipeline: ChatPipeline,
-) -> tuple[RunnableLambda[ChatRunState, ChatRunState], ...]:
-    """Build deterministic chat stage runnables for readable orchestration."""
-    runner = ChatStageRunner(pipeline)
-    return pipeline.build_stage_runnables(
-        named_stages=(
-            ("search_context", runner.search_context),
-            ("prepare_context", runner.prepare_context),
-            ("generate_answer", runner.generate_answer),
-            ("build_turns", runner.build_turns),
-            ("write_outputs", runner.write_outputs),
-        )
+) -> Runnable[ChatRunState, ChatRunState]:
+    """Build deterministic chat stage chain."""
+    types_namespace = {"ChatPipeline": pipeline.__class__}
+    SearchContextStage.model_rebuild(
+        _types_namespace=types_namespace,
+        force=True,
     )
+    PrepareContextStage.model_rebuild(
+        _types_namespace=types_namespace,
+        force=True,
+    )
+    GenerateAnswerStage.model_rebuild(
+        _types_namespace=types_namespace,
+        force=True,
+    )
+    BuildTurnsStage.model_rebuild(
+        _types_namespace=types_namespace,
+        force=True,
+    )
+    WriteChatOutputsStage.model_rebuild(
+        _types_namespace=types_namespace,
+        force=True,
+    )
+    stages: tuple[PipelineStageRunnable[ChatRunState], ...] = (
+        SearchContextStage(pipeline=pipeline),
+        PrepareContextStage(pipeline=pipeline),
+        GenerateAnswerStage(pipeline=pipeline),
+        BuildTurnsStage(pipeline=pipeline),
+        WriteChatOutputsStage(pipeline=pipeline),
+    )
+    configured_stages = tuple(
+        stage.configured(pipeline_type=pipeline.pipeline_type)
+        for stage in stages
+    )
+    return pipeline.build_stage_chain(stages=configured_stages)

@@ -13,6 +13,7 @@ from time import perf_counter
 from typing import ClassVar, Literal, Protocol
 
 import numpy as np
+from langchain_core.runnables import Runnable
 from langchain_ollama.embeddings import OllamaEmbeddings
 from pydantic import PrivateAttr
 from qdrant_client import QdrantClient
@@ -54,7 +55,11 @@ from .io import (
     write_chat_transcript_yaml,
 )
 from .models import ChatCitation, ChatResult, ChatTranscriptPayload, ChatTurn
-from .run_stages import build_chat_stage_runnables, create_initial_chat_state
+from .run_stages import (
+    ChatRunState,
+    build_chat_stage_chain,
+    create_initial_chat_state,
+)
 
 _CITATION_RE = re.compile(r"\[(C\d+)\]")
 _WHITESPACE_RE = re.compile(r"\s+")
@@ -120,6 +125,9 @@ class ChatPipeline(BasePipeline):
     )
     _last_llm_max_new_tokens: int | None = PrivateAttr(default=None)
     _last_context_token_budget: int | None = PrivateAttr(default=None)
+    _stage_chain: Runnable[ChatRunState, ChatRunState] | None = PrivateAttr(
+        default=None
+    )
 
     @classmethod
     def config_model(cls) -> type[ChatSettings]:
@@ -149,16 +157,17 @@ class ChatPipeline(BasePipeline):
 
         if self.config.seed_context is not None or self.config.seed_chunks:
             self._qdrant_client = None
-            return
+        else:
+            try:
+                self._qdrant_client = self.config.vdb.setup_qdrant_client()
+            except Exception as exc:
+                logger.warning(
+                    "Chat Qdrant preconnect failed; falling back to lazy init: %s",
+                    exc,
+                )
+                self._qdrant_client = None
 
-        try:
-            self._qdrant_client = self.config.vdb.setup_qdrant_client()
-        except Exception as exc:
-            logger.warning(
-                "Chat Qdrant preconnect failed; falling back to lazy init: %s",
-                exc,
-            )
-            self._qdrant_client = None
+        self._stage_chain = build_chat_stage_chain(self)
 
     def _effective_end_date(self) -> date:
         return self.config.end_date or date.today()
@@ -274,16 +283,19 @@ class ChatPipeline(BasePipeline):
                     total=5,
                 )
                 phase_task = progress.add_task("", total=None, visible=False)
-                stage_runnables = build_chat_stage_runnables(self)
+                stage_chain = self._stage_chain
+                if stage_chain is None:
+                    stage_chain = build_chat_stage_chain(self)
+                    self._stage_chain = stage_chain
                 stage_state = create_initial_chat_state(
                     question=question,
                     progress=progress,
                     overall_task=overall_task,
                     phase_task=phase_task,
                 )
-                stage_state = self.run_stages(
+                stage_state = self.run_stage_chain(
                     initial_state=stage_state,
-                    stages=stage_runnables,
+                    stage_chain=stage_chain,
                 )
                 progress.update(phase_task, visible=False)
 

@@ -7,6 +7,7 @@ from pathlib import Path
 from time import perf_counter
 from typing import ClassVar, Literal
 
+from langchain_core.runnables import Runnable
 from langchain_ollama.embeddings import OllamaEmbeddings
 from pydantic import PrivateAttr
 from qdrant_client import QdrantClient
@@ -21,6 +22,7 @@ from rich.progress import (
     TimeRemainingColumn,
 )
 
+from sec_nlp.core.edgar.efts_models import EFTSHit
 from sec_nlp.core.infra.logger import logger
 from sec_nlp.core.infra.rich_console import get_rich_console
 from sec_nlp.core.market_analytics import build_market_context
@@ -43,6 +45,11 @@ from .io import (
     write_ranked_results_yaml,
 )
 from .models import RetrievalHit, RetrieveResult
+from .run_stages import (
+    RetrieveRunState,
+    build_retrieve_stage_chain,
+    create_initial_retrieve_state,
+)
 from .steps import (
     RetrieveCandidateSearcher,
     download_and_chunk_hits,
@@ -72,6 +79,9 @@ class RetrievePipeline(BasePipeline):
     _qdrant_client: QdrantClient | None = PrivateAttr(default=None)
     _embedder_init_attempts: int = PrivateAttr(default=0)
     _qdrant_init_attempts: int = PrivateAttr(default=0)
+    _stage_chain: Runnable[RetrieveRunState, RetrieveRunState] | None = (
+        PrivateAttr(default=None)
+    )
 
     @classmethod
     def config_model(cls) -> type[RetrieveSettings]:
@@ -84,6 +94,7 @@ class RetrievePipeline(BasePipeline):
     def _build_components(self) -> None:
         self._ensure_embedding_components()
         self._ensure_qdrant_client()
+        self._stage_chain = build_retrieve_stage_chain(self)
 
     def run_for_flow(self) -> tuple[RetrieveResult, RetrieveChatSeedBundle]:
         """Run retrieve and return an in-memory handoff bundle for chat."""
@@ -173,6 +184,99 @@ class RetrievePipeline(BasePipeline):
         )
         return result
 
+    def _search_candidates_for_symbol(
+        self,
+        *,
+        search_symbol: str | None,
+        candidate_searcher: RetrieveCandidateSearcher | None,
+    ) -> dict[str, list[EFTSHit]]:
+        if (
+            candidate_searcher is not None
+            and run_candidate_search is _ORIGINAL_RUN_CANDIDATE_SEARCH
+        ):
+            return candidate_searcher.search(
+                symbol=search_symbol,
+                queries=self.config.queries,
+            )
+        # Preserve monkeypatch compatibility for unit tests.
+        return run_candidate_search(
+            symbol=search_symbol,
+            queries=self.config.queries,
+            settings=self.config,
+        )
+
+    def _rank_hits(
+        self,
+        *,
+        output_symbol: str,
+        candidates_by_query: dict[str, list[EFTSHit]],
+    ) -> list[RetrievalHit]:
+        return rank_retrieval_hits(
+            symbol=output_symbol,
+            candidates_by_query=candidates_by_query,
+            top_k=self.config.top_k,
+        )
+
+    def _prune_ranked_hits(
+        self,
+        *,
+        hits: list[RetrievalHit],
+    ) -> list[RetrievalHit]:
+        return prune_hits_by_query_terms(
+            hits=hits,
+            min_hits=self.config.query_term_min_hits,
+            min_ratio=self.config.query_term_min_ratio,
+            stopwords=(
+                DEFAULT_QUERY_STOPWORDS
+                if self.config.stopword_aware_lexical
+                else None
+            ),
+        )
+
+    def _download_and_chunk_hits(
+        self,
+        *,
+        output_symbol: str,
+        hits: list[RetrievalHit],
+    ) -> list[RetrievalHit]:
+        return download_and_chunk_hits(
+            symbol=output_symbol,
+            hits=hits,
+            settings=self.config,
+        )
+
+    def _rerank_with_embeddings(
+        self,
+        *,
+        hits: list[RetrievalHit],
+    ) -> list[RetrievalHit]:
+        self._ensure_embedding_components()
+        return rerank_with_embeddings(
+            hits=hits,
+            settings=self.config,
+            embedder=self._embedder,
+            allow_setup_fallback=False,
+        )
+
+    def _index_hits(
+        self,
+        *,
+        output_symbol: str,
+        hits: list[RetrievalHit],
+        market_signals: dict[str, JsonValue] | None,
+    ) -> list[RetrievalHit]:
+        self._ensure_qdrant_client()
+        return index_retrieval_hits(
+            symbol=output_symbol,
+            hits=hits,
+            settings=self.config,
+            qdrant_client=self._qdrant_client,
+            embedder=self._embedder,
+            embedding_dim=self._embedding_dim,
+            market_signals=market_signals,
+            allow_setup_fallback=False,
+        )
+
     def _run_internal(
         self,
         *,
@@ -231,7 +335,7 @@ class RetrievePipeline(BasePipeline):
                     "write": 0.0,
                 }
                 precomputed_candidates_by_symbol: dict[
-                    str, dict[str, list]
+                    str, dict[str, list[EFTSHit]]
                 ] = {}
                 shared_candidate_overhead = 0.0
 
@@ -471,7 +575,7 @@ class RetrievePipeline(BasePipeline):
         search_symbol: str | None,
         output_symbol: str,
         candidate_searcher: RetrieveCandidateSearcher | None,
-        precomputed_candidates: dict[str, list] | None = None,
+        precomputed_candidates: dict[str, list[EFTSHit]] | None = None,
         shared_candidate_overhead: float = 0.0,
         progress: Progress | None = None,
         phase_task: TaskID | None = None,
@@ -483,152 +587,30 @@ class RetrievePipeline(BasePipeline):
         int,
         list[RetrievalHit],
     ]:
-        stage_timings: dict[str, float] = {
-            "candidate_search": 0.0,
-            "ranking": 0.0,
-            "hydrate": 0.0,
-            "embedding_rerank": 0.0,
-            "index": 0.0,
-            "write": 0.0,
-        }
-        self._update_phase(
-            progress,
-            phase_task,
-            output_symbol,
-            "Candidate search",
-        )
-        if precomputed_candidates is not None:
-            candidates_by_query = precomputed_candidates
-            stage_timings["candidate_search"] = max(
-                0.0, shared_candidate_overhead
-            )
-        else:
-            t0 = perf_counter()
-            if (
-                candidate_searcher is not None
-                and run_candidate_search is _ORIGINAL_RUN_CANDIDATE_SEARCH
-            ):
-                candidates_by_query = candidate_searcher.search(
-                    symbol=search_symbol,
-                    queries=self.config.queries,
-                )
-            else:
-                # Preserve monkeypatch compatibility for unit tests.
-                candidates_by_query = run_candidate_search(
-                    symbol=search_symbol,
-                    queries=self.config.queries,
-                    settings=self.config,
-                )
-            stage_timings["candidate_search"] = perf_counter() - t0
-
-        candidate_count = sum(
-            len(hits) for hits in candidates_by_query.values()
-        )
-
-        self._update_phase(progress, phase_task, output_symbol, "Ranking")
-        t0 = perf_counter()
-        ranked_hits = rank_retrieval_hits(
-            symbol=output_symbol,
-            candidates_by_query=candidates_by_query,
-            top_k=self.config.top_k,
-        )
-        ranked_before_prune = len(ranked_hits)
-        ranked_hits = prune_hits_by_query_terms(
-            hits=ranked_hits,
-            min_hits=self.config.query_term_min_hits,
-            min_ratio=self.config.query_term_min_ratio,
-            stopwords=(
-                DEFAULT_QUERY_STOPWORDS
-                if self.config.stopword_aware_lexical
-                else None
-            ),
-        )
-        stage_timings["ranking"] = perf_counter() - t0
-        lexical_pruned = max(0, ranked_before_prune - len(ranked_hits))
-
-        hydrate_limit = min(len(ranked_hits), self.config.hydrate_top_n)
-        hydrated_input = ranked_hits[:hydrate_limit]
-        passthrough_hits = ranked_hits[hydrate_limit:]
-
-        # Keep the stage boundaries explicit for future retrieve pipeline expansion.
-        t0 = perf_counter()
-        hydrated_hits = download_and_chunk_hits(
-            symbol=output_symbol,
-            hits=hydrated_input,
-            settings=self.config,
-        )
-        stage_timings["hydrate"] = perf_counter() - t0
-
-        t0 = perf_counter()
-        self._ensure_embedding_components()
-        reranked_hits = rerank_with_embeddings(
-            hits=hydrated_hits,
-            settings=self.config,
-            embedder=self._embedder,
-            allow_setup_fallback=False,
-        )
-        stage_timings["embedding_rerank"] = perf_counter() - t0
-        market_context_metadata = self._market_context_metadata(
+        stage_chain = self._stage_chain
+        if stage_chain is None:
+            stage_chain = build_retrieve_stage_chain(self)
+            self._stage_chain = stage_chain
+        state = create_initial_retrieve_state(
+            search_symbol=search_symbol,
             output_symbol=output_symbol,
+            candidate_searcher=candidate_searcher,
+            precomputed_candidates=precomputed_candidates,
+            shared_candidate_overhead=shared_candidate_overhead,
+            progress=progress,
+            phase_task=phase_task,
         )
-        market_signals = self._market_signals_for_payload(
-            market_context_metadata
+        final_state = self.run_stage_chain(
+            initial_state=state,
+            stage_chain=stage_chain,
         )
-        t0 = perf_counter()
-        self._ensure_qdrant_client()
-        indexed_hits = index_retrieval_hits(
-            symbol=output_symbol,
-            hits=reranked_hits,
-            settings=self.config,
-            qdrant_client=self._qdrant_client,
-            embedder=self._embedder,
-            embedding_dim=self._embedding_dim,
-            market_signals=market_signals,
-            allow_setup_fallback=False,
-        )
-        stage_timings["index"] = perf_counter() - t0
-
-        final_hits = indexed_hits + passthrough_hits
-        final_hits.sort(key=lambda hit: hit.score, reverse=True)
-
-        metadata: dict[str, JsonValue] = {
-            "queries_processed": len(self.config.queries),
-            "candidate_hits": candidate_count,
-            "ranked_hits": len(final_hits),
-            "lexical_pruned_hits": lexical_pruned,
-            "hydrated_hits": len(hydrated_input),
-            "passthrough_hits": len(passthrough_hits),
-            "chunk_snippets": sum(
-                1 for hit in final_hits if hit.chunk_index is not None
-            ),
-            "top_k": self.config.top_k,
-            "efts_candidates": self.config.efts_candidates,
-            "stage_timings": {
-                name: round(value, 6) for name, value in stage_timings.items()
-            },
-        }
-        if market_context_metadata:
-            metadata["market_context"] = market_context_metadata
-
-        self._update_phase(progress, phase_task, output_symbol, "Writing")
-        t0 = perf_counter()
-        outputs = self._write_outputs(
-            symbol=output_symbol,
-            hits=final_hits,
-            symbol_metadata=metadata,
-        )
-        stage_timings["write"] = perf_counter() - t0
-        metadata["stage_timings"] = {
-            name: round(value, 6) for name, value in stage_timings.items()
-        }
-
         return (
-            outputs,
-            metadata,
-            stage_timings,
+            final_state.outputs,
+            final_state.metadata,
+            final_state.stage_timings,
             len(self.config.queries),
-            len(final_hits),
-            final_hits,
+            len(final_state.final_hits),
+            final_state.final_hits,
         )
 
     def _market_context_metadata(

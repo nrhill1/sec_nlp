@@ -21,6 +21,10 @@ from sec_nlp.pipelines.presets.retrieve import (
     RetrieveSettings,
 )
 from sec_nlp.pipelines.presets.retrieve.models import RetrievalHit
+from sec_nlp.pipelines.presets.retrieve.run_stages import (
+    build_retrieve_stage_chain,
+    create_initial_retrieve_state,
+)
 from sec_nlp.pipelines.presets.retrieve.steps import (
     candidate_search as candidate_search_steps,
     download_and_chunk_hits,
@@ -1122,6 +1126,65 @@ def test_retrieve_pipeline_respects_hydrate_top_n(
     assert symbol_meta["hydrated_hits"] == 1
     assert symbol_meta["passthrough_hits"] == 2
     assert "stage_timings" in symbol_meta
+
+
+def test_retrieve_stage_chain_preserves_state_identity(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    config = RetrieveSettings(
+        email="test@example.com",
+        symbols=["ABC"],
+        queries=["supply chain"],
+        forms=["10-K"],
+        top_k=5,
+        efts_candidates=10,
+        hydrate_top_n=2,
+        rerank_with_embeddings=False,
+        index_results=False,
+        download_missing=False,
+        dl_path=tmp_path / "downloads",
+        out_path=tmp_path / "outputs",
+    )
+
+    candidates = {
+        "supply chain": [
+            _efts_hit(
+                accession="0000123456-26-000331",
+                filed=date(2026, 2, 1),
+                score=0.95,
+                company="ABC Co",
+            )
+        ]
+    }
+    monkeypatch.setattr(
+        "sec_nlp.pipelines.presets.retrieve.pipeline.run_candidate_search",
+        lambda symbol, queries, settings: candidates,
+    )
+    monkeypatch.setattr(
+        "sec_nlp.pipelines.presets.retrieve.pipeline.download_and_chunk_hits",
+        lambda symbol, hits, settings: hits,
+    )
+
+    pipeline = RetrievePipeline(config=config)
+    state = create_initial_retrieve_state(
+        search_symbol="ABC",
+        output_symbol="ABC",
+        candidate_searcher=None,
+        precomputed_candidates=None,
+        shared_candidate_overhead=0.0,
+        progress=None,
+        phase_task=None,
+    )
+    stage_chain = build_retrieve_stage_chain(pipeline)
+
+    final_state = pipeline.run_stage_chain(
+        initial_state=state,
+        stage_chain=stage_chain,
+    )
+
+    assert id(final_state) == id(state)
+    assert final_state.final_hits
 
 
 def test_download_and_chunk_hits_enriches_snippet_and_chunk_metadata(

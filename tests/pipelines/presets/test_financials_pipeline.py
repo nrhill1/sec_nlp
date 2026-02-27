@@ -12,6 +12,10 @@ from sec_nlp.core.edgar.xbrl_facts import XbrlFact, XbrlParser
 from sec_nlp.pipelines.presets.financials.config import FinancialsSettings
 from sec_nlp.pipelines.presets.financials.models import FinancialFact
 from sec_nlp.pipelines.presets.financials.pipeline import FinancialsPipeline
+from sec_nlp.pipelines.presets.financials.run_stages import (
+    build_financials_stage_chain,
+    create_initial_financials_state,
+)
 from sec_nlp.pipelines.presets.financials.steps.aggregate import (
     aggregate_financials,
     build_delta_report,
@@ -268,3 +272,43 @@ def test_pipeline_run_writes_outputs_with_mocked_steps(
     assert lines[1].startswith("# run_short_id:")
     assert lines[2].startswith("# run_id:")
     assert lines[3].startswith("# run_short_id_display:")
+
+
+def test_financials_stage_chain_preserves_state_identity(
+    tmp_path: Path, monkeypatch
+) -> None:
+    config = FinancialsSettings(
+        email="test@example.com",
+        symbols=["ABC"],
+        dl_path=tmp_path / "downloads",
+        out_path=tmp_path / "outputs",
+        output_format="json",
+    )
+    pipeline = FinancialsPipeline(config=config)
+    monkeypatch.setattr(
+        FinancialsPipeline,
+        "_write_outputs",
+        lambda self, **_kwargs: [],
+    )
+    monkeypatch.setattr(
+        "sec_nlp.pipelines.presets.financials.run_stages.download_financial_filings",
+        lambda symbol, settings: [],
+    )
+    monkeypatch.setattr(
+        "sec_nlp.pipelines.presets.financials.run_stages.extract_financial_facts",
+        lambda symbol, filing, parser: [],
+    )
+
+    chain = build_financials_stage_chain(pipeline)
+    initial_state = create_initial_financials_state(
+        symbol="ABC",
+        progress=None,
+        phase_task=None,
+    )
+    initial_state_id = id(initial_state)
+    final_state = pipeline.run_stage_chain(
+        initial_state=initial_state,
+        stage_chain=chain,
+    )
+
+    assert id(final_state) == initial_state_id

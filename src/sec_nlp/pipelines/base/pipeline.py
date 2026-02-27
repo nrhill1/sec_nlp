@@ -2,10 +2,10 @@
 """Abstract base classes for all pipelines."""
 
 from abc import ABC, abstractmethod
-from collections.abc import Callable, Sequence
+from collections.abc import Sequence
 from typing import ClassVar, TypeVar
 
-from langchain_core.runnables import Runnable, RunnableConfig, RunnableLambda
+from langchain_core.runnables import Runnable, RunnableConfig
 from pydantic import BaseModel, ConfigDict, field_validator
 
 from sec_nlp.core.infra.logger import logger
@@ -118,22 +118,33 @@ class BasePipeline(
         stages: Sequence[Runnable[StageStateT, StageStateT]],
     ) -> StageStateT:
         """Run pipeline stages in order using runnable stage adapters."""
-        state = initial_state
-        for stage in stages:
-            state = stage.invoke(state)
-        return state
+        chain = self.build_stage_chain(stages=stages)
+        return self.run_stage_chain(
+            initial_state=initial_state,
+            stage_chain=chain,
+        )
 
-    def build_stage_runnables(
+    def run_stage_chain(
         self,
         *,
-        named_stages: Sequence[
-            tuple[str, Callable[[StageStateT], StageStateT]]
-        ],
-    ) -> tuple[RunnableLambda[StageStateT, StageStateT], ...]:
-        """Build runnable stage adapters from named state transition callables."""
-        return tuple(
-            RunnableLambda(stage, name=name) for name, stage in named_stages
-        )
+        initial_state: StageStateT,
+        stage_chain: Runnable[StageStateT, StageStateT],
+    ) -> StageStateT:
+        """Run a prebuilt stage chain on one mutable state instance."""
+        return stage_chain.invoke(initial_state)
+
+    def build_stage_chain(
+        self,
+        *,
+        stages: Sequence[Runnable[StageStateT, StageStateT]],
+    ) -> Runnable[StageStateT, StageStateT]:
+        """Build a reusable runnable sequence from ordered stage runnables."""
+        if not stages:
+            raise ValueError("Stage chains require at least one stage")
+        chain: Runnable[StageStateT, StageStateT] = stages[0]
+        for stage in stages[1:]:
+            chain = chain | stage
+        return chain
 
     def _validate_requirements(self) -> None:
         """

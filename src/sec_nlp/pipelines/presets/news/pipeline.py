@@ -6,6 +6,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import ClassVar, Literal
 
+from langchain_core.runnables import Runnable
+from pydantic import PrivateAttr
 from rich.progress import (
     BarColumn,
     Progress,
@@ -32,7 +34,11 @@ from .io import (
     write_news_timeline_yaml,
 )
 from .models import NewsCorrelation, NewsHeadline, NewsResult, NewsTimelineEntry
-from .run_stages import build_news_stage_runnables, create_initial_news_state
+from .run_stages import (
+    NewsRunState,
+    build_news_stage_chain,
+    create_initial_news_state,
+)
 
 
 class NewsPipeline(BasePipeline):
@@ -45,6 +51,9 @@ class NewsPipeline(BasePipeline):
     requires_llm: ClassVar[bool] = False
 
     config: NewsSettings
+    _stage_chain: Runnable[NewsRunState, NewsRunState] | None = PrivateAttr(
+        default=None
+    )
 
     @classmethod
     def config_model(cls) -> type[NewsSettings]:
@@ -53,6 +62,9 @@ class NewsPipeline(BasePipeline):
     @classmethod
     def result_model(cls) -> type[NewsResult]:
         return NewsResult
+
+    def _build_components(self) -> None:
+        self._stage_chain = build_news_stage_chain(self)
 
     def run(self) -> NewsResult:
         try:
@@ -80,7 +92,10 @@ class NewsPipeline(BasePipeline):
                     total=len(self.config.symbols),
                 )
                 phase_task = progress.add_task("", total=None, visible=False)
-                stage_runnables = build_news_stage_runnables(self)
+                stage_chain = self._stage_chain
+                if stage_chain is None:
+                    stage_chain = build_news_stage_chain(self)
+                    self._stage_chain = stage_chain
 
                 for symbol in self.config.symbols:
                     normalized_symbol = symbol.upper()
@@ -94,9 +109,9 @@ class NewsPipeline(BasePipeline):
                         progress=progress,
                         phase_task=phase_task,
                     )
-                    symbol_state = self.run_stages(
+                    symbol_state = self.run_stage_chain(
                         initial_state=symbol_state,
-                        stages=stage_runnables,
+                        stage_chain=stage_chain,
                     )
 
                     outputs.extend(symbol_state.outputs)

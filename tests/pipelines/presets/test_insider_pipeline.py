@@ -13,6 +13,10 @@ from sec_nlp.pipelines.presets.insider.models import (
     InsiderTransaction,
 )
 from sec_nlp.pipelines.presets.insider.pipeline import InsiderPipeline
+from sec_nlp.pipelines.presets.insider.run_stages import (
+    build_insider_stage_chain,
+    create_initial_insider_state,
+)
 from sec_nlp.pipelines.presets.insider.steps.aggregate import (
     build_insider_ledgers,
     compute_net_buy_ratio,
@@ -244,15 +248,15 @@ def test_pipeline_run_writes_outputs_with_mocked_steps(
     )
 
     monkeypatch.setattr(
-        "sec_nlp.pipelines.presets.insider.pipeline.download_insider_filings",
+        "sec_nlp.pipelines.presets.insider.run_stages.download_insider_filings",
         lambda symbol, settings: [filing],
     )
     monkeypatch.setattr(
-        "sec_nlp.pipelines.presets.insider.pipeline.parse_insider_transactions",
+        "sec_nlp.pipelines.presets.insider.run_stages.parse_insider_transactions",
         lambda symbol, filing, parser: [transaction],
     )
     monkeypatch.setattr(
-        "sec_nlp.pipelines.presets.insider.pipeline.correlate_insider_activity",
+        "sec_nlp.pipelines.presets.insider.run_stages.correlate_insider_activity",
         lambda symbol, transactions, clusters, settings: (
             [
                 InsiderAlert(
@@ -312,3 +316,47 @@ def test_insider_alert_dedupes_related_transaction_ids() -> None:
     )
 
     assert alert.related_transaction_ids == ["tx-1", "tx-2"]
+
+
+def test_insider_stage_chain_preserves_state_identity(
+    tmp_path: Path, monkeypatch
+) -> None:
+    config = InsiderSettings(
+        email="test@example.com",
+        symbols=["ABC"],
+        dl_path=tmp_path / "downloads",
+        out_path=tmp_path / "outputs",
+        output_format="json",
+    )
+    pipeline = InsiderPipeline(config=config)
+    monkeypatch.setattr(
+        InsiderPipeline,
+        "_write_outputs",
+        lambda self, **_kwargs: [],
+    )
+    monkeypatch.setattr(
+        "sec_nlp.pipelines.presets.insider.run_stages.download_insider_filings",
+        lambda symbol, settings: [],
+    )
+    monkeypatch.setattr(
+        "sec_nlp.pipelines.presets.insider.run_stages.parse_insider_transactions",
+        lambda symbol, filing, parser: [],
+    )
+    monkeypatch.setattr(
+        "sec_nlp.pipelines.presets.insider.run_stages.correlate_insider_activity",
+        lambda symbol, transactions, clusters, settings: ([], {}),
+    )
+
+    chain = build_insider_stage_chain(pipeline)
+    initial_state = create_initial_insider_state(
+        symbol="ABC",
+        progress=None,
+        phase_task=None,
+    )
+    initial_state_id = id(initial_state)
+    final_state = pipeline.run_stage_chain(
+        initial_state=initial_state,
+        stage_chain=chain,
+    )
+
+    assert id(final_state) == initial_state_id

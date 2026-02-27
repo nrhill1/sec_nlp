@@ -6,6 +6,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import ClassVar, Literal
 
+from langchain_core.runnables import Runnable
+from pydantic import PrivateAttr
 from rich.progress import (
     BarColumn,
     Progress,
@@ -33,7 +35,8 @@ from .io import (
 )
 from .models import DetectedEvent, EventsResult
 from .run_stages import (
-    build_events_stage_runnables,
+    EventsRunState,
+    build_events_stage_chain,
     create_initial_events_state,
 )
 
@@ -48,6 +51,9 @@ class EventsPipeline(BasePipeline):
     requires_llm: ClassVar[bool] = False
 
     config: EventsSettings
+    _stage_chain: Runnable[EventsRunState, EventsRunState] | None = PrivateAttr(
+        default=None
+    )
 
     @classmethod
     def config_model(cls) -> type[EventsSettings]:
@@ -56,6 +62,9 @@ class EventsPipeline(BasePipeline):
     @classmethod
     def result_model(cls) -> type[EventsResult]:
         return EventsResult
+
+    def _build_components(self) -> None:
+        self._stage_chain = build_events_stage_chain(self)
 
     def run(self) -> EventsResult:
         try:
@@ -83,7 +92,10 @@ class EventsPipeline(BasePipeline):
                     total=len(self.config.symbols),
                 )
                 phase_task = progress.add_task("", total=None, visible=False)
-                stage_runnables = build_events_stage_runnables(self)
+                stage_chain = self._stage_chain
+                if stage_chain is None:
+                    stage_chain = build_events_stage_chain(self)
+                    self._stage_chain = stage_chain
 
                 for symbol in self.config.symbols:
                     normalized_symbol = symbol.upper()
@@ -97,9 +109,9 @@ class EventsPipeline(BasePipeline):
                         progress=progress,
                         phase_task=phase_task,
                     )
-                    symbol_state = self.run_stages(
+                    symbol_state = self.run_stage_chain(
                         initial_state=symbol_state,
-                        stages=stage_runnables,
+                        stage_chain=stage_chain,
                     )
 
                     outputs.extend(symbol_state.outputs)
