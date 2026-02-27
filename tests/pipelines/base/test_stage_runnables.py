@@ -57,3 +57,41 @@ def test_configured_stage_preserves_identity() -> None:
     assert id(final_state) == initial_state_id
     assert final_state.value == 9
     assert final_state.steps == ["configured"]
+
+
+def test_configured_stage_includes_debug_metadata() -> None:
+    configured = IncrementStage(name="configured", delta=1).configured(
+        pipeline_type="unit",
+        run_id="run-123",
+    )
+    config_raw = getattr(configured, "config", None)
+    assert isinstance(config_raw, dict)
+    metadata_raw = config_raw.get("metadata")
+    assert isinstance(metadata_raw, dict)
+    assert metadata_raw["pipeline_type"] == "unit"
+    assert metadata_raw["stage_name"] == "configured"
+    assert metadata_raw["run_id"] == "run-123"
+    assert isinstance(metadata_raw.get("stage_debug_uuid"), str)
+    assert metadata_raw["stage_debug_uuid"]
+
+
+def test_stage_debug_uuid_is_deterministic_for_same_inputs() -> None:
+    configured_a = IncrementStage(name="configured", delta=1).configured(
+        pipeline_type="unit",
+        run_id="run-123",
+    )
+    configured_b = IncrementStage(name="configured", delta=5).configured(
+        pipeline_type="unit",
+        run_id="run-123",
+    )
+    config_a_raw = getattr(configured_a, "config", None)
+    config_b_raw = getattr(configured_b, "config", None)
+    assert isinstance(config_a_raw, dict)
+    assert isinstance(config_b_raw, dict)
+    metadata_a_raw = config_a_raw.get("metadata")
+    metadata_b_raw = config_b_raw.get("metadata")
+    assert isinstance(metadata_a_raw, dict)
+    assert isinstance(metadata_b_raw, dict)
+    assert (
+        metadata_a_raw["stage_debug_uuid"] == metadata_b_raw["stage_debug_uuid"]
+    )

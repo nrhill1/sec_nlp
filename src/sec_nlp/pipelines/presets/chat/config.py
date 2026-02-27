@@ -89,8 +89,8 @@ class ChatSettings(BasePipelineSettings):
         ),
         exclude=True,
     )
-    seed_chunks: list[ChatRetrievedChunk] = Field(
-        default_factory=list,
+    seed_chunks: tuple[ChatRetrievedChunk, ...] = Field(
+        default_factory=tuple,
         description=(
             "Optional prebuilt retrieval chunks injected by flow runtime to "
             "bypass seed model conversion."

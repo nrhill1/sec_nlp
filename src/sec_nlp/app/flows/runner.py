@@ -365,13 +365,13 @@ class FlowRunner:
                 )
 
         type PipelineConfigUpdateValue = (
-            FlowSeedBundle | list[FlowRetrievedChunk]
+            FlowSeedBundle | tuple[FlowRetrievedChunk, ...]
         )
         config_updates: dict[str, PipelineConfigUpdateValue] = {}
         if seed_bundle is not None:
             config_updates["seed_context"] = seed_bundle
         if seed_chunks:
-            config_updates["seed_chunks"] = list(seed_chunks)
+            config_updates["seed_chunks"] = seed_chunks
 
         pipeline_config = (
             stage.settings.model_copy(update=config_updates)
