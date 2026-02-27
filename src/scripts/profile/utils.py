@@ -10,12 +10,11 @@ from collections.abc import Callable, Generator
 from contextlib import contextmanager
 from pathlib import Path
 from types import TracebackType
-from typing import ParamSpec, Self, TypeVar
+from typing import ParamSpec, Self
 
 from sec_nlp.core.infra.logger import logger
 
 P = ParamSpec("P")
-T = TypeVar("T")
 
 
 @contextmanager

@@ -41,8 +41,8 @@ When fixing type errors, writing any new code, or modifying existing code:
 9. For Pydantic `model_config`, use `frozen=True` and `extra="forbid"` or `"ignore"` whenever possible.
 10. For Pydantic, never use `SkipValidation`.
 11. Do not create new `Protocol` types.
-12. Do not use reserved Python keywords or function names for any variables, keys, or class names.
-13. Type annotations and aliases should follow guidelines for Python v3.13.9.
+12. Do not use reserved Python keywords or function names for any variable, key, or class names.
+13. Type annotations, generics, and aliases should follow guidelines for Python v3.13.9.
 14. Use the `type` statement for type aliases (e.g. `type JsonDict = dict[str, JsonValue]`).
 15. Import from `collections.abc` (not `typing`) for `Sequence`, `Mapping`, `Callable`, etc.
 16. Use `from __future__ import annotations` only when needed for forward references.

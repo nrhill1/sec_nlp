@@ -5,14 +5,13 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from contextlib import AbstractContextManager
-from typing import ParamSpec, Protocol, TypeVar  # noqa: UP035
+from typing import ParamSpec, Protocol  # noqa: UP035
 
 P = ParamSpec("P")
-T = TypeVar("T")
 
 
 class Benchmark(Protocol):
-    def __call__(
+    def __call__[**P, T](
         self, func: Callable[P, T], *args: P.args, **kwargs: P.kwargs
     ) -> T: ...
 

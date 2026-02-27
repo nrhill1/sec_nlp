@@ -3,7 +3,7 @@
 
 from abc import ABC, abstractmethod
 from collections.abc import Sequence
-from typing import ClassVar, TypeVar
+from typing import ClassVar
 
 from langchain_core.runnables import Runnable, RunnableConfig
 from pydantic import BaseModel, ConfigDict, field_validator
@@ -17,7 +17,6 @@ from .result import BasePipelineResult
 __all__: tuple[str, ...] = ("BasePipeline",)
 
 _CLASSVAR_UNSET = "__UNSET__"
-StageStateT = TypeVar("StageStateT")
 
 
 class BasePipeline(
@@ -111,7 +110,7 @@ class BasePipeline(
             )
         return self.run()
 
-    def run_stages(
+    def run_stages[StageStateT](
         self,
         *,
         initial_state: StageStateT,
@@ -124,7 +123,7 @@ class BasePipeline(
             stage_chain=chain,
         )
 
-    def run_stage_chain(
+    def run_stage_chain[StageStateT](
         self,
         *,
         initial_state: StageStateT,
@@ -133,7 +132,7 @@ class BasePipeline(
         """Run a prebuilt stage chain on one mutable state instance."""
         return stage_chain.invoke(initial_state)
 
-    def build_stage_chain(
+    def build_stage_chain[StageStateT](
         self,
         *,
         stages: Sequence[Runnable[StageStateT, StageStateT]],

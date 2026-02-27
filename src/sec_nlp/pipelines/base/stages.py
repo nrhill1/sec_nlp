@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 from abc import abstractmethod
-from typing import TypeVar
 
 from langchain_core.runnables import (
     Runnable,
@@ -14,8 +13,6 @@ from langchain_core.runnables import (
 from pydantic import ConfigDict, Field
 
 from sec_nlp.types import ConfigValue
-
-StageStateT = TypeVar("StageStateT")
 
 
 class PipelineStageRunnable[StageStateT](

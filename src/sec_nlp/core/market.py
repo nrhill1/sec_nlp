@@ -8,7 +8,6 @@ from datetime import date, datetime
 from importlib import import_module
 from time import monotonic, sleep
 from types import ModuleType
-from typing import TypeVar
 
 from sec_nlp.core.infra.logger import logger
 from sec_nlp.core.infra.settings import (
@@ -20,7 +19,6 @@ from sec_nlp.core.infra.settings import (
 )
 
 CacheKey = tuple[str, str]
-T = TypeVar("T")
 
 
 class MarketExtensionError(RuntimeError):
@@ -171,7 +169,7 @@ class MarketRetriever:
         while len(self._cache) > self._cache_max_entries:
             self._cache.popitem(last=False)
 
-    def _call_with_retry(
+    def _call_with_retry[T](
         self,
         operation_name: str,
         operation: Callable[[], T],
