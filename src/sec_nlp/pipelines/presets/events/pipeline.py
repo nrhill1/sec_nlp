@@ -32,10 +32,9 @@ from .io import (
     write_events_timeline_yaml,
 )
 from .models import DetectedEvent, EventsResult
-from .steps import (
-    enrich_events_with_news,
-    scan_events_for_symbol,
-    score_event_impacts,
+from .run_stages import (
+    build_events_stage_runnables,
+    create_initial_events_state,
 )
 
 
@@ -84,6 +83,7 @@ class EventsPipeline(BasePipeline):
                     total=len(self.config.symbols),
                 )
                 phase_task = progress.add_task("", total=None, visible=False)
+                stage_runnables = build_events_stage_runnables(self)
 
                 for symbol in self.config.symbols:
                     normalized_symbol = symbol.upper()
@@ -92,23 +92,21 @@ class EventsPipeline(BasePipeline):
                         description=f"Processing {normalized_symbol}",
                     )
 
-                    (
-                        symbol_outputs,
-                        symbol_meta,
-                        detected_count,
-                        scored_count,
-                        headline_count,
-                    ) = self._process_symbol(
-                        normalized_symbol,
+                    symbol_state = create_initial_events_state(
+                        symbol=normalized_symbol,
                         progress=progress,
                         phase_task=phase_task,
                     )
+                    symbol_state = self.run_stages(
+                        initial_state=symbol_state,
+                        stages=stage_runnables,
+                    )
 
-                    outputs.extend(symbol_outputs)
-                    metadata[normalized_symbol] = symbol_meta
-                    total_detected += detected_count
-                    total_scored += scored_count
-                    total_headlines += headline_count
+                    outputs.extend(symbol_state.outputs)
+                    metadata[normalized_symbol] = symbol_state.metadata
+                    total_detected += len(symbol_state.scored_events)
+                    total_scored += symbol_state.scored_count
+                    total_headlines += symbol_state.headlines_linked
 
                     progress.update(phase_task, visible=False)
                     progress.advance(overall_task)
@@ -133,52 +131,6 @@ class EventsPipeline(BasePipeline):
                 success=False,
                 error=f"{type(exc).__name__}: {exc}",
             )
-
-    def _process_symbol(
-        self,
-        symbol: str,
-        *,
-        progress: Progress | None = None,
-        phase_task: TaskID | None = None,
-    ) -> tuple[list[Path], dict[str, int | float | str | None], int, int, int]:
-        self._update_phase(progress, phase_task, symbol, "Scanning")
-        scanned_events, downloaded, filings_scanned = scan_events_for_symbol(
-            symbol=symbol,
-            settings=self.config,
-        )
-
-        self._update_phase(progress, phase_task, symbol, "Enriching")
-        enriched_events, headlines_linked = enrich_events_with_news(
-            symbol=symbol,
-            events=scanned_events,
-            settings=self.config,
-        )
-
-        self._update_phase(progress, phase_task, symbol, "Scoring")
-        scored_events, scored_count = score_event_impacts(
-            symbol=symbol,
-            events=enriched_events,
-            settings=self.config,
-        )
-
-        self._update_phase(progress, phase_task, symbol, "Writing")
-        outputs = self._write_outputs(symbol=symbol, events=scored_events)
-
-        metadata: dict[str, int | float | str | None] = {
-            "downloaded": downloaded,
-            "filings_scanned": filings_scanned,
-            "events_detected": len(scored_events),
-            "events_scored": scored_count,
-            "headlines_linked": headlines_linked,
-        }
-
-        return (
-            outputs,
-            metadata,
-            len(scored_events),
-            scored_count,
-            headlines_linked,
-        )
 
     def _update_phase(
         self,

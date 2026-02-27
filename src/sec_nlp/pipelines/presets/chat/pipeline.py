@@ -274,6 +274,7 @@ class ChatPipeline(BasePipeline):
                     total=5,
                 )
                 phase_task = progress.add_task("", total=None, visible=False)
+                stage_runnables = build_chat_stage_runnables(self)
                 stage_state = create_initial_chat_state(
                     question=question,
                     progress=progress,
@@ -282,7 +283,7 @@ class ChatPipeline(BasePipeline):
                 )
                 stage_state = self.run_stages(
                     initial_state=stage_state,
-                    stages=build_chat_stage_runnables(self),
+                    stages=stage_runnables,
                 )
                 progress.update(phase_task, visible=False)
 

@@ -238,15 +238,15 @@ def test_events_pipeline_run_writes_outputs_with_mocked_steps(
     ]
 
     monkeypatch.setattr(
-        "sec_nlp.pipelines.presets.events.pipeline.scan_events_for_symbol",
+        "sec_nlp.pipelines.presets.events.run_stages.scan_events_for_symbol",
         lambda symbol, settings: (scanned_events, 1, 1),
     )
     monkeypatch.setattr(
-        "sec_nlp.pipelines.presets.events.pipeline.enrich_events_with_news",
+        "sec_nlp.pipelines.presets.events.run_stages.enrich_events_with_news",
         lambda symbol, events, settings: (events, 0),
     )
     monkeypatch.setattr(
-        "sec_nlp.pipelines.presets.events.pipeline.score_event_impacts",
+        "sec_nlp.pipelines.presets.events.run_stages.score_event_impacts",
         lambda symbol, events, settings: (events, 0),
     )
 

@@ -66,185 +66,162 @@ def create_initial_chat_state(
     )
 
 
-def _search_context_stage(
-    pipeline: ChatPipeline,
-    state: ChatRunState,
-) -> ChatRunState:
-    pipeline._update_phase(
-        state.progress,
-        state.phase_task,
-        (
-            "Using seeded retrieve context"
-            if pipeline.config.seed_context is not None
-            else "Searching indexed collections"
-        ),
-    )
-    if pipeline.config.seed_context is None:
-        state.chunks = pipeline._search_collections(
-            state.question,
-            progress=state.progress,
-            phase_task=state.phase_task,
+@dataclass(slots=True)
+class ChatStageRunner:
+    """Bound stage methods to avoid per-stage lambda/closure allocations."""
+
+    pipeline: ChatPipeline
+
+    def search_context(self, state: ChatRunState) -> ChatRunState:
+        self.pipeline._update_phase(
+            state.progress,
+            state.phase_task,
+            (
+                "Using seeded retrieve context"
+                if self.pipeline.config.seed_context is not None
+                else "Searching indexed collections"
+            ),
         )
-    else:
-        state.chunks = pipeline._search_seed_context(state.question)
-        if not state.chunks:
-            logger.warning(
-                "Seeded context returned no chunks; falling back to indexed collections",
-            )
-            pipeline._update_phase(
-                state.progress,
-                state.phase_task,
-                "Seed context empty; searching indexed collections",
-            )
-            state.chunks = pipeline._search_collections(
+        if self.pipeline.config.seed_context is None:
+            state.chunks = self.pipeline._search_collections(
                 state.question,
                 progress=state.progress,
                 phase_task=state.phase_task,
             )
-            state.seeded_context_fallback = True
+        else:
+            state.chunks = self.pipeline._search_seed_context(state.question)
+            if not state.chunks:
+                logger.warning(
+                    "Seeded context returned no chunks; falling back to indexed collections",
+                )
+                self.pipeline._update_phase(
+                    state.progress,
+                    state.phase_task,
+                    "Seed context empty; searching indexed collections",
+                )
+                state.chunks = self.pipeline._search_collections(
+                    state.question,
+                    progress=state.progress,
+                    phase_task=state.phase_task,
+                )
+                state.seeded_context_fallback = True
 
-    state.stage_timings.update(
-        {
-            "vector_search": pipeline._last_search_timings.get(
-                "vector_search",
-                0.0,
-            ),
-            "rerank": pipeline._last_search_timings.get("rerank", 0.0),
-        }
-    )
-    state.progress.advance(state.overall_task)
-    return state
+        state.stage_timings.update(
+            {
+                "vector_search": self.pipeline._last_search_timings.get(
+                    "vector_search",
+                    0.0,
+                ),
+                "rerank": self.pipeline._last_search_timings.get("rerank", 0.0),
+            }
+        )
+        state.progress.advance(state.overall_task)
+        return state
 
+    def prepare_context(self, state: ChatRunState) -> ChatRunState:
+        self.pipeline._update_phase(
+            state.progress,
+            state.phase_task,
+            "Preparing citations and context",
+        )
+        state.citations = self.pipeline._to_citations(state.chunks)
+        coverage_metadata = self.pipeline._symbol_coverage_metadata(
+            state.citations
+        )
+        t0 = perf_counter()
+        state.external_context, state.external_metadata = (
+            self.pipeline._build_external_context(
+                question=state.question,
+                citations=state.citations,
+            )
+        )
+        state.stage_timings["external_context"] = perf_counter() - t0
+        if state.seeded_context_fallback:
+            coverage_metadata["seeded_context_fallback_to_vector_search"] = True
+        state.external_metadata.update(coverage_metadata)
+        missing_symbols = coverage_metadata.get("missing_symbols")
+        if isinstance(missing_symbols, list) and missing_symbols:
+            logger.warning(
+                "No retrieved filing chunks for %d symbols: %s",
+                len(missing_symbols),
+                ", ".join(str(symbol) for symbol in missing_symbols),
+            )
+        state.progress.advance(state.overall_task)
+        return state
 
-def _prepare_context_stage(
-    pipeline: ChatPipeline,
-    state: ChatRunState,
-) -> ChatRunState:
-    pipeline._update_phase(
-        state.progress,
-        state.phase_task,
-        "Preparing citations and context",
-    )
-    state.citations = pipeline._to_citations(state.chunks)
-    coverage_metadata = pipeline._symbol_coverage_metadata(state.citations)
-    t0 = perf_counter()
-    state.external_context, state.external_metadata = (
-        pipeline._build_external_context(
+    def generate_answer(self, state: ChatRunState) -> ChatRunState:
+        self.pipeline._update_phase(
+            state.progress,
+            state.phase_task,
+            "Generating answer",
+        )
+        state.answer, state.used_citation_ids = self.pipeline._build_answer(
             question=state.question,
             citations=state.citations,
+            external_context=state.external_context,
         )
-    )
-    state.stage_timings["external_context"] = perf_counter() - t0
-    if state.seeded_context_fallback:
-        coverage_metadata["seeded_context_fallback_to_vector_search"] = True
-    state.external_metadata.update(coverage_metadata)
-    missing_symbols = coverage_metadata.get("missing_symbols")
-    if isinstance(missing_symbols, list) and missing_symbols:
-        logger.warning(
-            "No retrieved filing chunks for %d symbols: %s",
-            len(missing_symbols),
-            ", ".join(str(symbol) for symbol in missing_symbols),
+        state.stage_timings.update(
+            {
+                "prompt_build": self.pipeline._last_answer_timings.get(
+                    "prompt_build",
+                    0.0,
+                ),
+                "llm_generate": self.pipeline._last_answer_timings.get(
+                    "llm_generate",
+                    0.0,
+                ),
+            }
         )
-    state.progress.advance(state.overall_task)
-    return state
+        state.progress.advance(state.overall_task)
+        return state
 
-
-def _generate_answer_stage(
-    pipeline: ChatPipeline,
-    state: ChatRunState,
-) -> ChatRunState:
-    pipeline._update_phase(
-        state.progress,
-        state.phase_task,
-        "Generating answer",
-    )
-    state.answer, state.used_citation_ids = pipeline._build_answer(
-        question=state.question,
-        citations=state.citations,
-        external_context=state.external_context,
-    )
-    state.stage_timings.update(
-        {
-            "prompt_build": pipeline._last_answer_timings.get(
-                "prompt_build",
-                0.0,
-            ),
-            "llm_generate": pipeline._last_answer_timings.get(
-                "llm_generate",
-                0.0,
-            ),
-        }
-    )
-    state.progress.advance(state.overall_task)
-    return state
-
-
-def _build_turns_stage(
-    pipeline: ChatPipeline,
-    state: ChatRunState,
-) -> ChatRunState:
-    pipeline._update_phase(
-        state.progress,
-        state.phase_task,
-        "Building transcript",
-    )
-    state.turns = pipeline._build_turns(
-        question=state.question,
-        answer=state.answer,
-        citation_ids=state.used_citation_ids,
-    )
-    state.progress.advance(state.overall_task)
-    return state
-
-
-def _write_outputs_stage(
-    pipeline: ChatPipeline,
-    state: ChatRunState,
-) -> ChatRunState:
-    pipeline._update_phase(
-        state.progress,
-        state.phase_task,
-        "Writing outputs",
-    )
-    if pipeline.config.transcript_autosave:
-        t0 = perf_counter()
-        state.outputs = pipeline._write_outputs(
+    def build_turns(self, state: ChatRunState) -> ChatRunState:
+        self.pipeline._update_phase(
+            state.progress,
+            state.phase_task,
+            "Building transcript",
+        )
+        state.turns = self.pipeline._build_turns(
             question=state.question,
             answer=state.answer,
-            citations=state.citations,
             citation_ids=state.used_citation_ids,
-            turns=state.turns,
-            external_context=state.external_context,
-            external_metadata=state.external_metadata,
         )
-        state.stage_timings["write"] = perf_counter() - t0
-    state.progress.advance(state.overall_task)
-    return state
+        state.progress.advance(state.overall_task)
+        return state
+
+    def write_outputs(self, state: ChatRunState) -> ChatRunState:
+        self.pipeline._update_phase(
+            state.progress,
+            state.phase_task,
+            "Writing outputs",
+        )
+        if self.pipeline.config.transcript_autosave:
+            t0 = perf_counter()
+            state.outputs = self.pipeline._write_outputs(
+                question=state.question,
+                answer=state.answer,
+                citations=state.citations,
+                citation_ids=state.used_citation_ids,
+                turns=state.turns,
+                external_context=state.external_context,
+                external_metadata=state.external_metadata,
+            )
+            state.stage_timings["write"] = perf_counter() - t0
+        state.progress.advance(state.overall_task)
+        return state
 
 
 def build_chat_stage_runnables(
     pipeline: ChatPipeline,
 ) -> tuple[RunnableLambda[ChatRunState, ChatRunState], ...]:
     """Build deterministic chat stage runnables for readable orchestration."""
-    return (
-        RunnableLambda(
-            lambda state: _search_context_stage(pipeline, state),
-            name="search_context",
-        ),
-        RunnableLambda(
-            lambda state: _prepare_context_stage(pipeline, state),
-            name="prepare_context",
-        ),
-        RunnableLambda(
-            lambda state: _generate_answer_stage(pipeline, state),
-            name="generate_answer",
-        ),
-        RunnableLambda(
-            lambda state: _build_turns_stage(pipeline, state),
-            name="build_turns",
-        ),
-        RunnableLambda(
-            lambda state: _write_outputs_stage(pipeline, state),
-            name="write_outputs",
-        ),
+    runner = ChatStageRunner(pipeline)
+    return pipeline.build_stage_runnables(
+        named_stages=(
+            ("search_context", runner.search_context),
+            ("prepare_context", runner.prepare_context),
+            ("generate_answer", runner.generate_answer),
+            ("build_turns", runner.build_turns),
+            ("write_outputs", runner.write_outputs),
+        )
     )

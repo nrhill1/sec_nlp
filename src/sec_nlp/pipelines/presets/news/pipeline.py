@@ -32,12 +32,7 @@ from .io import (
     write_news_timeline_yaml,
 )
 from .models import NewsCorrelation, NewsHeadline, NewsResult, NewsTimelineEntry
-from .steps import (
-    correlate_news_items,
-    fetch_news_items,
-    match_news_items,
-    resolve_symbol_aliases,
-)
+from .run_stages import build_news_stage_runnables, create_initial_news_state
 
 
 class NewsPipeline(BasePipeline):
@@ -85,6 +80,7 @@ class NewsPipeline(BasePipeline):
                     total=len(self.config.symbols),
                 )
                 phase_task = progress.add_task("", total=None, visible=False)
+                stage_runnables = build_news_stage_runnables(self)
 
                 for symbol in self.config.symbols:
                     normalized_symbol = symbol.upper()
@@ -93,23 +89,21 @@ class NewsPipeline(BasePipeline):
                         description=f"Processing {normalized_symbol}",
                     )
 
-                    (
-                        symbol_outputs,
-                        symbol_meta,
-                        fetched_count,
-                        emitted_count,
-                        cluster_count,
-                    ) = self._process_symbol(
-                        normalized_symbol,
+                    symbol_state = create_initial_news_state(
+                        symbol=normalized_symbol,
                         progress=progress,
                         phase_task=phase_task,
                     )
+                    symbol_state = self.run_stages(
+                        initial_state=symbol_state,
+                        stages=stage_runnables,
+                    )
 
-                    outputs.extend(symbol_outputs)
-                    metadata[normalized_symbol] = symbol_meta
-                    items_fetched += fetched_count
-                    items_emitted += emitted_count
-                    clusters_detected += cluster_count
+                    outputs.extend(symbol_state.outputs)
+                    metadata[normalized_symbol] = symbol_state.metadata
+                    items_fetched += len(symbol_state.fetched_items)
+                    items_emitted += len(symbol_state.correlated_items)
+                    clusters_detected += len(symbol_state.correlation.clusters)
 
                     progress.update(phase_task, visible=False)
                     progress.advance(overall_task)
@@ -134,66 +128,6 @@ class NewsPipeline(BasePipeline):
                 success=False,
                 error=f"{type(exc).__name__}: {exc}",
             )
-
-    def _process_symbol(
-        self,
-        symbol: str,
-        *,
-        progress: Progress | None = None,
-        phase_task: TaskID | None = None,
-    ) -> tuple[list[Path], dict[str, int | float | str | None], int, int, int]:
-        symbol_aliases = resolve_symbol_aliases(
-            symbol=symbol,
-            settings=self.config,
-        )
-
-        self._update_phase(progress, phase_task, symbol, "Fetching")
-        fetched_items = fetch_news_items(symbol=symbol, settings=self.config)
-
-        self._update_phase(progress, phase_task, symbol, "Matching")
-        matched_items = match_news_items(
-            items=fetched_items,
-            symbol=symbol,
-            topics=self.config.topics,
-            min_relevance=self.config.min_relevance,
-            require_symbol_match=self.config.require_symbol_match,
-            symbol_aliases=symbol_aliases,
-        )
-
-        self._update_phase(progress, phase_task, symbol, "Correlating")
-        correlated_items, timeline, correlation = correlate_news_items(
-            symbol=symbol,
-            items=matched_items,
-            settings=self.config,
-        )
-
-        self._update_phase(progress, phase_task, symbol, "Writing")
-        outputs = self._write_outputs(
-            symbol=symbol,
-            items=correlated_items,
-            timeline=timeline,
-            correlation=correlation,
-            symbol_aliases=symbol_aliases,
-        )
-
-        metadata: dict[str, int | float | str | None] = {
-            "items_fetched": len(fetched_items),
-            "items_emitted": len(correlated_items),
-            "timeline_days": len(timeline),
-            "days_compared": correlation.days_compared,
-            "news_to_return_correlation": correlation.news_to_return_correlation,
-            "filings_linked": correlation.filings_linked,
-            "clusters_detected": len(correlation.clusters),
-            "symbol_alias_count": len(symbol_aliases),
-        }
-
-        return (
-            outputs,
-            metadata,
-            len(fetched_items),
-            len(correlated_items),
-            len(correlation.clusters),
-        )
 
     def _update_phase(
         self,

@@ -341,15 +341,15 @@ def test_pipeline_run_writes_outputs_with_mocked_steps(
     ]
 
     monkeypatch.setattr(
-        "sec_nlp.pipelines.presets.news.pipeline.fetch_news_items",
+        "sec_nlp.pipelines.presets.news.run_stages.fetch_news_items",
         lambda symbol, settings: fetched_items,
     )
     monkeypatch.setattr(
-        "sec_nlp.pipelines.presets.news.pipeline.resolve_symbol_aliases",
+        "sec_nlp.pipelines.presets.news.run_stages.resolve_symbol_aliases",
         lambda symbol, settings: ["ABC", "$ABC"],
     )
     monkeypatch.setattr(
-        "sec_nlp.pipelines.presets.news.pipeline.match_news_items",
+        "sec_nlp.pipelines.presets.news.run_stages.match_news_items",
         lambda items,
         symbol,
         topics,
@@ -358,7 +358,7 @@ def test_pipeline_run_writes_outputs_with_mocked_steps(
         symbol_aliases: matched_items,
     )
     monkeypatch.setattr(
-        "sec_nlp.pipelines.presets.news.pipeline.correlate_news_items",
+        "sec_nlp.pipelines.presets.news.run_stages.correlate_news_items",
         lambda symbol, items, settings: (matched_items, timeline, correlation),
     )
 

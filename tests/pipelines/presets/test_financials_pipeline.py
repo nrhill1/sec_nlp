@@ -223,11 +223,11 @@ def test_pipeline_run_writes_outputs_with_mocked_steps(
     )
 
     monkeypatch.setattr(
-        "sec_nlp.pipelines.presets.financials.pipeline.download_financial_filings",
+        "sec_nlp.pipelines.presets.financials.run_stages.download_financial_filings",
         lambda symbol, settings: [filing],
     )
     monkeypatch.setattr(
-        "sec_nlp.pipelines.presets.financials.pipeline.extract_financial_facts",
+        "sec_nlp.pipelines.presets.financials.run_stages.extract_financial_facts",
         lambda symbol, filing, parser: [
             FinancialFact(
                 symbol=symbol,

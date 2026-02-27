@@ -2,10 +2,10 @@
 """Abstract base classes for all pipelines."""
 
 from abc import ABC, abstractmethod
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from typing import ClassVar, TypeVar
 
-from langchain_core.runnables import Runnable, RunnableConfig
+from langchain_core.runnables import Runnable, RunnableConfig, RunnableLambda
 from pydantic import BaseModel, ConfigDict, field_validator
 
 from sec_nlp.core.infra.logger import logger
@@ -122,6 +122,18 @@ class BasePipeline(
         for stage in stages:
             state = stage.invoke(state)
         return state
+
+    def build_stage_runnables(
+        self,
+        *,
+        named_stages: Sequence[
+            tuple[str, Callable[[StageStateT], StageStateT]]
+        ],
+    ) -> tuple[RunnableLambda[StageStateT, StageStateT], ...]:
+        """Build runnable stage adapters from named state transition callables."""
+        return tuple(
+            RunnableLambda(stage, name=name) for name, stage in named_stages
+        )
 
     def _validate_requirements(self) -> None:
         """

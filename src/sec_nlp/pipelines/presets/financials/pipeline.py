@@ -34,11 +34,9 @@ from .io import (
     write_financials_yaml,
 )
 from .models import FinancialsResult
-from .steps import (
-    aggregate_financials,
-    build_delta_report,
-    download_financial_filings,
-    extract_financial_facts,
+from .run_stages import (
+    build_financials_stage_runnables,
+    create_initial_financials_state,
 )
 
 
@@ -92,6 +90,7 @@ class FinancialsPipeline(BasePipeline):
                     total=len(self.config.symbols),
                 )
                 phase_task = progress.add_task("", total=None, visible=False)
+                stage_runnables = build_financials_stage_runnables(self)
 
                 for symbol in self.config.symbols:
                     normalized_symbol = symbol.upper()
@@ -100,16 +99,18 @@ class FinancialsPipeline(BasePipeline):
                         description=f"Processing {normalized_symbol}",
                     )
 
-                    symbol_outputs, symbol_meta, symbol_periods = (
-                        self._process_symbol(
-                            normalized_symbol,
-                            progress=progress,
-                            phase_task=phase_task,
-                        )
+                    symbol_state = create_initial_financials_state(
+                        symbol=normalized_symbol,
+                        progress=progress,
+                        phase_task=phase_task,
                     )
-                    outputs.extend(symbol_outputs)
-                    metadata[normalized_symbol] = symbol_meta
-                    periods_generated += symbol_periods
+                    symbol_state = self.run_stages(
+                        initial_state=symbol_state,
+                        stages=stage_runnables,
+                    )
+                    outputs.extend(symbol_state.outputs)
+                    metadata[normalized_symbol] = symbol_state.metadata
+                    periods_generated += len(symbol_state.statements)
 
                     progress.update(phase_task, visible=False)
                     progress.advance(overall_task)
@@ -131,62 +132,6 @@ class FinancialsPipeline(BasePipeline):
             return FinancialsResult(
                 success=False, error=f"{type(exc).__name__}: {exc}"
             )
-
-    def _process_symbol(
-        self,
-        symbol: str,
-        *,
-        progress: Progress | None = None,
-        phase_task: TaskID | None = None,
-    ) -> tuple[list[Path], dict[str, int | str], int]:
-        self._update_phase(progress, phase_task, symbol, "Downloading")
-        filings = download_financial_filings(
-            symbol=symbol, settings=self.config
-        )
-        parser = self._get_parser()
-
-        self._update_phase(
-            progress,
-            phase_task,
-            symbol,
-            "Extracting",
-            total=len(filings),
-        )
-        all_facts = []
-        for filing in filings:
-            all_facts.extend(
-                extract_financial_facts(
-                    symbol=symbol, filing=filing, parser=parser
-                )
-            )
-            if progress is not None and phase_task is not None:
-                progress.advance(phase_task)
-
-        self._update_phase(progress, phase_task, symbol, "Aggregating")
-        statements = aggregate_financials(
-            all_facts, compute_ratios=self.config.compute_ratios
-        )
-        self._update_phase(progress, phase_task, symbol, "Delta report")
-        delta_report = (
-            build_delta_report(statements)
-            if self.config.include_delta_report
-            else {}
-        )
-
-        self._update_phase(progress, phase_task, symbol, "Writing")
-        outputs = self._write_outputs(
-            symbol=symbol,
-            filings_processed=len(filings),
-            statements=statements,
-            delta_report=delta_report,
-        )
-
-        metadata = {
-            "filings_processed": len(filings),
-            "facts_extracted": len(all_facts),
-            "periods_generated": len(statements),
-        }
-        return outputs, metadata, len(statements)
 
     def _update_phase(
         self,
