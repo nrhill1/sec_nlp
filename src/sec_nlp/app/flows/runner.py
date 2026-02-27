@@ -3,7 +3,6 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
 from time import perf_counter
 from uuid import uuid4
 
@@ -23,6 +22,8 @@ from sec_nlp.app.flows.models import (
     FlowStageSpec,
 )
 from sec_nlp.core.types import coerce_result_json_dict
+from sec_nlp.pipelines.base.config import BasePipelineSettings
+from sec_nlp.pipelines.base.pipeline import BasePipeline
 from sec_nlp.pipelines.base.result import BasePipelineResult
 from sec_nlp.pipelines.presets.analyze import AnalyzeConfig, AnalyzePipeline
 from sec_nlp.pipelines.presets.chat import ChatPipeline, ChatSettings
@@ -126,20 +127,18 @@ class FlowRunner:
         stage: CompiledStage,
         artifacts: FlowArtifactStore,
     ) -> FlowStageResult:
-        handlers: dict[
-            str,
-            Callable[[CompiledStage, FlowArtifactStore], FlowStageResult],
-        ] = {
-            "retrieve": self._run_retrieve_stage,
-            "chat": self._run_chat_stage,
-            "exhibit": self._run_exhibit_stage,
-            "analyze": self._run_analyze_stage,
-            "warranty": self._run_warranty_stage,
-        }
-        handler = handlers.get(stage.stage.pipeline)
-        if handler is not None:
-            return handler(stage, artifacts)
-        raise ValueError(f"Unsupported flow pipeline '{stage.stage.pipeline}'")
+        pipeline_name = stage.stage.pipeline
+        if pipeline_name == "retrieve":
+            return self._run_retrieve_stage(stage, artifacts)
+        if pipeline_name == "chat":
+            return self._run_chat_stage(stage, artifacts)
+        if pipeline_name == "exhibit":
+            return self._run_exhibit_stage(stage, artifacts)
+        if pipeline_name == "analyze":
+            return self._run_analyze_stage(stage, artifacts)
+        if pipeline_name == "warranty":
+            return self._run_warranty_stage(stage, artifacts)
+        raise ValueError(f"Unsupported flow pipeline '{pipeline_name}'")
 
     @classmethod
     def _build_stage_result(
@@ -261,6 +260,37 @@ class FlowRunner:
         if len(normalized) <= max_chars:
             return normalized
         return f"{normalized[: max_chars - 1].rstrip()}…"
+
+    @classmethod
+    def _run_plain_pipeline_stage[
+        SettingsT: BasePipelineSettings,
+        PipelineT: BasePipeline,
+    ](
+        cls,
+        *,
+        stage: CompiledStage,
+        artifacts: FlowArtifactStore,
+        settings_type: type[SettingsT],
+        pipeline_type: str,
+        pipeline_class: type[PipelineT],
+    ) -> FlowStageResult:
+        _ = artifacts
+        if not isinstance(stage.settings, settings_type):
+            raise ValueError(
+                f"{pipeline_type} stage received non-{pipeline_type} settings"
+            )
+        settings = stage.settings
+        started = perf_counter()
+        pipeline = pipeline_class(config=settings)
+        result = pipeline.invoke()
+        elapsed = perf_counter() - started
+        return cls._build_stage_result(
+            stage=stage.stage,
+            pipeline_result=result,
+            duration_seconds=elapsed,
+            run_id=str(settings.run_id),
+            run_short_id=settings.short_id,
+        )
 
     @classmethod
     def _run_retrieve_stage(
@@ -395,19 +425,12 @@ class FlowRunner:
         stage: CompiledStage,
         artifacts: FlowArtifactStore,
     ) -> FlowStageResult:
-        _ = artifacts
-        if not isinstance(stage.settings, AnalyzeConfig):
-            raise ValueError("analyze stage received non-analyze settings")
-        started = perf_counter()
-        pipeline = AnalyzePipeline(config=stage.settings)
-        result = pipeline.run()
-        elapsed = perf_counter() - started
-        return cls._build_stage_result(
-            stage=stage.stage,
-            pipeline_result=result,
-            duration_seconds=elapsed,
-            run_id=str(stage.settings.run_id),
-            run_short_id=stage.settings.short_id,
+        return cls._run_plain_pipeline_stage(
+            stage=stage,
+            artifacts=artifacts,
+            settings_type=AnalyzeConfig,
+            pipeline_type="analyze",
+            pipeline_class=AnalyzePipeline,
         )
 
     @classmethod
@@ -416,19 +439,12 @@ class FlowRunner:
         stage: CompiledStage,
         artifacts: FlowArtifactStore,
     ) -> FlowStageResult:
-        _ = artifacts
-        if not isinstance(stage.settings, WarrantyConfig):
-            raise ValueError("warranty stage received non-warranty settings")
-        started = perf_counter()
-        pipeline = WarrantyPipeline(config=stage.settings)
-        result = pipeline.run()
-        elapsed = perf_counter() - started
-        return cls._build_stage_result(
-            stage=stage.stage,
-            pipeline_result=result,
-            duration_seconds=elapsed,
-            run_id=str(stage.settings.run_id),
-            run_short_id=stage.settings.short_id,
+        return cls._run_plain_pipeline_stage(
+            stage=stage,
+            artifacts=artifacts,
+            settings_type=WarrantyConfig,
+            pipeline_type="warranty",
+            pipeline_class=WarrantyPipeline,
         )
 
     @staticmethod

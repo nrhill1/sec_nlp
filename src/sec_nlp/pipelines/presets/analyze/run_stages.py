@@ -313,7 +313,10 @@ def build_analyze_stage_chain(
         WriteOutputsStage(pipeline=pipeline),
     )
     configured_stages = tuple(
-        stage.configured(pipeline_type=pipeline.pipeline_type)
+        stage.configured(
+            pipeline_type=pipeline.pipeline_type,
+            run_id=str(pipeline.config.run_id),
+        )
         for stage in stages
     )
     return pipeline.build_stage_chain(stages=configured_stages)
