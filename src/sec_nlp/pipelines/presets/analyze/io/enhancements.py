@@ -221,6 +221,7 @@ def build_sentiment_trends(
 
 
 def _trend_sort_key(row: JsonDict) -> tuple[int, JsonValue]:
+    """Build the sort key for sentiment trend rows."""
     value = row.get("filing_date")
     if isinstance(value, str) and value:
         return (0, value)
@@ -234,6 +235,7 @@ def _select_filing_meta(
     fallback_meta: MetadataRecord,
     accession,
 ) -> MetadataRecord:
+    """Select filing meta."""
     if results_for_filing:
         meta: MetadataRecord = (
             results_for_filing[0].get("source_metadata") or {}
@@ -247,6 +249,7 @@ def _select_filing_meta(
 
 
 def _extract_filing_date(meta: MetadataRecord) -> date | None:
+    """Extract filing date."""
     for key in _DATE_KEYS:
         parsed = _parse_date_value(meta.get(key))
         if parsed is not None:
@@ -263,6 +266,7 @@ def _extract_filing_date(meta: MetadataRecord) -> date | None:
 def _aggregate_sentiment(
     results: list[AnalysisResultDict],
 ) -> tuple[JsonDict, float | None, JsonValue]:
+    """Aggregate sentiment labels for a filing group."""
     counts: Counter = Counter()
     for result in results:
         sentiment = result.get("sentiment")
@@ -289,6 +293,7 @@ def _aggregate_sentiment(
 
 
 def _extract_entity_names(value: JsonValue) -> list:
+    """Extract entity names."""
     names: list = []
     if isinstance(value, str):
         cleaned = value.strip()
@@ -315,6 +320,7 @@ def _extract_entity_names(value: JsonValue) -> list:
 
 
 def _coerce_amount(value: JsonValue) -> float | None:
+    """Coerce an amount-like field to float when possible."""
     if value is None or isinstance(value, bool):
         return None
     if isinstance(value, (int, float)):
@@ -344,6 +350,7 @@ def _coerce_amount(value: JsonValue) -> float | None:
 
 
 def _key_hash(value: JsonValue) -> int | None:
+    """Build a stable hash key for dedupe operations."""
     if isinstance(value, str):
         cleaned = value.strip().lower()
         return hash(cleaned) if cleaned else None
@@ -362,6 +369,7 @@ def _build_exec_comp_filing_entry(
     results_for_filing: list[AnalysisResultDict],
     meta: MetadataRecord,
 ) -> JsonDict:
+    """Build exec comp filing entry."""
     executives: list[JsonDict] = []
     compensation_items: list[JsonDict] = []
     performance_metrics: list[JsonValue] = []
@@ -470,6 +478,7 @@ def _build_exec_comp_filing_entry(
 
 
 def _build_exec_comp_yoy(filings: list[JsonDict]) -> list[JsonDict]:
+    """Build exec comp yoy."""
     if len(filings) < 2:
         return []
 
@@ -523,6 +532,7 @@ def _build_exec_comp_yoy(filings: list[JsonDict]) -> list[JsonDict]:
 
 
 def _exec_comp_sort_key(item: JsonDict) -> tuple[int, JsonValue]:
+    """Build a deterministic sort key for executive comp entries."""
     raw_date = item.get("filing_date")
     parsed = _parse_date_value(raw_date)
     if parsed is not None:
@@ -532,6 +542,7 @@ def _exec_comp_sort_key(item: JsonDict) -> tuple[int, JsonValue]:
 
 
 def _collect_peer_map(peers_value: JsonValue) -> dict[int, JsonValue]:
+    """Collect peer map."""
     peers: dict[int, JsonValue] = {}
     if isinstance(peers_value, list):
         candidates = peers_value
@@ -548,6 +559,7 @@ def _collect_peer_map(peers_value: JsonValue) -> dict[int, JsonValue]:
 
 
 def _build_exec_comp_peer_deltas(filings: list[JsonDict]) -> list[JsonDict]:
+    """Build exec comp peer deltas."""
     if len(filings) < 2:
         return []
     ordered = sorted(filings, key=_exec_comp_sort_key)
@@ -689,6 +701,7 @@ def build_filing_comparisons(
 
 
 def _collect_unique_values(results: list[AnalysisResultDict], field) -> set:
+    """Collect unique values."""
     values: set = set()
     for result in results:
         items = result.get(field)
@@ -786,6 +799,7 @@ def write_peer_summary(
 
 
 def _common_items(sets: list[set]) -> set:
+    """Return top shared items across peer profiles."""
     if not sets:
         return set()
     common = sets[0].copy()
@@ -795,6 +809,7 @@ def _common_items(sets: list[set]) -> set:
 
 
 def _compute_net_sentiment(breakdown: JsonValue) -> float | None:
+    """Compute net sentiment."""
     if not isinstance(breakdown, dict):
         return None
     total_scored = 0

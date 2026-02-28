@@ -85,6 +85,7 @@ class BenchmarkStats:
 
 
 def _format_table(headers: list[str], rows: list[list[str]]) -> str:
+    """Format headers and rows as an aligned text table."""
     if not rows:
         return ""
     widths = [len(h) for h in headers]
@@ -112,6 +113,7 @@ def _run_case(
     repeats: int,
     warmup: int,
 ) -> BenchmarkStats:
+    """Execute one benchmark case and collect timing statistics."""
     for _ in range(warmup):
         case.run(iterations)
 
@@ -135,6 +137,7 @@ def _run_case(
 
 
 def _random_texts(count: int, length: int, rng: random.Random) -> list[str]:
+    """Generate deterministic random text samples for benchmarks."""
     alphabet = string.ascii_letters + string.digits + " "
     return [
         "".join(rng.choice(alphabet) for _ in range(length))
@@ -143,6 +146,7 @@ def _random_texts(count: int, length: int, rng: random.Random) -> list[str]:
 
 
 def _build_cases(config: BenchmarkConfig) -> list[BenchmarkCase]:
+    """Build cases."""
     rng = random.Random(config.seed)
     texts = _random_texts(config.iterations, config.text_size, rng)
 
@@ -254,6 +258,7 @@ def _select_cases(
     cases: list[BenchmarkCase],
     selected: list[str],
 ) -> list[BenchmarkCase]:
+    """Select cases."""
     if not selected or "all" in selected:
         return cases
     selected_set = {s.strip() for s in selected}
@@ -261,6 +266,7 @@ def _select_cases(
 
 
 def _print_results(stats: list[BenchmarkStats]) -> None:
+    """Log formatted benchmark results."""
     if not stats:
         logger.info("No benchmarks selected.")
         return

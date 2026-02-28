@@ -80,6 +80,7 @@ def normalize_metadata_for_output(
 def _normalize_metadata_value(
     key: str, value: MetadataValue | Path
 ) -> JsonValue | None:
+    """Normalize metadata value."""
     if isinstance(value, Path):
         return str(value)
     if isinstance(value, (int, float)) and is_score_key(key):

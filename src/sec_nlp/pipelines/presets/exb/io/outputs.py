@@ -112,6 +112,7 @@ def write_exhibit_outputs(
 
 
 def _as_str(value: JsonValue | None) -> str | None:
+    """Coerce str."""
     if value is None:
         return None
     if isinstance(value, bool):
@@ -125,6 +126,8 @@ def _as_str(value: JsonValue | None) -> str | None:
 def _sort_accession_records(
     records: list[AccessionRecord],
 ) -> list[AccessionRecord]:
+    """Sort accession records by filing date and accession number."""
+
     def _sort_key(record: AccessionRecord) -> tuple[str, str]:
         date_key = record.get("filing_date") or ""
         accession_key = record.get("accession_number") or ""
@@ -136,6 +139,7 @@ def _sort_accession_records(
 def _build_accession_records(
     docs: list[Document],
 ) -> list[AccessionRecord]:
+    """Build accession records."""
     accessions: dict[str, AccessionAccumulator] = {}
     for doc in docs:
         meta = doc.metadata or {}
@@ -200,6 +204,7 @@ def _build_accession_records(
 def _collect_accession_numbers(
     records: list[AccessionRecord],
 ) -> list[str]:
+    """Collect accession numbers."""
     accessions: list[str] = []
     for record in records:
         accession = record.get("accession_number")
@@ -209,6 +214,7 @@ def _collect_accession_numbers(
 
 
 def _accession_record_payload(record: AccessionRecord) -> JsonDict:
+    """Build serialized payload fields for an accession record."""
     return {
         "accession_number": record["accession_number"],
         "form_type": record["form_type"],
@@ -276,6 +282,7 @@ def _prepare_output(data: JsonObject, verbose: bool) -> JsonObject:
 
 
 def _as_str_list(value: JsonValue | None) -> list[str]:
+    """Coerce str list."""
     if value is None:
         return []
     if isinstance(value, str):

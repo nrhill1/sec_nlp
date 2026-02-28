@@ -44,6 +44,7 @@ class RollupRecord(TypedDict):
 
 
 def _as_str(value: JsonValue | None) -> str | None:
+    """Coerce str."""
     if value is None:
         return None
     if isinstance(value, bool):
@@ -54,6 +55,7 @@ def _as_str(value: JsonValue | None) -> str | None:
 
 
 def _as_str_list(value: JsonValue | None) -> list[str]:
+    """Coerce str list."""
     if value is None:
         return []
     if isinstance(value, str):
@@ -71,6 +73,7 @@ def _as_str_list(value: JsonValue | None) -> list[str]:
 
 
 def _as_metadata(value: JsonValue | None) -> JsonObject:
+    """Coerce metadata."""
     if isinstance(value, Mapping):
         cleaned: dict[str, JsonValue] = {}
         for key, raw in value.items():

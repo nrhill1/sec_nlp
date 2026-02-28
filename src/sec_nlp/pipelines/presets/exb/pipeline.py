@@ -64,6 +64,7 @@ class SearchRecord(TypedDict):
 
 
 def _normalize_symbol(value: JsonValue) -> str:
+    """Normalize symbol."""
     if isinstance(value, str):
         return value
     if isinstance(value, bool) or value is None:
@@ -175,6 +176,7 @@ class ExhibitPipeline(BasePipeline):
         self._stage_chain = build_exhibit_stage_chain(self)
 
     def _collection_name(self):
+        """Resolve the vector collection name for this run."""
         collection_name = self.config.vdb.collection_name
         if isinstance(collection_name, str) and collection_name.strip():
             return collection_name

@@ -40,6 +40,7 @@ _RELATED_CURRENT_REPORT_WINDOW_DAYS: Final[int] = 30
 
 
 def _parse_yyyymmdd(value: str) -> date | None:
+    """Parse yyyymmdd."""
     if len(value) != 8 or not value.isdigit():
         return None
     try:
@@ -49,6 +50,7 @@ def _parse_yyyymmdd(value: str) -> date | None:
 
 
 def _parse_date(value: str) -> date | None:
+    """Parse date."""
     if not value:
         return None
     if "-" in value:
@@ -60,6 +62,7 @@ def _parse_date(value: str) -> date | None:
 
 
 def _normalize_accession(value: str) -> str:
+    """Normalize accession."""
     return value.replace("-", "").strip()
 
 
@@ -69,6 +72,7 @@ def _infer_fiscal_period(
     period_end: date | None,
     filed_date: date | None,
 ) -> tuple[int | None, str | None]:
+    """Infer fiscal period."""
     if period_end:
         fiscal_year = period_end.year
     elif filed_date:
@@ -90,6 +94,7 @@ def _infer_fiscal_period(
 
 
 def _is_proxy_form(form_type: str | None) -> bool:
+    """Return whether proxy form."""
     if not form_type:
         return False
     normalized = form_type.replace(" ", "").upper()
@@ -105,6 +110,7 @@ class RelationshipResolver:
         *,
         header_line_limit: int = 2000,
     ) -> None:
+        """Initialize the resolver with download path and header limits."""
         self.downloads_folder = downloads_folder
         self.header_line_limit = header_line_limit
 
@@ -151,6 +157,7 @@ class RelationshipResolver:
     ) -> list[
         tuple[FilingIdentifier, list[tuple[str, FilingRelationType, str]]]
     ]:
+        """Collect entries."""
         entries: list[
             tuple[FilingIdentifier, list[tuple[str, FilingRelationType, str]]]
         ] = []
@@ -175,6 +182,7 @@ class RelationshipResolver:
         return entries
 
     def _read_header_lines(self, filing_dir: Path) -> list[str]:
+        """Read a bounded number of header lines from full-submission text."""
         submission_path = filing_dir / "full-submission.txt"
         if not submission_path.exists():
             return []
@@ -204,6 +212,7 @@ class RelationshipResolver:
         header_lines: list[str],
         accession_number: str,
     ) -> list[tuple[str, FilingRelationType, str]]:
+        """Extract references."""
         references: list[tuple[str, FilingRelationType, str]] = []
         seen: set[tuple[str, FilingRelationType]] = set()
         own_normalized = _normalize_accession(accession_number)
@@ -228,6 +237,7 @@ class RelationshipResolver:
     def _classify_reference_line(
         upper_line: str,
     ) -> FilingRelationType | None:
+        """Classify reference lines into supported filing relation types."""
         if "INCORPORAT" in upper_line:
             return FilingRelationType.incorporation_by_reference
         if "EXHIBIT" in upper_line:
@@ -242,6 +252,7 @@ class RelationshipResolver:
         form_fallback: str,
         header_lines: list[str],
     ) -> FilingIdentifier:
+        """Build identifier."""
         accession_number = accession_dir.name
         form_type = self._extract_header_value(header_lines, _FORM_TYPE_PATTERN)
         if not form_type:
@@ -284,6 +295,7 @@ class RelationshipResolver:
         header_lines: list[str],
         pattern: re.Pattern[str],
     ) -> str | None:
+        """Extract header value."""
         for line in header_lines:
             match = pattern.search(line)
             if match:
@@ -296,6 +308,7 @@ class RelationshipResolver:
         amendment: FilingIdentifier,
         candidates: list[FilingIdentifier],
     ) -> FilingIdentifier | None:
+        """Select best candidate."""
         if not candidates:
             return None
         if amendment.filed_date:
@@ -317,6 +330,7 @@ class RelationshipResolver:
         graph: FilingRelationshipGraph,
         filings: list[FilingIdentifier],
     ) -> None:
+        """Add amendment relations between original and amended filings."""
         for filing in filings:
             if not filing.is_amendment:
                 continue
@@ -360,6 +374,7 @@ class RelationshipResolver:
         graph: FilingRelationshipGraph,
         filings: list[FilingIdentifier],
     ) -> None:
+        """Add relationships between filings that share the same reporting period."""
         grouped: dict[tuple[int, str], list[FilingIdentifier]] = defaultdict(
             list
         )
@@ -387,6 +402,7 @@ class RelationshipResolver:
         graph: FilingRelationshipGraph,
         filings: list[FilingIdentifier],
     ) -> None:
+        """Add relationships between filings that share the same fiscal year."""
         grouped: dict[int, list[FilingIdentifier]] = defaultdict(list)
         for filing in filings:
             if filing.fiscal_year is None:
@@ -412,6 +428,7 @@ class RelationshipResolver:
         graph: FilingRelationshipGraph,
         filings: list[FilingIdentifier],
     ) -> None:
+        """Add 8-K links to nearby periodic filings within the relation window."""
         current_reports = [
             filing
             for filing in filings
@@ -450,6 +467,7 @@ class RelationshipResolver:
         graph: FilingRelationshipGraph,
         filings: list[FilingIdentifier],
     ) -> None:
+        """Add proxy-related links from DEF14A filings to nearby annual reports."""
         proxies = [
             filing for filing in filings if _is_proxy_form(filing.form_type)
         ]

@@ -64,6 +64,7 @@ class PerfIteration:
 
 
 def _percentile(values: list[float], pct: float) -> float:
+    """Compute an interpolated percentile for a numeric series."""
     if not values:
         return 0.0
     if len(values) == 1:
@@ -81,6 +82,7 @@ def _percentile(values: list[float], pct: float) -> float:
 
 
 def _safe_stage_timings(metadata: dict[str, JsonValue]) -> dict[str, float]:
+    """Safely read stage timings."""
     timings: dict[str, float] = {}
     raw = metadata.get("stage_timings")
     if not isinstance(raw, dict):
@@ -96,6 +98,7 @@ def _safe_stage_timings(metadata: dict[str, JsonValue]) -> dict[str, float]:
 def _safe_output_counts(
     pipeline: str, metadata: dict[str, JsonValue]
 ) -> dict[str, int]:
+    """Safely read output counts."""
     counts: dict[str, int] = {}
     if pipeline == "chat":
         hits = metadata.get("hits_retrieved")
@@ -131,6 +134,7 @@ def _default_cases(
     chat_model_name: str | None,
     chat_max_new_tokens: int | None,
 ) -> list[PerfCase]:
+    """Return default cases."""
     forms = "10-K,10-Q,8-K,6-K"
     start_date = "2023-01-01"
     tech_symbols = ["NVDA", "AMD", "AVGO", "QCOM", "INTC"]
@@ -298,6 +302,7 @@ def _default_cases(
 
 
 def _build_summary(iterations: list[PerfIteration]) -> dict[str, JsonValue]:
+    """Build summary."""
     grouped: dict[str, list[PerfIteration]] = {}
     for iteration in iterations:
         grouped.setdefault(iteration.case, []).append(iteration)
@@ -343,11 +348,13 @@ def _build_summary(iterations: list[PerfIteration]) -> dict[str, JsonValue]:
 
 
 def _artifact_path(output_dir: Path) -> Path:
+    """Build an artifact path with a UTC timestamp suffix."""
     stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%S%z")
     return output_dir / f"perf_suite_{stamp}.json"
 
 
 def _load_artifact(path: Path) -> dict[str, JsonValue]:
+    """Load and normalize a perf artifact JSON payload."""
     payload = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(payload, Mapping):
         raise ValueError(f"Invalid artifact payload: {path}")
@@ -388,6 +395,7 @@ def _build_json_dict(mapping: object) -> dict[str, JsonValue]:
 
 
 def _latest_artifacts(output_dir: Path, count: int = 2) -> list[Path]:
+    """Return the most recent perf suite artifacts."""
     return sorted(output_dir.glob("perf_suite_*.json"))[-count:]
 
 
@@ -465,6 +473,7 @@ class PerfSuiteConfig(BaseSettings):
         raise ValueError("mode must be 'run' or 'compare'")
 
     def _run_suite(self) -> None:
+        """Run the selected perf matrix and write the artifact summary."""
         output_dir = self.output_dir.resolve()
         output_dir.mkdir(parents=True, exist_ok=True)
         cases = _default_cases(
@@ -578,6 +587,7 @@ class PerfSuiteConfig(BaseSettings):
                     )
 
     def _subprocess_env(self) -> dict[str, str]:
+        """Build subprocess environment overrides for stable perf runs."""
         env = dict(os.environ)
         env["SEC_NLP_VDB_COLLECTION_NAME"] = self.collection_name
         env["SEC_NLP_VDB_QDRANT_LOCATION"] = str(self.qdrant_location)
@@ -593,6 +603,7 @@ class PerfSuiteConfig(BaseSettings):
         return env
 
     def _compare_latest(self) -> None:
+        """Compare p95 metrics between the two latest perf artifacts."""
         output_dir = self.output_dir.resolve()
         artifacts = _latest_artifacts(output_dir, count=2)
         if len(artifacts) < 2:
