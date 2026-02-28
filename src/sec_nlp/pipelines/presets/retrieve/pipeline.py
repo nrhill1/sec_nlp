@@ -399,13 +399,13 @@ class RetrievePipeline(BasePipeline):
                             metadata[output_symbol] = symbol_meta
                             total_queries += queries_processed
                             total_hits += hits_count
-                            if include_bridge:
-                                bridge_chunks.extend(
-                                    self._hits_to_seed_chunks(symbol_hits)
-                                )
                             if include_prebuilt_chunks:
                                 prebuilt_chunks.extend(
                                     self._hits_to_chat_chunks(symbol_hits)
+                                )
+                            elif include_bridge:
+                                bridge_chunks.extend(
+                                    self._hits_to_seed_chunks(symbol_hits)
                                 )
 
                             progress.update(phase_task, visible=False)
@@ -440,13 +440,13 @@ class RetrievePipeline(BasePipeline):
                         metadata[output_symbol] = symbol_meta
                         total_queries += queries_processed
                         total_hits += hits_count
-                        if include_bridge:
-                            bridge_chunks.extend(
-                                self._hits_to_seed_chunks(symbol_hits)
-                            )
                         if include_prebuilt_chunks:
                             prebuilt_chunks.extend(
                                 self._hits_to_chat_chunks(symbol_hits)
+                            )
+                        elif include_bridge:
+                            bridge_chunks.extend(
+                                self._hits_to_seed_chunks(symbol_hits)
                             )
 
                         progress.update(phase_task, visible=False)
@@ -482,7 +482,7 @@ class RetrievePipeline(BasePipeline):
                         if output_symbol != "ALL"
                     ],
                     queries=list(self.config.queries),
-                    chunks=bridge_chunks,
+                    chunks=([] if include_prebuilt_chunks else bridge_chunks),
                 )
                 if include_bridge
                 else None

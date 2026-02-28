@@ -12,7 +12,6 @@ from sec_nlp.app.flows.contracts import (
     ContractEvidenceBundle,
     FlowRetrievedChunk,
     FlowSeedBundle,
-    FlowSeedChunk,
 )
 from sec_nlp.app.flows.models import (
     FlowRunResult,
@@ -228,13 +227,26 @@ class FlowRunner:
     def _seed_from_contract_evidence(
         evidence: ContractEvidenceBundle,
     ) -> FlowSeedBundle:
-        chunks: list[FlowSeedChunk] = []
+        return FlowSeedBundle(
+            upstream_pipeline=evidence.upstream_pipeline,
+            upstream_run_id=evidence.upstream_run_id,
+            upstream_short_id=evidence.upstream_short_id,
+            symbols=list(evidence.symbols),
+            queries=list(evidence.queries),
+            chunks=[],
+        )
+
+    @staticmethod
+    def _seed_chunks_from_contract_evidence(
+        evidence: ContractEvidenceBundle,
+    ) -> tuple[FlowRetrievedChunk, ...]:
+        chunks: list[FlowRetrievedChunk] = []
         for contract_chunk in evidence.chunks:
             snippet = contract_chunk.snippet.strip()
             if not snippet:
                 continue
             chunks.append(
-                FlowSeedChunk(
+                FlowRetrievedChunk(
                     collection="exhibit",
                     score=float(contract_chunk.score),
                     symbol=contract_chunk.symbol,
@@ -243,16 +255,10 @@ class FlowRunner:
                     filed_date=contract_chunk.filed_date,
                     source=contract_chunk.source,
                     snippet=snippet,
+                    vector=None,
                 )
             )
-        return FlowSeedBundle(
-            upstream_pipeline=evidence.upstream_pipeline,
-            upstream_run_id=evidence.upstream_run_id,
-            upstream_short_id=evidence.upstream_short_id,
-            symbols=list(evidence.symbols),
-            queries=list(evidence.queries),
-            chunks=chunks,
-        )
+        return tuple(chunks)
 
     @staticmethod
     def _answer_preview(answer: str, *, max_chars: int = 160) -> str:
@@ -350,6 +356,9 @@ class FlowRunner:
                 )
                 if contract_bundle is not None:
                     seed_bundle = cls._seed_from_contract_evidence(
+                        contract_bundle
+                    )
+                    seed_chunks = cls._seed_chunks_from_contract_evidence(
                         contract_bundle
                     )
 

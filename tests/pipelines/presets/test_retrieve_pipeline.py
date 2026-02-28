@@ -998,7 +998,7 @@ def test_retrieve_pipeline_run_for_flow_with_chunks(
 
     assert result.success is True
     assert isinstance(bundle, RetrieveChatSeedBundle)
-    assert len(bundle.chunks) == 1
+    assert len(bundle.chunks) == 0
     assert len(chunks) == 1
     assert chunks[0].collection == "retrieve"
     assert chunks[0].snippet

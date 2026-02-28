@@ -530,13 +530,14 @@ def test_flow_runner_passes_contract_evidence_into_chat(monkeypatch) -> None:
         seed_context: ChatSeedBundle | None,
         seed_chunks: tuple[ChatRetrievedChunk, ...],
     ) -> ChatResult:
-        _ = (self, seed_chunks)
+        _ = self
         seed = seed_context
         assert isinstance(seed, ChatSeedBundle)
+        assert seed_chunks
         observed["seed_source"] = seed.upstream_pipeline
         observed["seed_run_id"] = seed.upstream_run_id
-        observed["seed_chunk_collection"] = seed.chunks[0].collection
-        observed["seed_chunk_score"] = seed.chunks[0].score
+        observed["seed_chunk_collection"] = seed_chunks[0].collection
+        observed["seed_chunk_score"] = seed_chunks[0].score
         return ChatResult(
             success=True,
             outputs=[Path("/tmp/chat_summary.json")],
