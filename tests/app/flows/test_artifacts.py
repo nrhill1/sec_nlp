@@ -13,7 +13,7 @@ from sec_nlp.app.flows.contracts import (
 
 def test_stage_artifact_prefers_seed_bundle() -> None:
     store = FlowArtifactStore()
-    store.put_retrieve_seed(
+    store.put_seed_bundle(
         "retrieve_stage",
         FlowSeedBundle(
             upstream_pipeline="retrieve",

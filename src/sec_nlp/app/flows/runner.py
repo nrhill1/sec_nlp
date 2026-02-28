@@ -237,30 +237,6 @@ class FlowRunner:
         )
 
     @staticmethod
-    def _seed_chunks_from_contract_evidence(
-        evidence: ContractEvidenceBundle,
-    ) -> tuple[FlowRetrievedChunk, ...]:
-        chunks: list[FlowRetrievedChunk] = []
-        for contract_chunk in evidence.chunks:
-            snippet = contract_chunk.snippet.strip()
-            if not snippet:
-                continue
-            chunks.append(
-                FlowRetrievedChunk(
-                    collection="exhibit",
-                    score=float(contract_chunk.score),
-                    symbol=contract_chunk.symbol,
-                    accession_number=contract_chunk.accession_number,
-                    form_type=contract_chunk.form_type,
-                    filed_date=contract_chunk.filed_date,
-                    source=contract_chunk.source,
-                    snippet=snippet,
-                    vector=None,
-                )
-            )
-        return tuple(chunks)
-
-    @staticmethod
     def _answer_preview(answer: str, *, max_chars: int = 160) -> str:
         normalized = " ".join(answer.split())
         if len(normalized) <= max_chars:
@@ -312,7 +288,7 @@ class FlowRunner:
         result, seed_bundle, seed_chunks = pipeline.run_for_flow_with_chunks()
         elapsed = perf_counter() - started
         if result.success:
-            artifacts.put_retrieve_seed(stage.stage.id, seed_bundle)
+            artifacts.put_seed_bundle(stage.stage.id, seed_bundle)
             artifacts.put_seed_chunks(stage.stage.id, seed_chunks)
 
         return cls._build_stage_result(
@@ -345,7 +321,7 @@ class FlowRunner:
         seed_chunks: tuple[FlowRetrievedChunk, ...] = ()
         if seed_binding is not None:
             if seed_binding.artifact == "retrieve_seed":
-                seed_bundle = artifacts.get_chat_seed(seed_binding.from_stage)
+                seed_bundle = artifacts.get_seed_bundle(seed_binding.from_stage)
                 seed_chunks = (
                     artifacts.get_seed_chunks(seed_binding.from_stage) or ()
                 )
@@ -360,10 +336,6 @@ class FlowRunner:
                     seed_bundle = cls._seed_from_contract_evidence(
                         contract_bundle
                     )
-                    if not seed_chunks:
-                        seed_chunks = cls._seed_chunks_from_contract_evidence(
-                            contract_bundle
-                        )
 
             if seed_bundle is None and not seed_chunks:
                 return cls._build_unexecuted_stage_result(

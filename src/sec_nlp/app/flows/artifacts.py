@@ -21,16 +21,12 @@ class FlowArtifactStore:
         ] = {}
         self._contract_evidence_by_stage: dict[str, ContractEvidenceBundle] = {}
 
-    def put_retrieve_seed(self, stage_id: str, bundle: FlowSeedBundle) -> None:
-        """Store retrieve handoff bundle keyed by stage ID."""
+    def put_seed_bundle(self, stage_id: str, bundle: FlowSeedBundle) -> None:
+        """Store seeded bundle keyed by stage ID."""
         self._seed_by_stage[stage_id] = bundle
 
-    def get_retrieve_seed(self, stage_id: str) -> FlowSeedBundle | None:
-        """Load retrieve seed bundle for a stage ID."""
-        return self._seed_by_stage.get(stage_id)
-
-    def get_chat_seed(self, stage_id: str) -> FlowSeedBundle | None:
-        """Return seeded bundle for chat stage execution."""
+    def get_seed_bundle(self, stage_id: str) -> FlowSeedBundle | None:
+        """Load seeded bundle for one stage."""
         return self._seed_by_stage.get(stage_id)
 
     def put_seed_chunks(
@@ -70,7 +66,7 @@ class FlowArtifactStore:
 
     def stage_artifact(self, stage_id: str) -> FlowArtifactValue | None:
         """Return the first available typed artifact for a stage ID."""
-        seed = self.get_retrieve_seed(stage_id)
+        seed = self.get_seed_bundle(stage_id)
         if seed is not None:
             return seed
         return self.get_contract_evidence(stage_id)
