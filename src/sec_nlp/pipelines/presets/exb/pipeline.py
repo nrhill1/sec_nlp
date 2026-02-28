@@ -12,7 +12,10 @@ from qdrant_client import QdrantClient
 from qdrant_client.models import Distance, VectorParams
 from tqdm import tqdm
 
-from sec_nlp.app.flows.contracts import ContractEvidenceBundle
+from sec_nlp.app.flows.contracts import (
+    ContractEvidenceBundle,
+    FlowRetrievedChunk,
+)
 from sec_nlp.core.infra.logger import log_divider, logger
 from sec_nlp.core.ingest.loader import Loader
 from sec_nlp.core.text.keyword import KeywordMatcher
@@ -26,7 +29,10 @@ from sec_nlp.pipelines.utils import slugify
 from sec_nlp.pipelines.vector.query import scroll_exists
 from sec_nlp.types import JsonValue, ResultDict
 
-from .bridge import build_contract_evidence_bundle
+from .bridge import (
+    build_contract_evidence_bundle,
+    build_contract_seed_chunks,
+)
 from .config import ExhibitConfig
 from .models import ExhibitResult
 from .run_stages import (
@@ -174,19 +180,47 @@ class ExhibitPipeline(BasePipeline):
 
     def run(self) -> ExhibitResult:
         """Execute the exhibit pipeline and return standard result payload."""
-        result, _ = self._run_internal(include_bridge=False)
+        result, _, _ = self._run_internal(include_bridge=False)
         return result
 
     def run_for_flow(self) -> tuple[ExhibitResult, ContractEvidenceBundle]:
         """Execute exhibit pipeline and return flow handoff contract evidence."""
-        result, evidence_bundle = self._run_internal(include_bridge=True)
+        result, evidence_bundle, _ = self._run_internal(
+            include_bridge=True,
+            include_prebuilt_chunks=False,
+        )
         if evidence_bundle is not None:
             return result, evidence_bundle
         return result, self._empty_contract_bundle()
 
+    def run_for_flow_with_chunks(
+        self,
+    ) -> tuple[
+        ExhibitResult,
+        ContractEvidenceBundle,
+        tuple[FlowRetrievedChunk, ...],
+    ]:
+        """Execute exhibit pipeline and return flow handoff prebuilt chunks."""
+        result, evidence_bundle, chunks = self._run_internal(
+            include_bridge=True,
+            include_prebuilt_chunks=True,
+        )
+        if evidence_bundle is None:
+            evidence_bundle = self._empty_contract_bundle()
+        if chunks is None:
+            chunks = ()
+        return result, evidence_bundle, chunks
+
     def _run_internal(
-        self, *, include_bridge: bool
-    ) -> tuple[ExhibitResult, ContractEvidenceBundle | None]:
+        self,
+        *,
+        include_bridge: bool,
+        include_prebuilt_chunks: bool = False,
+    ) -> tuple[
+        ExhibitResult,
+        ContractEvidenceBundle | None,
+        tuple[FlowRetrievedChunk, ...] | None,
+    ]:
         """
         Execute the exhibit pipeline.
 
@@ -208,6 +242,7 @@ class ExhibitPipeline(BasePipeline):
                 "short_id": self.config.short_id,
             }
             bridge_chunks = []
+            prebuilt_chunks: list[FlowRetrievedChunk] = []
             bridge_symbols: list[str] = []
             bridge_queries = list(self.config.candidate_queries)
             short_id = (
@@ -238,16 +273,25 @@ class ExhibitPipeline(BasePipeline):
                         all_outputs.extend(symbol_outputs)
                         metadata[symbol] = len(symbol_outputs)
                         if include_bridge and bridge_docs:
-                            symbol_bundle = build_contract_evidence_bundle(
-                                symbol=symbol,
-                                docs=bridge_docs,
-                                run_id=str(self.config.run_id),
-                                run_short_id=short_id,
-                                queries=bridge_queries,
-                            )
-                            if symbol_bundle.chunks:
-                                bridge_symbols.append(symbol)
-                                bridge_chunks.extend(symbol_bundle.chunks)
+                            if include_prebuilt_chunks:
+                                symbol_seed_chunks = build_contract_seed_chunks(
+                                    symbol=symbol,
+                                    docs=bridge_docs,
+                                )
+                                if symbol_seed_chunks:
+                                    bridge_symbols.append(symbol)
+                                    prebuilt_chunks.extend(symbol_seed_chunks)
+                            else:
+                                symbol_bundle = build_contract_evidence_bundle(
+                                    symbol=symbol,
+                                    docs=bridge_docs,
+                                    run_id=str(self.config.run_id),
+                                    run_short_id=short_id,
+                                    queries=bridge_queries,
+                                )
+                                if symbol_bundle.chunks:
+                                    bridge_symbols.append(symbol)
+                                    bridge_chunks.extend(symbol_bundle.chunks)
             else:
                 logger.info("Skipping chunking/indexing (search_only mode)")
 
@@ -272,12 +316,16 @@ class ExhibitPipeline(BasePipeline):
                     upstream_short_id=short_id,
                     symbols=bridge_symbols,
                     queries=bridge_queries,
-                    chunks=bridge_chunks,
+                    chunks=([] if include_prebuilt_chunks else bridge_chunks),
                 )
                 if include_bridge
                 else None
             )
-            return result, evidence_bundle
+            return (
+                result,
+                evidence_bundle,
+                tuple(prebuilt_chunks) if include_prebuilt_chunks else None,
+            )
 
         except Exception as e:
             logger.exception("Pipeline execution failed")
@@ -288,6 +336,7 @@ class ExhibitPipeline(BasePipeline):
                     error=f"{type(e).__name__}: {e}",
                 ),
                 self._empty_contract_bundle() if include_bridge else None,
+                () if include_bridge and include_prebuilt_chunks else None,
             )
 
     def _process_symbol(self, symbol: str) -> list[Path]:

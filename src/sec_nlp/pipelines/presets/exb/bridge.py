@@ -6,6 +6,7 @@ from langchain_core.documents import Document
 from sec_nlp.app.flows.contracts import (
     ContractEvidenceBundle,
     ContractEvidenceChunk,
+    FlowRetrievedChunk,
 )
 from sec_nlp.types import JsonValue
 
@@ -82,3 +83,36 @@ def build_contract_evidence_bundle(
         queries=list(queries or []),
         chunks=chunks,
     )
+
+
+def build_contract_seed_chunks(
+    *,
+    symbol: str,
+    docs: list[Document],
+    max_chunks: int = 200,
+    snippet_chars: int = 500,
+) -> tuple[FlowRetrievedChunk, ...]:
+    """Convert EXB documents into prebuilt chat chunks for flow handoff."""
+    chunks: list[FlowRetrievedChunk] = []
+    for doc in docs:
+        if len(chunks) >= max_chunks:
+            break
+        snippet = _snippet(doc.page_content, snippet_chars)
+        if not snippet:
+            continue
+        metadata = doc.metadata or {}
+        chunks.append(
+            FlowRetrievedChunk(
+                collection="exhibit",
+                score=_coerce_score(metadata.get("keyword_score")),
+                symbol=_coerce_str(metadata.get("ticker")) or symbol,
+                accession_number=_coerce_str(metadata.get("accession_number")),
+                form_type=_coerce_str(metadata.get("form_type")),
+                filed_date=_coerce_str(metadata.get("filing_date")),
+                source=_coerce_str(metadata.get("source_file"))
+                or _coerce_str(metadata.get("source")),
+                snippet=snippet,
+                vector=None,
+            )
+        )
+    return tuple(chunks)

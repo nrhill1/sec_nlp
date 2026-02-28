@@ -76,10 +76,34 @@ def test_retrieve_seed_chunks_roundtrip() -> None:
             vector=None,
         )
     ]
-    store.put_retrieve_seed_chunks("retrieve_stage", chunks)
+    store.put_seed_chunks("retrieve_stage", chunks)
 
-    loaded = store.get_retrieve_seed_chunks("retrieve_stage")
+    loaded = store.get_seed_chunks("retrieve_stage")
     assert loaded is not None
     assert len(loaded) == 1
     assert loaded[0].collection == "retrieve"
     assert store.has_artifact("retrieve_stage")
+
+
+def test_contract_seed_chunks_roundtrip() -> None:
+    store = FlowArtifactStore()
+    chunks = (
+        FlowRetrievedChunk(
+            collection="exhibit",
+            score=0.87,
+            symbol="MP",
+            accession_number="0000000000-00-000003",
+            form_type="8-K",
+            filed_date="2025-12-31",
+            source="https://www.sec.gov/exhibit",
+            snippet="Supplier must provide NdPr oxide volumes quarterly.",
+            vector=None,
+        ),
+    )
+    store.put_seed_chunks("exhibit_stage", chunks)
+
+    loaded = store.get_seed_chunks("exhibit_stage")
+    assert loaded is not None
+    assert len(loaded) == 1
+    assert loaded[0].collection == "exhibit"
+    assert store.has_artifact("exhibit_stage")

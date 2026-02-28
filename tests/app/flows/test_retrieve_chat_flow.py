@@ -9,7 +9,6 @@ from sec_nlp.app.flows.artifacts import FlowArtifactStore
 from sec_nlp.app.flows.compiled import CompiledStage
 from sec_nlp.app.flows.contracts import (
     ContractEvidenceBundle,
-    ContractEvidenceChunk,
 )
 from sec_nlp.app.flows.models import (
     FlowDefaults,
@@ -442,7 +441,9 @@ def test_flow_runner_executes_exhibit_stage(monkeypatch) -> None:
 
     def _fake_exhibit_run_for_flow(
         self: ExhibitPipeline,
-    ) -> tuple[ExhibitResult, ContractEvidenceBundle]:
+    ) -> tuple[
+        ExhibitResult, ContractEvidenceBundle, tuple[ChatRetrievedChunk, ...]
+    ]:
         _ = self
         return (
             ExhibitResult(
@@ -458,11 +459,12 @@ def test_flow_runner_executes_exhibit_stage(monkeypatch) -> None:
                 queries=["supply agreement"],
                 chunks=[],
             ),
+            (),
         )
 
     monkeypatch.setattr(
         ExhibitPipeline,
-        "run_for_flow",
+        "run_for_flow_with_chunks",
         _fake_exhibit_run_for_flow,
     )
 
@@ -496,7 +498,9 @@ def test_flow_runner_passes_contract_evidence_into_chat(monkeypatch) -> None:
 
     def _fake_exhibit_run_for_flow(
         self: ExhibitPipeline,
-    ) -> tuple[ExhibitResult, ContractEvidenceBundle]:
+    ) -> tuple[
+        ExhibitResult, ContractEvidenceBundle, tuple[ChatRetrievedChunk, ...]
+    ]:
         _ = self
         return (
             ExhibitResult(
@@ -510,17 +514,20 @@ def test_flow_runner_passes_contract_evidence_into_chat(monkeypatch) -> None:
                 upstream_short_id=402,
                 symbols=["CDE"],
                 queries=["supply agreement"],
-                chunks=[
-                    ContractEvidenceChunk(
-                        symbol="CDE",
-                        accession_number="0000215466-24-000003",
-                        form_type="8-K",
-                        filed_date="2024-02-21",
-                        source="https://www.sec.gov/ixviewer/ix.html",
-                        score=0.87,
-                        snippet="Supplier must provide NdPr oxide volumes quarterly.",
-                    )
-                ],
+                chunks=[],
+            ),
+            (
+                ChatRetrievedChunk(
+                    collection="exhibit",
+                    score=0.87,
+                    symbol="CDE",
+                    accession_number="0000215466-24-000003",
+                    form_type="8-K",
+                    filed_date="2024-02-21",
+                    source="https://www.sec.gov/ixviewer/ix.html",
+                    snippet="Supplier must provide NdPr oxide volumes quarterly.",
+                    vector=None,
+                ),
             ),
         )
 
@@ -551,7 +558,7 @@ def test_flow_runner_passes_contract_evidence_into_chat(monkeypatch) -> None:
 
     monkeypatch.setattr(
         ExhibitPipeline,
-        "run_for_flow",
+        "run_for_flow_with_chunks",
         _fake_exhibit_run_for_flow,
     )
     monkeypatch.setattr(ChatPipeline, "run_for_flow", _fake_chat_run_for_flow)

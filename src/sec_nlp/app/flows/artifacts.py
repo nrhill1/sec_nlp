@@ -33,19 +33,19 @@ class FlowArtifactStore:
         """Return seeded bundle for chat stage execution."""
         return self._seed_by_stage.get(stage_id)
 
-    def put_retrieve_seed_chunks(
+    def put_seed_chunks(
         self,
         stage_id: str,
-        chunks: list[FlowRetrievedChunk],
+        chunks: tuple[FlowRetrievedChunk, ...] | list[FlowRetrievedChunk],
     ) -> None:
-        """Store prebuilt retrieve chunks for zero-copy chat handoff."""
+        """Store prebuilt seed chunks for zero-copy chat handoff."""
         self._seed_chunks_by_stage[stage_id] = tuple(chunks)
 
-    def get_retrieve_seed_chunks(
+    def get_seed_chunks(
         self,
         stage_id: str,
     ) -> tuple[FlowRetrievedChunk, ...] | None:
-        """Load prebuilt retrieve chunks for chat handoff."""
+        """Load prebuilt seed chunks for one stage."""
         return self._seed_chunks_by_stage.get(stage_id)
 
     def put_contract_evidence(

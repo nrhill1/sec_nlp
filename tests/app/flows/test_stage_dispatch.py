@@ -146,7 +146,7 @@ def test_run_stage_dispatches_supported_chat(monkeypatch) -> None:
 def test_run_stage_dispatches_supported_exhibit(monkeypatch) -> None:
     def _fake_exhibit_run(
         self: ExhibitPipeline,
-    ) -> tuple[ExhibitResult, ContractEvidenceBundle]:
+    ) -> tuple[ExhibitResult, ContractEvidenceBundle, tuple]:
         _ = self
         return (
             ExhibitResult(
@@ -155,9 +155,14 @@ def test_run_stage_dispatches_supported_exhibit(monkeypatch) -> None:
                 metadata={},
             ),
             self._empty_contract_bundle(),
+            (),
         )
 
-    monkeypatch.setattr(ExhibitPipeline, "run_for_flow", _fake_exhibit_run)
+    monkeypatch.setattr(
+        ExhibitPipeline,
+        "run_for_flow_with_chunks",
+        _fake_exhibit_run,
+    )
     monkeypatch.setattr(ExhibitPipeline, "_build_components", lambda self: None)
     stage = CompiledStage(
         stage=FlowStageSpec(

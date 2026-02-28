@@ -313,7 +313,7 @@ class FlowRunner:
         elapsed = perf_counter() - started
         if result.success:
             artifacts.put_retrieve_seed(stage.stage.id, seed_bundle)
-            artifacts.put_retrieve_seed_chunks(stage.stage.id, seed_chunks)
+            artifacts.put_seed_chunks(stage.stage.id, seed_chunks)
 
         return cls._build_stage_result(
             stage=stage.stage,
@@ -347,20 +347,23 @@ class FlowRunner:
             if seed_binding.artifact == "retrieve_seed":
                 seed_bundle = artifacts.get_chat_seed(seed_binding.from_stage)
                 seed_chunks = (
-                    artifacts.get_retrieve_seed_chunks(seed_binding.from_stage)
-                    or ()
+                    artifacts.get_seed_chunks(seed_binding.from_stage) or ()
                 )
             elif seed_binding.artifact == "contract_evidence":
                 contract_bundle = artifacts.get_contract_evidence(
                     seed_binding.from_stage
                 )
+                seed_chunks = (
+                    artifacts.get_seed_chunks(seed_binding.from_stage) or ()
+                )
                 if contract_bundle is not None:
                     seed_bundle = cls._seed_from_contract_evidence(
                         contract_bundle
                     )
-                    seed_chunks = cls._seed_chunks_from_contract_evidence(
-                        contract_bundle
-                    )
+                    if not seed_chunks:
+                        seed_chunks = cls._seed_chunks_from_contract_evidence(
+                            contract_bundle
+                        )
 
             if seed_bundle is None and not seed_chunks:
                 return cls._build_unexecuted_stage_result(
@@ -404,10 +407,13 @@ class FlowRunner:
 
         started = perf_counter()
         pipeline = ExhibitPipeline(config=stage.settings)
-        result, evidence_bundle = pipeline.run_for_flow()
+        result, evidence_bundle, seed_chunks = (
+            pipeline.run_for_flow_with_chunks()
+        )
         elapsed = perf_counter() - started
         if result.success:
             artifacts.put_contract_evidence(stage.stage.id, evidence_bundle)
+            artifacts.put_seed_chunks(stage.stage.id, seed_chunks)
 
         return cls._build_stage_result(
             stage=stage.stage,
