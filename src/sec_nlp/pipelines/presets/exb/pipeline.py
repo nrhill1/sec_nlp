@@ -54,6 +54,8 @@ from .steps.search.search import ExhibitSearch
 
 
 class SearchRecord(TypedDict):
+    """Per-query output record emitted by the EXB search stage."""
+
     query: str
     query_slug: str
     output_file: str | None

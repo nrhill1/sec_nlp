@@ -7,6 +7,8 @@ from typing import TypedDict
 
 
 class WarrantyPeriodRecord(TypedDict, total=False):
+    """Normalized warranty metrics for one reporting period."""
+
     symbol: str
     period: str | None
     period_end: str | None
@@ -23,6 +25,8 @@ class WarrantyPeriodRecord(TypedDict, total=False):
 
 
 class WarrantyMergeBucket(TypedDict, total=False):
+    """Intermediate warranty bucket used during row merging."""
+
     symbol: str | None
     period: str | None
     period_end: str | None

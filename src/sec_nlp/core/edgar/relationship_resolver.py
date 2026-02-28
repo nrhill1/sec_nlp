@@ -493,6 +493,7 @@ class RelationshipResolver:
 def build_related_filings_map(
     graph: FilingRelationshipGraph,
 ) -> dict[str, list[JsonDict]]:
+    """Group relationship edges by source accession for output payloads."""
     related: dict[str, list[JsonDict]] = defaultdict(list)
     for relation in graph.relations:
         target = relation.target
@@ -516,6 +517,7 @@ def build_related_filings_map(
 def serialize_relationship_graph(
     graph: FilingRelationshipGraph,
 ) -> JsonDict:
+    """Convert a relationship graph into a JSON-serializable dictionary."""
     filings_payload: JsonDict = {}
     for accession, filing in graph.filings.items():
         filings_payload[accession] = {

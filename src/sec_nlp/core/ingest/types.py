@@ -7,6 +7,8 @@ from typing import TypedDict
 
 
 class DownloadResult(TypedDict, total=False):
+    """Per-symbol download counters and status fields."""
+
     success: bool
     downloaded: int
     skipped_existing: int

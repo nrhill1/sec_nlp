@@ -33,6 +33,7 @@ def build_output_formatter(
     config: AnalyzeConfig,
     topics: list[str] | None = None,
 ) -> OutputFormatter:
+    """Construct the output formatter for the active analyze configuration."""
     keyword_terms = topics or config.topics or config.keywords
     return OutputFormatter(
         export_format=config.export_format,
@@ -54,6 +55,7 @@ def build_preprocessor(
     topics: list[str] | None,
     embedder: OllamaEmbeddings | None,
 ) -> ChunkPreprocessor:
+    """Create the chunk preprocessor with topic matching and optional embeddings."""
     keyword_terms = topics or config.topics or config.keywords
     topic_matcher = build_topic_matcher(keyword_terms)
     return ChunkPreprocessor(
@@ -77,6 +79,7 @@ def build_analysis_runner(
     | None = None,
     ensemble_model_names: list[str] | None = None,
 ) -> AnalyzerRunnable:
+    """Build the analysis runnable and wire model-level execution settings."""
     prompt_ref = (
         str(config.llm.prompt_file)
         if config.llm.prompt_file is not None
@@ -120,6 +123,7 @@ def build_search_runner(
     config: AnalyzeConfig,
     vector_store: QdrantVectorStore | None,
 ) -> SearchRunnable:
+    """Build the search runnable for vector and hybrid retrieval modes."""
     return SearchRunnable(
         vector_store=vector_store,
         symbols=config.symbols,

@@ -19,6 +19,7 @@ _NUMERIC_SIGNAL_RE = re.compile(r"[$€£]?\d")
 def compute_market_confidence_signal(
     market_correlation: JsonDict | None,
 ) -> float | None:
+    """Estimate confidence lift from post-filing market reaction metrics."""
     if market_correlation is None:
         return None
     metrics_value = market_correlation.get("metrics")
@@ -47,6 +48,7 @@ def compute_market_confidence_signal(
 
 
 def score_query_relevance(result: AnalysisResultDict) -> float:
+    """Score how many query terms matched versus missed terms."""
     matched = result.get("query_match_terms")
     missing = result.get("missing_query_terms")
     matched_count = len(matched) if isinstance(matched, list) else 0
@@ -58,6 +60,7 @@ def score_query_relevance(result: AnalysisResultDict) -> float:
 
 
 def score_match_strength(result: AnalysisResultDict) -> float | None:
+    """Return the strongest normalized match score from matched queries."""
     matched_queries = result.get("matched_queries")
     if not isinstance(matched_queries, list):
         return None
@@ -77,6 +80,7 @@ def score_match_strength(result: AnalysisResultDict) -> float | None:
 
 
 def collect_query_terms(result: AnalysisResultDict) -> list[str]:
+    """Collect unique normalized terms from matched and missing query lists."""
     matched = result.get("query_match_terms")
     missing = result.get("missing_query_terms")
     terms: list[str] = []
@@ -96,6 +100,7 @@ def collect_query_terms(result: AnalysisResultDict) -> list[str]:
 
 
 def extract_yake_terms(result: AnalysisResultDict) -> list[str]:
+    """Extract normalized YAKE keyword terms from source metadata."""
     source_meta = result.get("source_metadata")
     if not isinstance(source_meta, dict):
         return []
@@ -116,6 +121,7 @@ def extract_yake_terms(result: AnalysisResultDict) -> list[str]:
 
 
 def score_yake_overlap(result: AnalysisResultDict) -> float | None:
+    """Compute overlap between query terms and YAKE-derived terms."""
     query_terms = collect_query_terms(result)
     if not query_terms:
         return None
@@ -127,6 +133,7 @@ def score_yake_overlap(result: AnalysisResultDict) -> float | None:
 
 
 def has_evidence(result: AnalysisResultDict) -> bool:
+    """Return whether the result contains evidence spans or excerpts."""
     evidence = result.get("evidence_spans")
     if isinstance(evidence, list) and evidence:
         return True
@@ -135,6 +142,7 @@ def has_evidence(result: AnalysisResultDict) -> bool:
 
 
 def has_numeric_signal(result: AnalysisResultDict) -> bool:
+    """Return whether summary text includes numeric signals."""
     summary = result.get("summary")
     if isinstance(summary, str) and _NUMERIC_SIGNAL_RE.search(summary):
         return True
@@ -151,6 +159,7 @@ def derive_confidence_score(
     market_signal: float | None,
     yake_overlap: float | None = None,
 ) -> tuple[float, str]:
+    """Derive a bounded confidence score and rationale string for a result."""
     query_relevance = score_query_relevance(result)
     match_strength = score_match_strength(result)
     if yake_overlap is None:
@@ -195,6 +204,7 @@ def apply_confidence_derivation(
     analysis_results: list[AnalysisResultDict],
     market_correlation: JsonDict | None,
 ) -> None:
+    """Populate confidence fields across analysis results in place."""
     market_signal = compute_market_confidence_signal(market_correlation)
     for result in analysis_results:
         if result.get("error") or result.get("exception"):

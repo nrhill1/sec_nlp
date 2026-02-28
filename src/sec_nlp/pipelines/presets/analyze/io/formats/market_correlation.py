@@ -119,6 +119,7 @@ def build_market_correlation(
     market_data: MarketEnrichment | None,
     results: list[AnalysisResultDict],
 ) -> JsonDict | None:
+    """Build market-correlation analytics for an analysis result set."""
     if market_data is None or not market_data.quotes:
         return None
 

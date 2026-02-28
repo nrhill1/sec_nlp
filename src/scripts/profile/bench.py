@@ -46,6 +46,8 @@ from sec_nlp.pipelines.presets.analyze.models import (  # noqa: E402
 
 @dataclass(frozen=True)
 class BenchmarkCase:
+    """Single benchmark scenario and its executable workload."""
+
     name: str
     description: str
     run: Callable[[int], None]
@@ -53,6 +55,8 @@ class BenchmarkCase:
 
 @dataclass(frozen=True)
 class BenchmarkStats:
+    """Aggregate timing and memory metrics for a benchmark case."""
+
     name: str
     iterations: int
     repeats: int
@@ -291,6 +295,8 @@ def _print_results(stats: list[BenchmarkStats]) -> None:
 
 
 class BenchmarkConfig(BaseSettings):
+    """CLI settings for benchmark profile runs."""
+
     model_config = SettingsConfigDict(
         cli_prog_name="bench",
         cli_exit_on_error=True,
@@ -375,6 +381,7 @@ class BenchmarkConfig(BaseSettings):
 
 
 def main() -> None:
+    """Run the command-line entrypoint."""
     CliApp.run(BenchmarkConfig)
 
 

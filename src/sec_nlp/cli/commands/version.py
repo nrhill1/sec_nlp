@@ -32,6 +32,8 @@ def _get_version() -> str:
 
 
 class Version(BaseModel):
+    """CLI command model for printing the installed sec-nlp version."""
+
     model_config = ConfigDict(defer_build=True)
 
     def cli_cmd(self) -> None:

@@ -39,6 +39,8 @@ from .analysis import AnalysisBatchInput
 
 @dataclass(frozen=True)
 class SearchQueryResults:
+    """Filtered documents and total hit count for one query."""
+
     filtered: list[tuple[Document, float]]
     total: int
 

@@ -40,6 +40,8 @@ from sec_nlp.types import JsonDict
 
 
 class LoaderRunMetadata(TypedDict):
+    """Metadata summary emitted after a loader run."""
+
     work_folder: str
     download_results: DownloadResults
     per_symbol_doc_counts: dict[str, int]
@@ -48,6 +50,8 @@ class LoaderRunMetadata(TypedDict):
 
 
 class FilingRecord(Protocol):
+    """Minimal filing record interface used by timestamp helpers."""
+
     acceptance_date: str
 
 

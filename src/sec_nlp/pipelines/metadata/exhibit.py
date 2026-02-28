@@ -12,6 +12,8 @@ from sec_nlp.types import JsonObject, JsonValue
 
 
 class RollupWorkItem(TypedDict):
+    """Input row used while building exhibit rollups."""
+
     accession_number: str
     filing_date: str | None
     form_type: str | None
@@ -26,6 +28,8 @@ class RollupWorkItem(TypedDict):
 
 
 class RollupRecord(TypedDict):
+    """Normalized exhibit rollup record emitted to outputs."""
+
     accession_number: str
     filing_date: str | None
     form_type: str | None

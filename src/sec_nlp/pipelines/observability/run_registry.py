@@ -18,6 +18,8 @@ from sec_nlp.pipelines.types import QueryParam
 
 
 class RunRecordDict(TypedDict):
+    """Normalized run record persisted in the run registry."""
+
     record_id: int
     short_id: str
     run_id: str

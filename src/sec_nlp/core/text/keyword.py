@@ -14,6 +14,8 @@ from pydantic.dataclasses import dataclass
 
 @dataclass(frozen=True, config=ConfigDict(extra="forbid"))
 class KeywordSpec:
+    """Configured keyword pattern and ranking weight."""
+
     pattern: str
     priority: int
     weight: float
@@ -21,6 +23,8 @@ class KeywordSpec:
 
 @dataclass(frozen=True, config=ConfigDict(extra="forbid"))
 class KeywordHit:
+    """Single keyword match found in text."""
+
     pattern: str
     priority: int
     weight: float
@@ -29,6 +33,8 @@ class KeywordHit:
 
 @dataclass(frozen=True, config=ConfigDict(extra="forbid"))
 class KeywordScore:
+    """Aggregate keyword relevance score and ranked hits."""
+
     total_score: float
     rank_vector: list[float]
     hits: list[KeywordHit]
@@ -36,6 +42,8 @@ class KeywordScore:
 
 @dataclass(frozen=True, config=ConfigDict(extra="forbid"))
 class FilterStats:
+    """Counters describing keyword-filtering outcomes."""
+
     kept: int
     total: int
     keyword_hits: int

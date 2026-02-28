@@ -79,6 +79,7 @@ def write_exhibit_summary(
     docs: list[Document],
     config: ExhibitConfig,
 ) -> list[Path]:
+    """Build and write exhibit summary files for one symbol."""
     summary = build_exhibit_summary(
         symbol=symbol,
         docs=docs,
@@ -116,6 +117,7 @@ def build_exhibit_summary(
     docs: list[Document],
     config: ExhibitConfig,
 ) -> JsonDict:
+    """Assemble an exhibit-level summary payload from extracted docs."""
     if not docs:
         return {}
 

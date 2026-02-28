@@ -656,6 +656,7 @@ class PerfSuiteConfig(BaseSettings):
 
 
 def main() -> None:
+    """Run the command-line entrypoint."""
     signal.signal(signal.SIGINT, lambda *_: sys.exit(130))
     CliApp.run(PerfSuiteConfig)
 

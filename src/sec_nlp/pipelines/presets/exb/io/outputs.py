@@ -23,6 +23,8 @@ from ..config import ExhibitConfig
 
 
 class AccessionRecord(TypedDict):
+    """Serialized accession record used by EXB output writers."""
+
     accession_number: str
     form_type: str | None
     filing_date: str | None
@@ -37,6 +39,8 @@ class AccessionRecord(TypedDict):
 
 @dataclass
 class AccessionAccumulator:
+    """Mutable accumulator for grouping docs by accession."""
+
     accession_number: str
     form_type: str | None
     filing_date: str | None

@@ -64,6 +64,7 @@ def write_symbol_summary(
     relevant_results: list[AnalysisResultDict],
     fallback_meta: MetadataRecord,
 ) -> Path | None:
+    """Build and write the per-symbol summary artifact."""
     summary = build_symbol_summary(
         symbol=symbol,
         run_id=run_id,
@@ -87,6 +88,7 @@ def build_symbol_summary(
     relevant_results: list[AnalysisResultDict],
     fallback_meta: MetadataRecord,
 ) -> JsonDict:
+    """Assemble a symbol-level summary payload from analysis results."""
     run_id_value = str(run_id) if run_id is not None else None
     summary: JsonDict = {
         "symbol": symbol,
@@ -116,6 +118,7 @@ def write_executive_comp_summary(
     relevant_results: list[AnalysisResultDict],
     fallback_meta: MetadataRecord,
 ) -> Path | None:
+    """Build and write executive-compensation summary output."""
     summary = build_executive_comp_summary(
         symbol=symbol,
         run_id=run_id,
@@ -139,6 +142,7 @@ def build_executive_comp_summary(
     relevant_results: list[AnalysisResultDict],
     fallback_meta: MetadataRecord,
 ) -> JsonDict:
+    """Build a structured executive-compensation summary payload."""
     if not relevant_results:
         return {}
 
@@ -184,6 +188,7 @@ def build_sentiment_trends(
     results: list[AnalysisResultDict],
     fallback_meta: MetadataRecord,
 ) -> list[JsonDict]:
+    """Generate per-accession sentiment trend records from results."""
     if not results:
         return []
     grouped = group_results_by_accession(results, fallback_meta)
@@ -576,6 +581,7 @@ def build_entity_rollup(
     *,
     top_n: int = 10,
 ) -> JsonDict:
+    """Aggregate top entities and counts across analysis results."""
     if not results:
         return {}
     counts_by_type: dict = defaultdict(Counter)
@@ -612,6 +618,7 @@ def build_filing_comparisons(
     results: list[AnalysisResultDict],
     fallback_meta: MetadataRecord,
 ) -> list[JsonDict]:
+    """Build side-by-side filing comparison records."""
     if not results:
         return []
     grouped = group_results_by_accession(results, fallback_meta)
@@ -699,6 +706,7 @@ def build_symbol_profile(
     symbol,
     results: list[AnalysisResultDict],
 ) -> JsonDict:
+    """Summarize dominant tags, sentiment, and topics for one symbol."""
     tags = Counter()
     sentiments = Counter()
     topics = Counter()
@@ -732,6 +740,7 @@ def build_symbol_profile(
 
 
 def build_peer_comparison(profiles: dict) -> JsonDict:
+    """Build cross-symbol comparison metrics from symbol profiles."""
     if not profiles:
         return {}
     common_tags = _common_items(
@@ -766,6 +775,7 @@ def write_peer_summary(
     output_dir: Path,
     summary: JsonDict,
 ) -> Path | None:
+    """Write peer comparison summary output when data is available."""
     if not summary:
         return None
     output_dir.mkdir(parents=True, exist_ok=True)

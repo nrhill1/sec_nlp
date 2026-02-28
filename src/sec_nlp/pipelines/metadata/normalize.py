@@ -12,12 +12,14 @@ from sec_nlp.types import JsonDict, JsonValue
 
 
 def coerce_meta_str(value: MetadataValue) -> str | None:
+    """Normalize metadata scalars to string values."""
     if isinstance(value, (str, int, float, bool)):
         return str(value)
     return None
 
 
 def get_meta_str(meta: MetadataMap, key: str) -> str | None:
+    """Read a metadata key as a normalized string."""
     value = meta.get(key)
     if value is None:
         return None
@@ -30,6 +32,7 @@ def get_meta_str_any(
     *,
     include_source_meta: bool = True,
 ) -> str | None:
+    """Return the first matching metadata value across candidate keys."""
     for key in keys:
         value = meta.get(key)
         if value is None:
@@ -59,6 +62,7 @@ _OMIT_METADATA_KEYS: set[str] = {
 def normalize_metadata_for_output(
     metadata: MetadataMap | None,
 ) -> JsonDict:
+    """Convert internal metadata to a stable JSON output payload."""
     if not metadata:
         return {}
     payload: JsonDict = {}
