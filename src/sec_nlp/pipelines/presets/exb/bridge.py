@@ -1,6 +1,8 @@
 # src/sec_nlp/pipelines/presets/exb/bridge.py
 """Bridge helpers for converting EXB outputs into flow contract evidence."""
 
+from dataclasses import dataclass
+
 from langchain_core.documents import Document
 
 from sec_nlp.app.flows.contracts import (
@@ -41,6 +43,22 @@ def _snippet(text: str, max_chars: int) -> str:
     return f"{cleaned[: max(0, max_chars - 3)].rstrip()}..."
 
 
+@dataclass(slots=True, frozen=True)
+class _ContractChunkValues:
+    """Normalized chunk fields shared by EXB flow handoff outputs."""
+
+    symbol: str
+    accession_number: str | None
+    form_type: str | None
+    filed_date: str | None
+    exhibit_number: str | None
+    exhibit_category: str | None
+    section_number: str | None
+    source: str | None
+    score: float
+    snippet: str
+
+
 def build_contract_evidence_bundle(
     *,
     symbol: str,
@@ -52,29 +70,26 @@ def build_contract_evidence_bundle(
     snippet_chars: int = 500,
 ) -> ContractEvidenceBundle:
     """Convert EXB documents into a typed flow contract evidence bundle."""
-    chunks: list[ContractEvidenceChunk] = []
-    for doc in docs:
-        if len(chunks) >= max_chunks:
-            break
-        snippet = _snippet(doc.page_content, snippet_chars)
-        if not snippet:
-            continue
-        metadata = doc.metadata or {}
-        chunks.append(
-            ContractEvidenceChunk(
-                symbol=_coerce_str(metadata.get("ticker")) or symbol,
-                accession_number=_coerce_str(metadata.get("accession_number")),
-                form_type=_coerce_str(metadata.get("form_type")),
-                filed_date=_coerce_str(metadata.get("filing_date")),
-                exhibit_number=_coerce_str(metadata.get("exhibit_number")),
-                exhibit_category=_coerce_str(metadata.get("exhibit_category")),
-                section_number=_coerce_str(metadata.get("section_number")),
-                source=_coerce_str(metadata.get("source_file"))
-                or _coerce_str(metadata.get("source")),
-                score=_coerce_score(metadata.get("keyword_score")),
-                snippet=snippet,
-            )
+    chunks = [
+        ContractEvidenceChunk(
+            symbol=chunk.symbol,
+            accession_number=chunk.accession_number,
+            form_type=chunk.form_type,
+            filed_date=chunk.filed_date,
+            exhibit_number=chunk.exhibit_number,
+            exhibit_category=chunk.exhibit_category,
+            section_number=chunk.section_number,
+            source=chunk.source,
+            score=chunk.score,
+            snippet=chunk.snippet,
         )
+        for chunk in _contract_chunk_values(
+            symbol=symbol,
+            docs=docs,
+            max_chunks=max_chunks,
+            snippet_chars=snippet_chars,
+        )
+    ]
     return ContractEvidenceBundle(
         upstream_pipeline="exhibit",
         upstream_run_id=run_id,
@@ -93,7 +108,36 @@ def build_contract_seed_chunks(
     snippet_chars: int = 500,
 ) -> tuple[FlowRetrievedChunk, ...]:
     """Convert EXB documents into prebuilt chat chunks for flow handoff."""
-    chunks: list[FlowRetrievedChunk] = []
+    return tuple(
+        FlowRetrievedChunk(
+            collection="exhibit",
+            score=chunk.score,
+            symbol=chunk.symbol,
+            accession_number=chunk.accession_number,
+            form_type=chunk.form_type,
+            filed_date=chunk.filed_date,
+            source=chunk.source,
+            snippet=chunk.snippet,
+            vector=None,
+        )
+        for chunk in _contract_chunk_values(
+            symbol=symbol,
+            docs=docs,
+            max_chunks=max_chunks,
+            snippet_chars=snippet_chars,
+        )
+    )
+
+
+def _contract_chunk_values(
+    *,
+    symbol: str,
+    docs: list[Document],
+    max_chunks: int,
+    snippet_chars: int,
+) -> list[_ContractChunkValues]:
+    """Return normalized EXB chunk values reused by flow handoff builders."""
+    chunks: list[_ContractChunkValues] = []
     for doc in docs:
         if len(chunks) >= max_chunks:
             break
@@ -102,17 +146,18 @@ def build_contract_seed_chunks(
             continue
         metadata = doc.metadata or {}
         chunks.append(
-            FlowRetrievedChunk(
-                collection="exhibit",
-                score=_coerce_score(metadata.get("keyword_score")),
+            _ContractChunkValues(
                 symbol=_coerce_str(metadata.get("ticker")) or symbol,
                 accession_number=_coerce_str(metadata.get("accession_number")),
                 form_type=_coerce_str(metadata.get("form_type")),
                 filed_date=_coerce_str(metadata.get("filing_date")),
+                exhibit_number=_coerce_str(metadata.get("exhibit_number")),
+                exhibit_category=_coerce_str(metadata.get("exhibit_category")),
+                section_number=_coerce_str(metadata.get("section_number")),
                 source=_coerce_str(metadata.get("source_file"))
                 or _coerce_str(metadata.get("source")),
+                score=_coerce_score(metadata.get("keyword_score")),
                 snippet=snippet,
-                vector=None,
             )
         )
-    return tuple(chunks)
+    return chunks

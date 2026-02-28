@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from pathlib import Path
 from time import perf_counter
 from typing import ClassVar, Literal
@@ -62,6 +63,20 @@ from .steps import (
 from .steps.tokenization import DEFAULT_QUERY_STOPWORDS
 
 _ORIGINAL_RUN_CANDIDATE_SEARCH = run_candidate_search
+
+
+@dataclass(slots=True, frozen=True)
+class _FlowChunkValues:
+    """Normalized chunk fields shared across retrieve flow handoff types."""
+
+    collection: str
+    score: float
+    symbol: str | None
+    accession_number: str | None
+    form_type: str | None
+    filed_date: str | None
+    source: str | None
+    snippet: str
 
 
 class RetrievePipeline(BasePipeline):
@@ -521,41 +536,52 @@ class RetrievePipeline(BasePipeline):
         self, hits: list[RetrievalHit]
     ) -> list[RetrieveChatSeedChunk]:
         """Convert ranked hits into chat-seed chunks without serialization."""
-        collection_name = self.config.vdb.collection_name or "retrieve"
-        chunks: list[RetrieveChatSeedChunk] = []
-        for hit in hits:
-            snippet_raw = hit.snippet or ""
-            snippet = snippet_raw.strip()
-            if not snippet:
-                continue
-            chunks.append(
-                RetrieveChatSeedChunk(
-                    collection=collection_name,
-                    symbol=hit.symbol or None,
-                    accession_number=hit.accession_number or None,
-                    form_type=hit.form_type or None,
-                    filed_date=hit.filed_date or None,
-                    source=hit.edgar_url or None,
-                    score=float(hit.score),
-                    snippet=snippet,
-                )
+        return [
+            RetrieveChatSeedChunk(
+                collection=chunk.collection,
+                symbol=chunk.symbol,
+                accession_number=chunk.accession_number,
+                form_type=chunk.form_type,
+                filed_date=chunk.filed_date,
+                source=chunk.source,
+                score=chunk.score,
+                snippet=chunk.snippet,
             )
-        return chunks
+            for chunk in self._flow_chunk_values(hits)
+        ]
 
     def _hits_to_chat_chunks(
         self,
         hits: list[RetrievalHit],
     ) -> list[ChatRetrievedChunk]:
         """Convert ranked hits into prebuilt chat chunks for zero-copy handoff."""
+        return [
+            ChatRetrievedChunk(
+                collection=chunk.collection,
+                score=chunk.score,
+                symbol=chunk.symbol,
+                accession_number=chunk.accession_number,
+                form_type=chunk.form_type,
+                filed_date=chunk.filed_date,
+                source=chunk.source,
+                snippet=chunk.snippet,
+                vector=None,
+            )
+            for chunk in self._flow_chunk_values(hits)
+        ]
+
+    def _flow_chunk_values(
+        self, hits: list[RetrievalHit]
+    ) -> list[_FlowChunkValues]:
+        """Return normalized chunk fields reused by flow handoff outputs."""
         collection_name = self.config.vdb.collection_name or "retrieve"
-        chunks: list[ChatRetrievedChunk] = []
+        chunks: list[_FlowChunkValues] = []
         for hit in hits:
-            snippet_raw = hit.snippet or ""
-            snippet = snippet_raw.strip()
+            snippet = (hit.snippet or "").strip()
             if not snippet:
                 continue
             chunks.append(
-                ChatRetrievedChunk(
+                _FlowChunkValues(
                     collection=collection_name,
                     score=float(hit.score),
                     symbol=hit.symbol or None,
@@ -564,7 +590,6 @@ class RetrievePipeline(BasePipeline):
                     filed_date=hit.filed_date or None,
                     source=hit.edgar_url or None,
                     snippet=snippet,
-                    vector=None,
                 )
             )
         return chunks

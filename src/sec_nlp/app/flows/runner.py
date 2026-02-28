@@ -244,6 +244,26 @@ class FlowRunner:
         return f"{normalized[: max_chars - 1].rstrip()}…"
 
     @classmethod
+    def _resolve_chat_seed_inputs(
+        cls,
+        *,
+        binding: FlowStageInputBinding,
+        artifacts: FlowArtifactStore,
+    ) -> tuple[FlowSeedBundle | None, tuple[FlowRetrievedChunk, ...]]:
+        """Resolve seeded bundle and prebuilt chunks for one chat input binding."""
+        seed_chunks = artifacts.get_seed_chunks(binding.from_stage) or ()
+        if binding.artifact == "retrieve_seed":
+            return (
+                artifacts.get_seed_bundle(binding.from_stage),
+                seed_chunks,
+            )
+
+        contract_bundle = artifacts.get_contract_evidence(binding.from_stage)
+        if contract_bundle is None:
+            return None, seed_chunks
+        return cls._seed_from_contract_evidence(contract_bundle), seed_chunks
+
+    @classmethod
     def _run_plain_pipeline_stage[
         SettingsT: BasePipelineSettings,
         PipelineT: BasePipeline,
@@ -320,22 +340,10 @@ class FlowRunner:
         seed_bundle: FlowSeedBundle | None = None
         seed_chunks: tuple[FlowRetrievedChunk, ...] = ()
         if seed_binding is not None:
-            if seed_binding.artifact == "retrieve_seed":
-                seed_bundle = artifacts.get_seed_bundle(seed_binding.from_stage)
-                seed_chunks = (
-                    artifacts.get_seed_chunks(seed_binding.from_stage) or ()
-                )
-            elif seed_binding.artifact == "contract_evidence":
-                contract_bundle = artifacts.get_contract_evidence(
-                    seed_binding.from_stage
-                )
-                seed_chunks = (
-                    artifacts.get_seed_chunks(seed_binding.from_stage) or ()
-                )
-                if contract_bundle is not None:
-                    seed_bundle = cls._seed_from_contract_evidence(
-                        contract_bundle
-                    )
+            seed_bundle, seed_chunks = cls._resolve_chat_seed_inputs(
+                binding=seed_binding,
+                artifacts=artifacts,
+            )
 
             if seed_bundle is None and not seed_chunks:
                 return cls._build_unexecuted_stage_result(
