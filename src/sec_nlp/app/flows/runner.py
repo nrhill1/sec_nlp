@@ -364,30 +364,19 @@ class FlowRunner:
                     ),
                 )
 
-        type PipelineConfigUpdateValue = (
-            FlowSeedBundle | tuple[FlowRetrievedChunk, ...]
-        )
-        config_updates: dict[str, PipelineConfigUpdateValue] = {}
-        if seed_bundle is not None:
-            config_updates["seed_context"] = seed_bundle
-        if seed_chunks:
-            config_updates["seed_chunks"] = seed_chunks
-
-        pipeline_config = (
-            stage.settings.model_copy(update=config_updates)
-            if config_updates
-            else stage.settings
-        )
         started = perf_counter()
-        result = ChatPipeline(config=pipeline_config).run()
+        result = ChatPipeline(config=stage.settings).run_for_flow(
+            seed_context=seed_bundle,
+            seed_chunks=seed_chunks,
+        )
         elapsed = perf_counter() - started
 
         stage_result = cls._build_stage_result(
             stage=stage.stage,
             pipeline_result=result,
             duration_seconds=elapsed,
-            run_id=str(pipeline_config.run_id),
-            run_short_id=pipeline_config.short_id,
+            run_id=str(stage.settings.run_id),
+            run_short_id=stage.settings.short_id,
         )
         if result.success and isinstance(result.answer, str) and result.answer:
             metadata = dict(stage_result.metadata)

@@ -16,7 +16,7 @@ from sec_nlp.core.infra.logger import logger
 from sec_nlp.pipelines.base.stages import PipelineStageRunnable
 from sec_nlp.types import JsonValue
 
-from .bridge import ChatRetrievedChunk
+from .bridge import ChatRetrievedChunk, ChatSeedBundle
 from .models import ChatCitation, ChatTurn
 
 if TYPE_CHECKING:
@@ -31,6 +31,8 @@ class ChatRunState:
     progress: Progress
     overall_task: TaskID
     phase_task: TaskID
+    seed_context: ChatSeedBundle | None = None
+    seed_chunks: tuple[ChatRetrievedChunk, ...] = ()
     outputs: list[Path] = field(default_factory=list)
     chunks: list[ChatRetrievedChunk] = field(default_factory=list)
     citations: list[ChatCitation] = field(default_factory=list)
@@ -58,6 +60,8 @@ def create_initial_chat_state(
     progress: Progress,
     overall_task: TaskID,
     phase_task: TaskID,
+    seed_context: ChatSeedBundle | None = None,
+    seed_chunks: tuple[ChatRetrievedChunk, ...] = (),
 ) -> ChatRunState:
     """Create initial mutable state for chat runnable stage execution."""
     return ChatRunState(
@@ -65,6 +69,8 @@ def create_initial_chat_state(
         progress=progress,
         overall_task=overall_task,
         phase_task=phase_task,
+        seed_context=seed_context,
+        seed_chunks=seed_chunks,
     )
 
 
@@ -75,23 +81,30 @@ class SearchContextStage(PipelineStageRunnable[ChatRunState]):
     name: str = Field(default="search_context")
 
     def _run(self, state: ChatRunState) -> ChatRunState:
+        has_seed_context = (
+            state.seed_context is not None or len(state.seed_chunks) > 0
+        )
         self.pipeline._update_phase(
             state.progress,
             state.phase_task,
             (
                 "Using seeded retrieve context"
-                if self.pipeline.config.seed_context is not None
+                if has_seed_context
                 else "Searching indexed collections"
             ),
         )
-        if self.pipeline.config.seed_context is None:
+        if not has_seed_context:
             state.chunks = self.pipeline._search_collections(
                 state.question,
                 progress=state.progress,
                 phase_task=state.phase_task,
             )
         else:
-            state.chunks = self.pipeline._search_seed_context(state.question)
+            state.chunks = self.pipeline._search_seed_context(
+                question=state.question,
+                seed=state.seed_context,
+                seed_chunks=state.seed_chunks,
+            )
             if not state.chunks:
                 logger.warning(
                     "Seeded context returned no chunks; falling back to indexed collections",

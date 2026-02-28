@@ -90,8 +90,14 @@ def test_flow_runner_passes_retrieve_seed_into_chat(monkeypatch) -> None:
             ],
         )
 
-    def _fake_chat_run(self: ChatPipeline) -> ChatResult:
-        seed = self.config.seed_context
+    def _fake_chat_run_for_flow(
+        self: ChatPipeline,
+        *,
+        seed_context: ChatSeedBundle | None,
+        seed_chunks: tuple[ChatRetrievedChunk, ...],
+    ) -> ChatResult:
+        _ = (self, seed_chunks)
+        seed = seed_context
         assert isinstance(seed, ChatSeedBundle)
         observed["seed_upstream_run_id"] = seed.upstream_run_id
         observed["seed_symbols"] = list(seed.symbols)
@@ -112,7 +118,7 @@ def test_flow_runner_passes_retrieve_seed_into_chat(monkeypatch) -> None:
         "run_for_flow_with_chunks",
         _fake_retrieve_run_for_flow,
     )
-    monkeypatch.setattr(ChatPipeline, "run", _fake_chat_run)
+    monkeypatch.setattr(ChatPipeline, "run_for_flow", _fake_chat_run_for_flow)
 
     spec = FlowSpec(
         name="retrieve-chat-seeded",
@@ -228,8 +234,14 @@ def test_flow_runner_passes_seed_via_inputs_binding(monkeypatch) -> None:
             ],
         )
 
-    def _fake_chat_run(self: ChatPipeline) -> ChatResult:
-        seed = self.config.seed_context
+    def _fake_chat_run_for_flow(
+        self: ChatPipeline,
+        *,
+        seed_context: ChatSeedBundle | None,
+        seed_chunks: tuple[ChatRetrievedChunk, ...],
+    ) -> ChatResult:
+        _ = (self, seed_chunks)
+        seed = seed_context
         assert isinstance(seed, ChatSeedBundle)
         observed["seed_upstream_run_id"] = seed.upstream_run_id
         return ChatResult(
@@ -248,7 +260,7 @@ def test_flow_runner_passes_seed_via_inputs_binding(monkeypatch) -> None:
         "run_for_flow_with_chunks",
         _fake_retrieve_run_for_flow,
     )
-    monkeypatch.setattr(ChatPipeline, "run", _fake_chat_run)
+    monkeypatch.setattr(ChatPipeline, "run_for_flow", _fake_chat_run_for_flow)
 
     spec = FlowSpec(
         name="retrieve-chat-seeded-inputs",
@@ -512,8 +524,14 @@ def test_flow_runner_passes_contract_evidence_into_chat(monkeypatch) -> None:
             ),
         )
 
-    def _fake_chat_run(self: ChatPipeline) -> ChatResult:
-        seed = self.config.seed_context
+    def _fake_chat_run_for_flow(
+        self: ChatPipeline,
+        *,
+        seed_context: ChatSeedBundle | None,
+        seed_chunks: tuple[ChatRetrievedChunk, ...],
+    ) -> ChatResult:
+        _ = (self, seed_chunks)
+        seed = seed_context
         assert isinstance(seed, ChatSeedBundle)
         observed["seed_source"] = seed.upstream_pipeline
         observed["seed_run_id"] = seed.upstream_run_id
@@ -535,7 +553,7 @@ def test_flow_runner_passes_contract_evidence_into_chat(monkeypatch) -> None:
         "run_for_flow",
         _fake_exhibit_run_for_flow,
     )
-    monkeypatch.setattr(ChatPipeline, "run", _fake_chat_run)
+    monkeypatch.setattr(ChatPipeline, "run_for_flow", _fake_chat_run_for_flow)
 
     spec = FlowSpec(
         name="exhibit-chat-contract-seed",

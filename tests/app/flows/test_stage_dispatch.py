@@ -9,7 +9,11 @@ import pytest
 
 from sec_nlp.app.flows.artifacts import FlowArtifactStore
 from sec_nlp.app.flows.compiled import CompiledStage
-from sec_nlp.app.flows.contracts import ContractEvidenceBundle
+from sec_nlp.app.flows.contracts import (
+    ContractEvidenceBundle,
+    FlowRetrievedChunk,
+    FlowSeedBundle,
+)
 from sec_nlp.app.flows.models import FlowDefaults, FlowSpec, FlowStageSpec
 from sec_nlp.app.flows.runner import FlowRunner
 from sec_nlp.pipelines.presets.analyze import AnalyzeConfig, AnalyzePipeline
@@ -99,8 +103,13 @@ def test_run_stage_dispatches_supported_retrieve(monkeypatch) -> None:
 
 
 def test_run_stage_dispatches_supported_chat(monkeypatch) -> None:
-    def _fake_chat_run(self: ChatPipeline) -> ChatResult:
-        _ = self
+    def _fake_chat_run_for_flow(
+        self: ChatPipeline,
+        *,
+        seed_context: FlowSeedBundle | None,
+        seed_chunks: tuple[FlowRetrievedChunk, ...],
+    ) -> ChatResult:
+        _ = (self, seed_context, seed_chunks)
         return ChatResult(
             success=True,
             outputs=[Path("/tmp/chat_summary.json")],
@@ -112,7 +121,7 @@ def test_run_stage_dispatches_supported_chat(monkeypatch) -> None:
             citation_ids=[],
         )
 
-    monkeypatch.setattr(ChatPipeline, "run", _fake_chat_run)
+    monkeypatch.setattr(ChatPipeline, "run_for_flow", _fake_chat_run_for_flow)
     stage = CompiledStage(
         stage=FlowStageSpec(
             id="chat_answer",

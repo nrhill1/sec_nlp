@@ -251,6 +251,18 @@ class ChatPipeline(BasePipeline):
         )
 
     def run(self) -> ChatResult:
+        return self.run_for_flow(
+            seed_context=self.config.seed_context,
+            seed_chunks=self.config.seed_chunks,
+        )
+
+    def run_for_flow(
+        self,
+        *,
+        seed_context: ChatSeedBundle | None = None,
+        seed_chunks: tuple[ChatRetrievedChunk, ...] = (),
+    ) -> ChatResult:
+        """Run chat with optional in-memory seeded context overrides."""
         try:
             self.config.setup_paths()
             question = (self.config.question or "").strip()
@@ -292,6 +304,8 @@ class ChatPipeline(BasePipeline):
                     progress=progress,
                     overall_task=overall_task,
                     phase_task=phase_task,
+                    seed_context=seed_context,
+                    seed_chunks=seed_chunks,
                 )
                 stage_state = self.run_stage_chain(
                     initial_state=stage_state,
@@ -304,7 +318,10 @@ class ChatPipeline(BasePipeline):
                 external_metadata=stage_state.external_metadata,
             )
             metadata.update(
-                self._seed_context_metadata(self.config.seed_context)
+                self._seed_context_metadata(
+                    seed=stage_state.seed_context,
+                    seed_chunk_count=len(stage_state.seed_chunks),
+                )
             )
             metadata.update(
                 {
@@ -534,9 +551,14 @@ class ChatPipeline(BasePipeline):
         self._last_search_timings = search_timings
         return self._select_context_chunks(deduped)
 
-    def _search_seed_context(self, question: str) -> list[_RetrievedChunk]:
-        seed = self.config.seed_context
-        if seed is None and not self.config.seed_chunks:
+    def _search_seed_context(
+        self,
+        *,
+        question: str,
+        seed: ChatSeedBundle | None,
+        seed_chunks: tuple[ChatRetrievedChunk, ...],
+    ) -> list[_RetrievedChunk]:
+        if seed is None and not seed_chunks:
             self._last_search_timings = {"vector_search": 0.0, "rerank": 0.0}
             return []
 
@@ -549,8 +571,8 @@ class ChatPipeline(BasePipeline):
         filed_before = self.config.end_date
 
         seeded_chunks: list[_RetrievedChunk] = []
-        if self.config.seed_chunks:
-            for chunk in self.config.seed_chunks:
+        if seed_chunks:
+            for chunk in seed_chunks:
                 snippet = chunk.snippet.strip()
                 if not snippet:
                     continue
@@ -712,9 +734,16 @@ class ChatPipeline(BasePipeline):
 
     @staticmethod
     def _seed_context_metadata(
+        *,
         seed: ChatSeedBundle | None,
+        seed_chunk_count: int,
     ) -> dict[str, JsonValue]:
         if seed is None:
+            if seed_chunk_count > 0:
+                return {
+                    "seeded_context": True,
+                    "seeded_context_chunk_count": seed_chunk_count,
+                }
             return {"seeded_context": False}
         return {
             "seeded_context": True,
@@ -723,7 +752,9 @@ class ChatPipeline(BasePipeline):
             "seeded_context_short_id": seed.upstream_short_id,
             "seeded_context_symbols": list(seed.symbols),
             "seeded_context_queries": list(seed.queries),
-            "seeded_context_chunk_count": len(seed.chunks),
+            "seeded_context_chunk_count": max(
+                len(seed.chunks), seed_chunk_count
+            ),
         }
 
     @staticmethod
