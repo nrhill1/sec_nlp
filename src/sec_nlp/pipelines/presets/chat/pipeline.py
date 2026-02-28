@@ -101,6 +101,8 @@ _RetrievedChunk = ChatRetrievedChunk
 
 
 class _SnippetEmbedder(Protocol):
+    """Internal embedder adapter for snippet-level reranking."""
+
     def embed_documents(self, texts: list[str]) -> list[list[float]]: ...
 
 
@@ -138,6 +140,7 @@ class ChatPipeline(BasePipeline):
         return ChatResult
 
     def _build_components(self) -> None:
+        """Initialize reusable pipeline components for this run."""
         use_seed_only = (
             self.config.seed_context is not None
             or len(self.config.seed_chunks) > 0
@@ -170,9 +173,11 @@ class ChatPipeline(BasePipeline):
         self._stage_chain = build_chat_stage_chain(self)
 
     def _effective_end_date(self) -> date:
+        """Resolve the effective end date for the current run."""
         return self.config.end_date or date.today()
 
     def _chunk_identity(self, chunk: _RetrievedChunk) -> tuple[str, str, str]:
+        """Build a stable identity key for a retrieved chunk."""
         return (
             chunk.collection.casefold(),
             (chunk.accession_number or "").casefold(),
@@ -185,6 +190,7 @@ class ChatPipeline(BasePipeline):
         external_context: str,
         external_metadata: dict[str, JsonValue],
     ) -> ResultDict:
+        """Build base run metadata for chat result outputs."""
         metadata: ResultDict = {
             "collections": list(self.config.collections),
             "forms_filter": self.config.forms or [],
@@ -211,6 +217,7 @@ class ChatPipeline(BasePipeline):
         self,
         citations: list[ChatCitation],
     ) -> dict[str, JsonValue]:
+        """Summarize symbol coverage statistics for selected context chunks."""
         requested = [
             symbol.upper() for symbol in self.config.symbols if symbol.strip()
         ]
@@ -234,6 +241,7 @@ class ChatPipeline(BasePipeline):
         phase_task: TaskID | None,
         phase: str,
     ) -> None:
+        """Update progress state and current pipeline phase metadata."""
         if progress is None or phase_task is None:
             return
 
@@ -381,6 +389,7 @@ class ChatPipeline(BasePipeline):
         progress: Progress | None = None,
         phase_task: TaskID | None = None,
     ) -> list[_RetrievedChunk]:
+        """Search configured vector collections for relevant context chunks."""
         search_timings: dict[str, float] = {
             "vector_search": 0.0,
             "rerank": 0.0,
@@ -558,6 +567,7 @@ class ChatPipeline(BasePipeline):
         seed: ChatSeedBundle | None,
         seed_chunks: tuple[ChatRetrievedChunk, ...],
     ) -> list[_RetrievedChunk]:
+        """Search provided seed context before falling back to vector search."""
         if seed is None and not seed_chunks:
             self._last_search_timings = {"vector_search": 0.0, "rerank": 0.0}
             return []
@@ -660,6 +670,7 @@ class ChatPipeline(BasePipeline):
     def _select_context_chunks(
         self, chunks: list[_RetrievedChunk]
     ) -> list[_RetrievedChunk]:
+        """Select final context chunks after scoring and fairness constraints."""
         if not chunks:
             return []
 
@@ -707,6 +718,7 @@ class ChatPipeline(BasePipeline):
         return selected[: self.config.top_k]
 
     def _build_symbol_filter(self, symbols: list[str]) -> Filter | None:
+        """Build a symbol-scoped metadata filter for vector queries."""
         if not symbols:
             return None
 
@@ -738,6 +750,7 @@ class ChatPipeline(BasePipeline):
         seed: ChatSeedBundle | None,
         seed_chunk_count: int,
     ) -> dict[str, JsonValue]:
+        """Build metadata summary for seeded context chunks."""
         if seed is None:
             if seed_chunk_count > 0:
                 return {
@@ -759,6 +772,7 @@ class ChatPipeline(BasePipeline):
 
     @staticmethod
     def _snippet_fingerprint(text: str) -> str:
+        """Build a stable fingerprint for snippet deduplication."""
         return hashlib.blake2b(
             text.casefold().encode("utf-8"),
             digest_size=8,
@@ -770,6 +784,7 @@ class ChatPipeline(BasePipeline):
         qdrant: QdrantClient,
         collection: str,
     ) -> int | None:
+        """Collect vector points from a Qdrant collection with optional filters."""
         try:
             info = qdrant.get_collection(collection)
             points_count = getattr(info, "points_count", None)
@@ -789,6 +804,7 @@ class ChatPipeline(BasePipeline):
         symbols: list[str],
         question: str,
     ) -> None:
+        """Prefetch collection metadata when configured and available."""
         if not self.config.prefetch_retrieve:
             return
         if "retrieve" not in collection.casefold():
@@ -819,6 +835,7 @@ class ChatPipeline(BasePipeline):
         symbols: list[str],
         question: str,
     ) -> bool:
+        """Hydrate retrieve collection records into chat-ready chunks."""
         queries = (
             self.config.prefetch_queries
             if self.config.prefetch_queries
@@ -868,6 +885,7 @@ class ChatPipeline(BasePipeline):
         *,
         expected_dim: int | None = None,
     ) -> np.ndarray | None:
+        """Coerce embedding payloads into float vectors."""
         if values is None:
             return None
         vector = np.asarray(values, dtype=np.float32)
@@ -887,6 +905,7 @@ class ChatPipeline(BasePipeline):
         query_vector: list[float],
         embedder: _SnippetEmbedder,
     ) -> list[_RetrievedChunk]:
+        """Rerank candidate chunks with MMR for diversity and relevance."""
         if len(chunks) <= 1:
             return chunks
 
@@ -973,6 +992,7 @@ class ChatPipeline(BasePipeline):
 
     @staticmethod
     def _normalized_form_filters(forms: list[str] | None) -> set[str]:
+        """Normalize form filters for consistent metadata matching."""
         if not forms:
             return set()
 
@@ -988,6 +1008,7 @@ class ChatPipeline(BasePipeline):
 
     @staticmethod
     def _parse_filed_date(value: str | None) -> date | None:
+        """Parse filed date."""
         if value is None:
             return None
         cleaned = value.strip()
@@ -1018,6 +1039,7 @@ class ChatPipeline(BasePipeline):
         filed_after: date | None,
         filed_before: date | None,
     ) -> bool:
+        """Return whether a chunk satisfies symbol/date/form filters."""
         if forms:
             chunk_form = cls._normalized_form_filters([chunk.form_type or ""])
             if not chunk_form.intersection(forms):
@@ -1035,6 +1057,7 @@ class ChatPipeline(BasePipeline):
 
     @staticmethod
     def _parse_news_timestamp(value: str | None) -> datetime | None:
+        """Parse a news timestamp into a timezone-aware datetime when possible."""
         if value is None:
             return None
         cleaned = value.strip()
@@ -1051,6 +1074,7 @@ class ChatPipeline(BasePipeline):
 
     @staticmethod
     def _question_keywords(question: str, max_keywords: int = 8) -> list[str]:
+        """Extract question keywords."""
         keywords: list[str] = []
         seen: set[str] = set()
         for match in _QUESTION_TOKEN_RE.finditer(question):
@@ -1066,6 +1090,7 @@ class ChatPipeline(BasePipeline):
         return keywords
 
     def _context_symbol(self, citations: list[ChatCitation]) -> str | None:
+        """Resolve the primary symbol associated with a context chunk."""
         configured = [
             symbol.upper() for symbol in self.config.symbols if symbol.strip()
         ]
@@ -1082,6 +1107,7 @@ class ChatPipeline(BasePipeline):
         self,
         citations: list[ChatCitation],
     ) -> str | None:
+        """Resolve the symbol associated with an external context record."""
         configured = [
             symbol.upper() for symbol in self.config.symbols if symbol.strip()
         ]
@@ -1096,6 +1122,7 @@ class ChatPipeline(BasePipeline):
 
     @staticmethod
     def _citation_symbols(citations: list[ChatCitation]) -> list[str]:
+        """Extract citation symbols."""
         symbols = [
             citation.symbol.upper()
             for citation in citations
@@ -1107,6 +1134,7 @@ class ChatPipeline(BasePipeline):
         self,
         citations: list[ChatCitation],
     ) -> list[str]:
+        """Resolve market context symbols."""
         symbol_scope = [
             symbol.upper() for symbol in self.config.symbols if symbol.strip()
         ]
@@ -1137,6 +1165,7 @@ class ChatPipeline(BasePipeline):
         question: str,
         citations: list[ChatCitation],
     ) -> tuple[str, dict[str, JsonValue]]:
+        """Build external market and news context blocks for prompt injection."""
         symbol_scope = [
             symbol.upper() for symbol in self.config.symbols if symbol.strip()
         ]
@@ -1210,6 +1239,7 @@ class ChatPipeline(BasePipeline):
     def _market_context_lines(
         self, *, symbols: list[str]
     ) -> tuple[list[str], list[str], dict[str, JsonValue]]:
+        """Format market context records into prompt-ready lines."""
         if not symbols:
             return [], [], {}
 
@@ -1305,6 +1335,7 @@ class ChatPipeline(BasePipeline):
         return lines, covered_symbols, bundle_payload
 
     def _news_context_lines(self, *, symbol: str, question: str) -> list[str]:
+        """Format news context records into prompt-ready lines."""
         lookback_start = self._effective_end_date() - timedelta(
             days=self.config.news_lookback_days
         )
@@ -1361,6 +1392,7 @@ class ChatPipeline(BasePipeline):
         collection: str,
         point,
     ) -> _RetrievedChunk | None:
+        """Map a bullet point back to its best-matching source chunk."""
         payload = getattr(point, "payload", None)
         if not isinstance(payload, dict):
             return None
@@ -1427,6 +1459,7 @@ class ChatPipeline(BasePipeline):
         *,
         keys: tuple[str, ...],
     ) -> str | None:
+        """Return the first non-empty string from candidate values."""
         for key in keys:
             value = payload.get(key)
             if isinstance(value, str) and value.strip():
@@ -1438,6 +1471,7 @@ class ChatPipeline(BasePipeline):
 
     @staticmethod
     def _extract_snippet(payload: dict[str, JsonValue]) -> str | None:
+        """Extract snippet."""
         candidates: list[str] = []
 
         direct_keys = ("snippet", "page_content", "content", "text")
@@ -1469,6 +1503,7 @@ class ChatPipeline(BasePipeline):
 
     @staticmethod
     def _extract_point_vector(point) -> list[float] | None:
+        """Extract point vector."""
         candidate = getattr(point, "vector", None)
         if candidate is None:
             candidate = getattr(point, "vectors", None)
@@ -1494,6 +1529,7 @@ class ChatPipeline(BasePipeline):
     def _to_citations(
         self, chunks: list[_RetrievedChunk]
     ) -> list[ChatCitation]:
+        """Convert selected chunks into citation payload entries."""
         citations: list[ChatCitation] = []
         for idx, chunk in enumerate(chunks, start=1):
             citations.append(
@@ -1518,6 +1554,7 @@ class ChatPipeline(BasePipeline):
         citations: list[ChatCitation],
         external_context: str = "",
     ) -> tuple[str, list[str]]:
+        """Build the final answer payload with citations and metadata."""
         if not citations:
             return (
                 "I could not find indexed evidence for this question in the selected collections.",
@@ -1571,6 +1608,7 @@ class ChatPipeline(BasePipeline):
         return answer, used_ids
 
     def _effective_max_new_tokens(self, citation_count: int) -> int:
+        """Resolve the effective max new tokens for the current run."""
         configured = max(1, self.config.llm.max_new_tokens)
         cap = self.config.generation_token_cap
         if cap <= 0:
@@ -1584,12 +1622,14 @@ class ChatPipeline(BasePipeline):
         return max(96, min(configured, cap, adaptive_target))
 
     def _effective_context_token_budget(self, citation_count: int) -> int:
+        """Resolve the effective context token budget for the current run."""
         configured = max(1, self.config.context_token_budget)
         effective_generation = self._effective_max_new_tokens(citation_count)
         adaptive_cap = max(512, effective_generation * 4)
         return max(256, min(configured, adaptive_cap))
 
     def _invoke_llm_with_timeout(self, *, llm, prompt: str):
+        """Invoke the LLM with explicit timeout handling."""
         invoke = getattr(llm, "invoke", None)
         if not callable(invoke):
             raise TypeError("Configured LLM does not expose invoke(prompt)")
@@ -1615,6 +1655,7 @@ class ChatPipeline(BasePipeline):
         citations: list[ChatCitation],
         external_context: str = "",
     ) -> str:
+        """Build the LLM prompt from question, context, and output constraints."""
         symbol_scope = [
             symbol.upper() for symbol in self.config.symbols if symbol.strip()
         ]
@@ -1703,6 +1744,7 @@ class ChatPipeline(BasePipeline):
 
     @staticmethod
     def _estimate_tokens(text: str) -> int:
+        """Estimate token count for a text segment."""
         normalized = text.strip()
         if not normalized:
             return 0
@@ -1710,6 +1752,7 @@ class ChatPipeline(BasePipeline):
 
     @classmethod
     def _clip_to_token_budget(cls, text: str, budget_tokens: int) -> str:
+        """Clip text to fit within the requested token budget."""
         if budget_tokens <= 0:
             return ""
         max_chars = max(1, budget_tokens * 4)
@@ -1723,6 +1766,7 @@ class ChatPipeline(BasePipeline):
     def _pack_context_citations(
         self, citations: list[ChatCitation]
     ) -> list[tuple[ChatCitation, str]]:
+        """Pack context chunks and citations within the token budget."""
         effective_budget = self._effective_context_token_budget(len(citations))
         self._last_context_token_budget = effective_budget
         budget_remaining = effective_budget
@@ -1763,6 +1807,7 @@ class ChatPipeline(BasePipeline):
         answer: str,
         citation_ids: list[str],
     ) -> list[ChatTurn]:
+        """Build transcript turns for chat output artifacts."""
         turns: list[ChatTurn] = [
             ChatTurn(role=turn.role, message=turn.message)
             for turn in self.config.chat_history
@@ -1788,6 +1833,7 @@ class ChatPipeline(BasePipeline):
         external_context: str,
         external_metadata: dict[str, JsonValue],
     ) -> list[Path]:
+        """Write pipeline outputs and return generated artifact paths."""
         symbol = self._context_symbol(citations) or "ALL"
 
         symbol_out = self.config.get_symbol_output_dir(symbol)

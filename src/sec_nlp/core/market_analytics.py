@@ -68,6 +68,7 @@ class MarketContextBundle(BaseModel):
 
 
 def _normalize_symbols(symbols: Sequence[str]) -> list[str]:
+    """Normalize symbols."""
     normalized: list[str] = []
     seen: set[str] = set()
     for raw in symbols:
@@ -82,10 +83,12 @@ def _normalize_symbols(symbols: Sequence[str]) -> list[str]:
 
 
 def _sorted_quotes(quotes: Sequence[MarketQuote]) -> list[MarketQuote]:
+    """Sort quote records by timestamp ascending."""
     return sorted(quotes, key=lambda quote: quote.timestamp)
 
 
 def _close_series(quotes: Sequence[MarketQuote]) -> list[float]:
+    """Extract close-price series from quote records."""
     ordered = _sorted_quotes(quotes)
     closes: list[float] = []
     for quote in ordered:
@@ -94,6 +97,7 @@ def _close_series(quotes: Sequence[MarketQuote]) -> list[float]:
 
 
 def _return_pct(closes: Sequence[float]) -> float | None:
+    """Compute total return percentage for a quote series."""
     if len(closes) < 2:
         return None
     first = closes[0]
@@ -104,6 +108,7 @@ def _return_pct(closes: Sequence[float]) -> float | None:
 
 
 def _safe_simple_returns(closes: Sequence[float]) -> list[float]:
+    """Safely read simple returns."""
     if len(closes) < 2:
         return []
     try:
@@ -120,6 +125,7 @@ def _safe_simple_returns(closes: Sequence[float]) -> list[float]:
 def _returns_by_timestamp(
     quotes: Sequence[MarketQuote],
 ) -> dict[int, float]:
+    """Compute returns by timestamp."""
     ordered = _sorted_quotes(quotes)
     closes = _close_series(ordered)
     returns = _safe_simple_returns(closes)
@@ -133,6 +139,7 @@ def _aligned_returns(
     symbol_quotes: Sequence[MarketQuote],
     benchmark_quotes: Sequence[MarketQuote],
 ) -> tuple[list[float], list[float]]:
+    """Build aligned returns."""
     symbol_returns = _returns_by_timestamp(symbol_quotes)
     benchmark_returns = _returns_by_timestamp(benchmark_quotes)
     common_timestamps = sorted(set(symbol_returns) & set(benchmark_returns))
@@ -149,6 +156,7 @@ def _safe_beta(
     symbol_quotes: Sequence[MarketQuote],
     benchmark_quotes: Sequence[MarketQuote],
 ) -> float | None:
+    """Compute beta while guarding against degenerate inputs."""
     symbol_returns, benchmark_returns = _aligned_returns(
         symbol_quotes, benchmark_quotes
     )
@@ -161,6 +169,7 @@ def _safe_beta(
 
 
 def _safe_std_dev(closes: Sequence[float]) -> float | None:
+    """Compute standard deviation with short-series safeguards."""
     returns = _safe_simple_returns(closes)
     if len(returns) < 2:
         return None
@@ -171,6 +180,7 @@ def _safe_std_dev(closes: Sequence[float]) -> float | None:
 
 
 def _safe_atr(quotes: Sequence[MarketQuote]) -> float | None:
+    """Compute average true range with short-series safeguards."""
     ordered = _sorted_quotes(quotes)
     if len(ordered) < 2:
         return None
@@ -184,6 +194,7 @@ def _safe_atr(quotes: Sequence[MarketQuote]) -> float | None:
 
 
 def _safe_volume_spike(quotes: Sequence[MarketQuote]) -> float | None:
+    """Compute volume-spike ratio with baseline safeguards."""
     ordered = _sorted_quotes(quotes)
     volumes = [float(quote.volume) for quote in ordered]
     if len(volumes) < 2:
@@ -195,6 +206,7 @@ def _safe_volume_spike(quotes: Sequence[MarketQuote]) -> float | None:
 
 
 def _max_drawdown_pct(closes: Sequence[float]) -> float | None:
+    """Compute maximum drawdown percentage for a quote series."""
     if len(closes) < 2:
         return None
     peak = closes[0]
@@ -219,6 +231,7 @@ def _resolve_quotes(
     start_date: date,
     end_date: date,
 ) -> dict[str, list[MarketQuote]]:
+    """Resolve quotes."""
     try:
         batch = retriever.retrieve_ranges(symbols, (start_date, end_date))
         return {symbol.upper(): quotes for symbol, quotes in batch.items()}

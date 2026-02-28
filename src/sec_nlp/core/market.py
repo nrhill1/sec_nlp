@@ -47,6 +47,7 @@ class MarketCacheEntry:
 
 
 def _load_market_module() -> ModuleType:
+    """Load market module."""
     try:
         return import_module("market")
     except Exception as exc:  # pragma: no cover - depends on extension install
@@ -57,6 +58,7 @@ def _load_market_module() -> ModuleType:
 
 
 def _coerce_date(value: date | datetime) -> date:
+    """Coerce user input into a date value when possible."""
     if isinstance(value, datetime):
         return value.date()
     if isinstance(value, date):
@@ -67,6 +69,7 @@ def _coerce_date(value: date | datetime) -> date:
 def _coerce_date_range(
     date_range: Sequence[date | datetime],
 ) -> tuple[date, date]:
+    """Coerce date-range values into timezone-aware date bounds."""
     if len(date_range) != 2:
         raise ValueError("date_range must contain exactly two values")
     start_date = _coerce_date(date_range[0])
@@ -77,6 +80,7 @@ def _coerce_date_range(
 
 
 def _normalize_quote(raw: dict[str, float | int]) -> MarketQuote:
+    """Normalize quote."""
     return MarketQuote(
         timestamp=int(raw["timestamp"]),
         open_price=float(raw["open_price"]),
@@ -101,6 +105,7 @@ class MarketRetriever:
         retry_backoff_seconds: float | None = None,
         retry_backoff_multiplier: float | None = None,
     ) -> None:
+        """Initialize the object."""
         self._market = module or _load_market_module()
         self._cache_ttl_seconds = (
             MARKET_CACHE_TTL_SECONDS
@@ -132,9 +137,11 @@ class MarketRetriever:
         message: str,
         *args: str | int | float | bool | None,
     ) -> None:
+        """Log cache status and market fetch diagnostics."""
         logger.debug(message, *args)
 
     def _cache_enabled(self) -> bool:
+        """Cache enabled."""
         return self._cache_ttl_seconds > 0 and self._cache_max_entries > 0
 
     def _get_cached_quotes(
@@ -142,6 +149,7 @@ class MarketRetriever:
         cache_key: CacheKey,
         now: float,
     ) -> tuple[MarketQuote, ...] | None:
+        """Get cached quotes."""
         if not self._cache_enabled():
             return None
         entry = self._cache.get(cache_key)
@@ -159,6 +167,7 @@ class MarketRetriever:
         now: float,
         quotes: tuple[MarketQuote, ...],
     ) -> None:
+        """Store fetched quotes in the local cache backend."""
         if not self._cache_enabled():
             return
         self._cache[cache_key] = MarketCacheEntry(
@@ -174,6 +183,7 @@ class MarketRetriever:
         operation_name: str,
         operation: Callable[[], T],
     ) -> T:
+        """Execute a market-data call with bounded retries."""
         attempt = 0
         delay_seconds = self._retry_backoff_seconds
         while True:

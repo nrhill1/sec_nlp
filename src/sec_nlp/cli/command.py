@@ -120,16 +120,20 @@ class BasePipelineCommand(BaseModel, ABC):
         self._handle_result(result)
 
     def _get_pipeline_class(self) -> type[BasePipeline]:
+        """Get pipeline class."""
         return type(self).pipeline_class()
 
     def _has_symbols(self) -> bool:
+        """Return whether symbols."""
         symbols = getattr(self, "symbols", [])
         return bool(symbols)
 
     def _symbols_required(self) -> bool:
+        """Return whether this command requires at least one symbol."""
         return not bool(getattr(self, "symbols_optional", False))
 
     def _log_header(self) -> None:
+        """Log the standard run header for the active pipeline command."""
         title = (
             self._pipeline_type().replace("_", " ").title()
             if self._pipeline_type()
@@ -145,6 +149,7 @@ class BasePipelineCommand(BaseModel, ABC):
         get_rich_console().print(Text.from_ansi(header))
 
     def _get_header_subtitle(self) -> str:
+        """Get header subtitle."""
         pipeline_cls = self._get_pipeline_class()
         return getattr(pipeline_cls, "description", "")
 
@@ -295,6 +300,7 @@ class BasePipelineCommand(BaseModel, ABC):
         console.print(table)
 
     def _validation_config(self) -> BasePipelineSettings:
+        """Build validation settings for the active command payload."""
         if isinstance(self, BasePipelineSettings):
             return self
         raise TypeError(
@@ -302,6 +308,7 @@ class BasePipelineCommand(BaseModel, ABC):
         )
 
     def _handle_result(self, result: BasePipelineResult) -> None:
+        """Render pipeline results and set command exit behavior."""
         pipeline_name = self._pipeline_type() or "Pipeline"
         logger.info(format_divider())
 
@@ -336,21 +343,27 @@ class BasePipelineCommand(BaseModel, ABC):
         )
 
     def _should_validate(self) -> bool:
+        """Return whether validate."""
         return True
 
     def _should_collect_metrics(self) -> bool:
+        """Return whether collect metrics."""
         return bool(getattr(self, "collect_metrics", False))
 
     def _supports_interactive(self) -> bool:
+        """Return whether this command supports interactive execution."""
         return False
 
     def _run_interactive(self) -> None:
+        """Run interactive."""
         self._handle_missing_symbols()
 
     def _handle_missing_symbols(self) -> None:
+        """Emit an error when required symbol arguments are missing."""
         logger.error(color_text("No symbols provided.", color="red"))
 
     def _run_pipeline(self) -> BasePipelineResult:
+        """Run pipeline."""
         pipeline_cls = self._get_pipeline_class()
         profile_root = getattr(self, "profile_dir", None)
         profiler = PipelineProfiler(
@@ -422,6 +435,7 @@ class BasePipelineCommand(BaseModel, ABC):
             logger.debug("Run registry update skipped")
 
     def _pipeline_type(self) -> str:
+        """Return the pipeline type identifier for this command class."""
         pipeline_cls = self._get_pipeline_class()
         return getattr(pipeline_cls, "pipeline_type", "")
 
@@ -429,6 +443,7 @@ class BasePipelineCommand(BaseModel, ABC):
     def _normalize_registry_metadata(
         cls, value: Mapping[str, object] | None
     ) -> dict[str, object] | None:
+        """Normalize registry metadata."""
         if value is None:
             return None
         normalized = cls._to_registry_value(value)
@@ -444,6 +459,7 @@ class BasePipelineCommand(BaseModel, ABC):
 
     @classmethod
     def _to_registry_value(cls, value: object) -> object | None:
+        """Convert command values to run-registry-safe scalar payloads."""
         if value is None:
             return None
         if isinstance(value, (str, int, float, bool)):

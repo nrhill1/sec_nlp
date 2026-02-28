@@ -107,6 +107,7 @@ class RetrievePipeline(BasePipeline):
         return RetrieveResult
 
     def _build_components(self) -> None:
+        """Initialize reusable pipeline components for this run."""
         self._ensure_embedding_components()
         self._ensure_qdrant_client()
         self._stage_chain = build_retrieve_stage_chain(self)
@@ -140,6 +141,7 @@ class RetrievePipeline(BasePipeline):
         return result, bundle, chunks
 
     def _ensure_embedding_components(self) -> None:
+        """Ensure embedding components are initialized before use."""
         if not (
             self.config.rerank_with_embeddings or self.config.index_results
         ):
@@ -169,6 +171,7 @@ class RetrievePipeline(BasePipeline):
             self._embedding_dim = None
 
     def _ensure_qdrant_client(self) -> None:
+        """Ensure a Qdrant client is available for vector operations."""
         if not self.config.index_results:
             return
         if self._qdrant_client is not None:
@@ -205,6 +208,7 @@ class RetrievePipeline(BasePipeline):
         search_symbol: str | None,
         candidate_searcher: RetrieveCandidateSearcher | None,
     ) -> dict[str, list[EFTSHit]]:
+        """Run candidate search for a symbol and return scoped EFTS hits."""
         if (
             candidate_searcher is not None
             and run_candidate_search is _ORIGINAL_RUN_CANDIDATE_SEARCH
@@ -226,6 +230,7 @@ class RetrievePipeline(BasePipeline):
         output_symbol: str,
         candidates_by_query: dict[str, list[EFTSHit]],
     ) -> list[RetrievalHit]:
+        """Rank candidate hits by relevance and configured ranking signals."""
         return rank_retrieval_hits(
             symbol=output_symbol,
             candidates_by_query=candidates_by_query,
@@ -237,6 +242,7 @@ class RetrievePipeline(BasePipeline):
         *,
         hits: list[RetrievalHit],
     ) -> list[RetrievalHit]:
+        """Prune ranked hits using lexical overlap and hydration gates."""
         return prune_hits_by_query_terms(
             hits=hits,
             min_hits=self.config.query_term_min_hits,
@@ -254,6 +260,7 @@ class RetrievePipeline(BasePipeline):
         output_symbol: str,
         hits: list[RetrievalHit],
     ) -> list[RetrievalHit]:
+        """Download missing filings and extract chunked snippets for hits."""
         return download_and_chunk_hits(
             symbol=output_symbol,
             hits=hits,
@@ -265,6 +272,7 @@ class RetrievePipeline(BasePipeline):
         *,
         hits: list[RetrievalHit],
     ) -> list[RetrievalHit]:
+        """Apply embedding-based reranking to hydrated chunk candidates."""
         self._ensure_embedding_components()
         return rerank_with_embeddings(
             hits=hits,
@@ -280,6 +288,7 @@ class RetrievePipeline(BasePipeline):
         hits: list[RetrievalHit],
         market_signals: dict[str, JsonValue] | None,
     ) -> list[RetrievalHit]:
+        """Index selected hits into the configured vector store."""
         self._ensure_qdrant_client()
         return index_retrieval_hits(
             symbol=output_symbol,
@@ -302,6 +311,7 @@ class RetrievePipeline(BasePipeline):
         RetrieveChatSeedBundle | None,
         list[ChatRetrievedChunk] | None,
     ]:
+        """Execute the main pipeline workflow and return a result object."""
         try:
             self.config.setup_paths()
             if not self.config.queries:
@@ -612,6 +622,7 @@ class RetrievePipeline(BasePipeline):
         int,
         list[RetrievalHit],
     ]:
+        """Run retrieval for one symbol and return symbol-level output metadata."""
         stage_chain = self._stage_chain
         if stage_chain is None:
             stage_chain = build_retrieve_stage_chain(self)
@@ -643,6 +654,7 @@ class RetrievePipeline(BasePipeline):
         *,
         output_symbol: str,
     ) -> dict[str, JsonValue]:
+        """Build market context metadata attached to retrieve outputs."""
         if not self.config.include_market_signals:
             return {}
         if output_symbol == "ALL":
@@ -673,6 +685,7 @@ class RetrievePipeline(BasePipeline):
     def _market_signals_for_payload(
         market_context: dict[str, JsonValue],
     ) -> dict[str, JsonValue] | None:
+        """Build compact market signal payloads for vector indexing."""
         metrics_raw = market_context.get("metrics")
         if not isinstance(metrics_raw, list) or not metrics_raw:
             return None
@@ -697,6 +710,7 @@ class RetrievePipeline(BasePipeline):
         symbol: str,
         phase: str,
     ) -> None:
+        """Update progress state and current pipeline phase metadata."""
         if progress is None or phase_task is None:
             return
 
@@ -720,6 +734,7 @@ class RetrievePipeline(BasePipeline):
         hits: list[RetrievalHit],
         symbol_metadata: dict[str, JsonValue] | None = None,
     ) -> list[Path]:
+        """Write pipeline outputs and return generated artifact paths."""
         symbol_out = self.config.get_symbol_output_dir(symbol)
         output_context = build_run_output_context(
             symbol=symbol,

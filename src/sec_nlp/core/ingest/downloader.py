@@ -22,6 +22,7 @@ from sec_nlp.types import JsonDict, JsonValue
 def _success_download_result(
     *, downloaded: int, form_type: str, skipped_existing: int | None = None
 ) -> DownloadResult:
+    """Build a successful download-result payload."""
     result: DownloadResult = {
         "success": True,
         "downloaded": downloaded,
@@ -33,6 +34,7 @@ def _success_download_result(
 
 
 def _error_download_result(error: str) -> DownloadResult:
+    """Build a failed download-result payload with error metadata."""
     return {
         "success": False,
         "error": error,
@@ -348,6 +350,7 @@ def _lookup_primary_document(
     submissions_cache: dict[str, JsonDict],
     supplemental_cache: dict[str, JsonDict],
 ) -> str | None:
+    """Look up primary document."""
     payload = submissions_cache.get(cik)
     if payload is None:
         payload = _fetch_submissions_payload(cik, user_agent)
@@ -378,6 +381,7 @@ def _download_accession_files(
     mode: FilingMode,
     user_agent: str,
 ) -> tuple[int, int]:
+    """Download filing files for one accession into the target directory."""
     accession_dir.mkdir(parents=True, exist_ok=True)
 
     skipped_existing = 0
@@ -418,17 +422,20 @@ def _download_accession_files(
 
 
 def _fetch_submissions_payload(cik: str, user_agent: str) -> JsonDict:
+    """Fetch and parse SEC submissions payload for a CIK."""
     cik_value = cik.strip().zfill(10)
     url = f"https://data.sec.gov/submissions/CIK{cik_value}.json"
     return _fetch_json(url, user_agent)
 
 
 def _fetch_submission_file(name: str, user_agent: str) -> JsonDict:
+    """Fetch submission file."""
     url = f"https://data.sec.gov/submissions/{name}"
     return _fetch_json(url, user_agent)
 
 
 def _fetch_json(url: str, user_agent: str) -> JsonDict:
+    """Fetch json."""
     request = urllib.request.Request(
         url,
         headers={
@@ -448,6 +455,7 @@ def _fetch_json(url: str, user_agent: str) -> JsonDict:
 
 
 def _find_primary_document(payload: JsonDict, accession: str) -> str | None:
+    """Select the primary filing document from filing metadata rows."""
     table = _extract_filing_table(payload)
     accessions = table.get("accessionNumber")
     documents = table.get("primaryDocument")
@@ -464,6 +472,7 @@ def _find_primary_document(payload: JsonDict, accession: str) -> str | None:
 
 
 def _normalize_form_type(value: JsonValue) -> JsonValue:
+    """Normalize form type."""
     if not isinstance(value, str):
         return None
     cleaned = value.strip()
@@ -475,6 +484,7 @@ def _normalize_form_type(value: JsonValue) -> JsonValue:
 
 
 def _find_form_type(payload: JsonDict, accession: JsonValue) -> JsonValue:
+    """Find form type."""
     if not isinstance(accession, str):
         return None
     table = _extract_filing_table(payload)
@@ -493,6 +503,7 @@ def _find_form_type(payload: JsonDict, accession: JsonValue) -> JsonValue:
 
 
 def _extract_filing_table(payload: JsonDict) -> JsonDict:
+    """Extract filing table."""
     filings_block = coerce_json_dict(payload.get("filings"))
     if filings_block:
         recent = coerce_json_dict(filings_block.get("recent"))
@@ -502,6 +513,7 @@ def _extract_filing_table(payload: JsonDict) -> JsonDict:
 
 
 def _iter_submission_files(payload: JsonDict) -> Iterable[str]:
+    """Iterate known SEC submission file URLs for fallback fetches."""
     filings_block = coerce_json_dict(payload.get("filings"))
     if not filings_block:
         return []
@@ -520,6 +532,7 @@ def _iter_submission_files(payload: JsonDict) -> Iterable[str]:
 
 
 def _download_to_path(url: str, path: Path, user_agent: str) -> None:
+    """Download to path."""
     request = urllib.request.Request(
         url,
         headers={

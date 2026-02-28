@@ -214,6 +214,7 @@ class AnalyzerRunnable(
         return min(adaptive, self.batch_size)
 
     def _selected_output_fields(self) -> set[str]:
+        """Filter model output to selected analysis fields."""
         selected = {
             field.strip()
             for field in self.analysis_fields
@@ -232,11 +233,13 @@ class AnalyzerRunnable(
         return selected
 
     def _cache_path(self) -> Path | None:
+        """Cache path."""
         if not self.llm_cache_enabled:
             return None
         return self.llm_cache_file
 
     def _ensure_cache_loaded(self) -> None:
+        """Ensure cache loaded is initialized and available."""
         cache_path = self._cache_path()
         if self._cache_loaded or cache_path is None:
             return
@@ -271,6 +274,7 @@ class AnalyzerRunnable(
         self._cache_entries = loaded
 
     def _cache_key(self, item: AnalysisInput) -> str:
+        """Build a deterministic cache key for analysis input."""
         payload = {
             "namespace": self.llm_cache_namespace,
             "input": item.model_dump(mode="json", exclude_none=True),
@@ -286,6 +290,7 @@ class AnalyzerRunnable(
     def _lookup_cached_result(
         self, item: AnalysisInput
     ) -> AnalysisResult | None:
+        """Look up a cached analysis result for the current item."""
         self._ensure_cache_loaded()
         key = self._cache_key(item)
         raw = self._cache_entries.get(key)
@@ -308,6 +313,7 @@ class AnalyzerRunnable(
         item: AnalysisInput,
         result: AnalysisResult,
     ) -> None:
+        """Store a computed analysis result in the response cache."""
         self._ensure_cache_loaded()
         key = self._cache_key(item)
         self._cache_entries[key] = result.model_dump(
@@ -317,6 +323,7 @@ class AnalyzerRunnable(
         self._cache_dirty = True
 
     def _flush_cache(self) -> None:
+        """Flush pending cache writes to disk."""
         if not self._cache_dirty:
             return
         cache_path = self._cache_path()
@@ -401,7 +408,7 @@ class AnalyzerRunnable(
     def _process_batch(
         self, batch: list[AnalysisInput], docs: list[Document]
     ) -> list[AnalysisResultDict]:
-        """Process a batch with fallback to individual processing."""
+        """Run batch analysis, falling back to per-item execution when needed."""
         if not batch:
             raise ValueError("Cannot process empty batch")
         if len(batch) != len(docs):
@@ -446,6 +453,7 @@ class AnalyzerRunnable(
     def _invoke_batch_models(
         self, batch: list[AnalysisInput]
     ) -> list[AnalysisResult | Exception]:
+        """Invoke all configured batch models for the current batch."""
         if not self.ensemble_graphs:
             return self._invoke_batch_for_graph(
                 graph=self.graph,
@@ -484,6 +492,7 @@ class AnalyzerRunnable(
         batch: list[AnalysisInput],
         label: str,
     ) -> list[AnalysisResult | Exception]:
+        """Invoke one graph for the current batch payload."""
         config_callbacks = self._build_runnable_config(include_run_id=False)
         attempts = self.llm_retry_attempts + 1
         backoff = self.llm_retry_backoff
@@ -543,6 +552,7 @@ class AnalyzerRunnable(
         self,
         per_model_results: list[list[AnalysisResult | Exception]],
     ) -> list[AnalysisResult | Exception]:
+        """Aggregate ensemble model outputs into one result set."""
         if not per_model_results:
             return []
 
@@ -594,6 +604,7 @@ class AnalyzerRunnable(
 
     @staticmethod
     def _select_anchor_result(results: list[AnalysisResult]) -> AnalysisResult:
+        """Select anchor result."""
         anchor = results[0]
         anchor_score = (
             float(anchor.confidence_score)
@@ -619,6 +630,7 @@ class AnalyzerRunnable(
         *,
         cache_items: list[AnalysisInput] | None = None,
     ) -> list[AnalysisResultDict]:
+        """Format model results."""
         formatted_results: list[AnalysisResultDict] = []
         cache_candidates = cache_items if cache_items is not None else []
         for idx, (item, doc, result) in enumerate(
@@ -639,7 +651,7 @@ class AnalyzerRunnable(
     def _process_single_item(
         self, item: AnalysisInput, doc: Document
     ) -> AnalysisResultDict:
-        """Process a single item."""
+        """Analyze one item and return a normalized result payload."""
         result = self._invoke_single_model(item)
         if isinstance(result, Exception):
             return self._create_error_result(item, doc, result)
@@ -648,6 +660,7 @@ class AnalyzerRunnable(
     def _invoke_single_model(
         self, item: AnalysisInput
     ) -> AnalysisResult | Exception:
+        """Invoke one model for a single analysis item."""
         return self._invoke_single_model_for_graph(
             item,
             graph=self.graph,
@@ -661,6 +674,7 @@ class AnalyzerRunnable(
         graph: Runnable[AnalysisInput, AnalysisResult],
         label: str,
     ) -> AnalysisResult | Exception:
+        """Invoke one graph for a single analysis item."""
         try:
             config_callbacks = self._build_runnable_config(include_run_id=True)
             return graph.invoke(item, config=config_callbacks)
@@ -690,6 +704,7 @@ class AnalyzerRunnable(
     def _build_matched_query_list(
         matched_queries: list[dict[str, float | str]],
     ) -> list[str] | None:
+        """Build matched query list."""
         queries: list[str] = []
         seen: set[str] = set()
         for item in matched_queries:
@@ -710,6 +725,7 @@ class AnalyzerRunnable(
         matched_queries: list[dict[str, float | str]],
         content: str | None,
     ) -> str | None:
+        """Select primary query."""
         if not matched_queries:
             return None
         best_query: str | None = None
@@ -740,6 +756,7 @@ class AnalyzerRunnable(
 
     @classmethod
     def _has_numeric_signal(cls, *values: str | None) -> bool:
+        """Return whether numeric signal."""
         for value in values:
             if value and NUMERIC_SIGNAL_RE.search(value):
                 return True
@@ -755,6 +772,7 @@ class AnalyzerRunnable(
         overlap_ratio: float,
         result: AnalysisResult,
     ) -> float | None:
+        """Calibrate confidence scores for returned analysis results."""
         if llm_confidence is None and not matched_terms and not missing_terms:
             return None
 
@@ -779,6 +797,7 @@ class AnalyzerRunnable(
     def _extract_matched_queries(
         metadata: MetadataRecord | None,
     ) -> list[dict[str, float | str]]:
+        """Extract matched queries."""
         raw_matches = (metadata or {}).get("matched_queries")
         if isinstance(raw_matches, list):
             cleaned: list[dict[str, float | str]] = []
@@ -807,6 +826,7 @@ class AnalyzerRunnable(
     def _format_result(
         self, result: AnalysisResult, doc: Document
     ) -> AnalysisResultDict:
+        """Format result."""
         source_metadata: MetadataRecord = {
             **(doc.metadata or {}),
             "accession_number": get_accession_from_metadata(doc.metadata),
@@ -986,6 +1006,7 @@ class AnalyzerRunnable(
     def _build_runnable_config(
         self, *, include_run_id: bool
     ) -> RunnableConfig | None:
+        """Build runnable config."""
         config: RunnableConfig = {}
         if self.callbacks:
             config["callbacks"] = self.callbacks

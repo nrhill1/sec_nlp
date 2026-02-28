@@ -39,6 +39,7 @@ def aggregate_period_records(
     """
 
     def _get_accession(rec: WarrantyExtractionDict) -> str | None:
+        """Extract accession number from a period record."""
         return (
             rec.get("accession_number")
             or rec.get("source_metadata", {}).get("accession_number")
@@ -46,11 +47,13 @@ def aggregate_period_records(
         )
 
     def _get_method(rec: WarrantyExtractionDict) -> str:
+        """Extract method value from a period record."""
         return str(rec.get("source_metadata", {}).get("method", "llm"))
 
     def _extract_period_info(
         rec: WarrantyExtractionDict,
     ) -> tuple[str | None, str | None]:
+        """Extract normalized period metadata for aggregation."""
         meta = rec.get("source_metadata", {}) or {}
         period_val = (
             rec.get("period") or meta.get("period") or meta.get("fiscal_year")
@@ -69,6 +72,7 @@ def aggregate_period_records(
     def _init_agg(
         period: str | None, period_end: str | None, acc: str | None = None
     ) -> WarrantyAggregateDict:
+        """Initialize an aggregation bucket for one period key."""
         agg: WarrantyAggregateDict = {
             "symbol": symbol,
             "period": period,
@@ -92,6 +96,7 @@ def aggregate_period_records(
         new_val: float | None,
         new_is_xbrl: bool,
     ) -> None:
+        """Merge two values using source-priority rules."""
         if new_val is None:
             return
         if field == "warranty_liability":
@@ -126,6 +131,7 @@ def aggregate_period_records(
     def _merge_agg(
         target: WarrantyAggregateDict, source: WarrantyAggregateDict
     ) -> None:
+        """Merge source aggregates into one combined aggregate."""
         target["accessions"].update(source.get("accessions", set()))
         target["source_flags"].update(source.get("source_flags", set()))
         target["xbrl_conflicted_fields"].update(
@@ -160,6 +166,7 @@ def aggregate_period_records(
             target["confidence"] = source["confidence"]
 
     def _source_label(flags: set[str]) -> str:
+        """Build a stable source label for diagnostics."""
         if "xbrl" in flags and "llm" in flags:
             return "mixed"
         if "xbrl" in flags:
@@ -169,6 +176,7 @@ def aggregate_period_records(
         return "unknown"
 
     def _normalize_period(rec: WarrantyPeriodRecord) -> str | None:
+        """Normalize period labels for deterministic grouping."""
         if rec.get("period"):
             cleaned = _clean_year(rec.get("period"))
             if cleaned:
@@ -320,6 +328,7 @@ def dedupe_period_records(
     """
 
     def _norm_period_end(val: JsonValue) -> str | None:
+        """Normalize period-end values to ISO date strings."""
         if val in (None, "", "None"):
             return None
         s = str(val).strip()
@@ -335,6 +344,7 @@ def dedupe_period_records(
         return s  # leave as-is if unparseable
 
     def _conflict_fields(rec: WarrantyPeriodRecord) -> set[str]:
+        """Return field names considered for conflict tracking."""
         raw = rec.get("xbrl_conflicted_fields")
         if isinstance(raw, str):
             return {f for f in raw.split(";") if f}
@@ -343,6 +353,7 @@ def dedupe_period_records(
         return set()
 
     def _normalize(rec: WarrantyPeriodRecord) -> WarrantyPeriodRecord:
+        """Normalize scalar values for equality comparisons."""
         normalized: WarrantyPeriodRecord = {}
         symbol = rec.get("symbol")
         if isinstance(symbol, str):
@@ -407,6 +418,7 @@ def dedupe_period_records(
     def _source_rank(
         source: str | None, field: str, conflict_fields: set[str] | None
     ) -> float:
+        """Compute source precedence rank for merge decisions."""
         s = str(source or "").lower()
         rank = 0.0
         if s == "xbrl":
@@ -422,6 +434,7 @@ def dedupe_period_records(
     def _field_value(
         rec: WarrantyPeriodRecord, field: FieldName
     ) -> float | None:
+        """Read a field value from a period record."""
         if field == "warranty_liability":
             return rec.get("warranty_liability")
         if field == "warranty_payout":
@@ -431,6 +444,7 @@ def dedupe_period_records(
     def _bucket_value(
         bucket: WarrantyMergeBucket, field: FieldName
     ) -> float | None:
+        """Read a field value from an aggregate bucket."""
         if field == "warranty_liability":
             return bucket.get("warranty_liability")
         if field == "warranty_payout":
@@ -440,6 +454,7 @@ def dedupe_period_records(
     def _set_bucket_value(
         bucket: WarrantyMergeBucket, field: FieldName, value: float
     ) -> None:
+        """Write a field value into an aggregate bucket."""
         if field == "warranty_liability":
             bucket["warranty_liability"] = value
         elif field == "warranty_payout":
@@ -448,6 +463,7 @@ def dedupe_period_records(
             bucket["net_revenue"] = value
 
     def _bucket_rank(bucket: WarrantyMergeBucket, field: FieldName) -> float:
+        """Read the source rank for a bucket field."""
         if field == "warranty_liability":
             return bucket.get("_warranty_liability_rank", -1.0)
         if field == "warranty_payout":
@@ -457,6 +473,7 @@ def dedupe_period_records(
     def _set_bucket_rank(
         bucket: WarrantyMergeBucket, field: FieldName, rank: float
     ) -> None:
+        """Set the source rank for a bucket field."""
         if field == "warranty_liability":
             bucket["_warranty_liability_rank"] = rank
         elif field == "warranty_payout":
@@ -467,6 +484,7 @@ def dedupe_period_records(
     def _bucket_sources(
         bucket: WarrantyMergeBucket, field: FieldName
     ) -> set[str]:
+        """Read source labels attached to a bucket field."""
         if field == "warranty_liability":
             return bucket.get("warranty_liability_sources", set())
         if field == "warranty_payout":
@@ -476,6 +494,7 @@ def dedupe_period_records(
     def _set_bucket_sources(
         bucket: WarrantyMergeBucket, field: FieldName, sources: set[str]
     ) -> None:
+        """Set source labels for a bucket field."""
         if field == "warranty_liability":
             bucket["warranty_liability_sources"] = sources
         elif field == "warranty_payout":
@@ -489,6 +508,7 @@ def dedupe_period_records(
         field: FieldName,
         accs: set[str],
     ) -> None:
+        """Merge one field into a bucket using rank-aware rules."""
         conflict_fields = _conflict_fields(source_rec)
         src_rank = _source_rank(
             source_rec.get("source"), field, conflict_fields
@@ -514,6 +534,7 @@ def dedupe_period_records(
             _set_bucket_sources(target, field, sources)
 
     def _safe_float(val: JsonValue | None) -> float | None:
+        """Coerce numeric inputs to float when possible."""
         if val in (None, "", "None"):
             return None
         if isinstance(val, bool):
