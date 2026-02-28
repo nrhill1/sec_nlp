@@ -19,6 +19,7 @@ _INFO_TABLE_BLOCK_RE = re.compile(
 
 
 def _local_tag(tag: JsonValue) -> JsonValue:
+    """Return an element tag name without namespace prefixes."""
     if isinstance(tag, str):
         if "}" in tag:
             return tag.split("}", 1)[1]
@@ -29,6 +30,7 @@ def _local_tag(tag: JsonValue) -> JsonValue:
 
 
 def _normalize_text(value: JsonValue) -> JsonValue:
+    """Normalize text."""
     if isinstance(value, str):
         stripped = value.strip()
         if stripped:
@@ -40,6 +42,7 @@ def _normalize_text(value: JsonValue) -> JsonValue:
 def _find_child(
     parent: ElementTree.Element, name: JsonValue
 ) -> ElementTree.Element | None:
+    """Find child."""
     target = _local_tag(name)
     for child in list(parent):
         if _local_tag(child.tag) == target:
@@ -48,6 +51,7 @@ def _find_child(
 
 
 def _find_text(parent: ElementTree.Element, name: JsonValue) -> JsonValue:
+    """Find text."""
     child = _find_child(parent, name)
     if child is None or child.text is None:
         return None
@@ -57,6 +61,7 @@ def _find_text(parent: ElementTree.Element, name: JsonValue) -> JsonValue:
 def _find_nested_text(
     parent: ElementTree.Element, first: JsonValue, second: JsonValue
 ) -> JsonValue:
+    """Find nested text."""
     node = _find_child(parent, first)
     if node is None:
         return None
@@ -64,6 +69,7 @@ def _find_nested_text(
 
 
 def _parse_int(value: JsonValue) -> int | None:
+    """Parse int."""
     if isinstance(value, int):
         return value
     if isinstance(value, float):
@@ -80,6 +86,7 @@ def _parse_int(value: JsonValue) -> int | None:
 
 
 def _parse_info_table(entry: ElementTree.Element) -> JsonDict:
+    """Parse info table."""
     issuer = _find_text(entry, "nameOfIssuer")
     title = _find_text(entry, "titleOfClass")
     cusip = _find_text(entry, "cusip")
@@ -117,6 +124,7 @@ def _parse_info_table(entry: ElementTree.Element) -> JsonDict:
 
 
 def _format_entry(entry: JsonDict) -> JsonValue:
+    """Format entry."""
     parts = []
     issuer = entry.get("issuer")
     if isinstance(issuer, str):
@@ -140,6 +148,7 @@ def _format_entry(entry: JsonDict) -> JsonValue:
 
 
 def _extract_symbol(accession_dir: Path) -> JsonValue:
+    """Extract symbol."""
     parts = accession_dir.parts
     if "sec-edgar-filings" in parts:
         idx = parts.index("sec-edgar-filings")
@@ -149,6 +158,7 @@ def _extract_symbol(accession_dir: Path) -> JsonValue:
 
 
 def _extract_form_type(accession_dir: Path) -> JsonValue:
+    """Extract form type."""
     parent = accession_dir.parent
     if parent.name:
         return parent.name
@@ -156,6 +166,7 @@ def _extract_form_type(accession_dir: Path) -> JsonValue:
 
 
 def _parse_xml_text(xml_text: JsonValue) -> list[JsonDict]:
+    """Parse xml text."""
     if not isinstance(xml_text, str):
         return []
     text = xml_text.strip()
@@ -187,6 +198,7 @@ def _parse_xml_text(xml_text: JsonValue) -> list[JsonDict]:
 
 
 def _is_info_table_file(path: Path) -> bool:
+    """Return whether info table file."""
     if not path.is_file():
         return False
     suffix = path.suffix.lower()
@@ -242,6 +254,7 @@ class HoldingsParser:
 
     def _build_base_metadata(self, accession_dir: Path) -> JsonDict:
         # Local import avoids ingest/loader circular imports at module load.
+        """Build base metadata."""
         from sec_nlp.core.ingest import filings
 
         filing_date = filings.get_filing_date_from_dir(accession_dir)
@@ -254,6 +267,7 @@ class HoldingsParser:
         }
 
     def _parse_table_file(self, table_file: Path) -> list[JsonDict]:
+        """Parse table file."""
         try:
             xml_text = table_file.read_text(errors="ignore")
         except OSError as exc:

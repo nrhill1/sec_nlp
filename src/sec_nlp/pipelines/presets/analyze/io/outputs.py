@@ -63,6 +63,7 @@ class OutputFormatter:
         prompt_version: str | None = None,
         pipeline_version: str | None = None,
     ) -> None:
+        """Initialize the object."""
         self.export_format = export_format
         self.confidence_threshold = confidence_threshold
         self.topics = topics or []
@@ -89,6 +90,7 @@ class OutputFormatter:
 
     @staticmethod
     def _hash_prompt_file(prompt_path: Path | None) -> str | None:
+        """Hash prompt file content for deterministic metadata fingerprints."""
         if prompt_path is None:
             return None
         try:
@@ -97,6 +99,7 @@ class OutputFormatter:
             return None
 
     def _confidence_bucket(self, score: float | None) -> str:
+        """Map a confidence score to a configured confidence bucket."""
         if score is None:
             return "unknown"
         if score >= 0.85:
@@ -108,6 +111,8 @@ class OutputFormatter:
     def _rank_results(
         self, results: list[AnalysisResultDict]
     ) -> list[AnalysisResultDict]:
+        """Sort results by relevance and confidence for stable output order."""
+
         def sort_score(result: AnalysisResultDict) -> float:
             score = coerce_float(result.get("confidence_score"))
             return score if score is not None else -1.0
@@ -154,6 +159,7 @@ class OutputFormatter:
     def _round_matched_queries(
         matched_queries: list[dict[str, float | str]],
     ) -> list[dict[str, float | str]]:
+        """Round matched queries."""
         rounded: list[dict[str, float | str]] = []
         for item in matched_queries:
             if not isinstance(item, dict):
@@ -169,6 +175,7 @@ class OutputFormatter:
 
     @classmethod
     def _round_metadata_scores(cls, metadata: MetadataRecord) -> MetadataRecord:
+        """Round metadata scores."""
         rounded: dict[str, MetadataValue] = {}
         for key, value in metadata.items():
             if isinstance(key, str):
@@ -179,6 +186,7 @@ class OutputFormatter:
     def _round_metadata_value(
         cls, key: str, value: MetadataValue
     ) -> MetadataValue:
+        """Round metadata value."""
         if isinstance(value, (int, float)) and cls._is_score_key(key):
             return round_score(value)
         if isinstance(value, (str, bool)) or value is None:
@@ -197,6 +205,7 @@ class OutputFormatter:
     def _round_metadata_dict(
         cls, value: dict[str, MetadataScalar]
     ) -> dict[str, MetadataScalar]:
+        """Round metadata dict."""
         nested: dict[str, MetadataScalar] = {}
         for nested_key, nested_value in value.items():
             if isinstance(nested_value, (int, float)) and cls._is_score_key(
@@ -211,6 +220,7 @@ class OutputFormatter:
     def _round_metadata_dict_list(
         cls, value: dict[str, list[dict[str, MetadataScalar]]]
     ) -> dict[str, list[dict[str, MetadataScalar]]]:
+        """Round metadata dict list."""
         nested: dict[str, list[dict[str, MetadataScalar]]] = {}
         for nested_key, nested_value in value.items():
             if isinstance(nested_value, list):
@@ -223,6 +233,7 @@ class OutputFormatter:
 
     @staticmethod
     def _is_dict_list_map(value: MetadataMap) -> bool:
+        """Return whether dict list map."""
         if not value:
             return False
         return any(isinstance(item, list) for item in value.values())
@@ -231,6 +242,7 @@ class OutputFormatter:
     def _as_dict_scalar_map(
         value: MetadataMap,
     ) -> dict[str, MetadataScalar]:
+        """Coerce dict scalar map."""
         return {
             key: item
             for key, item in value.items()
@@ -241,6 +253,7 @@ class OutputFormatter:
     def _as_dict_list_map(
         value: MetadataMap,
     ) -> dict[str, list[dict[str, MetadataScalar]]]:
+        """Coerce dict list map."""
         filtered: dict[str, list[dict[str, MetadataScalar]]] = {}
         for key, item in value.items():
             if not isinstance(item, list):
@@ -263,6 +276,7 @@ class OutputFormatter:
         key: str,
         value: list[MetadataScalar] | list[dict[str, MetadataScalar]],
     ) -> list[MetadataScalar] | list[dict[str, MetadataScalar]]:
+        """Round metadata list."""
         if not value:
             return value
         if isinstance(value[0], dict):
@@ -281,10 +295,12 @@ class OutputFormatter:
 
     @staticmethod
     def _is_score_key(key: str) -> bool:
+        """Return whether score key."""
         return is_score_key(key)
 
     @staticmethod
     def _extract_queries(result: AnalysisResultDict) -> list[str]:
+        """Extract queries."""
         matched_queries = result.get("matched_queries")
         if not isinstance(matched_queries, list):
             return []
@@ -305,6 +321,7 @@ class OutputFormatter:
 
     @staticmethod
     def _extract_section(result: AnalysisResultDict) -> str | None:
+        """Extract section."""
         metadata = result.get("source_metadata") or {}
         section = metadata.get("section_number")
         if isinstance(section, (int, float)):
@@ -317,6 +334,7 @@ class OutputFormatter:
     def _group_by_query(
         self, results: list[AnalysisResultDict]
     ) -> dict[str, list[AnalysisResultDict]]:
+        """Group by query."""
         grouped: dict[str, list[AnalysisResultDict]] = {}
         for result in results:
             for query in self._extract_queries(result):
@@ -326,6 +344,7 @@ class OutputFormatter:
     def _group_by_section(
         self, results: list[AnalysisResultDict]
     ) -> dict[str, list[AnalysisResultDict]]:
+        """Group by section."""
         grouped: dict[str, list[AnalysisResultDict]] = {}
         for result in results:
             section = self._extract_section(result)
@@ -336,6 +355,7 @@ class OutputFormatter:
 
     @staticmethod
     def _timeline_sort_key(item: JsonDict) -> str:
+        """Build a deterministic sort key for relationship timeline entries."""
         value = item.get("filed_date")
         return value if isinstance(value, str) else ""
 
@@ -343,6 +363,7 @@ class OutputFormatter:
         self,
         filing_meta: MetadataMap,
     ) -> dict[str, list[JsonDict]]:
+        """Build relationship timeline."""
         related = filing_meta.get("related_filings")
         if not isinstance(related, list):
             return {}
@@ -516,6 +537,7 @@ class OutputFormatter:
     def _build_exec_comp_summary(
         self, results: list[AnalysisResultDict]
     ) -> ExecutiveCompSummary | None:
+        """Build exec comp summary."""
         if not results:
             return None
 

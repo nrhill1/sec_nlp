@@ -21,10 +21,12 @@ _TICKER_TOKEN = re.compile(r"^[A-Z][A-Z0-9\.-]{0,9}$")
 
 
 def _date_range(settings: RetrieveSettings) -> tuple[date, date]:
+    """Build a normalized date range tuple for EFTS queries."""
     return settings.date_range
 
 
 def _normalize_symbol(symbol: str | None) -> str | None:
+    """Normalize symbol."""
     if symbol is None:
         return None
     normalized = symbol.strip().upper()
@@ -32,6 +34,7 @@ def _normalize_symbol(symbol: str | None) -> str | None:
 
 
 def _normalize_cik(value: str | None) -> str | None:
+    """Normalize cik."""
     if value is None:
         return None
     digits = "".join(ch for ch in value if ch.isdigit())
@@ -69,6 +72,7 @@ def _scope_queries_for_symbol(
 
 @lru_cache(maxsize=4096)
 def _company_name_tickers(company_name: str) -> frozenset[str]:
+    """Parse candidate ticker symbols from a company name string."""
     if "(" not in company_name:
         return frozenset()
     matches = re.findall(r"\(([^)]+)\)", company_name.upper())
@@ -89,6 +93,7 @@ def _hit_matches_symbol(
     symbol: str,
     symbol_cik: str | None,
 ) -> bool:
+    """Return whether an EFTS hit belongs to the requested symbol."""
     target = symbol.upper()
     hit_tickers = {ticker.strip().upper() for ticker in hit.tickers if ticker}
     if target in hit_tickers:
@@ -112,6 +117,7 @@ def _resolve_symbol_cik(
     symbol: str,
     settings: RetrieveSettings,
 ) -> str | None:
+    """Resolve symbol cik."""
     try:
         cik = get_cik_for_ticker(
             ticker=symbol,
@@ -130,6 +136,7 @@ def _filter_hits_for_symbol(
     symbol: str,
     symbol_cik: str | None,
 ) -> list[EFTSHit]:
+    """Filter hits for symbol."""
     if not symbol.strip():
         return list(hits)
 
@@ -149,6 +156,7 @@ class RetrieveCandidateSearcher:
     """Run-scoped EFTS candidate searcher that reuses client + event loop."""
 
     def __init__(self, settings: RetrieveSettings) -> None:
+        """Initialize the object."""
         self._settings = settings
         self._start_date, self._end_date = _date_range(settings)
         self._client = create_efts_client(
@@ -164,6 +172,7 @@ class RetrieveCandidateSearcher:
         symbol: str | None,
         queries: Sequence[str],
     ) -> list[EFTSBatchResult]:
+        """Execute scoped EFTS searches concurrently for all queries."""
         normalized_symbol = _normalize_symbol(symbol)
         return await self._client.batch_search(
             queries=list(queries),
@@ -175,6 +184,7 @@ class RetrieveCandidateSearcher:
         )
 
     def _resolve_symbol_cik_cached(self, symbol: str) -> str | None:
+        """Resolve symbol cik cached."""
         cached = self._symbol_cik_cache.get(symbol)
         if symbol in self._symbol_cik_cache:
             return cached
@@ -189,6 +199,7 @@ class RetrieveCandidateSearcher:
         queries: Sequence[str],
         batch_results: list[EFTSBatchResult],
     ) -> dict[str, list[EFTSHit]]:
+        """Convert scoped EFTS batch results into ranked candidates."""
         symbol_display = normalized_symbol or "<all>"
         symbol_cik: str | None = None
 
@@ -480,6 +491,7 @@ class RetrieveCandidateSearcher:
         self._loop.close()
 
     def __enter__(self) -> RetrieveCandidateSearcher:
+        """Enter the candidate search context."""
         return self
 
     def __exit__(
@@ -488,6 +500,7 @@ class RetrieveCandidateSearcher:
         exc: BaseException | None,
         tb: TracebackType | None,
     ) -> None:
+        """Exit the candidate search context and clean up resources."""
         self.close()
 
 

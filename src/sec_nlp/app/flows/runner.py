@@ -43,6 +43,7 @@ class FlowRunner:
     """Execute a flow spec with direct compiled-stage pipeline dispatch."""
 
     def __init__(self, *, spec: FlowSpec) -> None:
+        """Initialize the object."""
         self.spec = spec
 
     def run(self) -> FlowRunResult:
@@ -126,6 +127,7 @@ class FlowRunner:
         stage: CompiledStage,
         artifacts: FlowArtifactStore,
     ) -> FlowStageResult:
+        """Run stage."""
         pipeline_name = stage.stage.pipeline
         if pipeline_name == "retrieve":
             return self._run_retrieve_stage(stage, artifacts)
@@ -149,6 +151,7 @@ class FlowRunner:
         run_id: str,
         run_short_id: int,
     ) -> FlowStageResult:
+        """Build stage result."""
         return FlowStageResult(
             stage_id=stage.id,
             pipeline=stage.pipeline,
@@ -170,6 +173,7 @@ class FlowRunner:
         skipped: bool,
         error: str,
     ) -> FlowStageResult:
+        """Build unexecuted stage result."""
         return FlowStageResult(
             stage_id=stage.id,
             pipeline=stage.pipeline,
@@ -185,6 +189,7 @@ class FlowRunner:
     def _resolve_seed_binding(
         stage: FlowStageSpec,
     ) -> tuple[FlowStageInputBinding | None, str | None]:
+        """Resolve seed binding."""
         resolved: FlowStageInputBinding | None = None
         for binding in stage.inputs:
             binding_error = FlowRunner._validate_input_binding(
@@ -208,6 +213,7 @@ class FlowRunner:
         stage: FlowStageSpec,
         binding: FlowStageInputBinding,
     ) -> str | None:
+        """Validate input binding."""
         if binding.artifact not in {"retrieve_seed", "contract_evidence"}:
             return (
                 f"chat stage '{stage.id}' does not support input artifact "
@@ -227,6 +233,7 @@ class FlowRunner:
     def _seed_from_contract_evidence(
         evidence: ContractEvidenceBundle,
     ) -> FlowSeedBundle:
+        """Build chat seed chunks from contract evidence artifacts."""
         return FlowSeedBundle(
             upstream_pipeline=evidence.upstream_pipeline,
             upstream_run_id=evidence.upstream_run_id,
@@ -238,6 +245,7 @@ class FlowRunner:
 
     @staticmethod
     def _answer_preview(answer: str, *, max_chars: int = 160) -> str:
+        """Extract a one-line answer preview for flow logging."""
         normalized = " ".join(answer.split())
         if len(normalized) <= max_chars:
             return normalized
@@ -276,6 +284,7 @@ class FlowRunner:
         pipeline_type: str,
         pipeline_class: type[PipelineT],
     ) -> FlowStageResult:
+        """Run plain pipeline stage."""
         _ = artifacts
         if not isinstance(stage.settings, settings_type):
             raise ValueError(
@@ -300,6 +309,7 @@ class FlowRunner:
         stage: CompiledStage,
         artifacts: FlowArtifactStore,
     ) -> FlowStageResult:
+        """Run retrieve stage."""
         if not isinstance(stage.settings, RetrieveSettings):
             raise ValueError("retrieve stage received non-retrieve settings")
 
@@ -325,6 +335,7 @@ class FlowRunner:
         stage: CompiledStage,
         artifacts: FlowArtifactStore,
     ) -> FlowStageResult:
+        """Run chat stage."""
         if not isinstance(stage.settings, ChatSettings):
             raise ValueError("chat stage received non-chat settings")
 
@@ -382,6 +393,7 @@ class FlowRunner:
         stage: CompiledStage,
         artifacts: FlowArtifactStore,
     ) -> FlowStageResult:
+        """Run exhibit stage."""
         if not isinstance(stage.settings, ExhibitConfig):
             raise ValueError("exhibit stage received non-exhibit settings")
 
@@ -409,6 +421,7 @@ class FlowRunner:
         stage: CompiledStage,
         artifacts: FlowArtifactStore,
     ) -> FlowStageResult:
+        """Run analyze stage."""
         return cls._run_plain_pipeline_stage(
             stage=stage,
             artifacts=artifacts,
@@ -423,6 +436,7 @@ class FlowRunner:
         stage: CompiledStage,
         artifacts: FlowArtifactStore,
     ) -> FlowStageResult:
+        """Run warranty stage."""
         return cls._run_plain_pipeline_stage(
             stage=stage,
             artifacts=artifacts,
@@ -436,6 +450,7 @@ class FlowRunner:
         stage: FlowStageSpec,
         previous: FlowStageResult | None,
     ) -> bool:
+        """Return whether run stage."""
         if stage.condition == "always":
             return True
         if previous is None:

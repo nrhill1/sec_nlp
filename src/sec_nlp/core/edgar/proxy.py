@@ -86,17 +86,20 @@ class ProxyData(BaseModel):
 
 
 def _normalize_text(value: str | None) -> str:
+    """Normalize text."""
     if not value:
         return ""
     return _WS_RE.sub(" ", value).strip()
 
 
 def _normalize_header(value: str) -> str:
+    """Normalize header."""
     cleaned = _normalize_text(value).lower()
     return re.sub(r"[^a-z0-9]+", " ", cleaned).strip()
 
 
 def _parse_money(value: str | None) -> float:
+    """Parse money."""
     text = _normalize_text(value)
     if not text or text in {"-", "--", "—", "n/a", "na"}:
         return 0.0
@@ -113,6 +116,7 @@ def _parse_money(value: str | None) -> float:
 
 
 def _parse_int(value: str | None) -> int:
+    """Parse int."""
     text = _normalize_text(value)
     if not text or text in {"-", "--", "—", "n/a", "na"}:
         return 0
@@ -124,6 +128,7 @@ def _parse_int(value: str | None) -> int:
 
 
 def _extract_year(text: str, fallback: str) -> str:
+    """Extract year."""
     match = _YEAR_RE.search(text)
     if match is not None:
         return match.group(0)
@@ -131,6 +136,7 @@ def _extract_year(text: str, fallback: str) -> str:
 
 
 def _split_name_title(value: str) -> tuple[str, str]:
+    """Split a combined name/title cell into separate fields."""
     cleaned = _normalize_text(value)
     if not cleaned:
         return "", ""
@@ -180,6 +186,7 @@ def _split_name_title(value: str) -> tuple[str, str]:
 
 
 def _parse_html(html_text: str):
+    """Parse html."""
     if not html_text.strip():
         return html.fromstring("<html></html>")
 
@@ -192,6 +199,7 @@ def _parse_html(html_text: str):
 
 
 def _table_rows(table) -> list[list[str]]:
+    """Extract normalized text rows from an HTML table."""
     rows: list[list[str]] = []
     for tr in table.xpath(".//tr"):
         cells = tr.xpath("./th|./td")
@@ -206,6 +214,7 @@ def _table_rows(table) -> list[list[str]]:
 def _column_index(
     headers: list[str], token_groups: tuple[tuple[str, ...], ...]
 ) -> int | None:
+    """Return the index of the first matching candidate header."""
     normalized = [_normalize_header(header) for header in headers]
     for index, header in enumerate(normalized):
         for tokens in token_groups:
@@ -215,6 +224,7 @@ def _column_index(
 
 
 def _cell(row: list[str], index: int | None) -> str:
+    """Return a row cell value by index when available."""
     if index is None or index < 0 or index >= len(row):
         return ""
     return row[index]
@@ -223,6 +233,7 @@ def _cell(row: list[str], index: int | None) -> str:
 def _extract_compensation(
     root, *, filing_date: str
 ) -> list[ExecutiveCompensation]:
+    """Extract compensation."""
     default_year = str(date.fromisoformat(filing_date).year)
     extracted: list[ExecutiveCompensation] = []
 
@@ -328,6 +339,7 @@ def _extract_compensation(
 
 
 def _proposal_number(value: str) -> int | None:
+    """Extract a proposal number token from proposal heading text."""
     match = _PROPOSAL_RE.search(value)
     if match is None:
         return None
@@ -338,6 +350,7 @@ def _proposal_number(value: str) -> int | None:
 
 
 def _extract_proposals(root) -> list[ShareholderProposal]:
+    """Extract proposals."""
     proposals: list[ShareholderProposal] = []
 
     for table in root.xpath("//table"):
@@ -412,6 +425,7 @@ def _extract_proposals(root) -> list[ShareholderProposal]:
 
 
 def _split_committees(value: str) -> list[str]:
+    """Split committee text into normalized committee names."""
     cleaned = _normalize_text(value)
     if not cleaned:
         return []
@@ -420,6 +434,7 @@ def _split_committees(value: str) -> list[str]:
 
 
 def _parse_independent(value: str) -> bool:
+    """Parse independent."""
     lowered = _normalize_text(value).lower()
     if lowered in {"y", "yes", "true", "independent"}:
         return True
@@ -429,6 +444,7 @@ def _parse_independent(value: str) -> bool:
 
 
 def _extract_board(root) -> list[BoardMember]:
+    """Extract board."""
     members: list[BoardMember] = []
 
     for table in root.xpath("//table"):
@@ -493,6 +509,7 @@ def _extract_board(root) -> list[BoardMember]:
 def _say_on_pay_from_proposals(
     proposals: list[ShareholderProposal],
 ) -> SayOnPayResult | None:
+    """Derive say-on-pay outcome and support ratio from proposal votes."""
     for proposal in proposals:
         description = proposal.description.lower()
         if (

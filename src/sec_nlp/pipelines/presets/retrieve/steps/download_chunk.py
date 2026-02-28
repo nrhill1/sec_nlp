@@ -23,6 +23,8 @@ from .tokenization import DEFAULT_QUERY_STOPWORDS, extract_query_terms
 
 @dataclass(slots=True, frozen=True)
 class _ChunkCandidate:
+    """Internal model for ChunkCandidate."""
+
     text: str
     section_type: str | None
     section_number: str | None
@@ -30,6 +32,7 @@ class _ChunkCandidate:
 
 
 def _mode_for_form(form_type: str, fallback: FilingMode) -> FilingMode:
+    """Resolve filing mode from the filing form type."""
     normalized = form_type.strip().upper()
     if normalized.startswith("10-K"):
         return FilingMode.annual
@@ -51,6 +54,7 @@ def _mode_for_form(form_type: str, fallback: FilingMode) -> FilingMode:
 
 
 def _best_html_file(accession_dir: Path) -> Path | None:
+    """Select the most relevant HTML file for chunk extraction."""
     best_path: Path | None = None
     best_size = -1
     for path in accession_dir.rglob("*"):
@@ -75,6 +79,7 @@ def _find_html_for_accession(
     accession: str,
     preferred_form: str | None,
 ) -> Path | None:
+    """Find html for accession."""
     symbol_root = dl_path / "sec-edgar-filings" / symbol.upper()
     if not symbol_root.exists():
         return None
@@ -100,6 +105,7 @@ def _find_html_for_accession(
 
 
 def _coerce_str(value: JsonValue) -> str | None:
+    """Coerce scalar metadata values to strings when possible."""
     if isinstance(value, str):
         cleaned = value.strip()
         return cleaned or None
@@ -107,6 +113,7 @@ def _coerce_str(value: JsonValue) -> str | None:
 
 
 def _coerce_int(value: JsonValue) -> int | None:
+    """Coerce scalar metadata values to integers when possible."""
     if isinstance(value, bool):
         return None
     if isinstance(value, int):
@@ -119,6 +126,7 @@ def _coerce_int(value: JsonValue) -> int | None:
 
 
 def _clip_snippet(text: str, max_chars: int) -> str:
+    """Trim snippet windows to a bounded character span."""
     cleaned = " ".join(text.split())
     if len(cleaned) <= max_chars:
         return cleaned
@@ -126,6 +134,7 @@ def _clip_snippet(text: str, max_chars: int) -> str:
 
 
 def _has_snippet(value: str | None) -> bool:
+    """Return whether snippet."""
     if value is None:
         return False
     return bool(value.strip())
@@ -138,6 +147,7 @@ def _choose_chunk(
     max_chars: int,
     remove_stopwords: bool,
 ) -> _ChunkCandidate | None:
+    """Select the best chunk candidate for a matched snippet."""
     if not candidates:
         return None
 
@@ -177,6 +187,7 @@ def _choose_chunk(
 
 
 def _build_section_filter(settings: RetrieveSettings):
+    """Build section filter."""
     if not settings.sections:
         return None
     return create_item_filter(settings.sections)
@@ -188,6 +199,7 @@ def _load_chunk_candidates(
     loader: Loader,
     settings: RetrieveSettings,
 ) -> list[_ChunkCandidate]:
+    """Load chunk candidates."""
     docs = loader.transform_html(
         html_path,
         section_filter=_build_section_filter(settings),
@@ -227,6 +239,7 @@ def _download_missing_accessions(
     hits_by_accession: dict[str, RetrievalHit],
     settings: RetrieveSettings,
 ) -> None:
+    """Download missing accession files required for hydration."""
     if not missing_accessions or not settings.download_missing:
         return
 
