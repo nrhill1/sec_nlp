@@ -33,6 +33,8 @@ NEWSWATCH_MANIFEST := $(NEWSWATCH_DIR)/Cargo.toml
 MATURIN_FLAGS ?=
 MATURIN_BUILD_FLAGS ?= --release --uv --strip
 MATURIN_SDIST_FLAGS ?=
+MATURIN_WHEEL_OUT ?= $(ROOT_DIR)/target/wheels
+PYTHON_BIN ?= $(ROOT_DIR)/.venv/bin/python
 RUSTFLAGS_DEV ?= -C debuginfo=0 -C codegen-units=256 -C opt-level=0
 RUSTFLAGS_PROD ?= -C lto=thin -C codegen-units=1 -C opt-level=3
 
@@ -43,6 +45,10 @@ STAMP_BOOTSTRAP := .bootstrap.stamp
 STAMP_UVSYNC := .uvsync.stamp
 UV_SYNC_FLAGS ?= --frozen
 UV_NO_BUILD_ISOLATION ?= 1
+UV_CACHE_DIR ?= $(ROOT_DIR)/.uv-cache
+PIP_CACHE_DIR ?= $(ROOT_DIR)/.pip-cache
+export UV_CACHE_DIR
+export PIP_CACHE_DIR
 
 # =========================================================================
 # Help
@@ -198,7 +204,9 @@ rs-nw-%:
 
 .PHONY: maturin-dev
 maturin-dev:
-	@RUSTFLAGS="$(RUSTFLAGS_DEV)" maturin develop -m $(MARKET_MANIFEST) $(MATURIN_FLAGS)
+	@mkdir -p $(MATURIN_WHEEL_OUT)
+	@RUSTFLAGS="$(RUSTFLAGS_DEV)" maturin build -m $(MARKET_MANIFEST) --interpreter $(PYTHON_BIN) --out $(MATURIN_WHEEL_OUT)
+	@$(PYTHON_BIN) -m pip install --no-deps --force-reinstall $$(ls -t $(MATURIN_WHEEL_OUT)/market-*.whl | head -n 1)
 
 .PHONY: maturin-build
 maturin-build:
@@ -211,12 +219,19 @@ maturin-sdist:
 .PHONY: build-ext
 build-ext: ready
 	@echo "==> Building Rust extensions..."
-	@RUSTFLAGS="$(RUSTFLAGS_DEV)" maturin develop -m $(MARKET_MANIFEST) $(MATURIN_FLAGS)
-	@RUSTFLAGS="$(RUSTFLAGS_DEV)" maturin develop -m $(EFTS_MANIFEST) $(MATURIN_FLAGS)
-	@RUSTFLAGS="$(RUSTFLAGS_DEV)" maturin develop -m $(CORR_MANIFEST) $(MATURIN_FLAGS)
-	@RUSTFLAGS="$(RUSTFLAGS_DEV)" maturin develop -m $(XBRL_MANIFEST) $(MATURIN_FLAGS)
-	@RUSTFLAGS="$(RUSTFLAGS_DEV)" maturin develop -m $(ENTITY_MANIFEST) $(MATURIN_FLAGS)
-	@RUSTFLAGS="$(RUSTFLAGS_DEV)" maturin develop -m $(NEWSWATCH_MANIFEST) $(MATURIN_FLAGS)
+	@mkdir -p $(MATURIN_WHEEL_OUT)
+	@RUSTFLAGS="$(RUSTFLAGS_DEV)" maturin build -m $(MARKET_MANIFEST) --interpreter $(PYTHON_BIN) --out $(MATURIN_WHEEL_OUT)
+	@$(PYTHON_BIN) -m pip install --no-deps --force-reinstall $$(ls -t $(MATURIN_WHEEL_OUT)/market-*.whl | head -n 1)
+	@RUSTFLAGS="$(RUSTFLAGS_DEV)" maturin build -m $(EFTS_MANIFEST) --interpreter $(PYTHON_BIN) --out $(MATURIN_WHEEL_OUT)
+	@$(PYTHON_BIN) -m pip install --no-deps --force-reinstall $$(ls -t $(MATURIN_WHEEL_OUT)/efts-*.whl | head -n 1)
+	@RUSTFLAGS="$(RUSTFLAGS_DEV)" maturin build -m $(CORR_MANIFEST) --interpreter $(PYTHON_BIN) --out $(MATURIN_WHEEL_OUT)
+	@$(PYTHON_BIN) -m pip install --no-deps --force-reinstall $$(ls -t $(MATURIN_WHEEL_OUT)/corr-*.whl | head -n 1)
+	@RUSTFLAGS="$(RUSTFLAGS_DEV)" maturin build -m $(XBRL_MANIFEST) --interpreter $(PYTHON_BIN) --out $(MATURIN_WHEEL_OUT)
+	@$(PYTHON_BIN) -m pip install --no-deps --force-reinstall $$(ls -t $(MATURIN_WHEEL_OUT)/xbrl-*.whl | head -n 1)
+	@RUSTFLAGS="$(RUSTFLAGS_DEV)" maturin build -m $(ENTITY_MANIFEST) --interpreter $(PYTHON_BIN) --out $(MATURIN_WHEEL_OUT)
+	@$(PYTHON_BIN) -m pip install --no-deps --force-reinstall $$(ls -t $(MATURIN_WHEEL_OUT)/entity-*.whl | head -n 1)
+	@RUSTFLAGS="$(RUSTFLAGS_DEV)" maturin build -m $(NEWSWATCH_MANIFEST) --interpreter $(PYTHON_BIN) --out $(MATURIN_WHEEL_OUT)
+	@$(PYTHON_BIN) -m pip install --no-deps --force-reinstall $$(ls -t $(MATURIN_WHEEL_OUT)/newswatch-*.whl | head -n 1)
 	@echo "✓ Rust extensions built"
 	@echo ""
 

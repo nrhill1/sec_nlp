@@ -55,6 +55,8 @@ Thumbs.db
 .eggs/
 dist/
 build/
+!src/scripts/build/
+!src/scripts/build/*.py
 *.whl
 *.spec
 
@@ -89,6 +91,7 @@ coverage.xml
 .uv-cache/
 .uv_cache/
 .uv-tmp/
+.pip-cache/
 .uv.lock
 
 ## Build Stamps
