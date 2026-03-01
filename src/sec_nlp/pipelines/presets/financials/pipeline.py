@@ -67,11 +67,13 @@ class FinancialsPipeline(BasePipeline):
         return FinancialsResult
 
     def _get_parser(self) -> XbrlParser:
+        """Get the filing parser instance used by the financials pipeline."""
         if self._parser is None:
             self._parser = create_xbrl_parser()
         return self._parser
 
     def _build_components(self) -> None:
+        """Initialize reusable components for financials execution."""
         self._stage_chain = build_financials_stage_chain(self)
 
     def run(self) -> FinancialsResult:
@@ -153,6 +155,7 @@ class FinancialsPipeline(BasePipeline):
         *,
         total: int | None = None,
     ) -> None:
+        """Update progress state and current financials phase metadata."""
         if progress is None or phase_task is None:
             return
 
@@ -187,6 +190,7 @@ class FinancialsPipeline(BasePipeline):
         statements,
         delta_report,
     ) -> list[Path]:
+        """Write financials outputs and return artifact file paths."""
         symbol_out = self.config.get_symbol_output_dir(symbol)
         output_context = build_run_output_context(
             symbol=symbol,

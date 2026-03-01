@@ -399,6 +399,7 @@ def _gather_config() -> ConfigData | None:
         )
 
         def _validate_symbols(value: str) -> bool | str:
+            """Validate and normalize symbol input for interactive prompts."""
             valid, invalid = _parse_symbols(value)
             if not valid:
                 return "Enter at least one ticker symbol."

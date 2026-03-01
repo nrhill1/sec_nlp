@@ -39,6 +39,7 @@ class SectionBoundary:
         self.title = title
 
     def __repr__(self) -> str:
+        """Return a concise debug representation for section extractor config."""
         end = f"{self.end_pos}" if self.end_pos else "EOF"
         return (
             f"<SectionBoundary {self.section_type} {self.section_number} "

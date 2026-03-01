@@ -129,6 +129,7 @@ def _sort_accession_records(
     """Sort accession records by filing date and accession number."""
 
     def _sort_key(record: AccessionRecord) -> tuple[str, str]:
+        """Build deterministic sort key for EXB accession output records."""
         date_key = record.get("filing_date") or ""
         accession_key = record.get("accession_number") or ""
         return (date_key, accession_key)

@@ -33,6 +33,7 @@ from sec_nlp.core.market import (
 
 
 def _format_quote(quote: MarketQuote) -> str:
+    """Format quote."""
     return (
         f"{quote.timestamp}: "
         f"open={quote.open_price:.2f} "
@@ -90,9 +91,11 @@ class Market(BaseModel):
     )
 
     def _has_range(self) -> bool:
+        """Return whether range."""
         return self.start_date is not None and self.end_date is not None
 
     def _print_range(self, quotes: Sequence[MarketQuote]) -> None:
+        """Resolve print range."""
         header = format_section_header(
             f"Quotes: {self.symbol.upper()}",
             style="box",
@@ -161,6 +164,7 @@ class Market(BaseModel):
     def _render_table(
         self, records: Sequence[dict[str, str | float | int]]
     ) -> str:
+        """Render table."""
         if not records:
             return "No quote data to display"
 
@@ -271,6 +275,7 @@ class Market(BaseModel):
             )
 
     def _determine_range(self) -> tuple[date, date]:
+        """Resolve determine range."""
         if self._has_range():
             assert self.start_date is not None and self.end_date is not None
             return (self.start_date, self.end_date)

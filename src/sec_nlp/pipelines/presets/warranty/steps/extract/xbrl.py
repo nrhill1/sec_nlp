@@ -528,6 +528,7 @@ def _log_xbrl_stats(
     """Log XBRL extraction statistics."""
 
     def _fmt_period(r: WarrantyExtractionDict) -> str:
+        """Format period values into canonical period labels."""
         val = r.get("period") or r.get("period_end")
         if val is None:
             return "?"

@@ -80,6 +80,7 @@ class LoadDocsStage(PipelineStageRunnable[AnalyzeRunState]):
     name: str = Field(default="load_docs")
 
     def _run(self, state: AnalyzeRunState) -> AnalyzeRunState:
+        """Execute the load docs stage and return updated run state."""
         logger.info("\n" + "=" * 70)
         logger.info("Processing symbol: %s", state.symbol)
 
@@ -113,6 +114,7 @@ class PreprocessStage(PipelineStageRunnable[AnalyzeRunState]):
     name: str = Field(default="preprocess_docs")
 
     def _run(self, state: AnalyzeRunState) -> AnalyzeRunState:
+        """Execute the preprocess stage and return updated run state."""
         if state.done:
             return state
         if state.already_preprocessed:
@@ -143,6 +145,7 @@ class EnrichAndIndexStage(PipelineStageRunnable[AnalyzeRunState]):
     name: str = Field(default="enrich_and_index")
 
     def _run(self, state: AnalyzeRunState) -> AnalyzeRunState:
+        """Execute the enrich and index stage and return updated run state."""
         if state.done:
             return state
         self.pipeline._update_phase(
@@ -168,6 +171,7 @@ class SearchAndAnalyzeStage(PipelineStageRunnable[AnalyzeRunState]):
     name: str = Field(default="search_and_analyze")
 
     def _run(self, state: AnalyzeRunState) -> AnalyzeRunState:
+        """Execute the search and analyze stage and return updated run state."""
         if state.done:
             return state
         state.search_queries = self.pipeline.config.get_search_queries()
@@ -201,6 +205,7 @@ class PostprocessStage(PipelineStageRunnable[AnalyzeRunState]):
     name: str = Field(default="postprocess_results")
 
     def _run(self, state: AnalyzeRunState) -> AnalyzeRunState:
+        """Execute the postprocess stage and return updated run state."""
         if state.done:
             return state
         self.pipeline._update_phase(
@@ -227,6 +232,7 @@ class WriteOutputsStage(PipelineStageRunnable[AnalyzeRunState]):
     name: str = Field(default="write_outputs")
 
     def _run(self, state: AnalyzeRunState) -> AnalyzeRunState:
+        """Execute the write outputs stage and return updated run state."""
         if state.done:
             return state
         self.pipeline._update_phase(

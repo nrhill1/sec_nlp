@@ -63,6 +63,7 @@ class ScanEventsStage(PipelineStageRunnable[EventsRunState]):
     name: str = Field(default="scan_events")
 
     def _run(self, state: EventsRunState) -> EventsRunState:
+        """Execute this events stage and return updated run state."""
         self.pipeline._update_phase(
             state.progress,
             state.phase_task,
@@ -85,6 +86,7 @@ class EnrichEventsStage(PipelineStageRunnable[EventsRunState]):
     name: str = Field(default="enrich_events")
 
     def _run(self, state: EventsRunState) -> EventsRunState:
+        """Execute this events stage and return updated run state."""
         self.pipeline._update_phase(
             state.progress,
             state.phase_task,
@@ -106,6 +108,7 @@ class ScoreEventsStage(PipelineStageRunnable[EventsRunState]):
     name: str = Field(default="score_events")
 
     def _run(self, state: EventsRunState) -> EventsRunState:
+        """Execute this events stage and return updated run state."""
         self.pipeline._update_phase(
             state.progress,
             state.phase_task,
@@ -127,6 +130,7 @@ class WriteEventsOutputsStage(PipelineStageRunnable[EventsRunState]):
     name: str = Field(default="write_outputs")
 
     def _run(self, state: EventsRunState) -> EventsRunState:
+        """Execute this events stage and return updated run state."""
         self.pipeline._update_phase(
             state.progress,
             state.phase_task,

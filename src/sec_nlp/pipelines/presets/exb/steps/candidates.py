@@ -20,6 +20,7 @@ from ..config import ExhibitConfig
 
 
 def _dedupe_queries(values: list[str]) -> list[str]:
+    """Normalize and deduplicate candidate query strings."""
     deduped: list[str] = []
     seen: set[str] = set()
     for raw in values:
@@ -54,6 +55,7 @@ def _candidate_settings(
     queries: list[str],
     config: ExhibitConfig,
 ) -> RetrieveSettings:
+    """Build candidate-search settings from EXB config."""
     return RetrieveSettings(
         email=config.email,
         symbols=[symbol],

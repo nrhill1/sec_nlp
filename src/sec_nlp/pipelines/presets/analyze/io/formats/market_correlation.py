@@ -187,6 +187,7 @@ def build_market_correlation(
     }
 
     def _round_value(value: float | None) -> float | None:
+        """Round numeric values with consistent market-correlation precision."""
         return round_score(value)
 
     metrics = {

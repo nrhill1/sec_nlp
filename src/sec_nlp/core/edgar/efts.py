@@ -40,6 +40,7 @@ MIN_REQUEST_INTERVAL: Final[float] = 0.1  # 10 requests per second max
 
 @lru_cache(maxsize=1)
 def _load_efts_module() -> ModuleType | None:
+    """Load the optional native EFTS extension module."""
     try:
         return import_module("efts")
     except Exception as exc:  # pragma: no cover - depends on extension install
@@ -284,6 +285,7 @@ class EFTSClient(BaseModel):
         self,
         params: EFTSSearchParams,
     ) -> EFTSSearchResponse:
+        """Attempt native EFTS search and return structured results."""
         module = _load_efts_module()
         if module is None:
             raise EFTSAPIError(
@@ -308,6 +310,7 @@ class EFTSClient(BaseModel):
 
 
 def _rust_error_from_exception(exc: Exception) -> EFTSAPIError:
+    """Convert Python exceptions to normalized RustError payloads."""
     message = str(exc)
     match = re.search(r"EFTS API Error \((\d+)\):\s*(.+)", message)
     if match:
@@ -546,6 +549,7 @@ class EFTSAPIError(Exception):
         message: str,
         detail: str | None = None,
     ) -> None:
+        """Initialize EFTS wrapper with optional native backend and settings."""
         self.status_code = status_code
         self.message = message
         self.detail = detail

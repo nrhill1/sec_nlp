@@ -72,7 +72,7 @@ def compile_stage(
 
 def compile_flow_stages(spec: FlowSpec) -> tuple[CompiledStage, ...]:
     """Compile all stages in a flow spec with prevalidated settings."""
-    compiled: list[CompiledStage] = []
-    for stage in spec.stages:
-        compiled.append(compile_stage(stage=stage, defaults=spec.defaults))
-    return tuple(compiled)
+    return tuple(
+        compile_stage(stage=stage, defaults=spec.defaults)
+        for stage in spec.stages
+    )

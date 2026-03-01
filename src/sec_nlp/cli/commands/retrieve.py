@@ -29,9 +29,11 @@ class Retrieve(RetrieveSettings, BasePipelineCommand):
     )
 
     def _get_header_subtitle(self) -> str:
+        """Build subtitle text for the retrieve command header."""
         return "Retrieval"
 
     def _log_pipeline_run_details(self) -> None:
+        """Log retrieve run configuration details before execution."""
         logger.info(format_key_value("Queries", str(len(self.queries))))
         logger.info(format_key_value("Top K", str(self.top_k)))
         logger.info(

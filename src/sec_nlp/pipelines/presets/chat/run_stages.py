@@ -81,6 +81,7 @@ class SearchContextStage(PipelineStageRunnable[ChatRunState]):
     name: str = Field(default="search_context")
 
     def _run(self, state: ChatRunState) -> ChatRunState:
+        """Execute the search context stage and return updated run state."""
         has_seed_context = (
             state.seed_context is not None or len(state.seed_chunks) > 0
         )
@@ -141,6 +142,7 @@ class PrepareContextStage(PipelineStageRunnable[ChatRunState]):
     name: str = Field(default="prepare_context")
 
     def _run(self, state: ChatRunState) -> ChatRunState:
+        """Execute the prepare context stage and return updated run state."""
         self.pipeline._update_phase(
             state.progress,
             state.phase_task,
@@ -179,6 +181,7 @@ class GenerateAnswerStage(PipelineStageRunnable[ChatRunState]):
     name: str = Field(default="generate_answer")
 
     def _run(self, state: ChatRunState) -> ChatRunState:
+        """Execute the generate answer stage and return updated run state."""
         self.pipeline._update_phase(
             state.progress,
             state.phase_task,
@@ -212,6 +215,7 @@ class BuildTurnsStage(PipelineStageRunnable[ChatRunState]):
     name: str = Field(default="build_turns")
 
     def _run(self, state: ChatRunState) -> ChatRunState:
+        """Execute the build turns stage and return updated run state."""
         self.pipeline._update_phase(
             state.progress,
             state.phase_task,
@@ -233,6 +237,7 @@ class WriteChatOutputsStage(PipelineStageRunnable[ChatRunState]):
     name: str = Field(default="write_outputs")
 
     def _run(self, state: ChatRunState) -> ChatRunState:
+        """Execute the write chat outputs stage and return updated run state."""
         self.pipeline._update_phase(
             state.progress,
             state.phase_task,

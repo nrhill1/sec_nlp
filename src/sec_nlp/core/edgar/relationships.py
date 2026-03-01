@@ -36,6 +36,7 @@ class FilingRelationType(StrEnum):
     proxy_for_annual = "proxy_for_annual"  # DEF 14A associated with 10-K
 
     def __str__(self) -> str:
+        """Return a display string for filing relation types."""
         return self.value
 
     @property

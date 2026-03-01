@@ -42,6 +42,7 @@ class ExhibitDocument:
         self.accession_number = accession_number
 
     def __repr__(self) -> str:
+        """Return a concise debug representation for exhibit downloader."""
         return f"<ExhibitDocument {self.exhibit_number} - {self.filename}>"
 
 

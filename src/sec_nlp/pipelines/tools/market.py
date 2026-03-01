@@ -23,6 +23,7 @@ def _check_timeout(
     timeout_seconds: float | None,
     stage: str,
 ) -> None:
+    """Raise timeout error when execution exceeds configured limit."""
     if timeout_seconds is None:
         return
     elapsed = monotonic() - started_at
@@ -38,6 +39,7 @@ def _format_metric_line(
     benchmark: str,
     profile: str,
 ) -> list[str]:
+    """Format one metric line for market context tool output."""
     return_pct = (
         f"{metric.return_pct:+.2f}%" if metric.return_pct is not None else "n/a"
     )
@@ -80,6 +82,7 @@ def _run_market_context_tool(
     profile: str = "standard",
     timeout_seconds: float | None = 30.0,
 ) -> JsonDict:
+    """Execute market context tool and return structured metrics."""
     started_at = monotonic()
     _check_timeout(
         started_at=started_at,

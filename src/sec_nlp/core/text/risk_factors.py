@@ -69,12 +69,15 @@ class RiskFactorClusterConfig:
 
 @dataclass
 class _ClusterState:
+    """Internal state container for risk-factor cluster accumulation."""
+
     simhash: Simhash
     statements: list[JsonDict]
     hashes: list[Simhash]
 
 
 def _normalize_text(text: JsonValue) -> JsonValue:
+    """Normalize text for risk-factor comparison and deduplication."""
     if not isinstance(text, str):
         return text
     cleaned = re.sub(r"\s+", " ", text).strip()
@@ -82,6 +85,7 @@ def _normalize_text(text: JsonValue) -> JsonValue:
 
 
 def _split_sentences(text: JsonValue) -> list[JsonValue]:
+    """Split text into sentence-like segments."""
     if not isinstance(text, str):
         return []
     cleaned = _normalize_text(text)
@@ -92,6 +96,7 @@ def _split_sentences(text: JsonValue) -> list[JsonValue]:
 
 
 def _split_statements(text: JsonValue) -> list[JsonValue]:
+    """Split text into candidate risk-factor statements."""
     if not isinstance(text, str):
         return []
     raw = text.replace("\r", "\n")
@@ -115,6 +120,7 @@ def _split_statements(text: JsonValue) -> list[JsonValue]:
 
 
 def _tokenize(text: JsonValue) -> list[JsonValue]:
+    """Tokenize normalized text for similarity checks."""
     if not isinstance(text, str):
         return []
     tokens = _TOKEN_PATTERN.findall(text.lower())
@@ -122,6 +128,7 @@ def _tokenize(text: JsonValue) -> list[JsonValue]:
 
 
 def _build_cluster_label(statements: Sequence[JsonDict]) -> JsonValue:
+    """Build a readable label for a risk-factor cluster."""
     counter: Counter = Counter()
     for statement in statements:
         text = statement.get("statement")
@@ -134,6 +141,7 @@ def _build_cluster_label(statements: Sequence[JsonDict]) -> JsonValue:
 
 
 def _statement_metadata(doc: Document) -> JsonDict:
+    """Build metadata payload for a clustered risk statement."""
     meta = doc.metadata or {}
     symbol = meta.get("symbol") or meta.get("ticker")
     accession = meta.get("accession_number") or meta.get("accession")

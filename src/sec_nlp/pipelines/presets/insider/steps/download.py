@@ -27,6 +27,7 @@ class DownloadedInsiderFiling:
 
 
 def _effective_date_range(settings: InsiderSettings) -> tuple[date, date]:
+    """Resolve effective date bounds for insider downloads."""
     end_date = settings.end_date or date.today()
     start_date = settings.start_date or (
         end_date - timedelta(days=30 * settings.lookback_months)
@@ -35,6 +36,7 @@ def _effective_date_range(settings: InsiderSettings) -> tuple[date, date]:
 
 
 def _effective_forms(settings: InsiderSettings) -> tuple[str, ...]:
+    """Resolve effective filing forms for insider downloads."""
     if settings.forms:
         cleaned = [item.strip().upper() for item in settings.forms if item]
         if cleaned:
@@ -50,6 +52,7 @@ def _collect_form_dirs(
     start_date: date,
     end_date: date,
 ) -> list[DownloadedInsiderFiling]:
+    """Collect existing downloaded form directories for symbols."""
     form_dir = base_dir / "sec-edgar-filings" / symbol.upper() / form_type
     if not form_dir.exists():
         return []
@@ -77,6 +80,7 @@ def _collect_form_dirs(
 
 
 def _sort_key(filing: DownloadedInsiderFiling) -> tuple[date, float]:
+    """Build deterministic sort key for downloaded insider docs."""
     filed_date = filing.filed_date or date.min
     try:
         mtime = filing.filing_dir.stat().st_mtime

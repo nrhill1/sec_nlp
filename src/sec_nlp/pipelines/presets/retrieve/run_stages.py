@@ -88,6 +88,7 @@ class CandidateSearchStage(PipelineStageRunnable[RetrieveRunState]):
     name: str = Field(default="candidate_search")
 
     def _run(self, state: RetrieveRunState) -> RetrieveRunState:
+        """Execute the candidate search stage and return updated run state."""
         self.pipeline._update_phase(
             state.progress,
             state.phase_task,
@@ -122,6 +123,7 @@ class RankHitsStage(PipelineStageRunnable[RetrieveRunState]):
     name: str = Field(default="rank_hits")
 
     def _run(self, state: RetrieveRunState) -> RetrieveRunState:
+        """Execute the rank hits stage and return updated run state."""
         self.pipeline._update_phase(
             state.progress,
             state.phase_task,
@@ -156,6 +158,7 @@ class HydrateStage(PipelineStageRunnable[RetrieveRunState]):
     name: str = Field(default="hydrate_hits")
 
     def _run(self, state: RetrieveRunState) -> RetrieveRunState:
+        """Execute the hydrate stage and return updated run state."""
         t0 = perf_counter()
         state.hydrated_hits = self.pipeline._download_and_chunk_hits(
             output_symbol=state.output_symbol,
@@ -172,6 +175,7 @@ class EmbeddingRerankStage(PipelineStageRunnable[RetrieveRunState]):
     name: str = Field(default="embedding_rerank")
 
     def _run(self, state: RetrieveRunState) -> RetrieveRunState:
+        """Execute the embedding rerank stage and return updated run state."""
         t0 = perf_counter()
         state.reranked_hits = self.pipeline._rerank_with_embeddings(
             hits=state.hydrated_hits,
@@ -187,6 +191,7 @@ class IndexStage(PipelineStageRunnable[RetrieveRunState]):
     name: str = Field(default="index_hits")
 
     def _run(self, state: RetrieveRunState) -> RetrieveRunState:
+        """Execute the index stage and return updated run state."""
         state.market_context_metadata = self.pipeline._market_context_metadata(
             output_symbol=state.output_symbol,
         )
@@ -212,6 +217,7 @@ class WriteOutputsStage(PipelineStageRunnable[RetrieveRunState]):
     name: str = Field(default="write_outputs")
 
     def _run(self, state: RetrieveRunState) -> RetrieveRunState:
+        """Execute the write outputs stage and return updated run state."""
         state.metadata = {
             "queries_processed": len(self.pipeline.config.queries),
             "candidate_hits": state.candidate_count,

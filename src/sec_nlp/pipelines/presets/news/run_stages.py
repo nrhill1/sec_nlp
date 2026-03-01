@@ -63,6 +63,7 @@ class ResolveAliasesStage(PipelineStageRunnable[NewsRunState]):
     name: str = Field(default="resolve_aliases")
 
     def _run(self, state: NewsRunState) -> NewsRunState:
+        """Execute the resolve aliases stage and return updated run state."""
         self.pipeline._update_phase(
             state.progress,
             state.phase_task,
@@ -83,6 +84,7 @@ class FetchItemsStage(PipelineStageRunnable[NewsRunState]):
     name: str = Field(default="fetch_items")
 
     def _run(self, state: NewsRunState) -> NewsRunState:
+        """Execute the fetch items stage and return updated run state."""
         self.pipeline._update_phase(
             state.progress,
             state.phase_task,
@@ -103,6 +105,7 @@ class MatchItemsStage(PipelineStageRunnable[NewsRunState]):
     name: str = Field(default="match_items")
 
     def _run(self, state: NewsRunState) -> NewsRunState:
+        """Execute the match items stage and return updated run state."""
         self.pipeline._update_phase(
             state.progress,
             state.phase_task,
@@ -127,6 +130,7 @@ class CorrelateItemsStage(PipelineStageRunnable[NewsRunState]):
     name: str = Field(default="correlate_items")
 
     def _run(self, state: NewsRunState) -> NewsRunState:
+        """Execute the correlate items stage and return updated run state."""
         self.pipeline._update_phase(
             state.progress,
             state.phase_task,
@@ -150,6 +154,7 @@ class WriteOutputsStage(PipelineStageRunnable[NewsRunState]):
     name: str = Field(default="write_outputs")
 
     def _run(self, state: NewsRunState) -> NewsRunState:
+        """Execute the write outputs stage and return updated run state."""
         self.pipeline._update_phase(
             state.progress,
             state.phase_task,

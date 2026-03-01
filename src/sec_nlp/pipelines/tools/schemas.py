@@ -14,6 +14,7 @@ type ToolJsonRecord = JsonDict
 
 
 def _normalize_symbol_list(values: list[str]) -> list[str]:
+    """Normalize symbol inputs into uppercase ticker lists."""
     seen: set[str] = set()
     normalized: list[str] = []
     for raw in values:
@@ -42,6 +43,7 @@ class MarketContextToolInput(BaseModel):
     @field_validator("symbols", mode="before")
     @classmethod
     def _normalize_symbols(cls, value: list[str] | str) -> list[str]:
+        """Normalize symbol list fields for tool request models."""
         if isinstance(value, str):
             value = [part for part in value.replace(",", " ").split() if part]
         return _normalize_symbol_list(value)
@@ -49,6 +51,7 @@ class MarketContextToolInput(BaseModel):
     @field_validator("benchmark", mode="before")
     @classmethod
     def _normalize_benchmark(cls, value: str) -> str:
+        """Normalize benchmark ticker inputs for market-context tools."""
         cleaned = value.strip().upper()
         if not cleaned:
             raise ValueError("benchmark cannot be empty")
@@ -84,6 +87,7 @@ class RetrieveHitsToolInput(BaseModel):
     @field_validator("symbols", mode="before")
     @classmethod
     def _normalize_symbols(cls, value: list[str] | str) -> list[str]:
+        """Normalize symbol list fields for tool request models."""
         if isinstance(value, str):
             value = [part for part in value.replace(",", " ").split() if part]
         return _normalize_symbol_list(value)
@@ -91,6 +95,7 @@ class RetrieveHitsToolInput(BaseModel):
     @field_validator("queries", mode="before")
     @classmethod
     def _normalize_queries(cls, value: list[str] | str) -> list[str]:
+        """Normalize retrieval query inputs and split bundled strings."""
         if isinstance(value, str):
             value = [part.strip() for part in value.split("||") if part.strip()]
         normalized: list[str] = []
@@ -135,6 +140,7 @@ class QdrantSearchToolInput(BaseModel):
     @field_validator("symbols", mode="before")
     @classmethod
     def _normalize_symbols(cls, value: list[str] | str) -> list[str]:
+        """Normalize symbol list fields for tool request models."""
         if isinstance(value, str):
             value = [part for part in value.replace(",", " ").split() if part]
         return _normalize_symbol_list(value)
@@ -142,6 +148,7 @@ class QdrantSearchToolInput(BaseModel):
     @field_validator("forms", mode="before")
     @classmethod
     def _normalize_forms(cls, value: list[str] | str) -> list[str]:
+        """Normalize SEC form filters for vector-search tools."""
         if isinstance(value, str):
             value = [part for part in value.replace(",", " ").split() if part]
         normalized: list[str] = []
@@ -183,6 +190,7 @@ class NewsContextToolInput(BaseModel):
     @field_validator("keywords", mode="before")
     @classmethod
     def _normalize_keywords(cls, value: list[str] | str) -> list[str]:
+        """Normalize keyword inputs for news-context tools."""
         if isinstance(value, str):
             value = [part.strip() for part in value.split("||") if part.strip()]
         normalized: list[str] = []

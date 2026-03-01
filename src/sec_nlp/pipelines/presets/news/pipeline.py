@@ -64,6 +64,7 @@ class NewsPipeline(BasePipeline):
         return NewsResult
 
     def _build_components(self) -> None:
+        """Initialize reusable components for news pipeline execution."""
         self._stage_chain = build_news_stage_chain(self)
 
     def run(self) -> NewsResult:
@@ -153,6 +154,7 @@ class NewsPipeline(BasePipeline):
         *,
         total: int | None = None,
     ) -> None:
+        """Update progress state and current news phase metadata."""
         if progress is None or phase_task is None:
             return
 
@@ -188,6 +190,7 @@ class NewsPipeline(BasePipeline):
         correlation: NewsCorrelation,
         symbol_aliases: list[str],
     ) -> list[Path]:
+        """Write news outputs and return emitted artifact paths."""
         symbol_out = self.config.get_symbol_output_dir(symbol)
         output_context = build_run_output_context(
             symbol=symbol,

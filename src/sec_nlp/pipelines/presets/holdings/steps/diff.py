@@ -12,6 +12,8 @@ from ..models import HoldingPosition, HoldingsDiff
 
 @dataclass(frozen=True)
 class _SnapshotPosition:
+    """Internal normalized snapshot row for holdings diffing."""
+
     cusip: str
     issuer: str | None
     shares: int
@@ -19,6 +21,7 @@ class _SnapshotPosition:
 
 
 def _parse_iso_date(value: str | None) -> date:
+    """Parse ISO-formatted date strings safely."""
     if value is None:
         return date.min
     try:
@@ -30,6 +33,7 @@ def _parse_iso_date(value: str | None) -> date:
 def _snapshot_for_accession(
     positions: list[HoldingPosition],
 ) -> dict[str, _SnapshotPosition]:
+    """Build normalized snapshot rows for one accession."""
     snapshot: dict[str, _SnapshotPosition] = {}
     for position in positions:
         if not position.cusip:
@@ -61,6 +65,7 @@ def _snapshot_for_accession(
 def _diff_status(
     previous: int, current: int
 ) -> Literal["increase", "decrease", "unchanged"]:
+    """Classify position changes between prior and current snapshots."""
     if current > previous:
         return "increase"
     if current < previous:

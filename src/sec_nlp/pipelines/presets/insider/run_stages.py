@@ -68,6 +68,7 @@ class DownloadInsiderFilingsStage(PipelineStageRunnable[InsiderRunState]):
     name: str = Field(default="download_filings")
 
     def _run(self, state: InsiderRunState) -> InsiderRunState:
+        """Execute the download insider filings stage and return updated run state."""
         self.pipeline._update_phase(
             state.progress,
             state.phase_task,
@@ -88,6 +89,7 @@ class ParseInsiderTransactionsStage(PipelineStageRunnable[InsiderRunState]):
     name: str = Field(default="parse_transactions")
 
     def _run(self, state: InsiderRunState) -> InsiderRunState:
+        """Execute the parse insider transactions stage and return updated run state."""
         self.pipeline._update_phase(
             state.progress,
             state.phase_task,
@@ -117,6 +119,7 @@ class AggregateInsiderActivityStage(PipelineStageRunnable[InsiderRunState]):
     name: str = Field(default="aggregate_activity")
 
     def _run(self, state: InsiderRunState) -> InsiderRunState:
+        """Execute the aggregate insider activity stage and return updated run state."""
         self.pipeline._update_phase(
             state.progress,
             state.phase_task,
@@ -140,6 +143,7 @@ class CorrelateInsiderActivityStage(PipelineStageRunnable[InsiderRunState]):
     name: str = Field(default="correlate_activity")
 
     def _run(self, state: InsiderRunState) -> InsiderRunState:
+        """Execute the correlate insider activity stage and return updated run state."""
         self.pipeline._update_phase(
             state.progress,
             state.phase_task,
@@ -162,6 +166,7 @@ class WriteInsiderOutputsStage(PipelineStageRunnable[InsiderRunState]):
     name: str = Field(default="write_outputs")
 
     def _run(self, state: InsiderRunState) -> InsiderRunState:
+        """Execute the write insider outputs stage and return updated run state."""
         self.pipeline._update_phase(
             state.progress,
             state.phase_task,

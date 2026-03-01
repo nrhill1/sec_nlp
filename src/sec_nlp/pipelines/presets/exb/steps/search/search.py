@@ -15,6 +15,7 @@ from sec_nlp.types import JsonObject, JsonValue
 
 
 def _doc_type_from_metadata(metadata: JsonObject) -> JsonValue:
+    """Resolve EXB document type label from metadata fields."""
     exhibit_number = metadata.get("exhibit_number")
     if not (isinstance(exhibit_number, str) and exhibit_number.strip()):
         exhibit_number = metadata.get("section_number")

@@ -12,6 +12,7 @@ from ..models import NewsHeadline
 
 
 def _normalize_topics(topics: list[str]) -> list[str]:
+    """Normalize and deduplicate topic labels for matching."""
     normalized: list[str] = []
     for topic in topics:
         cleaned = topic.strip()
@@ -21,6 +22,7 @@ def _normalize_topics(topics: list[str]) -> list[str]:
 
 
 def _simple_score(text: str, topics: list[str]) -> tuple[list[str], float]:
+    """Compute lightweight keyword overlap score for a headline."""
     if not topics:
         return [], 1.0
 
@@ -36,6 +38,7 @@ def _simple_score(text: str, topics: list[str]) -> tuple[list[str], float]:
 
 
 def _efts_score(text: str, topics: list[str]) -> tuple[list[str], float]:
+    """Compute EFTS-style relevance score for a headline and query."""
     topic_score = score_document(text, topics, case_insensitive=True)
     matched = [
         topic
@@ -53,6 +56,7 @@ def _efts_score(text: str, topics: list[str]) -> tuple[list[str], float]:
 def _normalized_symbol_aliases(
     symbol: str, symbol_aliases: list[str] | None
 ) -> list[str]:
+    """Build normalized symbol/company aliases for anchoring checks."""
     aliases: list[str] = [symbol]
     if symbol_aliases:
         aliases.extend(symbol_aliases)
@@ -76,6 +80,7 @@ def _has_symbol_anchor(
     symbol: str,
     symbol_aliases: list[str] | None = None,
 ) -> bool:
+    """Return whether headline text contains a symbol anchor alias."""
     aliases = _normalized_symbol_aliases(symbol, symbol_aliases)
     if not aliases:
         return True

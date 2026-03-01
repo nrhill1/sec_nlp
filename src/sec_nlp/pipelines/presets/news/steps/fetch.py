@@ -36,10 +36,13 @@ _CORPORATE_SUFFIXES: set[str] = {
 
 
 class _HasEmail(Protocol):
+    """Internal protocol for config objects that expose an email field."""
+
     email: str
 
 
 def _infer_feed_type(url: str) -> str:
+    """Infer feed type from a news source identifier."""
     lowered = url.lower()
     if "newsapi" in lowered or "polygon" in lowered or "json" in lowered:
         return "json_api"
@@ -47,6 +50,7 @@ def _infer_feed_type(url: str) -> str:
 
 
 def _normalize_feed_type(raw_type: str) -> str:
+    """Normalize feed-type values to known canonical labels."""
     lowered = raw_type.strip().lower()
     if lowered in {"json", "json_api", "api"}:
         return "json_api"
@@ -54,6 +58,7 @@ def _normalize_feed_type(raw_type: str) -> str:
 
 
 def _default_feed_name(url: str) -> str:
+    """Return a default feed name for a feed type."""
     parsed = urlparse(url)
     host = parsed.netloc.lower()
     if host.startswith("www."):
@@ -93,6 +98,7 @@ def parse_feed_specs(feed_specs: list[str]) -> list[FeedTuple]:
 
 
 def _parse_timestamp(value: str | None) -> datetime | None:
+    """Parse news timestamps into timezone-aware datetimes."""
     if value is None:
         return None
     stripped = value.strip()
@@ -111,6 +117,7 @@ def _parse_timestamp(value: str | None) -> datetime | None:
 
 
 def _normalize_topics(topics: list[str]) -> list[str]:
+    """Normalize and deduplicate topic labels."""
     normalized: list[str] = []
     for topic in topics:
         cleaned = topic.strip()
@@ -120,6 +127,7 @@ def _normalize_topics(topics: list[str]) -> list[str]:
 
 
 def _company_aliases(company_name: str) -> list[str]:
+    """Build company-name aliases for query expansion."""
     compact = re.sub(r"\s+", " ", company_name.strip())
     if not compact:
         return []
@@ -158,6 +166,7 @@ def _company_aliases(company_name: str) -> list[str]:
 
 @lru_cache(maxsize=256)
 def _resolve_company_name(symbol: str, email: str) -> str | None:
+    """Resolve the preferred company display name for a symbol."""
     try:
         return get_company_name_for_ticker(
             ticker=symbol,
@@ -201,6 +210,7 @@ def _default_keywords(
     *,
     symbol_aliases: list[str],
 ) -> list[str]:
+    """Build default news keywords for symbol and company context."""
     base: list[str] = [
         alias for alias in symbol_aliases if alias and not alias.startswith("$")
     ]

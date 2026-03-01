@@ -65,6 +65,7 @@ class FlowStageSpec(BaseModel):
     @field_validator("id")
     @classmethod
     def _validate_id(cls, value: str) -> str:
+        """Validate flow and stage identifiers against allowed patterns."""
         cleaned = value.strip()
         if not cleaned:
             raise ValueError("stage id cannot be empty")
@@ -90,6 +91,7 @@ class FlowStageInputBinding(BaseModel):
     @field_validator("from_stage")
     @classmethod
     def _validate_from_stage(cls, value: str) -> str:
+        """Validate input binding references to prior stages."""
         cleaned = value.strip()
         if not cleaned:
             raise ValueError("inputs.from_stage cannot be empty")
@@ -119,6 +121,7 @@ class FlowSpec(BaseModel):
 
     @model_validator(mode="after")
     def _validate_stage_graph(self) -> FlowSpec:
+        """Validate stage graph ordering and dependency constraints."""
         if not self.stages:
             raise ValueError("flow spec requires at least one stage")
 

@@ -24,4 +24,5 @@ class Financials(FinancialsSettings, BasePipelineCommand):
     )
 
     def _get_header_subtitle(self) -> str:
+        """Build subtitle text for the financials command header."""
         return "Financial Statements"

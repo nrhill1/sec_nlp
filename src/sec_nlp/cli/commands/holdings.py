@@ -24,4 +24,5 @@ class Holdings(HoldingsSettings, BasePipelineCommand):
     )
 
     def _get_header_subtitle(self) -> str:
+        """Build subtitle text for the holdings command header."""
         return "Institutional Holdings"

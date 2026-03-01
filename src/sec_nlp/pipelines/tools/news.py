@@ -22,6 +22,7 @@ def _check_timeout(
     timeout_seconds: float | None,
     stage: str,
 ) -> None:
+    """Raise timeout error when execution exceeds configured limit."""
     if timeout_seconds is None:
         return
     elapsed = monotonic() - started_at
@@ -32,6 +33,7 @@ def _check_timeout(
 
 
 def _parse_timestamp(value: str | None) -> datetime | None:
+    """Parse timestamp strings into datetime values when possible."""
     if value is None:
         return None
     cleaned = value.strip()
@@ -54,6 +56,7 @@ def _run_news_context_tool(
     lookback_days: int = 14,
     timeout_seconds: float | None = 30.0,
 ) -> JsonDict:
+    """Execute news context tool and return deduplicated items."""
     started_at = monotonic()
     cutoff_date = datetime.now(UTC).date() - timedelta(days=lookback_days)
     retriever = create_news_retriever(

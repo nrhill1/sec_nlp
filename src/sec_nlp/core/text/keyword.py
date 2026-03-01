@@ -83,6 +83,7 @@ class KeywordMatcher:
         cls,
         value: KeywordMatcher | Iterable[str],
     ) -> list[str]:
+        """Validate keyword patterns before matcher initialization."""
         if isinstance(value, KeywordMatcher):
             patterns_iterable = value.patterns
         else:
@@ -113,6 +114,7 @@ class KeywordMatcher:
     @field_validator("case_insensitive", mode="before")
     @classmethod
     def _validate_case_insensitive(cls, value: bool) -> bool:
+        """Validate case-insensitive keyword pattern constraints."""
         if not isinstance(value, bool):
             raise TypeError("case_insensitive must be a bool")
         return value
@@ -124,6 +126,7 @@ class KeywordMatcher:
         automaton: ahocorasick.Automaton,
         info: ValidationInfo,
     ) -> ahocorasick.Automaton:
+        """Build the keyword-matching automaton backend."""
         patterns = info.data.get("patterns")
         if not isinstance(patterns, list):
             raise TypeError("patterns must be a list of strings")
@@ -159,6 +162,7 @@ class KeywordMatcher:
         word: str,
         value: int,
     ) -> None:
+        """Add one keyword pattern to the automaton backend."""
         automaton.add_word(word, value)
 
     @classmethod
@@ -169,6 +173,7 @@ class KeywordMatcher:
         patterns: list[str],
         case_insensitive: bool,
     ) -> None:
+        """Populate the automaton with all validated keyword specs."""
         automaton.clear()
         seen: set[str] = set()
         for idx, pattern in enumerate(patterns):
@@ -185,6 +190,7 @@ class KeywordMatcher:
         *,
         expected_count: int,
     ) -> None:
+        """Validate automaton state before executing matches."""
         if len(automaton) != expected_count:
             raise ValueError("automaton entry count does not match patterns")
 
@@ -251,6 +257,7 @@ class KeywordMatcher:
         *,
         case_insensitive: bool,
     ) -> list[KeywordSpec]:
+        """Normalize and sort keyword specs for scoring."""
         cleaned: list[KeywordSpec] = []
         seen: set[str] = set()
         for spec in specs:
@@ -397,6 +404,7 @@ class KeywordMatcher:
                 fallback_kept = fallback_pool[:max_non_keyword_chunks]
 
         def _score(doc: Document) -> tuple[float, int, int]:
+            """Compute weighted keyword score and ranking vectors."""
             meta = doc.metadata or {}
             return (
                 float(meta.get("keyword_score", 0.0)),

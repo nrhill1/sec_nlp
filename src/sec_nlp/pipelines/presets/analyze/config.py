@@ -505,6 +505,7 @@ class AnalyzeConfig(BasePipelineSettings):
     def _apply_prompt_profile(
         cls, values: dict[str, JsonValue]
     ) -> dict[str, JsonValue]:
+        """Resolve apply prompt profile."""
         profile_value = values.get("prompt")
         if profile_value is None:
             profile_value = values.get("prompt_profile")
@@ -525,6 +526,7 @@ class AnalyzeConfig(BasePipelineSettings):
     def _apply_market_flags(
         cls, values: dict[str, JsonValue]
     ) -> dict[str, JsonValue]:
+        """Resolve apply market flags."""
         market_values: dict[str, JsonValue] = {}
         raw_market = values.get("market")
         if isinstance(raw_market, MarketConfig):
@@ -581,6 +583,7 @@ class AnalyzeConfig(BasePipelineSettings):
 
     @staticmethod
     def _combine_section_patterns(patterns: JsonDict) -> JsonValue:
+        """Resolve combine section patterns."""
         combined_parts = []
         for pattern in patterns.values():
             if isinstance(pattern, str) and pattern:
@@ -592,6 +595,7 @@ class AnalyzeConfig(BasePipelineSettings):
     @model_validator(mode="before")
     @classmethod
     def _apply_mode_defaults(cls, values: JsonDict) -> JsonDict:
+        """Resolve apply mode defaults."""
         raw_mode = values.get("mode")
         if isinstance(raw_mode, FilingMode):
             mode = raw_mode
@@ -715,6 +719,7 @@ class AnalyzeConfig(BasePipelineSettings):
     def _normalize_llm_ensemble_models(
         cls, value: list[str] | str | None
     ) -> list[str]:
+        """Normalize llm ensemble models."""
         if value is None:
             return []
         if isinstance(value, str):

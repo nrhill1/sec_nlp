@@ -21,6 +21,7 @@ def _rank_key(
     query: str,
     accession: str,
 ) -> tuple[float, date, str, str]:
+    """Build deterministic sort key for ranking tuples."""
     return (score, filed_date, query.casefold(), accession)
 
 
@@ -80,6 +81,7 @@ def _query_terms(
     min_len: int = 3,
     stopwords: Collection[str] | None = None,
 ) -> set[str]:
+    """Extract normalized query terms from hit metadata."""
     return extract_query_terms(
         query,
         min_len=min_len,

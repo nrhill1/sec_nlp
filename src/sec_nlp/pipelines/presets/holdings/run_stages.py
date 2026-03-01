@@ -62,6 +62,7 @@ class DownloadHoldingsFilingsStage(PipelineStageRunnable[HoldingsRunState]):
     name: str = Field(default="download_filings")
 
     def _run(self, state: HoldingsRunState) -> HoldingsRunState:
+        """Execute the download holdings filings stage and return updated run state."""
         self.pipeline._update_phase(
             state.progress,
             state.phase_task,
@@ -82,6 +83,7 @@ class ParseHoldingsPositionsStage(PipelineStageRunnable[HoldingsRunState]):
     name: str = Field(default="parse_positions")
 
     def _run(self, state: HoldingsRunState) -> HoldingsRunState:
+        """Execute the parse holdings positions stage and return updated run state."""
         self.pipeline._update_phase(
             state.progress,
             state.phase_task,
@@ -112,6 +114,7 @@ class DiffHoldingsPositionsStage(PipelineStageRunnable[HoldingsRunState]):
     name: str = Field(default="diff_positions")
 
     def _run(self, state: HoldingsRunState) -> HoldingsRunState:
+        """Execute the diff holdings positions stage and return updated run state."""
         self.pipeline._update_phase(
             state.progress,
             state.phase_task,
@@ -132,6 +135,7 @@ class AggregateHoldingsSummaryStage(PipelineStageRunnable[HoldingsRunState]):
     name: str = Field(default="aggregate_summary")
 
     def _run(self, state: HoldingsRunState) -> HoldingsRunState:
+        """Execute the aggregate holdings summary stage and return updated run state."""
         self.pipeline._update_phase(
             state.progress,
             state.phase_task,
@@ -154,6 +158,7 @@ class WriteHoldingsOutputsStage(PipelineStageRunnable[HoldingsRunState]):
     name: str = Field(default="write_outputs")
 
     def _run(self, state: HoldingsRunState) -> HoldingsRunState:
+        """Execute the write holdings outputs stage and return updated run state."""
         self.pipeline._update_phase(
             state.progress,
             state.phase_task,

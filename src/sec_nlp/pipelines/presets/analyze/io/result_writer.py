@@ -177,6 +177,7 @@ def _log_relationship_timeline(
     accession: str,
     timeline: dict[str, list[JsonDict]],
 ) -> None:
+    """Log relationship timeline summary for analyze outputs."""
     logger.info("Related filings for %s (%s):", symbol, accession or "unknown")
     for relation_type, items in timeline.items():
         accessions: list[str] = []

@@ -471,6 +471,7 @@ class AnalyzePipeline(BasePipeline):
         prev_handler = signal.getsignal(signal.SIGINT)
 
         def _sigint_handler(signum: int, frame: FrameType | None) -> None:
+            """Handle SIGINT and request graceful pipeline shutdown."""
             if _abort_event.is_set():
                 # Second Ctrl+C — restore previous handler and re-raise.
                 signal.signal(signal.SIGINT, prev_handler)
@@ -679,6 +680,7 @@ class AnalyzePipeline(BasePipeline):
         symbol: str | None,
         label: str | None,
     ) -> None:
+        """Resolve log chunk stats by accession."""
         accession_docs: dict[str | None, list[Document]] = defaultdict(list)
         for doc in docs:
             accession = get_accession_from_metadata(doc.metadata)
@@ -785,7 +787,7 @@ class AnalyzePipeline(BasePipeline):
         phase_task: TaskID | None = None,
         prefetched: PrefetchedSymbolData | None = None,
     ) -> tuple[list[Path], ChunkStats]:
-        """Process a single symbol through the full analysis pipeline."""
+        """Run a single symbol through the full analysis pipeline."""
         stage_chain = self._stage_chain
         if stage_chain is None:
             stage_chain = build_analyze_stage_chain(self)
@@ -908,7 +910,7 @@ class AnalyzePipeline(BasePipeline):
         perform_download: bool,
         timings: Timings,
     ) -> tuple[int | None, bool]:
-        """Handle EFTS auto-download logic."""
+        """Apply EFTS auto-download policy for the current symbol run."""
         limit_per_symbol = efts_utils.cap_efts_download_limit(
             self.config, limit_per_symbol
         )
@@ -1301,6 +1303,7 @@ class AnalyzePipeline(BasePipeline):
 
     @staticmethod
     def _ensure_filing_dates(docs: list[Document]) -> None:
+        """Ensure filing dates is initialized and available."""
         for doc in docs:
             metadata = dict(doc.metadata or {})
             if metadata.get("filing_date") or metadata.get("acceptance_date"):
@@ -1416,6 +1419,7 @@ class AnalyzePipeline(BasePipeline):
 
     @staticmethod
     def _extract_filing_date_for_macro(docs: list[Document]) -> date | None:
+        """Extract filing date for macro."""
         for doc in docs:
             metadata = doc.metadata or {}
             for key in ("filing_date", "acceptance_date", "filed_date"):
@@ -1429,6 +1433,7 @@ class AnalyzePipeline(BasePipeline):
 
     @staticmethod
     def _combine_contexts(*contexts: str | None) -> str | None:
+        """Resolve combine contexts."""
         parts = [context for context in contexts if context]
         if not parts:
             return None
@@ -1437,6 +1442,7 @@ class AnalyzePipeline(BasePipeline):
     def _update_efts_keywords_from_docs(
         self, symbol: str, docs: list[Document]
     ) -> None:
+        """Update efts keywords from docs."""
         efts_utils.update_efts_keywords_from_docs(
             symbol=symbol,
             docs=docs,

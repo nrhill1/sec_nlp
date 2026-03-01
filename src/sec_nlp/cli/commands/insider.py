@@ -21,4 +21,5 @@ class Insider(InsiderSettings, BasePipelineCommand):
     )
 
     def _get_header_subtitle(self) -> str:
+        """Build subtitle text for the insider command header."""
         return "Insider Transactions"

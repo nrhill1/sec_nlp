@@ -30,6 +30,7 @@ class NewsItem(BaseModel):
 
 @lru_cache(maxsize=1)
 def _load_newswatch_module() -> ModuleType:
+    """Load the optional native newswatch extension module."""
     try:
         return import_module("newswatch")
     except Exception as exc:  # pragma: no cover - depends on extension install
@@ -40,12 +41,14 @@ def _load_newswatch_module() -> ModuleType:
 
 
 def _field(raw_item, name: str):
+    """Read a string-key field from a mapping payload."""
     if isinstance(raw_item, Mapping):
         return raw_item.get(name)
     return getattr(raw_item, name, None)
 
 
 def _coerce_str(value) -> str | None:
+    """Coerce scalar values to strings when possible."""
     if value is None:
         return None
     if isinstance(value, str):
@@ -55,6 +58,7 @@ def _coerce_str(value) -> str | None:
 
 
 def _coerce_keywords(value) -> list[str]:
+    """Normalize keyword payloads to a list of strings."""
     if not isinstance(value, list):
         return []
     keywords: list[str] = []
@@ -66,6 +70,7 @@ def _coerce_keywords(value) -> list[str]:
 
 
 def _to_news_item(raw_item) -> NewsItem:
+    """Convert one native payload item to a NewsItem model."""
     title = _coerce_str(_field(raw_item, "title")) or ""
     url = _coerce_str(_field(raw_item, "url")) or ""
     source = _coerce_str(_field(raw_item, "source")) or ""
@@ -80,6 +85,7 @@ def _to_news_item(raw_item) -> NewsItem:
 
 
 def _to_news_items(raw_items: list) -> list[NewsItem]:
+    """Convert native payload lists to NewsItem models."""
     return [_to_news_item(raw_item) for raw_item in raw_items]
 
 
@@ -94,6 +100,7 @@ class NewsRetriever:
         rate_limit_secs: float = 0.0,
         module: ModuleType | None = None,
     ) -> None:
+        """Initialize the newswatch client wrapper."""
         if not feeds:
             raise ValueError("feeds must be non-empty")
         self._module = module or _load_newswatch_module()

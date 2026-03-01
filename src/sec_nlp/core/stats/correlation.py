@@ -15,6 +15,7 @@ class CorrExtensionError(RuntimeError):
 
 @lru_cache(maxsize=1)
 def _load_corr_module() -> ModuleType:
+    """Load optional native correlation extension module."""
     try:
         return import_module("corr")
     except Exception as exc:  # pragma: no cover - depends on extension install

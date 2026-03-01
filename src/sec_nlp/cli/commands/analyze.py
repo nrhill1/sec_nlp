@@ -90,6 +90,7 @@ class AnalyzeCommand(AnalyzeConfig, BasePipelineCommand):
 
     def _supports_interactive(self) -> bool:
         # If a preset is explicitly provided, don't enter interactive mode.
+        """Return whether analyze command supports interactive mode."""
         return not bool(self.preset)
 
     def _run_interactive(self) -> None:
@@ -124,6 +125,7 @@ class AnalyzeCommand(AnalyzeConfig, BasePipelineCommand):
     def _merge_cli_queries(
         cls, values: dict[str, JsonValue]
     ) -> dict[str, JsonValue]:
+        """Merge CLI query arguments into a normalized query list."""
         cli_queries = values.get("cli_queries")
         if isinstance(cli_queries, list) and cli_queries:
             raw_search = values.get("search")
@@ -137,11 +139,13 @@ class AnalyzeCommand(AnalyzeConfig, BasePipelineCommand):
         return values
 
     def _handle_missing_symbols(self) -> None:
+        """Emit an error when required analyze symbols are missing."""
         logger.error(color_text("No symbols provided.", color="red"))
         logger.info("Usage: sec-nlp analyze SYMBOL [SYMBOL ...] [OPTIONS]")
         logger.info("Run 'sec-nlp analyze --help' for more information.")
 
     def _get_header_subtitle(self) -> str:
+        """Build subtitle text for the analyze command header."""
         return "Topic Scoring + LLM"
 
     # Backwards compatibility: keep legacy class name

@@ -314,5 +314,6 @@ class PipelineChain(BaseModel):
         return len(self.stages)
 
     def __repr__(self) -> str:
+        """Return concise debug representation for composition chain state."""
         stage_names = [s.name for s in self.stages]
         return f"PipelineChain(name={self.name!r}, stages={stage_names})"

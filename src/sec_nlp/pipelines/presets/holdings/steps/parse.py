@@ -15,6 +15,7 @@ from .download import DownloadedHoldingsFiling
 
 
 def _coerce_str(value: JsonValue) -> str | None:
+    """Coerce scalar values to strings when possible."""
     if value is None:
         return None
     if isinstance(value, str):
@@ -24,6 +25,7 @@ def _coerce_str(value: JsonValue) -> str | None:
 
 
 def _coerce_int(value: JsonValue) -> int | None:
+    """Coerce scalar values to integers when possible."""
     if isinstance(value, bool):
         return None
     if isinstance(value, int):
@@ -42,6 +44,7 @@ def _coerce_int(value: JsonValue) -> int | None:
 
 
 def _source_name(value: JsonValue) -> str | None:
+    """Resolve source label for a parsed holdings record."""
     source = _coerce_str(value)
     if source is None:
         return None
@@ -54,6 +57,7 @@ def _map_document(
     filing: DownloadedHoldingsFiling,
     document: Document,
 ) -> HoldingPosition:
+    """Map a parsed document into holdings position rows."""
     metadata = document.metadata
     voting_authority = metadata.get("voting_authority")
     voting = voting_authority if isinstance(voting_authority, dict) else {}

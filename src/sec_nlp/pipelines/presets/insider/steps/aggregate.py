@@ -23,6 +23,8 @@ class TradeCluster:
 
 @dataclass
 class _OwnerAccumulator:
+    """Internal accumulator for owner-level insider aggregates."""
+
     owner_name: str | None
     owner_cik: int | None
     total_transactions: int = 0
@@ -34,6 +36,7 @@ class _OwnerAccumulator:
 
 
 def _parse_iso_date(value: str | None) -> date | None:
+    """Parse ISO-formatted date strings safely."""
     if value is None:
         return None
     try:
@@ -43,6 +46,7 @@ def _parse_iso_date(value: str | None) -> date | None:
 
 
 def _owner_key(transaction: InsiderTransaction) -> str:
+    """Build a stable owner key for aggregation."""
     if transaction.owner_cik is not None:
         return str(transaction.owner_cik)
     if transaction.owner_name:
@@ -51,6 +55,7 @@ def _owner_key(transaction: InsiderTransaction) -> str:
 
 
 def _direction(transaction: InsiderTransaction) -> int:
+    """Normalize transaction direction labels."""
     ownership = (transaction.ownership_type or "").strip().upper()
     if ownership == "A":
         return 1

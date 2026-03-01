@@ -64,6 +64,7 @@ class EventsPipeline(BasePipeline):
         return EventsResult
 
     def _build_components(self) -> None:
+        """Initialize reusable components for events pipeline execution."""
         self._stage_chain = build_events_stage_chain(self)
 
     def run(self) -> EventsResult:
@@ -151,6 +152,7 @@ class EventsPipeline(BasePipeline):
         symbol: str,
         phase: str,
     ) -> None:
+        """Update progress state and current events phase metadata."""
         if progress is None or phase_task is None:
             return
 
@@ -173,6 +175,7 @@ class EventsPipeline(BasePipeline):
         symbol: str,
         events: list[DetectedEvent],
     ) -> list[Path]:
+        """Write events outputs and return emitted artifact paths."""
         symbol_out = self.config.get_symbol_output_dir(symbol)
         output_context = build_run_output_context(
             symbol=symbol,

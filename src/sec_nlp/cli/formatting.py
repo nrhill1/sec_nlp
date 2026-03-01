@@ -22,6 +22,7 @@ type HeaderRenderable = Group | Align | Panel | Rule | Text
 
 
 def _render_rich(renderable) -> str:
+    """Render markup text with Rich formatting styles."""
     console = create_rich_console(
         force_terminal=True,
         width=get_terminal_width(),
@@ -260,6 +261,7 @@ def format_table(
         text: str, width: int, align: str, color: str | None = None
     ) -> str:
         # Get visible length (ignoring ANSI codes already in text)
+        """Align table cell text using the column alignment rule."""
         text_len = visible_length(text)
         padding = width - text_len
         if padding <= 0:
@@ -292,11 +294,13 @@ def format_table(
         return padded
 
     def _get_align(col_idx: int) -> str:
+        """Return alignment preference for a table column."""
         if column_specs and col_idx < len(column_specs):
             return column_specs[col_idx].align
         return "left"
 
     def _get_color(col_idx: int, is_header: bool) -> str | None:
+        """Return display color for a table column."""
         if is_header:
             return header_color
         if column_specs and col_idx < len(column_specs):

@@ -21,4 +21,5 @@ class Events(EventsSettings, BasePipelineCommand):
     )
 
     def _get_header_subtitle(self) -> str:
+        """Build subtitle text for the events command header."""
         return "Event Timeline"

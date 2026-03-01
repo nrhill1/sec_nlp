@@ -13,6 +13,7 @@ from pydantic_settings import CliApp
 
 # Install a fast SIGINT handler before importing the rest of the app to avoid noisy tracebacks
 def _graceful_sigint(signum: int, frame: FrameType | None) -> None:
+    """Handle SIGINT by exiting with a friendly interruption status."""
     print("\nInterrupted by user (Ctrl+C)")
     sys.exit(130)
 
@@ -191,6 +192,7 @@ def main() -> int:
     # Install a fast SIGINT handler to exit cleanly without long tracebacks
     def _graceful_sigint(signum: int, frame: FrameType | None) -> None:
         # Use stdout for immediate feedback; logger may not be initialized yet
+        """Handle SIGINT by exiting with a friendly interruption status."""
         print("\nInterrupted by user (Ctrl+C)")
         sys.exit(130)
 

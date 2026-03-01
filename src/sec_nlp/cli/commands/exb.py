@@ -42,6 +42,7 @@ class Exb(ExhibitConfig, BasePipelineCommand):
     )
 
     def _get_header_subtitle(self) -> str:
+        """Build subtitle text for the exb command header."""
         return "Exhibits"
 
     def _log_config_details(self) -> None:

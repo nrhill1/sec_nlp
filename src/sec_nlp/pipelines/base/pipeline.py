@@ -221,4 +221,5 @@ class BasePipeline(
         return cls.result_model()
 
     def __repr__(self) -> str:
+        """Return concise debug representation for pipeline settings snapshot."""
         return f"<{self.__class__.__name__} type={self.pipeline_type}>"

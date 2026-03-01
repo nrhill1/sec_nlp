@@ -34,6 +34,7 @@ class ResultOutputParser[R: BasePipelineResult](
 
     @property
     def _type(self) -> str:
+        """Return chain type identifier for serialization metadata."""
         return f"sec_nlp.core.llm.chains.ResultOutputParser[{self.pydantic_object.__name__}]"
 
     @property

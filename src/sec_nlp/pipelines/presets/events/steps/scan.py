@@ -37,20 +37,24 @@ _ITEM_EVENT_MAP: dict[str, str] = {
 
 
 def _extract_accession(path: Path) -> str | None:
+    """Extract accession number from event document metadata."""
     match = _ACCESSION_RE.search(str(path))
     return match.group(1) if match else None
 
 
 def _extract_item_numbers(text: str) -> list[str]:
+    """Extract normalized item numbers from event metadata."""
     items = [match.group(1) for match in _ITEM_RE.finditer(text)]
     return list(dict.fromkeys(items))
 
 
 def _normalize_event_type(value: str) -> str:
+    """Normalize event-type labels to canonical forms."""
     return value.strip().lower().replace("-", "_").replace(" ", "_")
 
 
 def _extract_form_type(path: Path) -> str:
+    """Extract filing form type from event document metadata."""
     parts = path.parts
     if "sec-edgar-filings" in parts:
         index = parts.index("sec-edgar-filings")
@@ -62,6 +66,7 @@ def _extract_form_type(path: Path) -> str:
 def _resolve_event_type(
     item_numbers: list[str], text: str
 ) -> tuple[str, list[str], str | None]:
+    """Resolve event type from form and item metadata."""
     mentions: list[str] = []
     snippet: str | None = None
 

@@ -94,6 +94,7 @@ def _format_table(headers: list[str], rows: list[list[str]]) -> str:
             widths[idx] = max(widths[idx], len(cell))
 
     def _format_row(values: Iterable[str]) -> str:
+        """Format one table row using precomputed column widths."""
         parts = []
         for idx, value in enumerate(values):
             if idx == 0:
@@ -151,6 +152,7 @@ def _build_cases(config: BenchmarkConfig) -> list[BenchmarkCase]:
     texts = _random_texts(config.iterations, config.text_size, rng)
 
     def _run_simhash(iterations: int) -> None:
+        """Run SimHash dedupe microbenchmark for configured iterations."""
         deduper = SimHashDeduplicator(
             config=SimHashConfig(
                 num_bits=config.simhash_bits,
@@ -161,6 +163,7 @@ def _build_cases(config: BenchmarkConfig) -> list[BenchmarkCase]:
             deduper.add_if_unique(text)
 
     def _run_keyword_score(iterations: int) -> None:
+        """Run keyword-scoring microbenchmark for configured iterations."""
         specs = [
             KeywordSpec("warranty", 2, 1.5),
             KeywordSpec("recall", 2, 1.2),
@@ -173,6 +176,7 @@ def _build_cases(config: BenchmarkConfig) -> list[BenchmarkCase]:
             KeywordMatcher.score_keywords(text, specs)
 
     def _run_validation_result(iterations: int) -> None:
+        """Run validation-model construction benchmark iterations."""
         for i in range(iterations):
             ValidationResult(
                 passed=True,
@@ -183,6 +187,7 @@ def _build_cases(config: BenchmarkConfig) -> list[BenchmarkCase]:
             )
 
     def _run_analysis_output(iterations: int) -> None:
+        """Run analysis-output model construction benchmark iterations."""
         for _i in range(iterations):
             AnalysisOutput(
                 symbol="AAPL",

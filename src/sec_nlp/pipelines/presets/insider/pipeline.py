@@ -76,11 +76,13 @@ class InsiderPipeline(BasePipeline):
         return InsiderResult
 
     def _get_parser(self) -> InsiderParser:
+        """Get the filing parser instance used by the insider pipeline."""
         if self._parser is None:
             self._parser = InsiderParser()
         return self._parser
 
     def _build_components(self) -> None:
+        """Initialize reusable components for insider execution."""
         self._stage_chain = build_insider_stage_chain(self)
 
     def run(self) -> InsiderResult:
@@ -167,6 +169,7 @@ class InsiderPipeline(BasePipeline):
         *,
         total: int | None = None,
     ) -> None:
+        """Update progress state and current insider phase metadata."""
         if progress is None or phase_task is None:
             return
         if total is None:
@@ -204,6 +207,7 @@ class InsiderPipeline(BasePipeline):
         clusters: list[TradeCluster],
         correlation_meta: dict[str, int],
     ) -> list[Path]:
+        """Write insider outputs and return artifact file paths."""
         symbol_out = self.config.get_symbol_output_dir(symbol)
         output_context = build_run_output_context(
             symbol=symbol,

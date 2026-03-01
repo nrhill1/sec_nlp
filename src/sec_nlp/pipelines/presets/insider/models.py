@@ -84,6 +84,7 @@ class InsiderAlert(BaseModel):
         | tuple[JsonValue, ...]
         | set[JsonValue],
     ) -> list[str]:
+        """Deduplicate related transaction IDs while preserving order."""
         if value is None:
             return []
         if isinstance(value, str):

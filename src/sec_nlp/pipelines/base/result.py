@@ -83,6 +83,7 @@ class BasePipelineResult(BaseModel, ABC):
         return self.success and not self.error
 
     def __repr__(self) -> str:
+        """Return concise debug representation for pipeline result state."""
         return f"<{self.__class__.__name__} type={self.pipeline_type} success={self.success}>"
 
     def __str__(self) -> str:

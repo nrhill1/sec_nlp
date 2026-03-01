@@ -279,6 +279,7 @@ class ChatSettings(BasePipelineSettings):
     @field_validator("question", mode="before")
     @classmethod
     def _normalize_question(cls, value: str | None) -> str | None:
+        """Normalize question."""
         if value is None:
             return None
         cleaned = value.strip()
@@ -289,6 +290,7 @@ class ChatSettings(BasePipelineSettings):
     def _normalize_prefetch_queries(
         cls, value: list[str] | str | None
     ) -> list[str]:
+        """Normalize prefetch queries."""
         if value is None:
             return []
         if isinstance(value, str):
@@ -310,6 +312,7 @@ class ChatSettings(BasePipelineSettings):
     @field_validator("market_benchmark_symbol", mode="before")
     @classmethod
     def _normalize_benchmark_symbol(cls, value: str) -> str:
+        """Normalize benchmark symbol."""
         cleaned = value.strip().upper()
         if not cleaned:
             raise ValueError("market_benchmark_symbol cannot be empty")
@@ -318,6 +321,7 @@ class ChatSettings(BasePipelineSettings):
     @field_validator("collections", mode="before")
     @classmethod
     def _normalize_collections(cls, value: list[str] | str | None) -> list[str]:
+        """Normalize collections."""
         if value is None:
             return ["retrieve", "analyze"]
         if isinstance(value, str):
@@ -342,6 +346,7 @@ class ChatSettings(BasePipelineSettings):
         cls,
         value: list[ChatHistoryTurn | dict[str, str]] | None,
     ) -> list[ChatHistoryTurn]:
+        """Normalize history."""
         if value is None:
             return []
 

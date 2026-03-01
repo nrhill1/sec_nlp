@@ -51,6 +51,7 @@ class PrepareSymbolStage(PipelineStageRunnable[WarrantyRunState]):
     name: str = Field(default="prepare_symbol")
 
     def _run(self, state: WarrantyRunState) -> WarrantyRunState:
+        """Execute this warranty stage and return updated run state."""
         from sec_edgar_downloader import Downloader
 
         log_divider(logger, color="cyan")
@@ -89,6 +90,7 @@ class ResolveHtmlPathsStage(PipelineStageRunnable[WarrantyRunState]):
     name: str = Field(default="resolve_html_paths")
 
     def _run(self, state: WarrantyRunState) -> WarrantyRunState:
+        """Execute this warranty stage and return updated run state."""
         try:
             state.html_paths = self.pipeline._loader.html_paths_for_symbol(
                 symbol=state.symbol,
@@ -127,6 +129,7 @@ class ProcessFilingsStage(PipelineStageRunnable[WarrantyRunState]):
     name: str = Field(default="process_filings")
 
     def _run(self, state: WarrantyRunState) -> WarrantyRunState:
+        """Execute this warranty stage and return updated run state."""
         if state.skip_symbol:
             return state
         for html_path in state.html_paths:

@@ -204,6 +204,7 @@ class MarketRetriever:
         """Fetch the latest close price for a ticker."""
 
         def _fetch() -> float:
+            """Fetch quotes for one ticker in the requested date range."""
             return self._market.fetch_price(ticker)
 
         self._log("fetch_price ticker=%s", ticker)
@@ -218,6 +219,7 @@ class MarketRetriever:
             return {}
 
         def _fetch() -> dict[str, float]:
+            """Fetch quotes for one ticker in the requested date range."""
             return self._market.fetch_prices(list(normalized))
 
         self._log("fetch_prices tickers=%s", ", ".join(normalized))
@@ -241,6 +243,7 @@ class MarketRetriever:
             return list(cached_quotes)
 
         def _fetch() -> list[dict[str, float | int]]:
+            """Fetch quotes for one ticker in the requested date range."""
             return self._market.retrieve_range(ticker, date_range_text)
 
         self._log("retrieve_range ticker=%s range=%s", ticker, date_range_text)

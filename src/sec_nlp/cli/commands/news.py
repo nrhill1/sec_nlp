@@ -21,4 +21,5 @@ class News(NewsSettings, BasePipelineCommand):
     )
 
     def _get_header_subtitle(self) -> str:
+        """Build subtitle text for the news command header."""
         return "News Monitoring"

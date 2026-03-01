@@ -24,4 +24,5 @@ class Warranty(WarrantyConfig, BasePipelineCommand):
     )
 
     def _get_header_subtitle(self) -> str:
+        """Build subtitle text for the warranty command header."""
         return "Warranty Signals"

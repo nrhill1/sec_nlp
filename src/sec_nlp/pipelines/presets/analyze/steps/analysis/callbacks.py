@@ -14,6 +14,7 @@ class TracingCallbackHandler(BaseCallbackHandler):
     """Lightweight LangChain callback handler for logging/tracing."""
 
     def __init__(self, log_prompts: bool = False) -> None:
+        """Initialize callback state for per-chunk analysis instrumentation."""
         self.log_prompts = log_prompts
 
     def on_llm_start(

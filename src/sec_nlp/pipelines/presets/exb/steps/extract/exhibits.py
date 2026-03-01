@@ -387,6 +387,7 @@ def collect_exhibit_documents(
 
 
 def _normalize_exhibit_numbers(values: list[JsonValue]) -> list[JsonValue]:
+    """Normalize exhibit number labels for matching."""
     cleaned: list[JsonValue] = []
     seen = set()
     for item in values:
@@ -404,6 +405,7 @@ def _normalize_exhibit_numbers(values: list[JsonValue]) -> list[JsonValue]:
 
 
 def _is_contract_exhibit(value: JsonValue) -> bool:
+    """Return whether an exhibit label represents a contract exhibit."""
     if isinstance(value, str):
         base = value.split(".")[0].strip()
         return base == "10"

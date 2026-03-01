@@ -36,6 +36,7 @@ class HtmlProcessor:
         section_chunk_max_length: int,
         keyword_mode: str,
     ) -> None:
+        """Initialize the parser with chunking and section-extraction settings."""
         self.chunk_size = chunk_size
         self.chunk_overlap = chunk_overlap
         self.section_chunking = section_chunking
@@ -57,6 +58,7 @@ class HtmlProcessor:
     def _build_section_extractor(
         self, section_filter: SectionFilter | None
     ) -> SectionExtractor | None:
+        """Build a section extractor when section chunking is enabled."""
         if not self.section_chunking:
             return None
         if section_filter is None:
@@ -68,6 +70,7 @@ class HtmlProcessor:
         )
 
     def _section_log_suffix(self, section_chunks: list[Document]) -> str:
+        """Build a log suffix describing section-extraction mode."""
         meta = section_chunks[0].metadata or {}
         symbol_value = meta.get("symbol") or meta.get("ticker")
         symbol = (
@@ -98,6 +101,7 @@ class HtmlProcessor:
     def _log_section_chunk_summary(
         self, section_chunks: list[Document]
     ) -> None:
+        """Log section and chunk statistics for parsed documents."""
         if not section_chunks:
             return
 
@@ -163,6 +167,7 @@ class HtmlProcessor:
         metadata: JsonDict | None,
         section_filter: SectionFilter | None,
     ) -> list[Document]:
+        """Chunk long text into bounded segments for downstream processing."""
         if not text_content or not text_content.strip():
             return []
 
@@ -194,6 +199,7 @@ class HtmlProcessor:
         elements: list[Element],
         keywords: list[str],
     ) -> list[Element]:
+        """Filter parsed filing elements by keyword matches."""
         if not keywords:
             return elements
         specs = [
@@ -224,6 +230,7 @@ class HtmlProcessor:
         documents: list[Document],
         keywords: list[str],
     ) -> list[Document]:
+        """Filter parsed documents by keyword relevance."""
         if not keywords:
             return documents
         specs = [

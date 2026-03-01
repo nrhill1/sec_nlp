@@ -87,6 +87,7 @@ class CandidateAccessionsStage(PipelineStageRunnable[ExhibitRunState]):
     name: str = Field(default="candidate_accessions")
 
     def _run(self, state: ExhibitRunState) -> ExhibitRunState:
+        """Execute the candidate accessions stage and return updated run state."""
         log_divider(logger, color="cyan")
         logger.info("Processing symbol: %s \n", state.symbol)
 
@@ -131,6 +132,7 @@ class CollectExhibitDocsStage(PipelineStageRunnable[ExhibitRunState]):
     name: str = Field(default="collect_exhibit_docs")
 
     def _run(self, state: ExhibitRunState) -> ExhibitRunState:
+        """Execute the collect exhibit docs stage and return updated run state."""
         if state.done:
             return state
 
@@ -169,6 +171,7 @@ class DropReferenceStubStage(PipelineStageRunnable[ExhibitRunState]):
     name: str = Field(default="drop_reference_stubs")
 
     def _run(self, state: ExhibitRunState) -> ExhibitRunState:
+        """Execute the drop reference stub stage and return updated run state."""
         if state.done:
             return state
 
@@ -194,6 +197,7 @@ class FilterChunksStage(PipelineStageRunnable[ExhibitRunState]):
     name: str = Field(default="filter_chunks")
 
     def _run(self, state: ExhibitRunState) -> ExhibitRunState:
+        """Execute the filter chunks stage and return updated run state."""
         if state.done:
             return state
 
@@ -237,6 +241,7 @@ class ExcludeIndexedAccessionsStage(PipelineStageRunnable[ExhibitRunState]):
     name: str = Field(default="exclude_indexed_accessions")
 
     def _run(self, state: ExhibitRunState) -> ExhibitRunState:
+        """Execute the exclude indexed accessions stage and return updated run state."""
         if state.done:
             return state
 
@@ -268,6 +273,7 @@ class IndexAndWriteStage(PipelineStageRunnable[ExhibitRunState]):
     name: str = Field(default="index_and_write")
 
     def _run(self, state: ExhibitRunState) -> ExhibitRunState:
+        """Execute the index and write stage and return updated run state."""
         if state.done:
             return state
 

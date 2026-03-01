@@ -556,6 +556,7 @@ class OutputFormatter:
         seen_notes: set[int] = set()
 
         def _key_hash(value: JsonValue) -> int | None:
+            """Build a stable hash key for dedupe and grouping operations."""
             if isinstance(value, str):
                 cleaned = value.strip().lower()
                 return hash(cleaned) if cleaned else None
@@ -570,6 +571,7 @@ class OutputFormatter:
         def _append_unique(
             bucket: list[JsonValue], seen: set[int], value: JsonValue
         ) -> None:
+            """Append value when not already present in list."""
             key = _key_hash(value)
             if key is None or key in seen:
                 return
@@ -579,6 +581,7 @@ class OutputFormatter:
         def _append_unique_dict(
             bucket: list[JsonDict], seen: set[int], value: JsonValue
         ) -> None:
+            """Append dict entry when its key/value pair is unique."""
             mapping = coerce_json_dict(value)
             if mapping is None:
                 return

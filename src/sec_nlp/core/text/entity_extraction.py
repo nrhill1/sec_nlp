@@ -42,6 +42,7 @@ class EventMention(BaseModel):
 
 @lru_cache(maxsize=1)
 def _load_entity_module() -> ModuleType:
+    """Load the optional native entity-extraction extension module."""
     try:
         return import_module("entity")
     except Exception as exc:  # pragma: no cover - depends on extension install
@@ -53,16 +54,19 @@ def _load_entity_module() -> ModuleType:
 
 @lru_cache(maxsize=1)
 def _get_entity_tagger():
+    """Get or initialize the cached native entity tagger instance."""
     return _load_entity_module().EntityTagger()
 
 
 def _field(raw, name: str):
+    """Read a string-key field from a mapping payload."""
     if isinstance(raw, Mapping):
         return raw.get(name)
     return getattr(raw, name, None)
 
 
 def _coerce_str(value) -> str | None:
+    """Coerce scalar values to strings when possible."""
     if value is None:
         return None
     if isinstance(value, str):
@@ -72,6 +76,7 @@ def _coerce_str(value) -> str | None:
 
 
 def _coerce_int(value) -> int | None:
+    """Coerce scalar values to integers when possible."""
     if isinstance(value, bool) or value is None:
         return None
     if isinstance(value, int):
@@ -90,6 +95,7 @@ def _coerce_int(value) -> int | None:
 
 
 def _coerce_float(value) -> float | None:
+    """Coerce scalar values to floats when possible."""
     if isinstance(value, bool) or value is None:
         return None
     if isinstance(value, (int, float)):
@@ -106,6 +112,7 @@ def _coerce_float(value) -> float | None:
 
 
 def _to_entity(raw_entity) -> Entity:
+    """Convert native entity payloads to typed EntityRecord models."""
     normalized = _coerce_str(_field(raw_entity, "normalized"))
     return Entity(
         text=_coerce_str(_field(raw_entity, "text")) or "",
@@ -117,6 +124,7 @@ def _to_entity(raw_entity) -> Entity:
 
 
 def _to_event(raw_event) -> EventMention:
+    """Convert native event payloads to typed EventRecord models."""
     return EventMention(
         event_type=_coerce_str(_field(raw_event, "event_type")) or "",
         text=_coerce_str(_field(raw_event, "text")) or "",

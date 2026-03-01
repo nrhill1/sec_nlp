@@ -22,6 +22,7 @@ class FilingMode(StrEnum):
     shelf_registration = "shelf"  # S-3
 
     def __str__(self) -> str:
+        """Return a display string for filing mode values."""
         return self.value
 
     @property

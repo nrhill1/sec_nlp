@@ -593,6 +593,7 @@ class WarrantyPipeline(BasePipeline):
         keywords = [kw.lower() for kw in (self.config.keywords or [])]
 
         def _matches_keywords(text: str) -> bool:
+            """Return whether text matches configured warranty keywords."""
             if not keywords:
                 return True
             lower = text.lower()
@@ -683,6 +684,7 @@ class WarrantyPipeline(BasePipeline):
         out_file = symbol_out_path / f"{base_name}.json"
 
         def _has_numeric(rec: WarrantyExtractionDict) -> bool:
+            """Return whether text contains numeric signal content."""
             return any(
                 isinstance(rec.get(f), (int, float))
                 for f in (
@@ -693,6 +695,7 @@ class WarrantyPipeline(BasePipeline):
             )
 
         def _is_xbrl(rec: WarrantyExtractionDict) -> bool:
+            """Return whether a parsed document represents XBRL content."""
             method = rec.get("source_metadata", {}).get("method")
             return bool(method == "xbrl_facts")
 
@@ -850,6 +853,7 @@ class WarrantyPipeline(BasePipeline):
                         accession_val = row.get("accession_number")
 
                         def _as_float(raw: str | None) -> float | None:
+                            """Coerce numeric values to float when possible."""
                             if raw in (None, "", "None"):
                                 return None
                             try:

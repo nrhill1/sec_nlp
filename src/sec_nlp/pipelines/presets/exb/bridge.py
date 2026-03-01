@@ -14,6 +14,7 @@ from sec_nlp.types import JsonValue
 
 
 def _coerce_str(value: JsonValue) -> str | None:
+    """Coerce scalar values to strings when possible."""
     if isinstance(value, str):
         cleaned = value.strip()
         if cleaned:
@@ -24,6 +25,7 @@ def _coerce_str(value: JsonValue) -> str | None:
 
 
 def _coerce_score(value: JsonValue) -> float:
+    """Coerce score-like values to bounded floats."""
     if isinstance(value, bool) or value is None:
         return 0.0
     if isinstance(value, (int, float)):
@@ -37,6 +39,7 @@ def _coerce_score(value: JsonValue) -> float:
 
 
 def _snippet(text: str, max_chars: int) -> str:
+    """Build bounded snippet text for EXB flow handoff chunks."""
     cleaned = " ".join(text.split())
     if len(cleaned) <= max_chars:
         return cleaned

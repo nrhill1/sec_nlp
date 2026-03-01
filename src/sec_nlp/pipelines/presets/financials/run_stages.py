@@ -63,6 +63,7 @@ class DownloadFilingsStage(PipelineStageRunnable[FinancialsRunState]):
     name: str = Field(default="download_filings")
 
     def _run(self, state: FinancialsRunState) -> FinancialsRunState:
+        """Execute the download filings stage and return updated run state."""
         self.pipeline._update_phase(
             state.progress,
             state.phase_task,
@@ -83,6 +84,7 @@ class ExtractFactsStage(PipelineStageRunnable[FinancialsRunState]):
     name: str = Field(default="extract_facts")
 
     def _run(self, state: FinancialsRunState) -> FinancialsRunState:
+        """Execute the extract facts stage and return updated run state."""
         self.pipeline._update_phase(
             state.progress,
             state.phase_task,
@@ -112,6 +114,7 @@ class AggregateFinancialsStage(PipelineStageRunnable[FinancialsRunState]):
     name: str = Field(default="aggregate_financials")
 
     def _run(self, state: FinancialsRunState) -> FinancialsRunState:
+        """Execute the aggregate financials stage and return updated run state."""
         self.pipeline._update_phase(
             state.progress,
             state.phase_task,
@@ -132,6 +135,7 @@ class BuildDeltaReportStage(PipelineStageRunnable[FinancialsRunState]):
     name: str = Field(default="build_delta_report")
 
     def _run(self, state: FinancialsRunState) -> FinancialsRunState:
+        """Execute the build delta report stage and return updated run state."""
         self.pipeline._update_phase(
             state.progress,
             state.phase_task,
@@ -153,6 +157,7 @@ class WriteFinancialsOutputsStage(PipelineStageRunnable[FinancialsRunState]):
     name: str = Field(default="write_outputs")
 
     def _run(self, state: FinancialsRunState) -> FinancialsRunState:
+        """Execute the write financials outputs stage and return updated run state."""
         self.pipeline._update_phase(
             state.progress,
             state.phase_task,

@@ -186,6 +186,7 @@ class SentenceSplitter:
         return result
 
     def __repr__(self) -> str:
+        """Return a concise debug representation for chunking config."""
         tokenizer = "NLTK" if _NLTK_AVAILABLE else "regex-fallback"
         return (
             f"SentenceSplitter(max_sentences={self._max_sentences}, "

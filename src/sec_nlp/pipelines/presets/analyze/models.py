@@ -30,6 +30,7 @@ ANALYSIS_OUTPUT_SCHEMA_VERSION = "1.1"
 
 
 def _normalize_key_point_item(item: StringListInput) -> str | None:
+    """Normalize key-point items to plain text strings."""
     if item is None:
         return None
     if isinstance(item, str):
@@ -217,6 +218,7 @@ class AnalysisResult(BasePipelineResult):
     @field_validator("impact_confidence", mode="before")
     @classmethod
     def _coerce_impact_confidence(cls, v: JsonValue) -> float | None:
+        """Coerce impact confidence values to bounded floats."""
         if v is None:
             return None
         if isinstance(v, (int, float)):

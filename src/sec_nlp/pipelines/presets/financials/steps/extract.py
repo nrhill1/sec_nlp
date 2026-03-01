@@ -50,6 +50,7 @@ CANONICAL_CONCEPT_ALIASES: dict[str, str] = {
 
 
 def _normalize_token(value: str) -> str:
+    """Normalize text token for XBRL tag matching."""
     return re.sub(r"[^a-z0-9:]", "", value.lower())
 
 
@@ -70,10 +71,12 @@ def normalize_concept(tag: str, local_name: str) -> str | None:
 def _period_for_fact(
     fact: XbrlFact,
 ) -> tuple[str | None, str | None, str | None]:
+    """Resolve reporting period label for an extracted XBRL fact."""
     return fact.period_start, fact.period_end, fact.period_instant
 
 
 def _discover_xbrl_files(filing_dir: Path) -> list[Path]:
+    """Discover candidate XBRL files under an accession directory."""
     files: list[Path] = []
     for pattern in ("*.xml", "*.htm", "*.html"):
         files.extend(sorted(filing_dir.glob(pattern)))

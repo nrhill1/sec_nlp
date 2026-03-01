@@ -15,6 +15,7 @@ class FlowArtifactStore:
     """Stage-scoped in-memory artifact store for local flow runs."""
 
     def __init__(self) -> None:
+        """Initialize an in-memory artifact store for flow stage handoffs."""
         self._seed_by_stage: dict[str, FlowSeedBundle] = {}
         self._seed_chunks_by_stage: dict[
             str, tuple[FlowRetrievedChunk, ...]

@@ -75,11 +75,13 @@ class HoldingsPipeline(BasePipeline):
         return HoldingsResult
 
     def _get_parser(self) -> HoldingsParser:
+        """Get the filing parser instance used by the holdings pipeline."""
         if self._parser is None:
             self._parser = HoldingsParser()
         return self._parser
 
     def _build_components(self) -> None:
+        """Initialize reusable components for holdings execution."""
         self._stage_chain = build_holdings_stage_chain(self)
 
     def run(self) -> HoldingsResult:
@@ -164,6 +166,7 @@ class HoldingsPipeline(BasePipeline):
         *,
         total: int | None = None,
     ) -> None:
+        """Update progress state and current holdings phase metadata."""
         if progress is None or phase_task is None:
             return
         if total is None:
@@ -198,6 +201,7 @@ class HoldingsPipeline(BasePipeline):
         diffs: list[HoldingsDiff],
         summary: OwnershipSummary,
     ) -> list[Path]:
+        """Write holdings outputs and return artifact file paths."""
         symbol_out = self.config.get_symbol_output_dir(symbol)
         output_context = build_run_output_context(
             symbol=symbol,
