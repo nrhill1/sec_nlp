@@ -3,13 +3,13 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from time import perf_counter
 from uuid import uuid4
 
 from sec_nlp.app.flows.artifacts import FlowArtifactStore
 from sec_nlp.app.flows.compiled import CompiledStage, compile_flow_stages
 from sec_nlp.app.flows.contracts import (
-    ContractEvidenceBundle,
     FlowRetrievedChunk,
     FlowSeedBundle,
 )
@@ -19,6 +19,7 @@ from sec_nlp.app.flows.models import (
     FlowStageInputBinding,
     FlowStageResult,
     FlowStageSpec,
+    PipelineName,
 )
 from sec_nlp.core.types import coerce_result_json_dict
 from sec_nlp.pipelines.base.config import BasePipelineSettings
@@ -38,6 +39,8 @@ from sec_nlp.pipelines.presets.warranty import (
 from sec_nlp.pipelines.vector import clear_runtime_caches
 from sec_nlp.types import JsonValue
 
+type StageRunner = Callable[[CompiledStage, FlowArtifactStore], FlowStageResult]
+
 
 class FlowRunner:
     """Execute a flow spec with direct compiled-stage pipeline dispatch."""
@@ -45,6 +48,13 @@ class FlowRunner:
     def __init__(self, *, spec: FlowSpec) -> None:
         """Initialize the object."""
         self.spec = spec
+        self._stage_runner_by_pipeline: dict[PipelineName, StageRunner] = {
+            "retrieve": self._run_retrieve_stage,
+            "chat": self._run_chat_stage,
+            "exhibit": self._run_exhibit_stage,
+            "analyze": self._run_analyze_stage,
+            "warranty": self._run_warranty_stage,
+        }
 
     def run(self) -> FlowRunResult:
         """Execute all stages in order and return aggregate flow result."""
@@ -129,16 +139,9 @@ class FlowRunner:
     ) -> FlowStageResult:
         """Run stage."""
         pipeline_name = stage.stage.pipeline
-        if pipeline_name == "retrieve":
-            return self._run_retrieve_stage(stage, artifacts)
-        if pipeline_name == "chat":
-            return self._run_chat_stage(stage, artifacts)
-        if pipeline_name == "exhibit":
-            return self._run_exhibit_stage(stage, artifacts)
-        if pipeline_name == "analyze":
-            return self._run_analyze_stage(stage, artifacts)
-        if pipeline_name == "warranty":
-            return self._run_warranty_stage(stage, artifacts)
+        runner = self._stage_runner_by_pipeline.get(pipeline_name)
+        if runner is not None:
+            return runner(stage, artifacts)
         raise ValueError(f"Unsupported flow pipeline '{pipeline_name}'")
 
     @classmethod
@@ -230,46 +233,12 @@ class FlowRunner:
         return None
 
     @staticmethod
-    def _seed_from_contract_evidence(
-        evidence: ContractEvidenceBundle,
-    ) -> FlowSeedBundle:
-        """Build chat seed chunks from contract evidence artifacts."""
-        return FlowSeedBundle(
-            upstream_pipeline=evidence.upstream_pipeline,
-            upstream_run_id=evidence.upstream_run_id,
-            upstream_short_id=evidence.upstream_short_id,
-            symbols=list(evidence.symbols),
-            queries=list(evidence.queries),
-            chunks=[],
-        )
-
-    @staticmethod
     def _answer_preview(answer: str, *, max_chars: int = 160) -> str:
         """Extract a one-line answer preview for flow logging."""
         normalized = " ".join(answer.split())
         if len(normalized) <= max_chars:
             return normalized
         return f"{normalized[: max_chars - 1].rstrip()}…"
-
-    @classmethod
-    def _resolve_chat_seed_inputs(
-        cls,
-        *,
-        binding: FlowStageInputBinding,
-        artifacts: FlowArtifactStore,
-    ) -> tuple[FlowSeedBundle | None, tuple[FlowRetrievedChunk, ...]]:
-        """Resolve seeded bundle and prebuilt chunks for one chat input binding."""
-        seed_chunks = artifacts.get_seed_chunks(binding.from_stage) or ()
-        if binding.artifact == "retrieve_seed":
-            return (
-                artifacts.get_seed_bundle(binding.from_stage),
-                seed_chunks,
-            )
-
-        contract_bundle = artifacts.get_contract_evidence(binding.from_stage)
-        if contract_bundle is None:
-            return None, seed_chunks
-        return cls._seed_from_contract_evidence(contract_bundle), seed_chunks
 
     @classmethod
     def _run_plain_pipeline_stage[
@@ -351,9 +320,8 @@ class FlowRunner:
         seed_bundle: FlowSeedBundle | None = None
         seed_chunks: tuple[FlowRetrievedChunk, ...] = ()
         if seed_binding is not None:
-            seed_bundle, seed_chunks = cls._resolve_chat_seed_inputs(
-                binding=seed_binding,
-                artifacts=artifacts,
+            seed_bundle, seed_chunks = artifacts.resolve_chat_seed_input(
+                seed_binding
             )
 
             if seed_bundle is None and not seed_chunks:

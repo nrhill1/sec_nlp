@@ -9,6 +9,7 @@ from sec_nlp.app.flows.contracts import (
     FlowRetrievedChunk,
     FlowSeedBundle,
 )
+from sec_nlp.app.flows.models import FlowStageInputBinding
 
 
 class FlowArtifactStore:
@@ -71,3 +72,31 @@ class FlowArtifactStore:
         if seed is not None:
             return seed
         return self.get_contract_evidence(stage_id)
+
+    def resolve_chat_seed_input(
+        self,
+        binding: FlowStageInputBinding,
+    ) -> tuple[FlowSeedBundle | None, tuple[FlowRetrievedChunk, ...]]:
+        """Resolve one chat-stage input binding into seeded context and chunks."""
+        seed_chunks = self.get_seed_chunks(binding.from_stage) or ()
+        if binding.artifact == "retrieve_seed":
+            return self.get_seed_bundle(binding.from_stage), seed_chunks
+
+        contract_bundle = self.get_contract_evidence(binding.from_stage)
+        if contract_bundle is None:
+            return None, seed_chunks
+        return self._seed_from_contract_evidence(contract_bundle), seed_chunks
+
+    @staticmethod
+    def _seed_from_contract_evidence(
+        evidence: ContractEvidenceBundle,
+    ) -> FlowSeedBundle:
+        """Project contract evidence into a chat seed bundle shape."""
+        return FlowSeedBundle(
+            upstream_pipeline=evidence.upstream_pipeline,
+            upstream_run_id=evidence.upstream_run_id,
+            upstream_short_id=evidence.upstream_short_id,
+            symbols=list(evidence.symbols),
+            queries=list(evidence.queries),
+            chunks=[],
+        )
