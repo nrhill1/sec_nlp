@@ -1106,7 +1106,7 @@ class ChatPipeline(BasePipeline):
         ]
         unique_configured = list(dict.fromkeys(configured))
         if len(unique_configured) > 1:
-            return "MULTI"
+            return "(multi)"
         if len(unique_configured) == 1:
             return unique_configured[0]
         if citations and citations[0].symbol:
