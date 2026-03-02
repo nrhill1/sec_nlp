@@ -1,5 +1,10 @@
 # src/sec_nlp/app/flows/models.py
-"""Models for multi-pipeline flow orchestration."""
+"""Flow-spec and flow-result models used at runtime boundaries.
+
+These models define the contract between user-authored flow specs, compile-time
+settings construction, and execution-time result reporting. They intentionally
+centralize validation at ingress so stage execution can remain lightweight.
+"""
 
 from __future__ import annotations
 

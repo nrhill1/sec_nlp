@@ -1,5 +1,10 @@
 # src/sec_nlp/app/flows/artifacts.py
-"""Typed in-memory artifact storage for flow stage handoff."""
+"""In-memory artifact store for typed stage-to-stage handoff.
+
+The store keeps artifact families keyed by stage ID so downstream stages can
+consume upstream outputs by reference during a single process run, minimizing
+serialization and conversion overhead.
+"""
 
 from __future__ import annotations
 

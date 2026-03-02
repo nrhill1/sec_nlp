@@ -1,5 +1,10 @@
 # src/sec_nlp/app/flows/registry.py
-"""Shared flow registry for pipeline settings model resolution."""
+"""Registry mapping flow pipeline names to settings model classes.
+
+The compile layer uses this registry to resolve the one authoritative settings
+model per pipeline. That keeps stage settings creation deterministic and avoids
+hardcoding model-selection logic in the runner.
+"""
 
 from sec_nlp.app.flows.models import PipelineName
 from sec_nlp.pipelines.presets.analyze import AnalyzeConfig

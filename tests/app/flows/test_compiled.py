@@ -6,7 +6,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from sec_nlp.app.flows.artifacts import FlowArtifactStore
-from sec_nlp.app.flows.compiled import compile_flow_stages
+from sec_nlp.app.flows.compiled import CompiledChatStage, compile_flow_stages
 from sec_nlp.app.flows.contracts import FlowRetrievedChunk, FlowSeedBundle
 from sec_nlp.app.flows.models import FlowDefaults, FlowSpec, FlowStageSpec
 from sec_nlp.app.flows.runner import FlowRunner
@@ -115,7 +115,14 @@ def test_flow_runner_stage_uses_compiled_config_without_revalidation(
     monkeypatch.setattr(ChatPipeline, "run_for_flow", _fake_chat_run_for_flow)
     # Keep a prevalidated settings instance to ensure stage execution does not
     # call ChatSettings.model_validate again.
-    stage = stage.__class__(stage=stage.stage, settings=settings)
+    assert isinstance(stage, CompiledChatStage)
+    stage = CompiledChatStage(
+        stage=stage.stage,
+        pipeline="chat",
+        run_id=str(settings.run_id),
+        run_short_id=(settings.short_id if settings.short_id > 0 else None),
+        settings=settings,
+    )
 
     runner = FlowRunner(
         spec=FlowSpec(

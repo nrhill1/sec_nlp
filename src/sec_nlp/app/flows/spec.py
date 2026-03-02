@@ -1,5 +1,10 @@
 # src/sec_nlp/app/flows/spec.py
-"""Spec loading and validation helpers for flow execution."""
+"""Flow spec loader utilities for JSON/YAML ingress.
+
+This module is the file-format boundary before model validation; it decodes
+spec content and passes a mapping into `FlowSpec` so structural validation is
+handled in one canonical location.
+"""
 
 from __future__ import annotations
 

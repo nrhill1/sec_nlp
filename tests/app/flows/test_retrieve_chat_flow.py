@@ -399,7 +399,7 @@ def test_flow_runner_scopes_vector_caches_to_single_flow_run(
         _ = (self, artifacts)
         return FlowStageResult(
             stage_id=stage.stage.id,
-            pipeline=stage.stage.pipeline,
+            pipeline=stage.pipeline,
             success=True,
             skipped=False,
             duration_seconds=0.0,

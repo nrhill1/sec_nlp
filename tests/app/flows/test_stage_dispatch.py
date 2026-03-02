@@ -8,7 +8,13 @@ from pathlib import Path
 import pytest
 
 from sec_nlp.app.flows.artifacts import FlowArtifactStore
-from sec_nlp.app.flows.compiled import CompiledStage
+from sec_nlp.app.flows.compiled import (
+    CompiledAnalyzeStage,
+    CompiledChatStage,
+    CompiledExhibitStage,
+    CompiledRetrieveStage,
+    CompiledWarrantyStage,
+)
 from sec_nlp.app.flows.contracts import (
     ContractEvidenceBundle,
     FlowRetrievedChunk,
@@ -87,20 +93,24 @@ def test_run_stage_dispatches_supported_retrieve(monkeypatch) -> None:
         "run_for_flow_with_chunks",
         _fake_retrieve_run,
     )
-    stage = CompiledStage(
+    settings = RetrieveSettings.model_validate(
+        {
+            "email": "test@example.com",
+            "symbols": ["CDE"],
+            "queries": ["liquidity risk"],
+            "output_format": "json",
+        }
+    )
+    stage = CompiledRetrieveStage(
         stage=FlowStageSpec(
             id="retrieve_seed",
             pipeline="retrieve",
             overrides={},
         ),
-        settings=RetrieveSettings.model_validate(
-            {
-                "email": "test@example.com",
-                "symbols": ["CDE"],
-                "queries": ["liquidity risk"],
-                "output_format": "json",
-            }
-        ),
+        pipeline="retrieve",
+        run_id=str(settings.run_id),
+        run_short_id=settings.short_id if settings.short_id > 0 else None,
+        settings=settings,
     )
     result = _runner()._run_stage(stage, FlowArtifactStore())
     assert result.success is True
@@ -126,22 +136,26 @@ def test_run_stage_dispatches_supported_chat(monkeypatch) -> None:
         )
 
     monkeypatch.setattr(ChatPipeline, "run_for_flow", _fake_chat_run_for_flow)
-    stage = CompiledStage(
+    settings = ChatSettings.model_validate(
+        {
+            "email": "test@example.com",
+            "symbols": ["CDE"],
+            "question": "What changed?",
+            "interactive": False,
+            "collections": ["retrieve"],
+            "output_format": "json",
+        }
+    )
+    stage = CompiledChatStage(
         stage=FlowStageSpec(
             id="chat_answer",
             pipeline="chat",
             overrides={},
         ),
-        settings=ChatSettings.model_validate(
-            {
-                "email": "test@example.com",
-                "symbols": ["CDE"],
-                "question": "What changed?",
-                "interactive": False,
-                "collections": ["retrieve"],
-                "output_format": "json",
-            }
-        ),
+        pipeline="chat",
+        run_id=str(settings.run_id),
+        run_short_id=settings.short_id if settings.short_id > 0 else None,
+        settings=settings,
     )
     result = _runner()._run_stage(stage, FlowArtifactStore())
     assert result.success is True
@@ -168,19 +182,23 @@ def test_run_stage_dispatches_supported_exhibit(monkeypatch) -> None:
         _fake_exhibit_run,
     )
     monkeypatch.setattr(ExhibitPipeline, "_build_components", lambda self: None)
-    stage = CompiledStage(
+    settings = ExhibitConfig.model_validate(
+        {
+            "email": "test@example.com",
+            "symbols": ["CDE"],
+            "output_format": "json",
+        }
+    )
+    stage = CompiledExhibitStage(
         stage=FlowStageSpec(
             id="exhibit_seed",
             pipeline="exhibit",
             overrides={},
         ),
-        settings=ExhibitConfig.model_validate(
-            {
-                "email": "test@example.com",
-                "symbols": ["CDE"],
-                "output_format": "json",
-            }
-        ),
+        pipeline="exhibit",
+        run_id=str(settings.run_id),
+        run_short_id=settings.short_id if settings.short_id > 0 else None,
+        settings=settings,
     )
     result = _runner()._run_stage(stage, FlowArtifactStore())
     assert result.success is True
@@ -197,20 +215,24 @@ def test_run_stage_dispatches_supported_analyze(monkeypatch) -> None:
 
     monkeypatch.setattr(AnalyzePipeline, "run", _fake_analyze_run)
     monkeypatch.setattr(AnalyzePipeline, "_build_components", lambda self: None)
-    stage = CompiledStage(
+    settings = AnalyzeConfig.model_validate(
+        {
+            "email": "test@example.com",
+            "symbols": ["CDE"],
+            "search": {"queries": []},
+            "vector_mode": "off",
+        }
+    )
+    stage = CompiledAnalyzeStage(
         stage=FlowStageSpec(
             id="analyze_stage",
             pipeline="analyze",
             overrides={},
         ),
-        settings=AnalyzeConfig.model_validate(
-            {
-                "email": "test@example.com",
-                "symbols": ["CDE"],
-                "search": {"queries": []},
-                "vector_mode": "off",
-            }
-        ),
+        pipeline="analyze",
+        run_id=str(settings.run_id),
+        run_short_id=settings.short_id if settings.short_id > 0 else None,
+        settings=settings,
     )
     result = _runner()._run_stage(stage, FlowArtifactStore())
     assert result.success is True
@@ -229,43 +251,54 @@ def test_run_stage_dispatches_supported_warranty(monkeypatch) -> None:
     monkeypatch.setattr(
         WarrantyPipeline, "_build_components", lambda self: None
     )
-    stage = CompiledStage(
+    settings = WarrantyConfig.model_validate(
+        {
+            "email": "test@example.com",
+            "symbols": ["CDE"],
+        }
+    )
+    stage = CompiledWarrantyStage(
         stage=FlowStageSpec(
             id="warranty_stage",
             pipeline="warranty",
             overrides={},
         ),
-        settings=WarrantyConfig.model_validate(
-            {
-                "email": "test@example.com",
-                "symbols": ["CDE"],
-            }
-        ),
+        pipeline="warranty",
+        run_id=str(settings.run_id),
+        run_short_id=settings.short_id if settings.short_id > 0 else None,
+        settings=settings,
     )
     result = _runner()._run_stage(stage, FlowArtifactStore())
     assert result.success is True
 
 
 def test_run_stage_rejects_unknown_pipeline() -> None:
-    bad_stage = CompiledStage(
+    settings = RetrieveSettings.model_validate(
+        {
+            "email": "test@example.com",
+            "symbols": ["CDE"],
+            "queries": ["liquidity risk"],
+            "output_format": "json",
+        }
+    )
+    good_stage = CompiledRetrieveStage(
         stage=FlowStageSpec(
             id="bad_stage",
             pipeline="retrieve",
             overrides={},
         ),
-        settings=RetrieveSettings.model_validate(
-            {
-                "email": "test@example.com",
-                "symbols": ["CDE"],
-                "queries": ["liquidity risk"],
-                "output_format": "json",
-            }
-        ),
+        pipeline="retrieve",
+        run_id=str(settings.run_id),
+        run_short_id=settings.short_id if settings.short_id > 0 else None,
+        settings=settings,
     )
     runner = _runner()
-    bad_stage = CompiledStage(
-        stage=bad_stage.stage.model_copy(update={"pipeline": "bad"}),
-        settings=bad_stage.settings,
+    bad_stage = CompiledRetrieveStage(
+        stage=good_stage.stage.model_copy(update={"pipeline": "bad"}),
+        run_id=good_stage.run_id,
+        run_short_id=good_stage.run_short_id,
+        pipeline="bad",
+        settings=good_stage.settings,
     )
     with pytest.raises(ValueError, match="Unsupported flow pipeline"):
         runner._run_stage(bad_stage, FlowArtifactStore())
