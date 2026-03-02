@@ -1,0 +1,32 @@
+# examples/flows/retrieve_chat.yaml
+# Retrieve SEC filings via EFTS, then answer a question over the results.
+#
+# Usage:
+#   sec-nlp flow run --spec examples/flows/retrieve_chat.yaml
+
+name: retrieve_chat
+defaults:
+  email: your.email@example.com
+
+stages:
+  - id: retrieve_seed
+    pipeline: retrieve
+    overrides:
+      symbols: [AAPL]
+      queries: [liquidity risk || debt maturity]
+      top_k: 20
+      output_format: json
+
+  - id: chat_answer
+    pipeline: chat
+    condition: previous_success
+    inputs:
+      - from_stage: retrieve_seed
+        artifact: retrieve_seed
+        target_field: seed_context
+    overrides:
+      question: "What are the key liquidity risks disclosed in recent filings?"
+      interactive: false
+      output_format: json
+
+on_failure: stop
