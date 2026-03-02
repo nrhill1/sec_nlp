@@ -127,7 +127,7 @@ class RetrievePipeline(BasePipeline):
     ) -> tuple[
         RetrieveResult,
         RetrieveChatSeedBundle,
-        list[ChatRetrievedChunk],
+        tuple[ChatRetrievedChunk, ...],
     ]:
         """Run retrieve and return flow bundle plus prebuilt chat chunks."""
         result, bundle, chunks = self._run_internal(
@@ -137,7 +137,7 @@ class RetrievePipeline(BasePipeline):
         if bundle is None:
             bundle = self._empty_seed_bundle()
         if chunks is None:
-            chunks = []
+            chunks = ()
         return result, bundle, chunks
 
     def _ensure_embedding_components(self) -> None:
@@ -309,7 +309,7 @@ class RetrievePipeline(BasePipeline):
     ) -> tuple[
         RetrieveResult,
         RetrieveChatSeedBundle | None,
-        list[ChatRetrievedChunk] | None,
+        tuple[ChatRetrievedChunk, ...] | None,
     ]:
         """Execute the main pipeline workflow and return a result object."""
         try:
@@ -515,7 +515,7 @@ class RetrievePipeline(BasePipeline):
             return (
                 result,
                 bundle,
-                prebuilt_chunks if include_prebuilt_chunks else None,
+                (tuple(prebuilt_chunks) if include_prebuilt_chunks else None),
             )
         except Exception as exc:
             logger.exception("Retrieve pipeline failed")
@@ -526,7 +526,7 @@ class RetrievePipeline(BasePipeline):
                     error=f"{type(exc).__name__}: {exc}",
                 ),
                 self._empty_seed_bundle() if include_bridge else None,
-                [] if include_prebuilt_chunks else None,
+                () if include_prebuilt_chunks else None,
             )
 
     def _empty_seed_bundle(self) -> RetrieveChatSeedBundle:

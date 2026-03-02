@@ -43,7 +43,7 @@ def test_flow_runner_passes_retrieve_seed_into_chat(monkeypatch) -> None:
     ) -> tuple[
         RetrieveResult,
         RetrieveChatSeedBundle,
-        list[ChatRetrievedChunk],
+        tuple[ChatRetrievedChunk, ...],
     ]:
         _ = self
         return (
@@ -74,7 +74,7 @@ def test_flow_runner_passes_retrieve_seed_into_chat(monkeypatch) -> None:
                     )
                 ],
             ),
-            [
+            (
                 ChatRetrievedChunk(
                     collection="retrieve",
                     score=0.9,
@@ -85,8 +85,8 @@ def test_flow_runner_passes_retrieve_seed_into_chat(monkeypatch) -> None:
                     source="https://www.sec.gov/ixviewer/ix.html",
                     snippet="Liquidity risk increased in fiscal year 2024.",
                     vector=None,
-                )
-            ],
+                ),
+            ),
         )
 
     def _fake_chat_run_for_flow(
@@ -187,7 +187,7 @@ def test_flow_runner_passes_seed_via_inputs_binding(monkeypatch) -> None:
     ) -> tuple[
         RetrieveResult,
         RetrieveChatSeedBundle,
-        list[ChatRetrievedChunk],
+        tuple[ChatRetrievedChunk, ...],
     ]:
         _ = self
         return (
@@ -218,7 +218,7 @@ def test_flow_runner_passes_seed_via_inputs_binding(monkeypatch) -> None:
                     )
                 ],
             ),
-            [
+            (
                 ChatRetrievedChunk(
                     collection="retrieve",
                     score=0.9,
@@ -229,8 +229,8 @@ def test_flow_runner_passes_seed_via_inputs_binding(monkeypatch) -> None:
                     source="https://www.sec.gov/ixviewer/ix.html",
                     snippet="Liquidity risk increased in fiscal year 2024.",
                     vector=None,
-                )
-            ],
+                ),
+            ),
         )
 
     def _fake_chat_run_for_flow(
@@ -311,7 +311,7 @@ def test_flow_runner_reports_missing_seed_artifact(monkeypatch) -> None:
     ) -> tuple[
         RetrieveResult,
         RetrieveChatSeedBundle,
-        list[ChatRetrievedChunk],
+        tuple[ChatRetrievedChunk, ...],
     ]:
         _ = self
         return (
@@ -324,7 +324,7 @@ def test_flow_runner_reports_missing_seed_artifact(monkeypatch) -> None:
                 queries=["liquidity risk"],
                 chunks=[],
             ),
-            [],
+            (),
         )
 
     monkeypatch.setattr(

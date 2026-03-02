@@ -42,6 +42,8 @@ type StageRunner = Callable[[CompiledStage, FlowArtifactStore], FlowStageResult]
 class FlowRunner:
     """Execute a flow spec with direct compiled-stage pipeline dispatch."""
 
+    __slots__ = ("spec", "_stage_runner_by_pipeline")
+
     def __init__(self, *, spec: FlowSpec) -> None:
         """Initialize the object."""
         self.spec = spec

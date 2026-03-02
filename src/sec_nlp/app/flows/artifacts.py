@@ -37,6 +37,9 @@ class FlowArtifactStore:
         chunks: tuple[FlowRetrievedChunk, ...] | list[FlowRetrievedChunk],
     ) -> None:
         """Store prebuilt seed chunks for zero-copy chat handoff."""
+        if isinstance(chunks, tuple):
+            self._seed_chunks_by_stage[stage_id] = chunks
+            return
         self._seed_chunks_by_stage[stage_id] = tuple(chunks)
 
     def get_seed_chunks(

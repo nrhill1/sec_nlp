@@ -105,6 +105,7 @@ def test_contract_seed_chunks_roundtrip() -> None:
 
     loaded = store.get_seed_chunks("exhibit_stage")
     assert loaded is not None
+    assert loaded is chunks
     assert len(loaded) == 1
     assert loaded[0].collection == "exhibit"
     assert store.has_artifact("exhibit_stage")

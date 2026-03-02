@@ -56,7 +56,11 @@ def _runner() -> FlowRunner:
 def test_run_stage_dispatches_supported_retrieve(monkeypatch) -> None:
     def _fake_retrieve_run(
         self: RetrievePipeline,
-    ) -> tuple[RetrieveResult, RetrieveChatSeedBundle, list]:
+    ) -> tuple[
+        RetrieveResult,
+        RetrieveChatSeedBundle,
+        tuple[FlowRetrievedChunk, ...],
+    ]:
         _ = self
         return (
             RetrieveResult(
@@ -75,7 +79,7 @@ def test_run_stage_dispatches_supported_retrieve(monkeypatch) -> None:
                 queries=["liquidity risk"],
                 chunks=[],
             ),
-            [],
+            (),
         )
 
     monkeypatch.setattr(
