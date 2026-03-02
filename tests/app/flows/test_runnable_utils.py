@@ -48,7 +48,7 @@ def test_coerce_result_json_dict_converts_paths() -> None:
     assert items[0] == "/tmp/x"
 
 
-def test_build_stage_result_for_settings_converts_paths_and_metadata() -> None:
+def test_build_stage_result_converts_paths_and_metadata() -> None:
     stage = FlowStageSpec(
         id="retrieve_seed",
         pipeline="retrieve",
@@ -65,11 +65,12 @@ def test_build_stage_result_for_settings_converts_paths_and_metadata() -> None:
 
     settings = RetrieveSettings(email="test@example.com")
 
-    stage_result = FlowRunner._build_stage_result_for_settings(
+    stage_result = FlowRunner._build_stage_result(
         stage=stage,
         pipeline_result=pipeline_result,
         duration_seconds=1.25,
-        settings=settings,
+        run_id=str(settings.run_id),
+        run_short_id=settings.short_id,
     )
 
     assert stage_result.stage_id == "retrieve_seed"
@@ -78,7 +79,7 @@ def test_build_stage_result_for_settings_converts_paths_and_metadata() -> None:
     assert stage_result.metadata["path"] == "/tmp/nested.txt"
 
 
-def test_build_stage_result_for_settings_uses_settings_short_id() -> None:
+def test_build_stage_result_uses_settings_short_id() -> None:
     stage = FlowStageSpec(
         id="retrieve_seed",
         pipeline="retrieve",
@@ -95,11 +96,12 @@ def test_build_stage_result_for_settings_uses_settings_short_id() -> None:
 
     settings = RetrieveSettings(email="test@example.com")
 
-    stage_result = FlowRunner._build_stage_result_for_settings(
+    stage_result = FlowRunner._build_stage_result(
         stage=stage,
         pipeline_result=pipeline_result,
         duration_seconds=0.1,
-        settings=settings,
+        run_id=str(settings.run_id),
+        run_short_id=settings.short_id,
     )
 
     assert stage_result.run_short_id == settings.short_id

@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping
+from dataclasses import dataclass
 from time import perf_counter
 from uuid import uuid4
 
@@ -147,16 +148,17 @@ class FlowRunner:
                 raise ValueError(f"Unsupported flow pipeline '{pipeline_name}'")
 
     @classmethod
-    def _build_stage_result_for_settings(
+    def _build_stage_result(
         cls,
         *,
         stage: FlowStageSpec,
         pipeline_result: BasePipelineResult,
         duration_seconds: float,
-        settings: BasePipelineSettings,
+        run_id: str,
+        run_short_id: int | None,
         extra_metadata: Mapping[str, JsonValue] | None = None,
     ) -> FlowStageResult:
-        """Build stage result using run identifiers from validated settings."""
+        """Build stage result using precomputed stage run identifiers."""
         metadata = coerce_result_json_dict(pipeline_result.metadata)
         if extra_metadata is not None:
             metadata.update(extra_metadata)
@@ -167,8 +169,8 @@ class FlowRunner:
             skipped=False,
             error=pipeline_result.error,
             duration_seconds=duration_seconds,
-            run_id=str(settings.run_id),
-            run_short_id=settings.short_id if settings.short_id > 0 else None,
+            run_id=run_id,
+            run_short_id=run_short_id,
             outputs=[str(path) for path in pipeline_result.outputs],
             metadata=metadata,
         )
@@ -178,16 +180,18 @@ class FlowRunner:
         cls,
         *,
         stage: FlowStageSpec,
-        settings: BasePipelineSettings,
+        run_id: str,
+        run_short_id: int | None,
         pipeline: BasePipeline,
     ) -> FlowStageResult:
         """Invoke a plain pipeline and normalize the stage result envelope."""
         result, elapsed = cls._timed_call(pipeline.invoke)
-        return cls._build_stage_result_for_settings(
+        return cls._build_stage_result(
             stage=stage,
             pipeline_result=result,
             duration_seconds=elapsed,
-            settings=settings,
+            run_id=run_id,
+            run_short_id=run_short_id,
         )
 
     @staticmethod
@@ -218,7 +222,8 @@ class FlowRunner:
         cls,
         *,
         stage: FlowStageSpec,
-        settings: BasePipelineSettings,
+        run_id: str,
+        run_short_id: int | None,
         artifacts: FlowArtifactStore,
         run_callback: Callable[
             [],
@@ -233,11 +238,12 @@ class FlowRunner:
         (result, bundle, seed_chunks), elapsed = cls._timed_call(run_callback)
         if result.success:
             persist_callback(artifacts, stage.id, bundle, seed_chunks)
-        return cls._build_stage_result_for_settings(
+        return cls._build_stage_result(
             stage=stage,
             pipeline_result=result,
             duration_seconds=elapsed,
-            settings=settings,
+            run_id=run_id,
+            run_short_id=run_short_id,
         )
 
     @classmethod
@@ -257,10 +263,12 @@ class FlowRunner:
             expected_type=expected_type,
             pipeline_name=pipeline_name,
         )
+        run_identifiers = _run_identifiers_from_settings(settings)
         pipeline = pipeline_factory(settings)
         return cls._invoke_pipeline(
             stage=stage.stage,
-            settings=settings,
+            run_id=run_identifiers.run_id,
+            run_short_id=run_identifiers.run_short_id,
             pipeline=pipeline,
         )
 
@@ -356,10 +364,12 @@ class FlowRunner:
             expected_type=RetrieveSettings,
             pipeline_name="retrieve",
         )
+        run_identifiers = _run_identifiers_from_settings(settings)
         pipeline = RetrievePipeline(config=settings)
         return cls._run_chunk_handoff_stage(
             stage=stage.stage,
-            settings=settings,
+            run_id=run_identifiers.run_id,
+            run_short_id=run_identifiers.run_short_id,
             artifacts=artifacts,
             run_callback=pipeline.run_for_flow_with_chunks,
             persist_callback=cls._persist_retrieve_artifacts,
@@ -377,6 +387,7 @@ class FlowRunner:
             expected_type=ChatSettings,
             pipeline_name="chat",
         )
+        run_identifiers = _run_identifiers_from_settings(settings)
 
         seed_binding = stage.stage.inputs[0] if stage.stage.inputs else None
 
@@ -409,11 +420,12 @@ class FlowRunner:
         answer_preview: str | None = None
         if result.success and isinstance(result.answer, str) and result.answer:
             answer_preview = cls._answer_preview(result.answer)
-        return cls._build_stage_result_for_settings(
+        return cls._build_stage_result(
             stage=stage.stage,
             pipeline_result=result,
             duration_seconds=elapsed,
-            settings=settings,
+            run_id=run_identifiers.run_id,
+            run_short_id=run_identifiers.run_short_id,
             extra_metadata=(
                 {"answer_preview": answer_preview}
                 if answer_preview is not None
@@ -433,10 +445,12 @@ class FlowRunner:
             expected_type=ExhibitConfig,
             pipeline_name="exhibit",
         )
+        run_identifiers = _run_identifiers_from_settings(settings)
         pipeline = ExhibitPipeline(config=settings)
         return cls._run_chunk_handoff_stage(
             stage=stage.stage,
-            settings=settings,
+            run_id=run_identifiers.run_id,
+            run_short_id=run_identifiers.run_short_id,
             artifacts=artifacts,
             run_callback=pipeline.run_for_flow_with_chunks,
             persist_callback=cls._persist_exhibit_artifacts,
@@ -460,3 +474,22 @@ class FlowRunner:
         if stage.condition == "previous_has_outputs":
             return bool(previous.outputs)
         return True
+
+
+@dataclass(frozen=True, slots=True)
+class _RunIdentifiers:
+    """Normalized run identifiers used when building flow stage result envelopes."""
+
+    run_id: str
+    run_short_id: int | None
+
+
+def _run_identifiers_from_settings(
+    settings: BasePipelineSettings,
+) -> _RunIdentifiers:
+    """Extract stable run identifiers from one validated settings object."""
+    run_short_id = settings.short_id if settings.short_id > 0 else None
+    return _RunIdentifiers(
+        run_id=str(settings.run_id),
+        run_short_id=run_short_id,
+    )
