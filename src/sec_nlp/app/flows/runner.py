@@ -191,46 +191,11 @@ class FlowRunner:
     @staticmethod
     def _resolve_seed_binding(
         stage: FlowStageSpec,
-    ) -> tuple[FlowStageInputBinding | None, str | None]:
+    ) -> FlowStageInputBinding | None:
         """Resolve seed binding."""
-        resolved: FlowStageInputBinding | None = None
-        for binding in stage.inputs:
-            binding_error = FlowRunner._validate_input_binding(
-                stage=stage,
-                binding=binding,
-            )
-            if binding_error is not None:
-                return None, binding_error
-            if resolved is not None:
-                return (
-                    None,
-                    f"chat stage '{stage.id}' accepts at most one input binding",
-                )
-            resolved = binding
-
-        return resolved, None
-
-    @staticmethod
-    def _validate_input_binding(
-        *,
-        stage: FlowStageSpec,
-        binding: FlowStageInputBinding,
-    ) -> str | None:
-        """Validate input binding."""
-        if binding.artifact not in {"retrieve_seed", "contract_evidence"}:
-            return (
-                f"chat stage '{stage.id}' does not support input artifact "
-                f"'{binding.artifact}'"
-            )
-        if (
-            binding.target_field is not None
-            and binding.target_field != "seed_context"
-        ):
-            return (
-                f"chat stage '{stage.id}' input binding target_field "
-                "must be 'seed_context'"
-            )
-        return None
+        if not stage.inputs:
+            return None
+        return stage.inputs[0]
 
     @staticmethod
     def _answer_preview(answer: str, *, max_chars: int = 160) -> str:
@@ -308,14 +273,7 @@ class FlowRunner:
         if not isinstance(stage.settings, ChatSettings):
             raise ValueError("chat stage received non-chat settings")
 
-        seed_binding, seed_error = cls._resolve_seed_binding(stage.stage)
-        if seed_error is not None:
-            return cls._build_unexecuted_stage_result(
-                stage=stage.stage,
-                success=False,
-                skipped=False,
-                error=seed_error,
-            )
+        seed_binding = cls._resolve_seed_binding(stage.stage)
 
         seed_bundle: FlowSeedBundle | None = None
         seed_chunks: tuple[FlowRetrievedChunk, ...] = ()

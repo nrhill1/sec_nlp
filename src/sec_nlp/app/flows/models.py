@@ -139,7 +139,19 @@ class FlowSpec(BaseModel):
                     f"stage '{stage.id}' ({stage.pipeline}) does not accept "
                     "input bindings yet"
                 )
+            if stage.pipeline == "chat" and len(stage.inputs) > 1:
+                raise ValueError(
+                    f"stage '{stage.id}' accepts at most one input binding"
+                )
             for binding in stage.inputs:
+                if (
+                    binding.target_field is not None
+                    and binding.target_field != "seed_context"
+                ):
+                    raise ValueError(
+                        f"stage '{stage.id}' input binding target_field "
+                        "must be 'seed_context'"
+                    )
                 if binding.from_stage not in stage_ids:
                     raise ValueError(
                         f"stage '{stage.id}' references unknown input stage "
