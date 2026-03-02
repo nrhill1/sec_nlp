@@ -191,17 +191,19 @@ class WriteHoldingsOutputsStage(PipelineStageRunnable[HoldingsRunState]):
         return state
 
 
+_HOLDINGS_STAGES: tuple[PipelineStageRunnable[HoldingsRunState], ...] = (
+    DownloadHoldingsFilingsStage(),
+    ParseHoldingsPositionsStage(),
+    DiffHoldingsPositionsStage(),
+    AggregateHoldingsSummaryStage(),
+    WriteHoldingsOutputsStage(),
+)
+
+
 def build_holdings_stage_chain(
     pipeline: HoldingsPipeline,
 ) -> Runnable[HoldingsRunState, HoldingsRunState]:
     """Build deterministic holdings stage chain."""
-    stages: tuple[PipelineStageRunnable[HoldingsRunState], ...] = (
-        DownloadHoldingsFilingsStage(),
-        ParseHoldingsPositionsStage(),
-        DiffHoldingsPositionsStage(),
-        AggregateHoldingsSummaryStage(),
-        WriteHoldingsOutputsStage(),
-    )
     return pipeline.build_stage_chain(
-        stages=pipeline.configure_stage_runnables(stages=stages)
+        stages=pipeline.configure_stage_runnables(stages=_HOLDINGS_STAGES)
     )

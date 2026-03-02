@@ -253,18 +253,20 @@ class WriteOutputsStage(PipelineStageRunnable[RetrieveRunState]):
         return state
 
 
+_RETRIEVE_STAGES: tuple[PipelineStageRunnable[RetrieveRunState], ...] = (
+    CandidateSearchStage(),
+    RankHitsStage(),
+    HydrateStage(),
+    EmbeddingRerankStage(),
+    IndexStage(),
+    WriteOutputsStage(),
+)
+
+
 def build_retrieve_stage_chain(
     pipeline: RetrievePipeline,
 ) -> Runnable[RetrieveRunState, RetrieveRunState]:
     """Build deterministic retrieve stage chain."""
-    stages: tuple[PipelineStageRunnable[RetrieveRunState], ...] = (
-        CandidateSearchStage(),
-        RankHitsStage(),
-        HydrateStage(),
-        EmbeddingRerankStage(),
-        IndexStage(),
-        WriteOutputsStage(),
-    )
     return pipeline.build_stage_chain(
-        stages=pipeline.configure_stage_runnables(stages=stages)
+        stages=pipeline.configure_stage_runnables(stages=_RETRIEVE_STAGES)
     )

@@ -198,17 +198,19 @@ class WriteInsiderOutputsStage(PipelineStageRunnable[InsiderRunState]):
         return state
 
 
+_INSIDER_STAGES: tuple[PipelineStageRunnable[InsiderRunState], ...] = (
+    DownloadInsiderFilingsStage(),
+    ParseInsiderTransactionsStage(),
+    AggregateInsiderActivityStage(),
+    CorrelateInsiderActivityStage(),
+    WriteInsiderOutputsStage(),
+)
+
+
 def build_insider_stage_chain(
     pipeline: InsiderPipeline,
 ) -> Runnable[InsiderRunState, InsiderRunState]:
     """Build deterministic insider stage chain."""
-    stages: tuple[PipelineStageRunnable[InsiderRunState], ...] = (
-        DownloadInsiderFilingsStage(),
-        ParseInsiderTransactionsStage(),
-        AggregateInsiderActivityStage(),
-        CorrelateInsiderActivityStage(),
-        WriteInsiderOutputsStage(),
-    )
     return pipeline.build_stage_chain(
-        stages=pipeline.configure_stage_runnables(stages=stages)
+        stages=pipeline.configure_stage_runnables(stages=_INSIDER_STAGES)
     )

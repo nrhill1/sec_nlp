@@ -150,16 +150,18 @@ class WriteEventsOutputsStage(PipelineStageRunnable[EventsRunState]):
         return state
 
 
+_EVENTS_STAGES: tuple[PipelineStageRunnable[EventsRunState], ...] = (
+    ScanEventsStage(),
+    EnrichEventsStage(),
+    ScoreEventsStage(),
+    WriteEventsOutputsStage(),
+)
+
+
 def build_events_stage_chain(
     pipeline: EventsPipeline,
 ) -> Runnable[EventsRunState, EventsRunState]:
     """Build deterministic events stage chain."""
-    stages: tuple[PipelineStageRunnable[EventsRunState], ...] = (
-        ScanEventsStage(),
-        EnrichEventsStage(),
-        ScoreEventsStage(),
-        WriteEventsOutputsStage(),
-    )
     return pipeline.build_stage_chain(
-        stages=pipeline.configure_stage_runnables(stages=stages)
+        stages=pipeline.configure_stage_runnables(stages=_EVENTS_STAGES)
     )

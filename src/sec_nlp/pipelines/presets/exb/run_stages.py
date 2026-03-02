@@ -321,19 +321,20 @@ class IndexAndWriteStage(PipelineStageRunnable[ExhibitRunState]):
         return state
 
 
+_EXHIBIT_STAGES: tuple[PipelineStageRunnable[ExhibitRunState], ...] = (
+    CandidateAccessionsStage(),
+    CollectExhibitDocsStage(),
+    DropReferenceStubStage(),
+    FilterChunksStage(),
+    ExcludeIndexedAccessionsStage(),
+    IndexAndWriteStage(),
+)
+
+
 def build_exhibit_stage_chain(
     pipeline: ExhibitPipeline,
 ) -> Runnable[ExhibitRunState, ExhibitRunState]:
     """Build deterministic exhibit stage chain."""
-
-    stages: tuple[PipelineStageRunnable[ExhibitRunState], ...] = (
-        CandidateAccessionsStage(),
-        CollectExhibitDocsStage(),
-        DropReferenceStubStage(),
-        FilterChunksStage(),
-        ExcludeIndexedAccessionsStage(),
-        IndexAndWriteStage(),
-    )
     return pipeline.build_stage_chain(
-        stages=pipeline.configure_stage_runnables(stages=stages)
+        stages=pipeline.configure_stage_runnables(stages=_EXHIBIT_STAGES)
     )

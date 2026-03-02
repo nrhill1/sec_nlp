@@ -176,17 +176,19 @@ class WriteFinancialsOutputsStage(PipelineStageRunnable[FinancialsRunState]):
         return state
 
 
+_FINANCIALS_STAGES: tuple[PipelineStageRunnable[FinancialsRunState], ...] = (
+    DownloadFilingsStage(),
+    ExtractFactsStage(),
+    AggregateFinancialsStage(),
+    BuildDeltaReportStage(),
+    WriteFinancialsOutputsStage(),
+)
+
+
 def build_financials_stage_chain(
     pipeline: FinancialsPipeline,
 ) -> Runnable[FinancialsRunState, FinancialsRunState]:
     """Build deterministic financials stage chain."""
-    stages: tuple[PipelineStageRunnable[FinancialsRunState], ...] = (
-        DownloadFilingsStage(),
-        ExtractFactsStage(),
-        AggregateFinancialsStage(),
-        BuildDeltaReportStage(),
-        WriteFinancialsOutputsStage(),
-    )
     return pipeline.build_stage_chain(
-        stages=pipeline.configure_stage_runnables(stages=stages)
+        stages=pipeline.configure_stage_runnables(stages=_FINANCIALS_STAGES)
     )

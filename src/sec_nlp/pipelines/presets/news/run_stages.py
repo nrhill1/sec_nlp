@@ -179,17 +179,19 @@ class WriteOutputsStage(PipelineStageRunnable[NewsRunState]):
         return state
 
 
+_NEWS_STAGES: tuple[PipelineStageRunnable[NewsRunState], ...] = (
+    ResolveAliasesStage(),
+    FetchItemsStage(),
+    MatchItemsStage(),
+    CorrelateItemsStage(),
+    WriteOutputsStage(),
+)
+
+
 def build_news_stage_chain(
     pipeline: NewsPipeline,
 ) -> Runnable[NewsRunState, NewsRunState]:
     """Build deterministic news stage chain."""
-    stages: tuple[PipelineStageRunnable[NewsRunState], ...] = (
-        ResolveAliasesStage(),
-        FetchItemsStage(),
-        MatchItemsStage(),
-        CorrelateItemsStage(),
-        WriteOutputsStage(),
-    )
     return pipeline.build_stage_chain(
-        stages=pipeline.configure_stage_runnables(stages=stages)
+        stages=pipeline.configure_stage_runnables(stages=_NEWS_STAGES)
     )

@@ -257,17 +257,19 @@ class WriteChatOutputsStage(PipelineStageRunnable[ChatRunState]):
         return state
 
 
+_CHAT_STAGES: tuple[PipelineStageRunnable[ChatRunState], ...] = (
+    SearchContextStage(),
+    PrepareContextStage(),
+    GenerateAnswerStage(),
+    BuildTurnsStage(),
+    WriteChatOutputsStage(),
+)
+
+
 def build_chat_stage_chain(
     pipeline: ChatPipeline,
 ) -> Runnable[ChatRunState, ChatRunState]:
     """Build deterministic chat stage chain."""
-    stages: tuple[PipelineStageRunnable[ChatRunState], ...] = (
-        SearchContextStage(),
-        PrepareContextStage(),
-        GenerateAnswerStage(),
-        BuildTurnsStage(),
-        WriteChatOutputsStage(),
-    )
     return pipeline.build_stage_chain(
-        stages=pipeline.configure_stage_runnables(stages=stages)
+        stages=pipeline.configure_stage_runnables(stages=_CHAT_STAGES)
     )

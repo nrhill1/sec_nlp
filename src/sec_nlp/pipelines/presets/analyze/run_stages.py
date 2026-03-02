@@ -281,18 +281,20 @@ class WriteOutputsStage(PipelineStageRunnable[AnalyzeRunState]):
         return state
 
 
+_ANALYZE_STAGES: tuple[PipelineStageRunnable[AnalyzeRunState], ...] = (
+    LoadDocsStage(),
+    PreprocessStage(),
+    EnrichAndIndexStage(),
+    SearchAndAnalyzeStage(),
+    PostprocessStage(),
+    WriteOutputsStage(),
+)
+
+
 def build_analyze_stage_chain(
     pipeline: AnalyzePipeline,
 ) -> Runnable[AnalyzeRunState, AnalyzeRunState]:
     """Build deterministic analyze stage chain."""
-    stages: tuple[PipelineStageRunnable[AnalyzeRunState], ...] = (
-        LoadDocsStage(),
-        PreprocessStage(),
-        EnrichAndIndexStage(),
-        SearchAndAnalyzeStage(),
-        PostprocessStage(),
-        WriteOutputsStage(),
-    )
     return pipeline.build_stage_chain(
-        stages=pipeline.configure_stage_runnables(stages=stages)
+        stages=pipeline.configure_stage_runnables(stages=_ANALYZE_STAGES)
     )

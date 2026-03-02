@@ -144,15 +144,17 @@ class ProcessFilingsStage(PipelineStageRunnable[WarrantyRunState]):
         return state
 
 
+_WARRANTY_STAGES: tuple[PipelineStageRunnable[WarrantyRunState], ...] = (
+    PrepareSymbolStage(),
+    ResolveHtmlPathsStage(),
+    ProcessFilingsStage(),
+)
+
+
 def build_warranty_stage_chain(
     pipeline: WarrantyPipeline,
 ) -> Runnable[WarrantyRunState, WarrantyRunState]:
     """Build deterministic warranty stage chain."""
-    stages: tuple[PipelineStageRunnable[WarrantyRunState], ...] = (
-        PrepareSymbolStage(),
-        ResolveHtmlPathsStage(),
-        ProcessFilingsStage(),
-    )
     return pipeline.build_stage_chain(
-        stages=pipeline.configure_stage_runnables(stages=stages)
+        stages=pipeline.configure_stage_runnables(stages=_WARRANTY_STAGES)
     )
