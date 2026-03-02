@@ -16,14 +16,11 @@ from sec_nlp.app.flows.contracts import (
 from sec_nlp.app.flows.models import (
     FlowRunResult,
     FlowSpec,
-    FlowStageInputBinding,
     FlowStageResult,
     FlowStageSpec,
     PipelineName,
 )
 from sec_nlp.core.types import coerce_result_json_dict
-from sec_nlp.pipelines.base.config import BasePipelineSettings
-from sec_nlp.pipelines.base.pipeline import BasePipeline
 from sec_nlp.pipelines.base.result import BasePipelineResult
 from sec_nlp.pipelines.presets.analyze import AnalyzeConfig, AnalyzePipeline
 from sec_nlp.pipelines.presets.chat import ChatPipeline, ChatSettings
@@ -52,8 +49,8 @@ class FlowRunner:
             "retrieve": self._run_retrieve_stage,
             "chat": self._run_chat_stage,
             "exhibit": self._run_exhibit_stage,
-            "analyze": self._run_analyze_stage,
-            "warranty": self._run_warranty_stage,
+            "analyze": self._run_plain_stage,
+            "warranty": self._run_plain_stage,
         }
 
     def run(self) -> FlowRunResult:
@@ -189,15 +186,6 @@ class FlowRunner:
         )
 
     @staticmethod
-    def _resolve_seed_binding(
-        stage: FlowStageSpec,
-    ) -> FlowStageInputBinding | None:
-        """Resolve seed binding."""
-        if not stage.inputs:
-            return None
-        return stage.inputs[0]
-
-    @staticmethod
     def _answer_preview(answer: str, *, max_chars: int = 160) -> str:
         """Extract a one-line answer preview for flow logging."""
         normalized = " ".join(answer.split())
@@ -206,27 +194,32 @@ class FlowRunner:
         return f"{normalized[: max_chars - 1].rstrip()}…"
 
     @classmethod
-    def _run_plain_pipeline_stage[
-        SettingsT: BasePipelineSettings,
-        PipelineT: BasePipeline,
-    ](
+    def _run_plain_stage(
         cls,
-        *,
         stage: CompiledStage,
         artifacts: FlowArtifactStore,
-        settings_type: type[SettingsT],
-        pipeline_type: str,
-        pipeline_class: type[PipelineT],
     ) -> FlowStageResult:
-        """Run plain pipeline stage."""
+        """Run plain stage without cross-stage artifact exchange."""
         _ = artifacts
-        if not isinstance(stage.settings, settings_type):
+        pipeline_name = stage.stage.pipeline
+        if pipeline_name == "analyze":
+            if not isinstance(stage.settings, AnalyzeConfig):
+                raise ValueError("analyze stage received non-analyze settings")
+            settings = stage.settings
+            pipeline = AnalyzePipeline(config=settings)
+        elif pipeline_name == "warranty":
+            if not isinstance(stage.settings, WarrantyConfig):
+                raise ValueError(
+                    "warranty stage received non-warranty settings"
+                )
+            settings = stage.settings
+            pipeline = WarrantyPipeline(config=settings)
+        else:
             raise ValueError(
-                f"{pipeline_type} stage received non-{pipeline_type} settings"
+                f"Unsupported plain stage pipeline '{pipeline_name}'"
             )
-        settings = stage.settings
+
         started = perf_counter()
-        pipeline = pipeline_class(config=settings)
         result = pipeline.invoke()
         elapsed = perf_counter() - started
         return cls._build_stage_result(
@@ -273,7 +266,7 @@ class FlowRunner:
         if not isinstance(stage.settings, ChatSettings):
             raise ValueError("chat stage received non-chat settings")
 
-        seed_binding = cls._resolve_seed_binding(stage.stage)
+        seed_binding = stage.stage.inputs[0] if stage.stage.inputs else None
 
         seed_bundle: FlowSeedBundle | None = None
         seed_chunks: tuple[FlowRetrievedChunk, ...] = ()
@@ -339,36 +332,6 @@ class FlowRunner:
             duration_seconds=elapsed,
             run_id=str(stage.settings.run_id),
             run_short_id=stage.settings.short_id,
-        )
-
-    @classmethod
-    def _run_analyze_stage(
-        cls,
-        stage: CompiledStage,
-        artifacts: FlowArtifactStore,
-    ) -> FlowStageResult:
-        """Run analyze stage."""
-        return cls._run_plain_pipeline_stage(
-            stage=stage,
-            artifacts=artifacts,
-            settings_type=AnalyzeConfig,
-            pipeline_type="analyze",
-            pipeline_class=AnalyzePipeline,
-        )
-
-    @classmethod
-    def _run_warranty_stage(
-        cls,
-        stage: CompiledStage,
-        artifacts: FlowArtifactStore,
-    ) -> FlowStageResult:
-        """Run warranty stage."""
-        return cls._run_plain_pipeline_stage(
-            stage=stage,
-            artifacts=artifacts,
-            settings_type=WarrantyConfig,
-            pipeline_type="warranty",
-            pipeline_class=WarrantyPipeline,
         )
 
     @staticmethod

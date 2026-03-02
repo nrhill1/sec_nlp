@@ -11,31 +11,33 @@ from sec_nlp.app.flows.models import (
     FlowStageInputBinding,
     FlowStageSpec,
 )
-from sec_nlp.app.flows.runner import FlowRunner
 
 
-def test_resolve_seed_binding_accepts_single_supported_binding() -> None:
-    stage = FlowStageSpec(
-        id="chat_answer",
-        pipeline="chat",
-        inputs=[
-            FlowStageInputBinding(
-                from_stage="retrieve_seed",
-                artifact="retrieve_seed",
-                target_field="seed_context",
-            )
+def test_flow_spec_accepts_single_chat_binding() -> None:
+    spec = FlowSpec(
+        name="single-chat-binding",
+        defaults=FlowDefaults(email="test@example.com"),
+        stages=[
+            FlowStageSpec(
+                id="retrieve_seed",
+                pipeline="retrieve",
+                overrides={"queries": ["liquidity risk"]},
+            ),
+            FlowStageSpec(
+                id="chat_answer",
+                pipeline="chat",
+                inputs=[
+                    FlowStageInputBinding(
+                        from_stage="retrieve_seed",
+                        artifact="retrieve_seed",
+                        target_field="seed_context",
+                    )
+                ],
+                overrides={"question": "Summarize with citations."},
+            ),
         ],
-        overrides={},
     )
-
-    binding = FlowRunner._resolve_seed_binding(stage)
-    assert binding is not None
-    assert binding.from_stage == "retrieve_seed"
-
-
-def test_resolve_seed_binding_returns_none_when_empty() -> None:
-    stage = FlowStageSpec(id="chat_answer", pipeline="chat", overrides={})
-    assert FlowRunner._resolve_seed_binding(stage) is None
+    assert len(spec.stages[1].inputs) == 1
 
 
 def test_stage_spec_rejects_invalid_target_field() -> None:
