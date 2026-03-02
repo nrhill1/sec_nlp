@@ -20,8 +20,8 @@ from sec_nlp.pipelines.presets.chat import (
 )
 from sec_nlp.pipelines.presets.chat.pipeline import _RetrievedChunk
 from sec_nlp.pipelines.presets.chat.run_stages import (
+    ChatRunState,
     build_chat_stage_chain,
-    create_initial_chat_state,
 )
 from sec_nlp.pipelines.vector.config import VectorConfig
 from sec_nlp.types import JsonValue
@@ -1158,7 +1158,7 @@ def test_chat_stage_chain_preserves_state_identity(
     progress = Progress()
     overall_task = progress.add_task("chat", total=5)
     phase_task = progress.add_task("phase", total=None, visible=False)
-    initial_state = create_initial_chat_state(
+    initial_state = ChatRunState(
         runtime=pipeline,
         question="What changed?",
         progress=progress,

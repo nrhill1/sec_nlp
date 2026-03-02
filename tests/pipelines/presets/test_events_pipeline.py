@@ -10,8 +10,8 @@ from sec_nlp.core.stats.event_study import EventStudyResult
 from sec_nlp.pipelines.presets.events import EventsPipeline, EventsSettings
 from sec_nlp.pipelines.presets.events.models import DetectedEvent
 from sec_nlp.pipelines.presets.events.run_stages import (
+    EventsRunState,
     build_events_stage_chain,
-    create_initial_events_state,
 )
 from sec_nlp.pipelines.presets.events.steps.scan import scan_events_for_symbol
 from sec_nlp.pipelines.presets.events.steps.score import score_event_impacts
@@ -308,7 +308,7 @@ def test_events_stage_chain_preserves_state_identity(
     )
 
     chain = build_events_stage_chain(pipeline)
-    initial_state = create_initial_events_state(
+    initial_state = EventsRunState(
         runtime=pipeline,
         symbol="ABC",
         progress=None,

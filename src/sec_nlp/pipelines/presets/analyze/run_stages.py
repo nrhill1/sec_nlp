@@ -58,24 +58,6 @@ def _accession_from_doc(doc: Document) -> str | None:
     return get_accession_from_metadata(doc.metadata)
 
 
-def create_initial_analyze_state(
-    *,
-    runtime: AnalyzePipeline,
-    symbol: str,
-    progress: Progress | None,
-    phase_task: TaskID | None,
-    prefetched: PrefetchedSymbolData | None,
-) -> AnalyzeRunState:
-    """Create initial mutable state for analyze runnable stage execution."""
-    return AnalyzeRunState(
-        runtime=runtime,
-        symbol=symbol,
-        progress=progress,
-        phase_task=phase_task,
-        prefetched=prefetched,
-    )
-
-
 class LoadDocsStage(PipelineStageRunnable[AnalyzeRunState]):
     """Ingress stage that acquires candidate documents from prefetch or live retrieval."""
 
@@ -295,6 +277,4 @@ def build_analyze_stage_chain(
     pipeline: AnalyzePipeline,
 ) -> Runnable[AnalyzeRunState, AnalyzeRunState]:
     """Build deterministic analyze stage chain."""
-    return pipeline.build_stage_chain(
-        stages=pipeline.configure_stage_runnables(stages=_ANALYZE_STAGES)
-    )
+    return pipeline.build_configured_stage_chain(stages=_ANALYZE_STAGES)

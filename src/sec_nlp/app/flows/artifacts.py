@@ -115,7 +115,7 @@ class FlowArtifactStore:
             upstream_pipeline=evidence.upstream_pipeline,
             upstream_run_id=evidence.upstream_run_id,
             upstream_short_id=evidence.upstream_short_id,
-            symbols=list(evidence.symbols),
-            queries=list(evidence.queries),
+            symbols=evidence.symbols,
+            queries=evidence.queries,
             chunks=[],
         )

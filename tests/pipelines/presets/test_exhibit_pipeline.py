@@ -15,8 +15,8 @@ from sec_nlp.pipelines.presets.exb.models import (
 )
 from sec_nlp.pipelines.presets.exb.pipeline import ExhibitPipeline
 from sec_nlp.pipelines.presets.exb.run_stages import (
+    ExhibitRunState,
     build_exhibit_stage_chain,
-    create_initial_exhibit_state,
 )
 from sec_nlp.pipelines.vector import VectorConfig
 
@@ -221,7 +221,7 @@ class TestExhibitPipeline:
         )
 
         stage_chain = build_exhibit_stage_chain(pipeline)
-        state = create_initial_exhibit_state(
+        state = ExhibitRunState(
             runtime=pipeline,
             symbol="CAT",
             include_bridge=True,

@@ -55,28 +55,6 @@ class ChatRunState:
     )
 
 
-def create_initial_chat_state(
-    *,
-    runtime: ChatPipeline,
-    question: str,
-    progress: Progress,
-    overall_task: TaskID,
-    phase_task: TaskID,
-    seed_context: ChatSeedBundle | None = None,
-    seed_chunks: tuple[ChatRetrievedChunk, ...] = (),
-) -> ChatRunState:
-    """Create initial mutable state for chat runnable stage execution."""
-    return ChatRunState(
-        runtime=runtime,
-        question=question,
-        progress=progress,
-        overall_task=overall_task,
-        phase_task=phase_task,
-        seed_context=seed_context,
-        seed_chunks=seed_chunks,
-    )
-
-
 class SearchContextStage(PipelineStageRunnable[ChatRunState]):
     """Ingress retrieval stage that sources context from seeds first, then vector search."""
 
@@ -270,6 +248,4 @@ def build_chat_stage_chain(
     pipeline: ChatPipeline,
 ) -> Runnable[ChatRunState, ChatRunState]:
     """Build deterministic chat stage chain."""
-    return pipeline.build_stage_chain(
-        stages=pipeline.configure_stage_runnables(stages=_CHAT_STAGES)
-    )
+    return pipeline.build_configured_stage_chain(stages=_CHAT_STAGES)

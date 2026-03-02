@@ -31,22 +31,6 @@ class WarrantyRunState:
     skip_symbol: bool = False
 
 
-def create_initial_warranty_state(
-    *,
-    runtime: WarrantyPipeline,
-    symbol: str,
-    start_date: date | None,
-    end_date: date | None,
-) -> WarrantyRunState:
-    """Create initial mutable state for warranty stage execution."""
-    return WarrantyRunState(
-        runtime=runtime,
-        symbol=symbol,
-        start_date=start_date,
-        end_date=end_date,
-    )
-
-
 class PrepareSymbolStage(PipelineStageRunnable[WarrantyRunState]):
     """Ingress stage that initializes symbol context and triggers filing downloads."""
 
@@ -155,6 +139,4 @@ def build_warranty_stage_chain(
     pipeline: WarrantyPipeline,
 ) -> Runnable[WarrantyRunState, WarrantyRunState]:
     """Build deterministic warranty stage chain."""
-    return pipeline.build_stage_chain(
-        stages=pipeline.configure_stage_runnables(stages=_WARRANTY_STAGES)
-    )
+    return pipeline.build_configured_stage_chain(stages=_WARRANTY_STAGES)

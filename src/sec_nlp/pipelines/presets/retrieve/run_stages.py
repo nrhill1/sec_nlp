@@ -60,30 +60,6 @@ class RetrieveRunState:
     )
 
 
-def create_initial_retrieve_state(
-    *,
-    runtime: RetrievePipeline,
-    search_symbol: str | None,
-    output_symbol: str,
-    candidate_searcher: RetrieveCandidateSearcher | None,
-    precomputed_candidates: dict[str, list[EFTSHit]] | None,
-    shared_candidate_overhead: float,
-    progress: Progress | None,
-    phase_task: TaskID | None,
-) -> RetrieveRunState:
-    """Create initial mutable state for retrieve runnable stage execution."""
-    return RetrieveRunState(
-        runtime=runtime,
-        search_symbol=search_symbol,
-        output_symbol=output_symbol,
-        candidate_searcher=candidate_searcher,
-        precomputed_candidates=precomputed_candidates,
-        shared_candidate_overhead=shared_candidate_overhead,
-        progress=progress,
-        phase_task=phase_task,
-    )
-
-
 class CandidateSearchStage(PipelineStageRunnable[RetrieveRunState]):
     """Ingress stage that materializes per-query EFTS candidates for downstream ranking."""
 
@@ -267,6 +243,4 @@ def build_retrieve_stage_chain(
     pipeline: RetrievePipeline,
 ) -> Runnable[RetrieveRunState, RetrieveRunState]:
     """Build deterministic retrieve stage chain."""
-    return pipeline.build_stage_chain(
-        stages=pipeline.configure_stage_runnables(stages=_RETRIEVE_STAGES)
-    )
+    return pipeline.build_configured_stage_chain(stages=_RETRIEVE_STAGES)

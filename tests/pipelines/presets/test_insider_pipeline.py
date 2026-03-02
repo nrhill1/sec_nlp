@@ -14,8 +14,8 @@ from sec_nlp.pipelines.presets.insider.models import (
 )
 from sec_nlp.pipelines.presets.insider.pipeline import InsiderPipeline
 from sec_nlp.pipelines.presets.insider.run_stages import (
+    InsiderRunState,
     build_insider_stage_chain,
-    create_initial_insider_state,
 )
 from sec_nlp.pipelines.presets.insider.steps.aggregate import (
     build_insider_ledgers,
@@ -348,7 +348,7 @@ def test_insider_stage_chain_preserves_state_identity(
     )
 
     chain = build_insider_stage_chain(pipeline)
-    initial_state = create_initial_insider_state(
+    initial_state = InsiderRunState(
         runtime=pipeline,
         symbol="ABC",
         progress=None,

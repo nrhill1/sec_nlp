@@ -48,22 +48,6 @@ class InsiderRunState:
     metadata: dict[str, int | float | str | None] = field(default_factory=dict)
 
 
-def create_initial_insider_state(
-    *,
-    runtime: InsiderPipeline,
-    symbol: str,
-    progress: Progress | None,
-    phase_task: TaskID | None,
-) -> InsiderRunState:
-    """Create initial mutable state for insider runnable stage execution."""
-    return InsiderRunState(
-        runtime=runtime,
-        symbol=symbol,
-        progress=progress,
-        phase_task=phase_task,
-    )
-
-
 class DownloadInsiderFilingsStage(PipelineStageRunnable[InsiderRunState]):
     """Ingress acquisition stage that downloads insider filings for a symbol."""
 
@@ -211,6 +195,4 @@ def build_insider_stage_chain(
     pipeline: InsiderPipeline,
 ) -> Runnable[InsiderRunState, InsiderRunState]:
     """Build deterministic insider stage chain."""
-    return pipeline.build_stage_chain(
-        stages=pipeline.configure_stage_runnables(stages=_INSIDER_STAGES)
-    )
+    return pipeline.build_configured_stage_chain(stages=_INSIDER_STAGES)

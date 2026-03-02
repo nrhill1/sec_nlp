@@ -34,7 +34,6 @@ from .models import WarrantyResult
 from .run_stages import (
     WarrantyRunState,
     build_warranty_stage_chain,
-    create_initial_warranty_state,
 )
 from .steps.aggregate.deduplication import (
     aggregate_period_records,
@@ -162,11 +161,8 @@ class WarrantyPipeline(BasePipeline):
         configured date window, then delegating to `_process_filing` for each.
         """
         start_date, end_date = self.config.date_range
-        stage_chain = self._stage_chain
-        if stage_chain is None:
-            stage_chain = build_warranty_stage_chain(self)
-            self._stage_chain = stage_chain
-        state = create_initial_warranty_state(
+        stage_chain = self.require_stage_chain(self._stage_chain)
+        state = WarrantyRunState(
             runtime=self,
             symbol=symbol,
             start_date=start_date,

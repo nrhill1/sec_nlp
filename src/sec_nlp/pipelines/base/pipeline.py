@@ -133,6 +133,17 @@ class BasePipeline(
         """Run a prebuilt stage chain on one mutable state instance."""
         return stage_chain.invoke(initial_state)
 
+    def require_stage_chain[StageStateT](
+        self,
+        stage_chain: Runnable[StageStateT, StageStateT] | None,
+    ) -> Runnable[StageStateT, StageStateT]:
+        """Return a stage chain or raise when pipeline components are uninitialized."""
+        if stage_chain is None:
+            raise RuntimeError(
+                "Stage chain not initialized; _build_components() must set _stage_chain"
+            )
+        return stage_chain
+
     def build_stage_chain[StageStateT](
         self,
         *,
@@ -159,6 +170,16 @@ class BasePipeline(
                 run_id=run_id,
             )
             for stage in stages
+        )
+
+    def build_configured_stage_chain[StageStateT](
+        self,
+        *,
+        stages: Sequence[PipelineStageRunnable[StageStateT]],
+    ) -> Runnable[StageStateT, StageStateT]:
+        """Build a stage chain after applying standard runnable stage metadata."""
+        return self.build_stage_chain(
+            stages=self.configure_stage_runnables(stages=stages)
         )
 
     def _validate_requirements(self) -> None:

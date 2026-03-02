@@ -13,8 +13,8 @@ from sec_nlp.pipelines.presets.financials.config import FinancialsSettings
 from sec_nlp.pipelines.presets.financials.models import FinancialFact
 from sec_nlp.pipelines.presets.financials.pipeline import FinancialsPipeline
 from sec_nlp.pipelines.presets.financials.run_stages import (
+    FinancialsRunState,
     build_financials_stage_chain,
-    create_initial_financials_state,
 )
 from sec_nlp.pipelines.presets.financials.steps.aggregate import (
     aggregate_financials,
@@ -300,7 +300,7 @@ def test_financials_stage_chain_preserves_state_identity(
     )
 
     chain = build_financials_stage_chain(pipeline)
-    initial_state = create_initial_financials_state(
+    initial_state = FinancialsRunState(
         runtime=pipeline,
         symbol="ABC",
         progress=None,

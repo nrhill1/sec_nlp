@@ -49,7 +49,6 @@ from .models import RetrievalHit, RetrieveResult
 from .run_stages import (
     RetrieveRunState,
     build_retrieve_stage_chain,
-    create_initial_retrieve_state,
 )
 from .steps import (
     RetrieveCandidateSearcher,
@@ -635,11 +634,8 @@ class RetrievePipeline(BasePipeline):
         list[RetrievalHit],
     ]:
         """Run retrieval for one symbol and return symbol-level output metadata."""
-        stage_chain = self._stage_chain
-        if stage_chain is None:
-            stage_chain = build_retrieve_stage_chain(self)
-            self._stage_chain = stage_chain
-        state = create_initial_retrieve_state(
+        stage_chain = self.require_stage_chain(self._stage_chain)
+        state = RetrieveRunState(
             runtime=self,
             search_symbol=search_symbol,
             output_symbol=output_symbol,

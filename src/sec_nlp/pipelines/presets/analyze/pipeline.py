@@ -86,7 +86,6 @@ from .models import AnalysisInput, AnalysisResult, AnalyzeResult
 from .run_stages import (
     AnalyzeRunState,
     build_analyze_stage_chain,
-    create_initial_analyze_state,
 )
 from .runnables.analysis import AnalyzerRunnable
 from .runnables.efts import EFTSSearchRunnable
@@ -788,11 +787,8 @@ class AnalyzePipeline(BasePipeline):
         prefetched: PrefetchedSymbolData | None = None,
     ) -> tuple[list[Path], ChunkStats]:
         """Run a single symbol through the full analysis pipeline."""
-        stage_chain = self._stage_chain
-        if stage_chain is None:
-            stage_chain = build_analyze_stage_chain(self)
-            self._stage_chain = stage_chain
-        state = create_initial_analyze_state(
+        stage_chain = self.require_stage_chain(self._stage_chain)
+        state = AnalyzeRunState(
             runtime=self,
             symbol=symbol,
             progress=progress,

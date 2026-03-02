@@ -43,22 +43,6 @@ class EventsRunState:
     metadata: dict[str, int | float | str | None] = field(default_factory=dict)
 
 
-def create_initial_events_state(
-    *,
-    runtime: EventsPipeline,
-    symbol: str,
-    progress: Progress | None,
-    phase_task: TaskID | None,
-) -> EventsRunState:
-    """Create initial mutable state for events runnable stage execution."""
-    return EventsRunState(
-        runtime=runtime,
-        symbol=symbol,
-        progress=progress,
-        phase_task=phase_task,
-    )
-
-
 class ScanEventsStage(PipelineStageRunnable[EventsRunState]):
     """Ingress stage that scans filings and materializes candidate event records."""
 
@@ -162,6 +146,4 @@ def build_events_stage_chain(
     pipeline: EventsPipeline,
 ) -> Runnable[EventsRunState, EventsRunState]:
     """Build deterministic events stage chain."""
-    return pipeline.build_stage_chain(
-        stages=pipeline.configure_stage_runnables(stages=_EVENTS_STAGES)
-    )
+    return pipeline.build_configured_stage_chain(stages=_EVENTS_STAGES)

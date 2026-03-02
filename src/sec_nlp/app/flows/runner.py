@@ -10,6 +10,7 @@ from uuid import uuid4
 from sec_nlp.app.flows.artifacts import FlowArtifactStore
 from sec_nlp.app.flows.compiled import CompiledStage, compile_flow_stages
 from sec_nlp.app.flows.contracts import (
+    ContractEvidenceBundle,
     FlowRetrievedChunk,
     FlowSeedBundle,
 )
@@ -18,14 +19,16 @@ from sec_nlp.app.flows.models import (
     FlowSpec,
     FlowStageResult,
     FlowStageSpec,
-    PipelineName,
 )
 from sec_nlp.core.types import coerce_result_json_dict
+from sec_nlp.pipelines.base.config import BasePipelineSettings
+from sec_nlp.pipelines.base.pipeline import BasePipeline
 from sec_nlp.pipelines.base.result import BasePipelineResult
 from sec_nlp.pipelines.presets.analyze import AnalyzeConfig, AnalyzePipeline
 from sec_nlp.pipelines.presets.chat import ChatPipeline, ChatSettings
 from sec_nlp.pipelines.presets.exb import ExhibitConfig, ExhibitPipeline
 from sec_nlp.pipelines.presets.retrieve import (
+    RetrieveChatSeedBundle,
     RetrievePipeline,
     RetrieveSettings,
 )
@@ -36,24 +39,15 @@ from sec_nlp.pipelines.presets.warranty import (
 from sec_nlp.pipelines.vector import clear_runtime_caches
 from sec_nlp.types import JsonValue
 
-type StageRunner = Callable[[CompiledStage, FlowArtifactStore], FlowStageResult]
-
 
 class FlowRunner:
     """Execute a flow spec with direct compiled-stage pipeline dispatch."""
 
-    __slots__ = ("spec", "_stage_runner_by_pipeline")
+    __slots__ = ("spec",)
 
     def __init__(self, *, spec: FlowSpec) -> None:
         """Initialize the object."""
         self.spec = spec
-        self._stage_runner_by_pipeline: dict[PipelineName, StageRunner] = {
-            "retrieve": self._run_retrieve_stage,
-            "chat": self._run_chat_stage,
-            "exhibit": self._run_exhibit_stage,
-            "analyze": self._run_plain_stage,
-            "warranty": self._run_plain_stage,
-        }
 
     def run(self) -> FlowRunResult:
         """Execute all stages in order and return aggregate flow result."""
@@ -138,10 +132,19 @@ class FlowRunner:
     ) -> FlowStageResult:
         """Run stage."""
         pipeline_name = stage.stage.pipeline
-        runner = self._stage_runner_by_pipeline.get(pipeline_name)
-        if runner is not None:
-            return runner(stage, artifacts)
-        raise ValueError(f"Unsupported flow pipeline '{pipeline_name}'")
+        match pipeline_name:
+            case "retrieve":
+                return self._run_retrieve_stage(stage, artifacts)
+            case "chat":
+                return self._run_chat_stage(stage, artifacts)
+            case "exhibit":
+                return self._run_exhibit_stage(stage, artifacts)
+            case "analyze":
+                return self._run_analyze_stage(stage, artifacts)
+            case "warranty":
+                return self._run_warranty_stage(stage, artifacts)
+            case _:
+                raise ValueError(f"Unsupported flow pipeline '{pipeline_name}'")
 
     @classmethod
     def _build_stage_result(
@@ -166,6 +169,136 @@ class FlowRunner:
             outputs=[str(path) for path in pipeline_result.outputs],
             metadata=coerce_result_json_dict(pipeline_result.metadata),
         )
+
+    @classmethod
+    def _build_stage_result_for_settings(
+        cls,
+        *,
+        stage: FlowStageSpec,
+        pipeline_result: BasePipelineResult,
+        duration_seconds: float,
+        settings: BasePipelineSettings,
+    ) -> FlowStageResult:
+        """Build stage result using run identifiers from validated settings."""
+        return cls._build_stage_result(
+            stage=stage,
+            pipeline_result=pipeline_result,
+            duration_seconds=duration_seconds,
+            run_id=str(settings.run_id),
+            run_short_id=settings.short_id,
+        )
+
+    @classmethod
+    def _invoke_pipeline(
+        cls,
+        *,
+        stage: FlowStageSpec,
+        settings: BasePipelineSettings,
+        pipeline: BasePipeline,
+    ) -> FlowStageResult:
+        """Invoke a plain pipeline and normalize the stage result envelope."""
+        result, elapsed = cls._timed_call(pipeline.invoke)
+        return cls._build_stage_result_for_settings(
+            stage=stage,
+            pipeline_result=result,
+            duration_seconds=elapsed,
+            settings=settings,
+        )
+
+    @staticmethod
+    def _timed_call[ResultT](
+        callback: Callable[[], ResultT],
+    ) -> tuple[ResultT, float]:
+        """Execute a zero-argument callback and return result plus duration."""
+        started = perf_counter()
+        result = callback()
+        return result, perf_counter() - started
+
+    @staticmethod
+    def _require_stage_settings[SettingsT: BasePipelineSettings](
+        stage: CompiledStage,
+        *,
+        expected_type: type[SettingsT],
+        pipeline_name: str,
+    ) -> SettingsT:
+        """Return validated stage settings for one pipeline name."""
+        if not isinstance(stage.settings, expected_type):
+            raise ValueError(
+                f"{pipeline_name} stage received non-{pipeline_name} settings"
+            )
+        return stage.settings
+
+    @classmethod
+    def _run_chunk_handoff_stage[BundleT](
+        cls,
+        *,
+        stage: FlowStageSpec,
+        settings: BasePipelineSettings,
+        artifacts: FlowArtifactStore,
+        run_callback: Callable[
+            [],
+            tuple[BasePipelineResult, BundleT, tuple[FlowRetrievedChunk, ...]],
+        ],
+        persist_callback: Callable[
+            [FlowArtifactStore, str, BundleT, tuple[FlowRetrievedChunk, ...]],
+            None,
+        ],
+    ) -> FlowStageResult:
+        """Run a stage that returns both a result and chunk-based handoff artifacts."""
+        (result, bundle, seed_chunks), elapsed = cls._timed_call(run_callback)
+        if result.success:
+            persist_callback(artifacts, stage.id, bundle, seed_chunks)
+        return cls._build_stage_result_for_settings(
+            stage=stage,
+            pipeline_result=result,
+            duration_seconds=elapsed,
+            settings=settings,
+        )
+
+    @classmethod
+    def _run_typed_pipeline_stage[SettingsT: BasePipelineSettings](
+        cls,
+        *,
+        stage: CompiledStage,
+        artifacts: FlowArtifactStore,
+        expected_type: type[SettingsT],
+        pipeline_name: str,
+        pipeline_factory: Callable[[SettingsT], BasePipeline],
+    ) -> FlowStageResult:
+        """Run a stage backed by one strongly typed pipeline settings model."""
+        _ = artifacts
+        settings = cls._require_stage_settings(
+            stage,
+            expected_type=expected_type,
+            pipeline_name=pipeline_name,
+        )
+        return cls._invoke_pipeline(
+            stage=stage.stage,
+            settings=settings,
+            pipeline=pipeline_factory(settings),
+        )
+
+    @staticmethod
+    def _persist_retrieve_artifacts(
+        artifacts: FlowArtifactStore,
+        stage_id: str,
+        bundle: RetrieveChatSeedBundle,
+        seed_chunks: tuple[FlowRetrievedChunk, ...],
+    ) -> None:
+        """Persist retrieve handoff artifacts into flow artifact storage."""
+        artifacts.put_seed_bundle(stage_id, bundle)
+        artifacts.put_seed_chunks(stage_id, seed_chunks)
+
+    @staticmethod
+    def _persist_exhibit_artifacts(
+        artifacts: FlowArtifactStore,
+        stage_id: str,
+        bundle: ContractEvidenceBundle,
+        seed_chunks: tuple[FlowRetrievedChunk, ...],
+    ) -> None:
+        """Persist exhibit handoff artifacts into flow artifact storage."""
+        artifacts.put_contract_evidence(stage_id, bundle)
+        artifacts.put_seed_chunks(stage_id, seed_chunks)
 
     @staticmethod
     def _build_unexecuted_stage_result(
@@ -196,40 +329,33 @@ class FlowRunner:
         return f"{normalized[: max_chars - 1].rstrip()}…"
 
     @classmethod
-    def _run_plain_stage(
+    def _run_analyze_stage(
         cls,
         stage: CompiledStage,
         artifacts: FlowArtifactStore,
     ) -> FlowStageResult:
-        """Run plain stage without cross-stage artifact exchange."""
-        _ = artifacts
-        pipeline_name = stage.stage.pipeline
-        if pipeline_name == "analyze":
-            if not isinstance(stage.settings, AnalyzeConfig):
-                raise ValueError("analyze stage received non-analyze settings")
-            settings = stage.settings
-            pipeline = AnalyzePipeline(config=settings)
-        elif pipeline_name == "warranty":
-            if not isinstance(stage.settings, WarrantyConfig):
-                raise ValueError(
-                    "warranty stage received non-warranty settings"
-                )
-            settings = stage.settings
-            pipeline = WarrantyPipeline(config=settings)
-        else:
-            raise ValueError(
-                f"Unsupported plain stage pipeline '{pipeline_name}'"
-            )
+        """Run analyze stage."""
+        return cls._run_typed_pipeline_stage(
+            stage=stage,
+            artifacts=artifacts,
+            expected_type=AnalyzeConfig,
+            pipeline_name="analyze",
+            pipeline_factory=lambda settings: AnalyzePipeline(config=settings),
+        )
 
-        started = perf_counter()
-        result = pipeline.invoke()
-        elapsed = perf_counter() - started
-        return cls._build_stage_result(
-            stage=stage.stage,
-            pipeline_result=result,
-            duration_seconds=elapsed,
-            run_id=str(settings.run_id),
-            run_short_id=settings.short_id,
+    @classmethod
+    def _run_warranty_stage(
+        cls,
+        stage: CompiledStage,
+        artifacts: FlowArtifactStore,
+    ) -> FlowStageResult:
+        """Run warranty stage."""
+        return cls._run_typed_pipeline_stage(
+            stage=stage,
+            artifacts=artifacts,
+            expected_type=WarrantyConfig,
+            pipeline_name="warranty",
+            pipeline_factory=lambda settings: WarrantyPipeline(config=settings),
         )
 
     @classmethod
@@ -239,23 +365,19 @@ class FlowRunner:
         artifacts: FlowArtifactStore,
     ) -> FlowStageResult:
         """Run retrieve stage."""
-        if not isinstance(stage.settings, RetrieveSettings):
-            raise ValueError("retrieve stage received non-retrieve settings")
-
-        started = perf_counter()
-        pipeline = RetrievePipeline(config=stage.settings)
-        result, seed_bundle, seed_chunks = pipeline.run_for_flow_with_chunks()
-        elapsed = perf_counter() - started
-        if result.success:
-            artifacts.put_seed_bundle(stage.stage.id, seed_bundle)
-            artifacts.put_seed_chunks(stage.stage.id, seed_chunks)
-
-        return cls._build_stage_result(
+        settings = cls._require_stage_settings(
+            stage,
+            expected_type=RetrieveSettings,
+            pipeline_name="retrieve",
+        )
+        return cls._run_chunk_handoff_stage(
             stage=stage.stage,
-            pipeline_result=result,
-            duration_seconds=elapsed,
-            run_id=str(stage.settings.run_id),
-            run_short_id=stage.settings.short_id,
+            settings=settings,
+            artifacts=artifacts,
+            run_callback=RetrievePipeline(
+                config=settings
+            ).run_for_flow_with_chunks,
+            persist_callback=cls._persist_retrieve_artifacts,
         )
 
     @classmethod
@@ -265,8 +387,11 @@ class FlowRunner:
         artifacts: FlowArtifactStore,
     ) -> FlowStageResult:
         """Run chat stage."""
-        if not isinstance(stage.settings, ChatSettings):
-            raise ValueError("chat stage received non-chat settings")
+        settings = cls._require_stage_settings(
+            stage,
+            expected_type=ChatSettings,
+            pipeline_name="chat",
+        )
 
         seed_binding = stage.stage.inputs[0] if stage.stage.inputs else None
 
@@ -288,19 +413,19 @@ class FlowRunner:
                     ),
                 )
 
+        chat_pipeline = ChatPipeline(config=settings)
         started = perf_counter()
-        result = ChatPipeline(config=stage.settings).run_for_flow(
+        result = chat_pipeline.run_for_flow(
             seed_context=seed_bundle,
             seed_chunks=seed_chunks,
         )
         elapsed = perf_counter() - started
 
-        stage_result = cls._build_stage_result(
+        stage_result = cls._build_stage_result_for_settings(
             stage=stage.stage,
             pipeline_result=result,
             duration_seconds=elapsed,
-            run_id=str(stage.settings.run_id),
-            run_short_id=stage.settings.short_id,
+            settings=settings,
         )
         if result.success and isinstance(result.answer, str) and result.answer:
             metadata = dict(stage_result.metadata)
@@ -315,25 +440,19 @@ class FlowRunner:
         artifacts: FlowArtifactStore,
     ) -> FlowStageResult:
         """Run exhibit stage."""
-        if not isinstance(stage.settings, ExhibitConfig):
-            raise ValueError("exhibit stage received non-exhibit settings")
-
-        started = perf_counter()
-        pipeline = ExhibitPipeline(config=stage.settings)
-        result, evidence_bundle, seed_chunks = (
-            pipeline.run_for_flow_with_chunks()
+        settings = cls._require_stage_settings(
+            stage,
+            expected_type=ExhibitConfig,
+            pipeline_name="exhibit",
         )
-        elapsed = perf_counter() - started
-        if result.success:
-            artifacts.put_contract_evidence(stage.stage.id, evidence_bundle)
-            artifacts.put_seed_chunks(stage.stage.id, seed_chunks)
-
-        return cls._build_stage_result(
+        return cls._run_chunk_handoff_stage(
             stage=stage.stage,
-            pipeline_result=result,
-            duration_seconds=elapsed,
-            run_id=str(stage.settings.run_id),
-            run_short_id=stage.settings.short_id,
+            settings=settings,
+            artifacts=artifacts,
+            run_callback=ExhibitPipeline(
+                config=settings
+            ).run_for_flow_with_chunks,
+            persist_callback=cls._persist_exhibit_artifacts,
         )
 
     @staticmethod

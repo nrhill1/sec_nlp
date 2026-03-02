@@ -22,8 +22,8 @@ from sec_nlp.pipelines.presets.retrieve import (
 )
 from sec_nlp.pipelines.presets.retrieve.models import RetrievalHit
 from sec_nlp.pipelines.presets.retrieve.run_stages import (
+    RetrieveRunState,
     build_retrieve_stage_chain,
-    create_initial_retrieve_state,
 )
 from sec_nlp.pipelines.presets.retrieve.steps import (
     candidate_search as candidate_search_steps,
@@ -1167,7 +1167,7 @@ def test_retrieve_stage_chain_preserves_state_identity(
     )
 
     pipeline = RetrievePipeline(config=config)
-    state = create_initial_retrieve_state(
+    state = RetrieveRunState(
         runtime=pipeline,
         search_symbol="ABC",
         output_symbol="ABC",

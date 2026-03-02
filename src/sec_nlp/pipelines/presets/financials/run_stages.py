@@ -43,22 +43,6 @@ class FinancialsRunState:
     metadata: dict[str, int | str] = field(default_factory=dict)
 
 
-def create_initial_financials_state(
-    *,
-    runtime: FinancialsPipeline,
-    symbol: str,
-    progress: Progress | None,
-    phase_task: TaskID | None,
-) -> FinancialsRunState:
-    """Create initial mutable state for financials runnable stages."""
-    return FinancialsRunState(
-        runtime=runtime,
-        symbol=symbol,
-        progress=progress,
-        phase_task=phase_task,
-    )
-
-
 class DownloadFilingsStage(PipelineStageRunnable[FinancialsRunState]):
     """Ingress acquisition stage that downloads filing accession directories by symbol."""
 
@@ -189,6 +173,4 @@ def build_financials_stage_chain(
     pipeline: FinancialsPipeline,
 ) -> Runnable[FinancialsRunState, FinancialsRunState]:
     """Build deterministic financials stage chain."""
-    return pipeline.build_stage_chain(
-        stages=pipeline.configure_stage_runnables(stages=_FINANCIALS_STAGES)
-    )
+    return pipeline.build_configured_stage_chain(stages=_FINANCIALS_STAGES)

@@ -42,22 +42,6 @@ class HoldingsRunState:
     metadata: dict[str, int | float | str | None] = field(default_factory=dict)
 
 
-def create_initial_holdings_state(
-    *,
-    runtime: HoldingsPipeline,
-    symbol: str,
-    progress: Progress | None,
-    phase_task: TaskID | None,
-) -> HoldingsRunState:
-    """Create initial mutable state for holdings runnable stage execution."""
-    return HoldingsRunState(
-        runtime=runtime,
-        symbol=symbol,
-        progress=progress,
-        phase_task=phase_task,
-    )
-
-
 class DownloadHoldingsFilingsStage(PipelineStageRunnable[HoldingsRunState]):
     """Ingress acquisition stage that downloads holdings filings for a symbol."""
 
@@ -204,6 +188,4 @@ def build_holdings_stage_chain(
     pipeline: HoldingsPipeline,
 ) -> Runnable[HoldingsRunState, HoldingsRunState]:
     """Build deterministic holdings stage chain."""
-    return pipeline.build_stage_chain(
-        stages=pipeline.configure_stage_runnables(stages=_HOLDINGS_STAGES)
-    )
+    return pipeline.build_configured_stage_chain(stages=_HOLDINGS_STAGES)

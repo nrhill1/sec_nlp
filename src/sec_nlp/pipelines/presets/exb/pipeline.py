@@ -38,7 +38,6 @@ from .models import ExhibitResult
 from .run_stages import (
     ExhibitRunState,
     build_exhibit_stage_chain,
-    create_initial_exhibit_state,
 )
 from .steps.candidates import build_candidate_accessions
 from .steps.extract.exhibits import (
@@ -385,11 +384,8 @@ class ExhibitPipeline(BasePipeline):
         include_bridge: bool,
     ) -> tuple[list[Path], list[Document]]:
         """Process a single symbol."""
-        stage_chain = self._stage_chain
-        if stage_chain is None:
-            stage_chain = build_exhibit_stage_chain(self)
-            self._stage_chain = stage_chain
-        state = create_initial_exhibit_state(
+        stage_chain = self.require_stage_chain(self._stage_chain)
+        state = ExhibitRunState(
             runtime=self,
             symbol=symbol,
             include_bridge=include_bridge,

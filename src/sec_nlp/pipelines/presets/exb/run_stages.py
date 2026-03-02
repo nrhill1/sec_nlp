@@ -69,20 +69,6 @@ class ExhibitRunState:
     done: bool = False
 
 
-def create_initial_exhibit_state(
-    *,
-    runtime: ExhibitPipeline,
-    symbol: str,
-    include_bridge: bool,
-) -> ExhibitRunState:
-    """Create initial mutable state for exhibit runnable stage execution."""
-    return ExhibitRunState(
-        runtime=runtime,
-        symbol=symbol,
-        include_bridge=include_bridge,
-    )
-
-
 class CandidateAccessionsStage(PipelineStageRunnable[ExhibitRunState]):
     """Scope stage that narrows accession search space before expensive exhibit extraction."""
 
@@ -335,6 +321,4 @@ def build_exhibit_stage_chain(
     pipeline: ExhibitPipeline,
 ) -> Runnable[ExhibitRunState, ExhibitRunState]:
     """Build deterministic exhibit stage chain."""
-    return pipeline.build_stage_chain(
-        stages=pipeline.configure_stage_runnables(stages=_EXHIBIT_STAGES)
-    )
+    return pipeline.build_configured_stage_chain(stages=_EXHIBIT_STAGES)

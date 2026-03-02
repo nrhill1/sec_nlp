@@ -16,8 +16,8 @@ from sec_nlp.pipelines.presets.news.models import (
 )
 from sec_nlp.pipelines.presets.news.pipeline import NewsPipeline
 from sec_nlp.pipelines.presets.news.run_stages import (
+    NewsRunState,
     build_news_stage_chain,
-    create_initial_news_state,
 )
 from sec_nlp.pipelines.presets.news.steps.correlate import correlate_news_items
 from sec_nlp.pipelines.presets.news.steps.fetch import (
@@ -430,7 +430,7 @@ def test_news_stage_chain_preserves_state_identity(
     )
 
     chain = build_news_stage_chain(pipeline)
-    initial_state = create_initial_news_state(
+    initial_state = NewsRunState(
         runtime=pipeline,
         symbol="ABC",
         progress=None,

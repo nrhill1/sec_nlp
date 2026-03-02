@@ -16,8 +16,8 @@ from sec_nlp.pipelines.presets.holdings.config import HoldingsSettings
 from sec_nlp.pipelines.presets.holdings.models import HoldingPosition
 from sec_nlp.pipelines.presets.holdings.pipeline import HoldingsPipeline
 from sec_nlp.pipelines.presets.holdings.run_stages import (
+    HoldingsRunState,
     build_holdings_stage_chain,
-    create_initial_holdings_state,
 )
 from sec_nlp.pipelines.presets.holdings.steps.aggregate import (
     build_ownership_summary,
@@ -374,7 +374,7 @@ def test_holdings_stage_chain_preserves_state_identity(
     )
 
     chain = build_holdings_stage_chain(pipeline)
-    initial_state = create_initial_holdings_state(
+    initial_state = HoldingsRunState(
         runtime=pipeline,
         symbol="ABC",
         progress=None,

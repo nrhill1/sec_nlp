@@ -43,22 +43,6 @@ class NewsRunState:
     metadata: dict[str, int | float | str | None] = field(default_factory=dict)
 
 
-def create_initial_news_state(
-    *,
-    runtime: NewsPipeline,
-    symbol: str,
-    progress: Progress | None,
-    phase_task: TaskID | None,
-) -> NewsRunState:
-    """Create initial mutable state for news runnable stage execution."""
-    return NewsRunState(
-        runtime=runtime,
-        symbol=symbol,
-        progress=progress,
-        phase_task=phase_task,
-    )
-
-
 class ResolveAliasesStage(PipelineStageRunnable[NewsRunState]):
     """Normalization stage that resolves alias inputs for consistent downstream matching."""
 
@@ -192,6 +176,4 @@ def build_news_stage_chain(
     pipeline: NewsPipeline,
 ) -> Runnable[NewsRunState, NewsRunState]:
     """Build deterministic news stage chain."""
-    return pipeline.build_stage_chain(
-        stages=pipeline.configure_stage_runnables(stages=_NEWS_STAGES)
-    )
+    return pipeline.build_configured_stage_chain(stages=_NEWS_STAGES)

@@ -37,7 +37,6 @@ from .models import DetectedEvent, EventsResult
 from .run_stages import (
     EventsRunState,
     build_events_stage_chain,
-    create_initial_events_state,
 )
 
 
@@ -93,10 +92,7 @@ class EventsPipeline(BasePipeline):
                     total=len(self.config.symbols),
                 )
                 phase_task = progress.add_task("", total=None, visible=False)
-                stage_chain = self._stage_chain
-                if stage_chain is None:
-                    stage_chain = build_events_stage_chain(self)
-                    self._stage_chain = stage_chain
+                stage_chain = self.require_stage_chain(self._stage_chain)
 
                 for symbol in self.config.symbols:
                     normalized_symbol = symbol.upper()
@@ -105,7 +101,7 @@ class EventsPipeline(BasePipeline):
                         description=f"Processing {normalized_symbol}",
                     )
 
-                    symbol_state = create_initial_events_state(
+                    symbol_state = EventsRunState(
                         runtime=self,
                         symbol=normalized_symbol,
                         progress=progress,

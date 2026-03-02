@@ -37,7 +37,6 @@ from .models import NewsCorrelation, NewsHeadline, NewsResult, NewsTimelineEntry
 from .run_stages import (
     NewsRunState,
     build_news_stage_chain,
-    create_initial_news_state,
 )
 
 
@@ -93,10 +92,7 @@ class NewsPipeline(BasePipeline):
                     total=len(self.config.symbols),
                 )
                 phase_task = progress.add_task("", total=None, visible=False)
-                stage_chain = self._stage_chain
-                if stage_chain is None:
-                    stage_chain = build_news_stage_chain(self)
-                    self._stage_chain = stage_chain
+                stage_chain = self.require_stage_chain(self._stage_chain)
 
                 for symbol in self.config.symbols:
                     normalized_symbol = symbol.upper()
@@ -105,7 +101,7 @@ class NewsPipeline(BasePipeline):
                         description=f"Processing {normalized_symbol}",
                     )
 
-                    symbol_state = create_initial_news_state(
+                    symbol_state = NewsRunState(
                         runtime=self,
                         symbol=normalized_symbol,
                         progress=progress,

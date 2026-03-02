@@ -58,7 +58,6 @@ from .models import ChatCitation, ChatResult, ChatTranscriptPayload, ChatTurn
 from .run_stages import (
     ChatRunState,
     build_chat_stage_chain,
-    create_initial_chat_state,
 )
 
 _CITATION_RE = re.compile(r"\[(C\d+)\]")
@@ -303,11 +302,8 @@ class ChatPipeline(BasePipeline):
                     total=5,
                 )
                 phase_task = progress.add_task("", total=None, visible=False)
-                stage_chain = self._stage_chain
-                if stage_chain is None:
-                    stage_chain = build_chat_stage_chain(self)
-                    self._stage_chain = stage_chain
-                stage_state = create_initial_chat_state(
+                stage_chain = self.require_stage_chain(self._stage_chain)
+                stage_state = ChatRunState(
                     runtime=self,
                     question=question,
                     progress=progress,
