@@ -7,7 +7,11 @@ from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 
 
 class FlowSeedChunk(BaseModel):
-    """Minimal filing chunk payload reused by retrieve and chat flow stages."""
+    """Citation-ready filing snippet used in retrieve-to-chat handoffs.
+
+    The shape is intentionally compact and model-agnostic so it can be
+    serialized for debugging but also passed in-memory without conversion.
+    """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -46,7 +50,12 @@ class FlowSeedChunk(BaseModel):
 
 
 class FlowSeedBundle(BaseModel):
-    """Canonical seeded context bundle shared by retrieve and chat."""
+    """Seeded filing context produced upstream and consumed by chat stages.
+
+    This bundle carries provenance (`upstream_*`), query scope, and optional
+    normalized snippets. Chat can use it directly or alongside prebuilt
+    `FlowRetrievedChunk` tuples for zero-copy prompt context assembly.
+    """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -78,18 +87,23 @@ class FlowSeedBundle(BaseModel):
 
     @property
     def run_id(self) -> str:
-        """Backward-compatible accessor for legacy retrieve bridge fields."""
+        """Expose `upstream_run_id` under the legacy `run_id` bridge name."""
         return self.upstream_run_id
 
     @property
     def run_short_id(self) -> int | None:
-        """Backward-compatible accessor for legacy retrieve bridge fields."""
+        """Expose `upstream_short_id` under the legacy bridge field name."""
         return self.upstream_short_id
 
 
 @dataclass(slots=True, frozen=True)
 class FlowRetrievedChunk:
-    """Prebuilt chat retrieval chunk used for zero-copy flow handoff."""
+    """Prebuilt retrieval snippet consumable by chat without remapping.
+
+    This dataclass mirrors the fields chat already ranks and cites, so flow
+    runtime can pass tuples by reference instead of rebuilding Pydantic models
+    between stages.
+    """
 
     collection: str
     score: float

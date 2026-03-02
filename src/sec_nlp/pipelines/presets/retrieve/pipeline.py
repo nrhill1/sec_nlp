@@ -545,7 +545,11 @@ class RetrievePipeline(BasePipeline):
     def _hits_to_seed_chunks(
         self, hits: list[RetrievalHit]
     ) -> list[RetrieveChatSeedChunk]:
-        """Convert ranked hits into chat-seed chunks without serialization."""
+        """Convert ranked retrieval hits into compact `FlowSeedChunk` payloads.
+
+        This is used when downstream chat will reconstruct retrieval chunks from
+        seed metadata instead of consuming prebuilt chat chunks.
+        """
         return [
             RetrieveChatSeedChunk(
                 collection=chunk.collection,
@@ -564,7 +568,11 @@ class RetrievePipeline(BasePipeline):
         self,
         hits: list[RetrievalHit],
     ) -> list[ChatRetrievedChunk]:
-        """Convert ranked hits into prebuilt chat chunks for zero-copy handoff."""
+        """Convert ranked hits into chat-ready chunk dataclasses.
+
+        The output mirrors chat's native chunk shape, enabling direct in-memory
+        handoff with no additional validation/remapping in flow runner.
+        """
         return [
             ChatRetrievedChunk(
                 collection=chunk.collection,
@@ -583,7 +591,11 @@ class RetrievePipeline(BasePipeline):
     def _flow_chunk_values(
         self, hits: list[RetrievalHit]
     ) -> list[_FlowChunkValues]:
-        """Return normalized chunk fields reused by flow handoff outputs."""
+        """Normalize retrieval hits into shared chunk fields for flow handoff.
+
+        Empty snippets are dropped here so both seed and chat chunk builders
+        operate on identical, citation-eligible source values.
+        """
         collection_name = self.config.vdb.collection_name or "retrieve"
         chunks: list[_FlowChunkValues] = []
         for hit in hits:

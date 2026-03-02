@@ -1,5 +1,9 @@
 # src/sec_nlp/pipelines/presets/chat/bridge.py
-"""Chat bridge aliases for flow seeded-context contracts."""
+"""Compatibility aliases for chat flow handoff contract models.
+
+These aliases map chat-facing names to canonical flow contracts so stage
+handoff code can migrate without duplicating model definitions.
+"""
 
 from sec_nlp.app.flows.contracts import (
     FlowRetrievedChunk,

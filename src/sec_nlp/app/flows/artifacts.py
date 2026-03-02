@@ -13,7 +13,11 @@ from sec_nlp.app.flows.models import FlowStageInputBinding
 
 
 class FlowArtifactStore:
-    """Stage-scoped in-memory artifact store for local flow runs."""
+    """In-memory artifact registry keyed by flow stage ID.
+
+    The store is optimized for local single-process execution, where downstream
+    stages consume upstream artifacts by reference rather than via JSON files.
+    """
 
     def __init__(self) -> None:
         """Initialize an in-memory artifact store for flow stage handoffs."""
@@ -24,11 +28,11 @@ class FlowArtifactStore:
         self._contract_evidence_by_stage: dict[str, ContractEvidenceBundle] = {}
 
     def put_seed_bundle(self, stage_id: str, bundle: FlowSeedBundle) -> None:
-        """Store seeded bundle keyed by stage ID."""
+        """Register a retrieve-style seed bundle for a producing stage."""
         self._seed_by_stage[stage_id] = bundle
 
     def get_seed_bundle(self, stage_id: str) -> FlowSeedBundle | None:
-        """Load seeded bundle for one stage."""
+        """Return a previously stored seed bundle for `stage_id`."""
         return self._seed_by_stage.get(stage_id)
 
     def put_seed_chunks(
@@ -36,7 +40,11 @@ class FlowArtifactStore:
         stage_id: str,
         chunks: tuple[FlowRetrievedChunk, ...] | list[FlowRetrievedChunk],
     ) -> None:
-        """Store prebuilt seed chunks for zero-copy chat handoff."""
+        """Store prebuilt chat chunks for zero-copy stage handoff.
+
+        Tuple inputs are preserved as-is to avoid extra allocations when
+        upstream already materialized an immutable chunk tuple.
+        """
         if isinstance(chunks, tuple):
             self._seed_chunks_by_stage[stage_id] = chunks
             return
@@ -46,23 +54,23 @@ class FlowArtifactStore:
         self,
         stage_id: str,
     ) -> tuple[FlowRetrievedChunk, ...] | None:
-        """Load prebuilt seed chunks for one stage."""
+        """Return prebuilt chat chunks for `stage_id`, if available."""
         return self._seed_chunks_by_stage.get(stage_id)
 
     def put_contract_evidence(
         self, stage_id: str, bundle: ContractEvidenceBundle
     ) -> None:
-        """Store EXB contract evidence bundle keyed by stage ID."""
+        """Register an EXB contract-evidence bundle for a producing stage."""
         self._contract_evidence_by_stage[stage_id] = bundle
 
     def get_contract_evidence(
         self, stage_id: str
     ) -> ContractEvidenceBundle | None:
-        """Load EXB contract evidence bundle for a stage ID."""
+        """Return contract evidence for `stage_id`, if one was stored."""
         return self._contract_evidence_by_stage.get(stage_id)
 
     def has_artifact(self, stage_id: str) -> bool:
-        """Return True when any artifact exists for the provided stage ID."""
+        """Return whether any artifact family exists for `stage_id`."""
         return (
             stage_id in self._seed_by_stage
             or stage_id in self._seed_chunks_by_stage
@@ -70,7 +78,10 @@ class FlowArtifactStore:
         )
 
     def stage_artifact(self, stage_id: str) -> FlowArtifactValue | None:
-        """Return the first available typed artifact for a stage ID."""
+        """Return the primary typed artifact for a stage.
+
+        Current precedence is seed bundle first, then contract evidence.
+        """
         seed = self.get_seed_bundle(stage_id)
         if seed is not None:
             return seed
@@ -80,7 +91,12 @@ class FlowArtifactStore:
         self,
         binding: FlowStageInputBinding,
     ) -> tuple[FlowSeedBundle | None, tuple[FlowRetrievedChunk, ...]]:
-        """Resolve one chat-stage input binding into seeded context and chunks."""
+        """Resolve one chat input binding into seed bundle + prebuilt chunks.
+
+        For `retrieve_seed`, this returns the stored seed bundle.
+        For `contract_evidence`, this projects EXB evidence into a seed-like
+        bundle while preserving any prebuilt chunks from the same stage.
+        """
         seed_chunks = self.get_seed_chunks(binding.from_stage) or ()
         if binding.artifact == "retrieve_seed":
             return self.get_seed_bundle(binding.from_stage), seed_chunks
@@ -94,7 +110,7 @@ class FlowArtifactStore:
     def _seed_from_contract_evidence(
         evidence: ContractEvidenceBundle,
     ) -> FlowSeedBundle:
-        """Project contract evidence into a chat seed bundle shape."""
+        """Project EXB contract evidence into chat's seed-bundle shape."""
         return FlowSeedBundle(
             upstream_pipeline=evidence.upstream_pipeline,
             upstream_run_id=evidence.upstream_run_id,

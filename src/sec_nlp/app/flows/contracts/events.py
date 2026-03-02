@@ -5,7 +5,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 class HeadlineBundle(BaseModel):
-    """Normalized headline context for downstream event or chat stages."""
+    """Deduplicated news headline context for downstream event/chat stages."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -31,7 +31,7 @@ class HeadlineBundle(BaseModel):
 
 
 class EventTimelineBundle(BaseModel):
-    """Detected event timeline context for downstream answer stages."""
+    """Structured event timeline context produced by the events pipeline."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -57,7 +57,7 @@ class EventTimelineBundle(BaseModel):
 
 
 class FinancialStatementBundle(BaseModel):
-    """Financial statement signal context passed into analysis stages."""
+    """Financial statement signal references for downstream analysis stages."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -79,7 +79,7 @@ class FinancialStatementBundle(BaseModel):
 
 
 class OwnershipSignalBundle(BaseModel):
-    """Ownership signal context from holdings/insider pipelines."""
+    """Ownership signal references emitted by holdings/insider pipelines."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 

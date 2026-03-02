@@ -1,5 +1,9 @@
 # src/sec_nlp/pipelines/presets/retrieve/bridge.py
-"""Deprecated retrieve bridge aliases for flow seeded-context contracts."""
+"""Compatibility aliases for retrieve-to-flow seeded context contracts.
+
+The canonical models now live under `sec_nlp.app.flows.contracts`, but these
+aliases keep older retrieve imports readable during migration.
+"""
 
 from sec_nlp.app.flows.contracts import FlowSeedBundle, FlowSeedChunk
 
