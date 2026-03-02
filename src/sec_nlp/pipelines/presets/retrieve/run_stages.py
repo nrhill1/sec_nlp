@@ -265,11 +265,6 @@ def build_retrieve_stage_chain(
         IndexStage(),
         WriteOutputsStage(),
     )
-    configured_stages = tuple(
-        stage.configured(
-            pipeline_type=pipeline.pipeline_type,
-            run_id=str(pipeline.config.run_id),
-        )
-        for stage in stages
+    return pipeline.build_stage_chain(
+        stages=pipeline.configure_stage_runnables(stages=stages)
     )
-    return pipeline.build_stage_chain(stages=configured_stages)

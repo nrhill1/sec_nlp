@@ -13,6 +13,7 @@ from sec_nlp.types import ConfigValue, InitSubclassKwargs
 
 from .config import BasePipelineSettings
 from .result import BasePipelineResult
+from .stages import PipelineStageRunnable
 
 __all__: tuple[str, ...] = ("BasePipeline",)
 
@@ -144,6 +145,21 @@ class BasePipeline(
         for stage in stages[1:]:
             chain = chain | stage
         return chain
+
+    def configure_stage_runnables[StageStateT](
+        self,
+        *,
+        stages: Sequence[PipelineStageRunnable[StageStateT]],
+    ) -> tuple[Runnable[StageStateT, StageStateT], ...]:
+        """Attach standard runnable tracing metadata to stage runnables."""
+        run_id = str(self.config.run_id)
+        return tuple(
+            stage.configured(
+                pipeline_type=self.pipeline_type,
+                run_id=run_id,
+            )
+            for stage in stages
+        )
 
     def _validate_requirements(self) -> None:
         """
