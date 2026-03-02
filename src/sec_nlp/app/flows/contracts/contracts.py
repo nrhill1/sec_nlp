@@ -14,10 +14,10 @@ from .seed import FlowSeedBundle
 
 
 class ContractEvidenceChunk(BaseModel):
-    """Normalized contract clause snippet extracted by the EXB pipeline.
+    """Structured legal-clause evidence extracted from exhibit documents.
 
-    Each chunk is a citation candidate that keeps accession/exhibit metadata so
-    downstream chat or analysis can reference the exact source clause.
+    Each chunk represents a contract-relevant passage with enough filing and
+    exhibit metadata to support auditability, citation rendering, and ranking.
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
@@ -65,10 +65,10 @@ class ContractEvidenceChunk(BaseModel):
 
 
 class ContractEvidenceBundle(BaseModel):
-    """Contract-evidence payload handed from EXB into downstream stages.
+    """EXB stage output envelope for contract-focused downstream workflows.
 
-    The bundle is intentionally parallel to `FlowSeedBundle`: provenance,
-    symbol/query scope, and a compact list of normalized evidence chunks.
+    This is the contract analogue of `FlowSeedBundle`: run provenance,
+    symbol/query scope, and normalized legal evidence snippets in one object.
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
@@ -99,10 +99,10 @@ class ContractEvidenceBundle(BaseModel):
 
 
 class ContextPack(BaseModel):
-    """Merged multi-source context payload for fan-in flow compositions.
+    """Composite context envelope for fan-in stages that blend multiple signals.
 
-    This is the canonical envelope when a stage needs filing, contract, event,
-    and financial signals at the same time.
+    The pack intentionally keeps each source bundle optional so flows can mix
+    filing, contract, event, financial, and ownership evidence incrementally.
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")

@@ -1,8 +1,13 @@
 # src/sec_nlp/pipelines/presets/retrieve/bridge.py
-"""Compatibility aliases for retrieve-to-flow seeded context contracts.
+"""Retrieve-side compatibility shim for flow contract imports.
 
-The canonical models now live under `sec_nlp.app.flows.contracts`, but these
-aliases keep older retrieve imports readable during migration.
+Purpose:
+1. Preserve stable import paths in retrieve callers that still reference
+   preset-local bridge names.
+2. Delegate all actual model definitions to `sec_nlp.app.flows.contracts`.
+
+This module should remain thin by design; adding new fields or behavior here
+would reintroduce duplicate model families.
 """
 
 from sec_nlp.app.flows.contracts import FlowSeedBundle, FlowSeedChunk

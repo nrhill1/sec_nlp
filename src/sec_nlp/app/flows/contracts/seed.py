@@ -7,10 +7,11 @@ from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 
 
 class FlowSeedChunk(BaseModel):
-    """Citation-ready filing snippet used in retrieve-to-chat handoffs.
+    """Normalized filing snippet contract for stage-to-stage evidence transfer.
 
-    The shape is intentionally compact and model-agnostic so it can be
-    serialized for debugging but also passed in-memory without conversion.
+    This model is the low-friction boundary object between retrieval/ranking
+    stages and downstream consumers (chat, analyze, or future fan-in stages).
+    It keeps only provenance + snippet data needed for citation and ordering.
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
@@ -50,11 +51,11 @@ class FlowSeedChunk(BaseModel):
 
 
 class FlowSeedBundle(BaseModel):
-    """Seeded filing context produced upstream and consumed by chat stages.
+    """Run-scoped seeded evidence envelope emitted by retrieval-style stages.
 
-    This bundle carries provenance (`upstream_*`), query scope, and optional
-    normalized snippets. Chat can use it directly or alongside prebuilt
-    `FlowRetrievedChunk` tuples for zero-copy prompt context assembly.
+    Use this as the canonical upstream context object when a downstream stage
+    needs query/symbol provenance and a compact set of ranked filing snippets.
+    Chat can pair this with `FlowRetrievedChunk` tuples for zero-copy context.
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
@@ -98,11 +99,10 @@ class FlowSeedBundle(BaseModel):
 
 @dataclass(slots=True, frozen=True)
 class FlowRetrievedChunk:
-    """Prebuilt retrieval snippet consumable by chat without remapping.
+    """Chat-native chunk record for zero-copy flow handoff.
 
-    This dataclass mirrors the fields chat already ranks and cites, so flow
-    runtime can pass tuples by reference instead of rebuilding Pydantic models
-    between stages.
+    This dataclass intentionally mirrors chat's internal retrieval shape so the
+    runner can pass tuples by reference without model conversion or revalidation.
     """
 
     collection: str

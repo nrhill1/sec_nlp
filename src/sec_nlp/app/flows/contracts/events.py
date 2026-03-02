@@ -5,7 +5,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 class HeadlineBundle(BaseModel):
-    """Deduplicated news headline context for downstream event/chat stages."""
+    """News-stage output envelope for headline-driven downstream enrichment."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -31,7 +31,7 @@ class HeadlineBundle(BaseModel):
 
 
 class EventTimelineBundle(BaseModel):
-    """Structured event timeline context produced by the events pipeline."""
+    """Events-stage output envelope summarizing detected event sequences."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -57,7 +57,7 @@ class EventTimelineBundle(BaseModel):
 
 
 class FinancialStatementBundle(BaseModel):
-    """Financial statement signal references for downstream analysis stages."""
+    """Financials-stage handoff object for statement-level signal context."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -79,7 +79,7 @@ class FinancialStatementBundle(BaseModel):
 
 
 class OwnershipSignalBundle(BaseModel):
-    """Ownership signal references emitted by holdings/insider pipelines."""
+    """Holdings/insider handoff object for ownership and activity context."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 

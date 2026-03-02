@@ -7,10 +7,10 @@ from .seed import FlowSeedChunk
 
 
 class CandidateHitBundle(BaseModel):
-    """Ranked filing candidates passed from retrieve into analyze stages.
+    """Retrieve-stage ranking output packaged for analysis-stage narrowing.
 
-    The `hits` payload reuses `FlowSeedChunk` so ranking evidence can move
-    across stages without additional model families or conversion logic.
+    This bundle lets analyze operate on an already-pruned candidate universe
+    instead of repeating full discovery, while preserving query-level provenance.
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
@@ -37,10 +37,10 @@ class CandidateHitBundle(BaseModel):
 
 
 class AnalysisEvidenceBundle(BaseModel):
-    """Summarized analyze output that can seed downstream answer stages.
+    """Portable summary of analyze-stage findings for downstream consumers.
 
-    This bundle favors lightweight pointers (summary + output paths) over
-    embedding full analysis payloads in flow memory.
+    The object is intentionally lightweight: use it to carry run context and
+    pointers to richer artifacts without inflating in-memory flow payloads.
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
