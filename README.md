@@ -153,12 +153,12 @@ sec-nlp flow run --spec flow_retrieve_chat.yaml
 
 Prebuilt flow packs:
 
-- `/Users/nicolashill/Projects/sec/flow_jobs/multi_jobs`:
+- `/Users/nicolashill/Projects/sec/jobs/multi_jobs`:
   30 retrieve->chat specs across baskets and size tiers.
-- `/Users/nicolashill/Projects/sec/flow_jobs/merged_basket_high_models`:
+- `/Users/nicolashill/Projects/sec/jobs/merged_basket_high_models`:
   higher-parameter specs that merge runs into one shared collection per basket
   (`qwen3-embedding:4b` + `qwen3:8b`).
-- `/Users/nicolashill/Projects/sec/flow_jobs/industry_tier_jobs`:
+- `/Users/nicolashill/Projects/sec/jobs/industry_tier_jobs`:
   mixed retrieve/chat/flow presets with standardized industry collections split
   by low/medium/high model tiers.
 

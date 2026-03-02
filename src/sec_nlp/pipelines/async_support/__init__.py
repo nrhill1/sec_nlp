@@ -1,5 +1,5 @@
 # src/sec_nlp/pipelines/async_support/__init__.py
-"""Async support for pipeline execution."""
+"""Async mixins and vector-store helpers for concurrent pipeline execution."""
 
 from .mixin import (
     AsyncMode,

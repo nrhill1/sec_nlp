@@ -1,5 +1,5 @@
 # src/sec_nlp/core/news/client.py
-"""Thin wrapper around the Rust `newswatch` extension."""
+"""Thin wrapper around the Rust ``newswatch`` extension for headline retrieval."""
 
 from __future__ import annotations
 

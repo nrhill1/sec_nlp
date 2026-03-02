@@ -1,5 +1,5 @@
 # src/sec_nlp/cli/commands/flow.py
-"""CLI commands for multi-pipeline flow execution."""
+"""CLI commands for multi-pipeline flow execution and spec validation."""
 
 from __future__ import annotations
 
@@ -20,7 +20,7 @@ from sec_nlp.core.infra.rich_console import get_rich_console
 
 
 class FlowRun(BaseModel):
-    """Run a multi-stage flow spec."""
+    """Execute a multi-stage flow spec and display per-stage results."""
 
     model_config = SettingsConfigDict(
         defer_build=True,
@@ -82,7 +82,7 @@ class FlowRun(BaseModel):
 
 
 class FlowValidate(BaseModel):
-    """Validate a flow spec without executing pipelines."""
+    """Parse and validate a flow spec, reporting stage graph structure."""
 
     model_config = SettingsConfigDict(
         defer_build=True,
@@ -116,7 +116,7 @@ class FlowValidate(BaseModel):
 
 
 class Flow(BaseModel):
-    """Flow orchestration command group."""
+    """CLI command group for flow orchestration (run, validate)."""
 
     model_config = SettingsConfigDict(
         defer_build=True,

@@ -1,5 +1,5 @@
 # src/sec_nlp/pipelines/utils.py
-"""Utility functions for pipelines"""
+"""Utility functions shared across pipeline implementations."""
 
 import re
 

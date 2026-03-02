@@ -1,5 +1,10 @@
 # src/sec_nlp/pipelines/presets/insider/pipeline.py
-"""Pipeline for insider transaction analysis from Forms 3/4/5."""
+"""Insider transaction analysis pipeline parsing SEC Forms 3, 4, and 5.
+
+Downloads ownership filings, parses transaction tables, correlates trades
+with market price movements, detects cluster activity, and exports
+ledger and alert reports per symbol.
+"""
 
 from __future__ import annotations
 
@@ -51,7 +56,12 @@ from .steps import TradeCluster
 
 
 class InsiderPipeline(BasePipeline):
-    """Analyze insider ownership filings and emit ledger/alert outputs."""
+    """Analyze Forms 3/4/5 transactions and emit ledger/alert reports.
+
+    Parses insider ownership filings, correlates with market price data,
+    detects cluster trading patterns, and exports per-symbol transaction
+    ledgers alongside configurable alert summaries.
+    """
 
     pipeline_type: ClassVar[Literal["insider"]] = "insider"
     description: ClassVar[str] = (

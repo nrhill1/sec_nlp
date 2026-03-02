@@ -1,6 +1,6 @@
 # src/sec_nlp/cli/__init__.py
 # sec_nlp/cli/__init__.py
-"""CLI entry point and command utilities."""
+"""CLI entry point, command dispatch, and argument normalization."""
 
 from .__main__ import main
 from .command import BasePipelineCommand

@@ -1,5 +1,5 @@
 # src/sec_nlp/core/stats/correlation.py
-"""Thin wrapper around the Rust `corr` extension."""
+"""Thin wrapper around the Rust ``corr`` extension for pairwise correlation."""
 
 from __future__ import annotations
 

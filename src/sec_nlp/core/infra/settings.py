@@ -1,5 +1,5 @@
 # src/sec_nlp/core/infra/settings.py
-"""Project-level settings and root discovery."""
+"""Project-level settings, root path discovery, and filing-mode constants."""
 
 from __future__ import annotations
 

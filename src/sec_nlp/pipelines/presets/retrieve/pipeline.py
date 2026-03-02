@@ -1,5 +1,12 @@
 # src/sec_nlp/pipelines/presets/retrieve/pipeline.py
-"""Pipeline for EFTS-first retrieval and ranked hit exports."""
+"""EFTS-first retrieval pipeline producing ranked filing hit exports.
+
+The retrieve pipeline queries SEC EDGAR full-text search per symbol,
+ranks and prunes candidates via lexical overlap, optionally downloads
+and chunks the top filings, and can rerank via embedding similarity.
+Results are exported as ranked CSV/JSON/YAML and optionally indexed
+into Qdrant for downstream chat consumption.
+"""
 
 from __future__ import annotations
 
@@ -79,7 +86,13 @@ class _FlowChunkValues:
 
 
 class RetrievePipeline(BasePipeline):
-    """Retrieve filing candidates and emit ranked results."""
+    """EFTS-first retrieval with lexical pruning, optional embedding rerank, and flow handoff.
+
+    Searches EDGAR full-text per symbol, ranks candidates, optionally
+    hydrates and embeds chunks, and produces ranked exports. In flow
+    mode, emits ``RetrieveChatSeedBundle`` and prebuilt chunks for
+    zero-copy handoff to downstream chat stages.
+    """
 
     pipeline_type: ClassVar[Literal["retrieve"]] = "retrieve"
     description: ClassVar[str] = (

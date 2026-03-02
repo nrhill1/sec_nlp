@@ -1,5 +1,5 @@
 # src/sec_nlp/core/llm/ollama.py
-"""Ollama client construction helpers."""
+"""Ollama model client construction and embedding setup helpers."""
 
 import os
 from typing import TypedDict, Unpack

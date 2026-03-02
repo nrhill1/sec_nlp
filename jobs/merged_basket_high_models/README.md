@@ -27,19 +27,19 @@ Profiles per basket:
 Validate one spec:
 
 ```bash
-uv run sec-nlp flow validate --spec flow_jobs/merged_basket_high_models/01_smoke_medium.yaml
+uv run sec-nlp flow validate --spec jobs/merged_basket_high_models/01_smoke_medium.yaml
 ```
 
 Run one spec:
 
 ```bash
-uv run sec-nlp flow run --spec flow_jobs/merged_basket_high_models/01_smoke_medium.yaml
+uv run sec-nlp flow run --spec jobs/merged_basket_high_models/01_smoke_medium.yaml
 ```
 
 Run all specs:
 
 ```bash
-for spec in flow_jobs/merged_basket_high_models/*.yaml; do
+for spec in jobs/merged_basket_high_models/*.yaml; do
   uv run sec-nlp flow run --spec "$spec"
 done
 ```

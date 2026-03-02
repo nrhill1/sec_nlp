@@ -1,5 +1,5 @@
 # src/sec_nlp/cli/__main__.py
-"""Main CLI application."""
+"""Main CLI application entry point invoked by ``python -m sec_nlp``."""
 
 import os
 import signal

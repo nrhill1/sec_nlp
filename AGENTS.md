@@ -58,6 +58,131 @@ Every Python source file (including all `__init__.py` files and tests) must star
 
 The path comment must use the exact repo-relative path of the file.
 
+### Docstrings
+
+All docstrings use [Google style](https://google.github.io/styleguide/pyguide.html#38-comments-and-docstrings) with triple double-quotes.
+
+#### Module Docstrings
+
+Every module must have a docstring immediately after the path comment.
+
+- **Summary line** (required): One sentence describing the module's purpose. Must end with a period.
+- **Extended description** (required for non-trivial modules): What the module provides, its role in the system, and key design decisions. Use paragraph prose, not bullet lists.
+- **`__init__.py` files**: One sentence describing what the package exposes or aggregates.
+
+Good example:
+
+```python
+# src/sec_nlp/app/flows/runner.py
+"""Executor for compiled flow stages and in-memory artifact handoff.
+
+The runner consumes typed compiled stages, dispatches each pipeline, and
+records stage-level envelopes. It avoids config re-validation by relying on
+compile-time guarantees and only operating on compiled stage types.
+"""
+```
+
+Bad example:
+
+```python
+# src/sec_nlp/pipelines/base/pipeline.py
+"""Abstract base classes for all pipelines."""  # Too vague — says nothing about what the base provides
+```
+
+#### Class Docstrings
+
+Every class must have a docstring.
+
+- **Summary line** (required): Describes what the class *represents* or *does*, in a full sentence.
+- **Extended description** (required for public classes; recommended for private): Responsibilities, design rationale, and relationship to collaborating classes.
+- **Attributes section** (required for dataclasses and plain classes with public attributes): List each attribute with type and purpose.
+- **Example section** (optional): Include for primary API entry points.
+
+Good example:
+
+```python
+class FlowArtifactStore:
+    """In-memory artifact registry keyed by flow stage ID.
+
+    Stores typed handoff bundles and seed chunks produced by upstream stages
+    so that downstream stages can consume them by reference within a single
+    process run. Designed for local execution where serialization overhead
+    should be avoided.
+
+    Attributes:
+        _seed_by_stage: Maps stage IDs to retrieve-produced seed bundles.
+        _seed_chunks_by_stage: Maps stage IDs to immutable chunk tuples.
+        _contract_evidence_by_stage: Maps stage IDs to EXB evidence bundles.
+    """
+```
+
+Bad example:
+
+```python
+class AnalyzePipeline(BasePipeline):
+    """Generalized pipeline for semantic search and confidence analysis."""  # Missing responsibilities, design context
+```
+
+#### Function and Method Docstrings
+
+Every public function and method must have a docstring. Private methods (`_name`) should have at least a summary line.
+
+- **Summary line** (required): Imperative mood ("Return...", "Build...", "Validate..."). Must end with a period.
+- **Args section** (required when ≥ 2 non-self parameters or when semantics are non-obvious): Each parameter on its own indented line with type and purpose.
+- **Returns section** (required when the return type is non-trivial or non-obvious): Describe what is returned and its structure.
+- **Raises section** (required when the function raises exceptions as part of its contract): List each exception type and when it occurs.
+
+Special cases:
+
+- **`__init__`**: Describe what is being constructed and the role of key parameters. Never write just `"Initialize the object."`.
+- **Pydantic validators**: Describe what constraint is enforced and why.
+- **Properties**: One-liner summary is sufficient.
+- **Trivial delegating methods** (< 3 lines, obvious behavior): One-liner summary is sufficient.
+- **`__repr__` / `__str__`**: One-liner summary is sufficient.
+
+Good example:
+
+```python
+def compile_stage(
+    *,
+    stage: FlowStageSpec,
+    defaults: FlowDefaults,
+) -> CompiledStage:
+    """Compile one flow stage into a prevalidated, typed pipeline config.
+
+    Merges flow-level defaults with stage overrides, resolves the settings
+    model from the pipeline registry, and returns a frozen compiled stage
+    that the runner can dispatch without further validation.
+
+    Args:
+        stage: Raw stage definition from the user-authored flow spec.
+        defaults: Shared flow defaults (currently just email).
+
+    Returns:
+        A typed compiled stage variant (e.g. ``CompiledRetrieveStage``) with
+        pre-validated settings and deterministic run identifiers.
+
+    Raises:
+        ValueError: If the stage references an unsupported pipeline name.
+    """
+```
+
+Bad example:
+
+```python
+def _run_analyze_stage(cls, stage, artifacts):
+    """Run analyze stage."""  # Just restates the function name
+```
+
+#### Test File Docstrings
+
+Test module docstrings should state what module, class, or behavior is under test:
+
+```python
+# tests/app/flows/test_artifacts.py
+"""Tests for FlowArtifactStore seed/chunk/evidence storage and retrieval."""
+```
+
 ### Pydantic Models
 
 - Always set `model_config = ConfigDict(frozen=True, extra="forbid")` unless mutability is required.

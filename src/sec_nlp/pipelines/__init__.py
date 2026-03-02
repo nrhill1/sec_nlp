@@ -1,5 +1,5 @@
 # src/sec_nlp/pipelines/__init__.py
-"""Pipeline implementations."""
+"""Pipeline base classes, preset implementations, and shared utilities."""
 
 from .base import (  # noqa: I001
     BasePipelineSettings,

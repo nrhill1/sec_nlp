@@ -1,5 +1,5 @@
 # src/sec_nlp/core/infra/rich_console.py
-"""Shared Rich console helpers and theme."""
+"""Shared Rich console singleton, theme definition, and renderable helpers."""
 
 from __future__ import annotations
 

@@ -1,5 +1,10 @@
 # src/sec_nlp/pipelines/presets/warranty/pipeline.py
-"""Pipeline for extracting warranty statistics (liabilities, payouts, etc.) from 10-K documents."""
+"""Warranty reserve extraction pipeline parsing 10-K annual reports.
+
+Downloads 10-K filings, extracts warranty-related XBRL facts and text
+sections, normalizes liability and payout statistics, deduplicates
+cross-period entries, and exports per-symbol warranty summaries.
+"""
 
 from datetime import date
 from pathlib import Path
@@ -44,7 +49,12 @@ from .types import WarrantyPeriodRecord
 
 
 class WarrantyPipeline(BasePipeline):
-    """Warranty data extraction pipeline."""
+    """Extract warranty reserve statistics from 10-K annual filings.
+
+    Parses XBRL warranty facts and text-mined disclosure sections,
+    normalizes liability/payout/accrual figures, deduplicates
+    overlapping periods, and exports per-symbol warranty summaries.
+    """
 
     pipeline_type: ClassVar[Literal["warranty"]] = "warranty"
     description: ClassVar[str] = (

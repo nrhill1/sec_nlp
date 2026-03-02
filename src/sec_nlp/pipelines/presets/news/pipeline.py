@@ -1,5 +1,10 @@
 # src/sec_nlp/pipelines/presets/news/pipeline.py
-"""Pipeline for monitoring company-centric financial news."""
+"""Financial news monitoring pipeline with market-correlation scoring.
+
+Fetches recent headlines via the Rust newswatch extension, deduplicates
+and scores relevance per symbol, correlates headline timing with price
+movements, and exports scored timelines.
+"""
 
 from __future__ import annotations
 
@@ -41,7 +46,12 @@ from .run_stages import (
 
 
 class NewsPipeline(BasePipeline):
-    """Fetch, score, correlate, and export financial news timelines."""
+    """Fetch, score, and correlate financial news headlines per symbol.
+
+    Uses the Rust newswatch extension for headline retrieval, applies
+    topic-relevance scoring, correlates with market movements, and
+    exports timestamped timeline reports.
+    """
 
     pipeline_type: ClassVar[Literal["news"]] = "news"
     description: ClassVar[str] = (

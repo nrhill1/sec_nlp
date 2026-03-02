@@ -1,5 +1,5 @@
 # src/sec_nlp/core/llm/__init__.py
-"""Langchain LLM integrations."""
+"""LangChain LLM client construction and chain-building helpers."""
 
 from .chains import build_runnable
 from .ollama import build_ollama_llm

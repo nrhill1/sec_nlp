@@ -1,5 +1,5 @@
 # src/sec_nlp/core/ingest/downloader.py
-"""Download helpers for SEC filings."""
+"""SEC filing download helpers backed by ``sec-edgar-downloader``."""
 
 from __future__ import annotations
 

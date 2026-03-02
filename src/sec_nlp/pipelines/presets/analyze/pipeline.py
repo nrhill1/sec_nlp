@@ -1,5 +1,12 @@
 # src/sec_nlp/pipelines/presets/analyze/pipeline.py
-"""Generalized semantic search and confidence analysis pipeline for SEC filings."""
+"""LLM-driven semantic search and confidence analysis pipeline for SEC filings.
+
+The analyze pipeline downloads filings, chunks and deduplicates content,
+optionally indexes into a vector store, then runs per-chunk LLM analysis
+with configurable confidence scoring. Market correlation and executive
+compensation enrichment stages are applied when enabled. Outputs are
+written as per-accession YAML/JSON/CSV alongside an aggregate summary.
+"""
 
 import signal
 from collections import defaultdict
@@ -114,7 +121,13 @@ type PromptInput = dict[
 
 
 class AnalyzePipeline(BasePipeline):
-    """Generalized pipeline for semantic search and confidence analysis."""
+    """Semantic search and confidence-scored LLM analysis over SEC filings.
+
+    Orchestrates filing download, chunk preprocessing, optional vector
+    indexing, per-chunk analysis with calibrated confidence, and
+    aggregated output export. Supports EFTS expansion, market
+    correlation, and executive compensation enrichment stages.
+    """
 
     # Class attributes
     pipeline_type: ClassVar[Literal["analyze"]] = "analyze"

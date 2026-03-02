@@ -1,6 +1,11 @@
 # src/sec_nlp/core/infra/logger.py
-# src/sec_nlp/core/logger.py
-"""Centralized logging configuration."""
+"""Centralized logging configuration, formatters, and styled output helpers.
+
+Provides ``setup_logging()`` for one-time application-wide log setup with
+console and file handlers, colored and Rich-aware formatters, and a suite
+of styled output helpers (dividers, headers, badges, bullets) used by CLI
+commands and pipeline progress reporting.
+"""
 
 import logging
 import re
@@ -21,7 +26,7 @@ from sec_nlp.core.infra.rich_console import (
 
 
 class TqdmLoggingHandler(logging.StreamHandler[TextIO]):
-    """StreamHandler that writes via tqdm.write when available."""
+    """Log handler that routes output through ``tqdm.write`` to avoid clobbering progress bars."""
 
     def emit(self, record: logging.LogRecord) -> None:
         try:
@@ -39,7 +44,7 @@ _logging_configured: bool = False
 
 
 class ColoredFormatter(logging.Formatter):
-    """Colored formatter for console output."""
+    """ANSI color and icon formatter for human-readable console log output."""
 
     COLORS: dict[str, str] = {
         "DEBUG": "\033[36m",  # Cyan
@@ -89,7 +94,7 @@ class ColoredFormatter(logging.Formatter):
 
 
 class PaddedFormatter(logging.Formatter):
-    """Formatter with standard spacing (no extra padding)."""
+    """Plain formatter that strips trailing newlines for clean log output."""
 
     def format(self, record: logging.LogRecord) -> str:
         base = super().format(record)
@@ -97,7 +102,7 @@ class PaddedFormatter(logging.Formatter):
 
 
 class PaddedColoredFormatter(ColoredFormatter):
-    """Colored formatter with standard spacing (no extra padding)."""
+    """Colored formatter that strips trailing newlines for clean log output."""
 
     def format(self, record: logging.LogRecord) -> str:
         base = super().format(record)
@@ -105,7 +110,7 @@ class PaddedColoredFormatter(ColoredFormatter):
 
 
 class FileSafeFormatter(logging.Formatter):
-    """Formatter that strips ANSI + non-ASCII for file logs."""
+    """Formatter that strips ANSI codes and non-ASCII characters for file logs."""
 
     def format(self, record: logging.LogRecord):
         base = super().format(record)
@@ -113,7 +118,7 @@ class FileSafeFormatter(logging.Formatter):
 
 
 class RichLogFormatter(logging.Formatter):
-    """Rich-based formatter for console logging."""
+    """Rich-aware log formatter rendering styled text, timestamps, and tracebacks."""
 
     def __init__(
         self,
@@ -122,7 +127,7 @@ class RichLogFormatter(logging.Formatter):
         show_name: bool,
         datefmt: str | None = None,
     ) -> None:
-        """Initialize formatter state for ANSI-aware log rendering."""
+        """Construct a Rich log formatter with configurable timestamp and name display."""
         super().__init__(datefmt=datefmt)
         self._console = create_rich_console(stderr=True)
         self._show_time = show_time
@@ -358,7 +363,7 @@ def setup_logging(
 
 
 class LogContext:
-    """Context manager for temporary log level changes."""
+    """Context manager that temporarily overrides a logger's level and restores it on exit."""
 
     def __init__(self, logger: logging.Logger | str, level: str | int):
         """

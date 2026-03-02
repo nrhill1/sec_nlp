@@ -1,2 +1,2 @@
 # tests/core/__init__.py
-"""Tests for core modules"""
+"""Tests for sec_nlp.core subpackages (edgar, text, ingest, llm, stats)."""

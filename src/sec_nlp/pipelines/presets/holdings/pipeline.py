@@ -1,5 +1,10 @@
 # src/sec_nlp/pipelines/presets/holdings/pipeline.py
-"""Pipeline for institutional holdings analysis from 13F filings."""
+"""Institutional holdings analysis pipeline parsing 13F-HR filings.
+
+Downloads quarterly 13F filings, parses XML holding tables, computes
+quarter-over-quarter position diffs, aggregates sector and concentration
+metrics, and exports snapshot and diff reports per filer.
+"""
 
 from __future__ import annotations
 
@@ -50,7 +55,11 @@ from .run_stages import (
 
 
 class HoldingsPipeline(BasePipeline):
-    """Analyze 13F holdings snapshots and quarter-over-quarter changes."""
+    """Parse 13F-HR filings into holdings snapshots with diff analysis.
+
+    Downloads quarterly 13F filings, parses XML holding tables, computes
+    position-level changes, and exports snapshot/diff reports per filer.
+    """
 
     pipeline_type: ClassVar[Literal["holdings"]] = "holdings"
     description: ClassVar[str] = (

@@ -1,5 +1,10 @@
 # src/sec_nlp/pipelines/presets/financials/pipeline.py
-"""Pipeline for extracting normalized financial statement data."""
+"""Financial statement extraction pipeline using XBRL fact parsing.
+
+Downloads annual/quarterly filings, extracts XBRL facts via the Rust
+extension, normalizes line items into a canonical schema, computes
+derived ratios, and exports per-symbol CSV/JSON statement files.
+"""
 
 from __future__ import annotations
 
@@ -42,7 +47,12 @@ from .run_stages import (
 
 
 class FinancialsPipeline(BasePipeline):
-    """Extract financial line items and derived ratios from filing XBRL."""
+    """Extract and normalize financial statements from XBRL-tagged filings.
+
+    Parses XBRL facts via the Rust extension, maps them to a canonical
+    line-item schema, computes derived financial ratios, and exports
+    per-symbol statement files.
+    """
 
     pipeline_type: ClassVar[Literal["financials"]] = "financials"
     description: ClassVar[str] = (
