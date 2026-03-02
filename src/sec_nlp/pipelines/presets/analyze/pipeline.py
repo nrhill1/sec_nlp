@@ -499,18 +499,18 @@ class AnalyzePipeline(BasePipeline):
             # Rich Panel for run header (centered) — first visual after log path
             console = get_rich_console()
             run_info = Text()
-            run_info.append(self.pipeline_type, style="bold white")
+            run_info.append(self.pipeline_type, style="bold #00d75f")
             run_info.append("\n")
-            run_info.append("Run ", style="bold cyan")
+            run_info.append("Run ", style="bold #00ff87")
             run_info.append(
-                f"{self.config.short_id_display}", style="bold magenta"
+                f"{self.config.short_id_display}", style="bold #00ff87"
             )
             run_info.append(" · ", style="dim")
-            run_info.append(f"{self.config.run_id}", style="dim cyan")
+            run_info.append(f"{self.config.run_id}", style="dim #00d75f")
             panel = Panel(
                 run_info,
-                title="[bold white]Pipeline Start[/bold white]",
-                border_style="magenta",
+                title="[bold #00ff87]Pipeline Start[/bold #00ff87]",
+                border_style="#00d75f",
                 expand=False,
             )
             console.print(Align.center(panel))
@@ -525,8 +525,10 @@ class AnalyzePipeline(BasePipeline):
 
             with Progress(
                 SpinnerColumn(),
-                TextColumn("[bold cyan]{task.description}"),
-                BarColumn(complete_style="green", finished_style="bold green"),
+                TextColumn("[bold #00d75f]{task.description}"),
+                BarColumn(
+                    complete_style="#00d75f", finished_style="bold #00ff87"
+                ),
                 TaskProgressColumn(),
                 TimeElapsedColumn(),
                 TextColumn("[dim]·[/dim]"),
@@ -1159,11 +1161,11 @@ class AnalyzePipeline(BasePipeline):
         # Rich Table for analysis summary
         console = get_rich_console()
         table = Table(
-            title=f"[bold cyan]Analysis Summary: {symbol}[/bold cyan]",
+            title=f"[bold #00d75f]Analysis Summary: {symbol}[/bold #00d75f]",
             show_header=False,
             box=None,
         )
-        table.add_column("Label", style="dim cyan", justify="right")
+        table.add_column("Label", style="dim #00d75f", justify="right")
         table.add_column("Value", style="white")
 
         # Total chunks
@@ -1181,12 +1183,12 @@ class AnalyzePipeline(BasePipeline):
             avg_conf_display = f"{avg_confidence:.2f}"
             table.add_row(
                 "Avg Confidence",
-                f"[magenta]{avg_conf_display}[/magenta]",
+                f"[#00ff87]{avg_conf_display}[/#00ff87]",
             )
         if median_confidence is not None:
             table.add_row(
                 "Median Confidence",
-                f"[magenta]{median_confidence:.2f}[/magenta]",
+                f"[#00ff87]{median_confidence:.2f}[/#00ff87]",
             )
 
         # Threshold
@@ -1283,7 +1285,7 @@ class AnalyzePipeline(BasePipeline):
             # Rich-styled path output
             console = get_rich_console()
             console.print(
-                f"[dim cyan]→[/dim cyan] Wrote [bold magenta]{len(output_files)}[/bold magenta] files for [bold cyan]{symbol}[/bold cyan] → [link=file://{output_dir.resolve()}][blue]{output_dir.resolve()}[/blue][/link]"
+                f"[dim #00d75f]→[/dim #00d75f] Wrote [bold #00ff87]{len(output_files)}[/bold #00ff87] files for [bold #00d75f]{symbol}[/bold #00d75f] → [link=file://{output_dir.resolve()}][#87d7af]{output_dir.resolve()}[/#87d7af][/link]"
             )
             logger.debug(
                 "Wrote %d analysis files for %s -> %s",

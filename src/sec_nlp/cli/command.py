@@ -251,11 +251,11 @@ class BasePipelineCommand(BaseModel, ABC):
 
         console = get_rich_console()
         table = Table(
-            title="[bold cyan]Configuration[/bold cyan]",
+            title="[bold #00d75f]Configuration[/bold #00d75f]",
             show_header=False,
             box=None,
         )
-        table.add_column("Key", style="dim cyan", width=20, justify="right")
+        table.add_column("Key", style="dim #00d75f", width=20, justify="right")
         table.add_column("Value", style="white")
 
         # Topics as badges
@@ -264,7 +264,7 @@ class BasePipelineCommand(BaseModel, ABC):
             for i, topic in enumerate(topics):
                 if i > 0:
                     topics_text.append(" ")
-                topics_text.append(f"[{topic}]", style="green bold")
+                topics_text.append(f"[{topic}]", style="#00ff87 bold")
             table.add_row("Topics", topics_text)
 
         # Keywords as badges
@@ -273,7 +273,7 @@ class BasePipelineCommand(BaseModel, ABC):
             for i, kw in enumerate(keywords):
                 if i > 0:
                     keywords_text.append(" ")
-                keywords_text.append(f"[{kw}]", style="blue bold")
+                keywords_text.append(f"[{kw}]", style="#87d7af bold")
             table.add_row("Keywords", keywords_text)
 
         # Search queries
@@ -281,7 +281,7 @@ class BasePipelineCommand(BaseModel, ABC):
             query_count = len(search_config.queries)
             table.add_row(
                 "Search Queries",
-                f"[cyan]{query_count}[/cyan] configured",
+                f"[#00d75f]{query_count}[/#00d75f] configured",
             )
 
         # Vector mode and confidence threshold
@@ -294,7 +294,7 @@ class BasePipelineCommand(BaseModel, ABC):
         if confidence_threshold is not None:
             table.add_row(
                 "Confidence Threshold",
-                f"[magenta]{confidence_threshold:.2f}[/magenta]",
+                f"[#00ff87]{confidence_threshold:.2f}[/#00ff87]",
             )
 
         console.print(table)

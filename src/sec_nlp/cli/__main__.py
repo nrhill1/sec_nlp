@@ -256,17 +256,17 @@ def main() -> int:
         # Provide helpful suggestions for common errors
         if "email" in error_msg.lower():
             logger.info(
-                color_text("Tip: ", color="cyan")
+                color_text("Tip: ", color="green")
                 + "Set a valid email with --email your@email.com or in .env file"
             )
         elif "date" in error_msg.lower():
             logger.info(
-                color_text("Tip: ", color="cyan")
+                color_text("Tip: ", color="green")
                 + "Use YYYY-MM-DD format for dates (e.g., 2024-01-01)"
             )
         elif "symbol" in error_msg.lower():
             logger.info(
-                color_text("Tip: ", color="cyan")
+                color_text("Tip: ", color="green")
                 + "Provide ticker symbols as positional args (e.g., AAPL MSFT)"
             )
 
@@ -276,7 +276,7 @@ def main() -> int:
         logger.debug("FileNotFoundError traceback:\n%s", traceback.format_exc())
         logger.error(color_text("File not found: ", color="red") + str(e))
         logger.info(
-            color_text("Tip: ", color="cyan")
+            color_text("Tip: ", color="green")
             + "Check that the path exists and is accessible."
         )
         return 3
@@ -285,7 +285,7 @@ def main() -> int:
         logger.debug("PermissionError traceback:\n%s", traceback.format_exc())
         logger.error(color_text("Permission denied: ", color="red") + str(e))
         logger.info(
-            color_text("Tip: ", color="cyan")
+            color_text("Tip: ", color="green")
             + "Check file permissions or try a different output directory."
         )
         return 4
@@ -294,7 +294,7 @@ def main() -> int:
         logger.debug("ConnectionError traceback:\n%s", traceback.format_exc())
         logger.error(color_text("Connection error: ", color="red") + str(e))
         logger.info(
-            color_text("Tip: ", color="cyan")
+            color_text("Tip: ", color="green")
             + "Check your network connection and try again."
         )
         return 5
@@ -306,7 +306,7 @@ def main() -> int:
         )
         logger.debug("Unexpected traceback:\n%s", traceback.format_exc())
         logger.info(
-            color_text("Tip: ", color="cyan")
+            color_text("Tip: ", color="green")
             + "Check the log file for details or report this issue."
         )
         return 1

@@ -22,17 +22,17 @@ from sec_nlp.core.infra.logger import logger
 from sec_nlp.core.infra.rich_console import create_rich_console
 from sec_nlp.types import ConfigData, ConfigValue, JsonObject, JsonValue
 
-# Custom style for questionary prompts
+# Custom style for questionary prompts — digital-green palette
 INTERACTIVE_STYLE: Style = Style(
     [
-        ("qmark", "fg:cyan bold"),
+        ("qmark", "fg:#00d75f bold"),
         ("question", "fg:white bold"),
-        ("answer", "fg:green bold"),
-        ("pointer", "fg:cyan bold"),
-        ("highlighted", "fg:cyan bold"),
-        ("selected", "fg:green"),
-        ("separator", "fg:cyan"),
-        ("instruction", "fg:gray"),
+        ("answer", "fg:#00ff87 bold"),
+        ("pointer", "fg:#00ff87 bold"),
+        ("highlighted", "fg:#00ff87 bold"),
+        ("selected", "fg:#00d75f"),
+        ("separator", "fg:#5f8787"),
+        ("instruction", "fg:#9e9e9e"),
         ("text", "fg:white"),
     ]
 )

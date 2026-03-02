@@ -88,8 +88,10 @@ class EventsPipeline(BasePipeline):
             console = get_rich_console()
             with Progress(
                 SpinnerColumn(),
-                TextColumn("[bold cyan]{task.description}"),
-                BarColumn(complete_style="green", finished_style="bold green"),
+                TextColumn("[bold #00d75f]{task.description}"),
+                BarColumn(
+                    complete_style="#00d75f", finished_style="bold #00ff87"
+                ),
                 TaskProgressColumn(),
                 TimeElapsedColumn(),
                 TextColumn("[dim]-[/dim]"),
