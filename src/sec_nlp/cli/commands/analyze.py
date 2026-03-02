@@ -194,6 +194,13 @@ class AnalyzeCommand(AnalyzeConfig, BasePipelineCommand):
         elif self.keywords:
             items.append(("Keywords", ", ".join(self.keywords)))
 
+        if self.llm_response_cache:
+            items.append(("Cache", "on"))
+        else:
+            items.append(
+                ("Cache", "off  ·  --llm-response-cache to skip re-analysis")
+            )
+
         for label, value in items:
             formatted = format_key_value(label, value)
             logger.info(formatted)

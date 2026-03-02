@@ -54,9 +54,10 @@ class ColoredFormatter(logging.Formatter):
         "ERROR": ANSI_PALETTE["error"],
         "CRITICAL": ANSI_PALETTE["critical"],
     }
-    TIME_COLOR: str = ANSI_PALETTE["dim_green"]
-    TZ_OFFSET_COLOR: str = ANSI_PALETTE["dim_green"]
-    TZ_NAME_COLOR: str = ANSI_PALETTE["secondary"]
+    DATE_COLOR: str = ANSI_PALETTE["muted"]
+    TIME_COLOR: str = ANSI_PALETTE["secondary"]
+    TZ_OFFSET_COLOR: str = ANSI_PALETTE["muted"]
+    TZ_NAME_COLOR: str = ANSI_PALETTE["dim_green"]
     ICONS: dict[str, str] = {
         "DEBUG": "●",
         "INFO": "▸",
@@ -80,13 +81,17 @@ class ColoredFormatter(logging.Formatter):
     def formatTime(
         self, record: logging.LogRecord, datefmt: str | None = None
     ) -> str:
-        """Colorize the timestamp with distinct timezone styling."""
+        """Colorize the timestamp with distinct date, time, and timezone styling."""
         dt = datetime.fromtimestamp(record.created).astimezone()
-        time_str = dt.strftime("%Y-%m-%d %H:%M:%S")
+        date_part = dt.strftime("%Y-%m-%d")
+        time_part = dt.strftime("%H:%M:%S")
         offset = dt.strftime("%z")
         tz_name = dt.tzname() or ""
 
-        result = f"{self.TIME_COLOR}{time_str}{self.RESET}"
+        result = (
+            f"{self.DATE_COLOR}{date_part}{self.RESET}"
+            f" {self.TIME_COLOR}{time_part}{self.RESET}"
+        )
         if offset:
             result += f" {self.TZ_OFFSET_COLOR}{offset}{self.RESET}"
         if tz_name:
