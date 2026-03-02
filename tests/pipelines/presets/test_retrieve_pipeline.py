@@ -1168,7 +1168,6 @@ def test_retrieve_stage_chain_preserves_state_identity(
 
     pipeline = RetrievePipeline(config=config)
     state = RetrieveRunState(
-        runtime=pipeline,
         search_symbol="ABC",
         output_symbol="ABC",
         candidate_searcher=None,

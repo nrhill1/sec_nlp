@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 from time import perf_counter
@@ -16,6 +17,7 @@ from sec_nlp.core.edgar.efts_models import EFTSHit
 from sec_nlp.pipelines.base.stages import PipelineStageRunnable
 from sec_nlp.types import JsonValue
 
+from .config import RetrieveSettings
 from .models import RetrievalHit
 from .steps import RetrieveCandidateSearcher
 
@@ -27,7 +29,6 @@ if TYPE_CHECKING:
 class RetrieveRunState:
     """In-place state carrier for retrieve stages from candidate search to output write."""
 
-    runtime: RetrievePipeline
     search_symbol: str | None
     output_symbol: str
     candidate_searcher: RetrieveCandidateSearcher | None
@@ -60,14 +61,47 @@ class RetrieveRunState:
     )
 
 
+@dataclass(slots=True, frozen=True)
+class RetrieveStageContext:
+    """Shared runtime context for retrieve stage runnables."""
+
+    config: RetrieveSettings
+    update_phase: Callable[[Progress | None, TaskID | None, str, str], None]
+    search_candidates_for_symbol: Callable[
+        [str | None, RetrieveCandidateSearcher | None],
+        dict[str, list[EFTSHit]],
+    ]
+    rank_hits: Callable[[str, dict[str, list[EFTSHit]]], list[RetrievalHit]]
+    prune_ranked_hits: Callable[[list[RetrievalHit]], list[RetrievalHit]]
+    download_and_chunk_hits: Callable[
+        [str, list[RetrievalHit]],
+        list[RetrievalHit],
+    ]
+    rerank_with_embeddings: Callable[[list[RetrievalHit]], list[RetrievalHit]]
+    market_context_metadata: Callable[[str], dict[str, JsonValue]]
+    market_signals_for_payload: Callable[
+        [dict[str, JsonValue]],
+        dict[str, JsonValue] | None,
+    ]
+    index_hits: Callable[
+        [str, list[RetrievalHit], dict[str, JsonValue] | None],
+        list[RetrievalHit],
+    ]
+    write_outputs: Callable[
+        [str, list[RetrievalHit], dict[str, JsonValue] | None],
+        list[Path],
+    ]
+
+
 class CandidateSearchStage(PipelineStageRunnable[RetrieveRunState]):
     """Ingress stage that materializes per-query EFTS candidates for downstream ranking."""
 
     name: str = Field(default="candidate_search")
+    context: RetrieveStageContext = Field(repr=False)
 
     def _run(self, state: RetrieveRunState) -> RetrieveRunState:
         """Execute the candidate search stage and return updated run state."""
-        state.runtime._update_phase(
+        self.context.update_phase(
             state.progress,
             state.phase_task,
             state.output_symbol,
@@ -82,9 +116,9 @@ class CandidateSearchStage(PipelineStageRunnable[RetrieveRunState]):
         else:
             t0 = perf_counter()
             state.candidates_by_query = (
-                state.runtime._search_candidates_for_symbol(
-                    search_symbol=state.search_symbol,
-                    candidate_searcher=state.candidate_searcher,
+                self.context.search_candidates_for_symbol(
+                    state.search_symbol,
+                    state.candidate_searcher,
                 )
             )
             state.stage_timings["candidate_search"] = perf_counter() - t0
@@ -98,30 +132,27 @@ class RankHitsStage(PipelineStageRunnable[RetrieveRunState]):
     """Selection stage that scores, prunes, and partitions candidates for hydration."""
 
     name: str = Field(default="rank_hits")
+    context: RetrieveStageContext = Field(repr=False)
 
     def _run(self, state: RetrieveRunState) -> RetrieveRunState:
         """Execute the rank hits stage and return updated run state."""
-        state.runtime._update_phase(
+        self.context.update_phase(
             state.progress,
             state.phase_task,
             state.output_symbol,
             "Ranking",
         )
         t0 = perf_counter()
-        ranked_hits = state.runtime._rank_hits(
-            output_symbol=state.output_symbol,
-            candidates_by_query=state.candidates_by_query,
+        ranked_hits = self.context.rank_hits(
+            state.output_symbol,
+            state.candidates_by_query,
         )
         ranked_before_prune = len(ranked_hits)
-        ranked_hits = state.runtime._prune_ranked_hits(
-            hits=ranked_hits,
-        )
+        ranked_hits = self.context.prune_ranked_hits(ranked_hits)
         state.stage_timings["ranking"] = perf_counter() - t0
         state.lexical_pruned = max(0, ranked_before_prune - len(ranked_hits))
 
-        hydrate_limit = min(
-            len(ranked_hits), state.runtime.config.hydrate_top_n
-        )
+        hydrate_limit = min(len(ranked_hits), self.context.config.hydrate_top_n)
         state.hydrated_input = ranked_hits[:hydrate_limit]
         state.passthrough_hits = ranked_hits[hydrate_limit:]
         state.ranked_hits = ranked_hits
@@ -132,13 +163,14 @@ class HydrateStage(PipelineStageRunnable[RetrieveRunState]):
     """Acquisition stage that resolves top-ranked hits into hydrated chunk snippets."""
 
     name: str = Field(default="hydrate_hits")
+    context: RetrieveStageContext = Field(repr=False)
 
     def _run(self, state: RetrieveRunState) -> RetrieveRunState:
         """Execute the hydrate stage and return updated run state."""
         t0 = perf_counter()
-        state.hydrated_hits = state.runtime._download_and_chunk_hits(
-            output_symbol=state.output_symbol,
-            hits=state.hydrated_input,
+        state.hydrated_hits = self.context.download_and_chunk_hits(
+            state.output_symbol,
+            state.hydrated_input,
         )
         state.stage_timings["hydrate"] = perf_counter() - t0
         return state
@@ -148,12 +180,13 @@ class EmbeddingRerankStage(PipelineStageRunnable[RetrieveRunState]):
     """Semantic refinement stage that reorders hydrated snippets by embedding relevance."""
 
     name: str = Field(default="embedding_rerank")
+    context: RetrieveStageContext = Field(repr=False)
 
     def _run(self, state: RetrieveRunState) -> RetrieveRunState:
         """Execute the embedding rerank stage and return updated run state."""
         t0 = perf_counter()
-        state.reranked_hits = state.runtime._rerank_with_embeddings(
-            hits=state.hydrated_hits,
+        state.reranked_hits = self.context.rerank_with_embeddings(
+            state.hydrated_hits,
         )
         state.stage_timings["embedding_rerank"] = perf_counter() - t0
         return state
@@ -163,20 +196,21 @@ class IndexStage(PipelineStageRunnable[RetrieveRunState]):
     """Persistence stage that indexes reranked chunks and composes final hit ordering."""
 
     name: str = Field(default="index_hits")
+    context: RetrieveStageContext = Field(repr=False)
 
     def _run(self, state: RetrieveRunState) -> RetrieveRunState:
         """Execute the index stage and return updated run state."""
-        state.market_context_metadata = state.runtime._market_context_metadata(
-            output_symbol=state.output_symbol,
+        state.market_context_metadata = self.context.market_context_metadata(
+            state.output_symbol,
         )
-        market_signals = state.runtime._market_signals_for_payload(
+        market_signals = self.context.market_signals_for_payload(
             state.market_context_metadata
         )
         t0 = perf_counter()
-        state.indexed_hits = state.runtime._index_hits(
-            output_symbol=state.output_symbol,
-            hits=state.reranked_hits,
-            market_signals=market_signals,
+        state.indexed_hits = self.context.index_hits(
+            state.output_symbol,
+            state.reranked_hits,
+            market_signals,
         )
         state.stage_timings["index"] = perf_counter() - t0
         state.final_hits = state.indexed_hits + state.passthrough_hits
@@ -188,11 +222,12 @@ class WriteOutputsStage(PipelineStageRunnable[RetrieveRunState]):
     """Egress stage that emits ranked hit artifacts and final stage timing metadata."""
 
     name: str = Field(default="write_outputs")
+    context: RetrieveStageContext = Field(repr=False)
 
     def _run(self, state: RetrieveRunState) -> RetrieveRunState:
         """Execute the write outputs stage and return updated run state."""
         state.metadata = {
-            "queries_processed": len(state.runtime.config.queries),
+            "queries_processed": len(self.context.config.queries),
             "candidate_hits": state.candidate_count,
             "ranked_hits": len(state.final_hits),
             "lexical_pruned_hits": state.lexical_pruned,
@@ -201,8 +236,8 @@ class WriteOutputsStage(PipelineStageRunnable[RetrieveRunState]):
             "chunk_snippets": sum(
                 1 for hit in state.final_hits if hit.chunk_index is not None
             ),
-            "top_k": state.runtime.config.top_k,
-            "efts_candidates": state.runtime.config.efts_candidates,
+            "top_k": self.context.config.top_k,
+            "efts_candidates": self.context.config.efts_candidates,
         }
         if state.market_context_metadata:
             state.metadata["market_context"] = state.market_context_metadata
@@ -210,17 +245,17 @@ class WriteOutputsStage(PipelineStageRunnable[RetrieveRunState]):
             name: round(value, 6) for name, value in state.stage_timings.items()
         }
 
-        state.runtime._update_phase(
+        self.context.update_phase(
             state.progress,
             state.phase_task,
             state.output_symbol,
             "Writing",
         )
         t0 = perf_counter()
-        state.outputs = state.runtime._write_outputs(
-            symbol=state.output_symbol,
-            hits=state.final_hits,
-            symbol_metadata=state.metadata,
+        state.outputs = self.context.write_outputs(
+            state.output_symbol,
+            state.final_hits,
+            state.metadata,
         )
         state.stage_timings["write"] = perf_counter() - t0
         state.metadata["stage_timings"] = {
@@ -229,18 +264,63 @@ class WriteOutputsStage(PipelineStageRunnable[RetrieveRunState]):
         return state
 
 
-_RETRIEVE_STAGES: tuple[PipelineStageRunnable[RetrieveRunState], ...] = (
-    CandidateSearchStage(),
-    RankHitsStage(),
-    HydrateStage(),
-    EmbeddingRerankStage(),
-    IndexStage(),
-    WriteOutputsStage(),
-)
-
-
 def build_retrieve_stage_chain(
     pipeline: RetrievePipeline,
 ) -> Runnable[RetrieveRunState, RetrieveRunState]:
     """Build deterministic retrieve stage chain."""
-    return pipeline.build_configured_stage_chain(stages=_RETRIEVE_STAGES)
+    context = RetrieveStageContext(
+        config=pipeline.config,
+        update_phase=pipeline._update_phase,
+        search_candidates_for_symbol=(
+            lambda search_symbol,
+            candidate_searcher: pipeline._search_candidates_for_symbol(
+                search_symbol=search_symbol,
+                candidate_searcher=candidate_searcher,
+            )
+        ),
+        rank_hits=(
+            lambda output_symbol, candidates_by_query: pipeline._rank_hits(
+                output_symbol=output_symbol,
+                candidates_by_query=candidates_by_query,
+            )
+        ),
+        prune_ranked_hits=lambda hits: pipeline._prune_ranked_hits(hits=hits),
+        download_and_chunk_hits=(
+            lambda output_symbol, hits: pipeline._download_and_chunk_hits(
+                output_symbol=output_symbol,
+                hits=hits,
+            )
+        ),
+        rerank_with_embeddings=lambda hits: pipeline._rerank_with_embeddings(
+            hits=hits,
+        ),
+        market_context_metadata=(
+            lambda output_symbol: pipeline._market_context_metadata(
+                output_symbol=output_symbol,
+            )
+        ),
+        market_signals_for_payload=pipeline._market_signals_for_payload,
+        index_hits=(
+            lambda output_symbol, hits, market_signals: pipeline._index_hits(
+                output_symbol=output_symbol,
+                hits=hits,
+                market_signals=market_signals,
+            )
+        ),
+        write_outputs=(
+            lambda symbol, hits, symbol_metadata: pipeline._write_outputs(
+                symbol=symbol,
+                hits=hits,
+                symbol_metadata=symbol_metadata,
+            )
+        ),
+    )
+    stages: tuple[PipelineStageRunnable[RetrieveRunState], ...] = (
+        CandidateSearchStage(context=context),
+        RankHitsStage(context=context),
+        HydrateStage(context=context),
+        EmbeddingRerankStage(context=context),
+        IndexStage(context=context),
+        WriteOutputsStage(context=context),
+    )
+    return pipeline.build_configured_stage_chain(stages=stages)

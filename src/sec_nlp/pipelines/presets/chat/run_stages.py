@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 from time import perf_counter
@@ -17,6 +18,7 @@ from sec_nlp.pipelines.base.stages import PipelineStageRunnable
 from sec_nlp.types import JsonValue
 
 from .bridge import ChatRetrievedChunk, ChatSeedBundle
+from .config import ChatSettings
 from .models import ChatCitation, ChatTurn
 
 if TYPE_CHECKING:
@@ -27,7 +29,6 @@ if TYPE_CHECKING:
 class ChatRunState:
     """In-place state carrier for chat stages from context retrieval to output persistence."""
 
-    runtime: ChatPipeline
     question: str
     progress: Progress
     overall_task: TaskID
@@ -55,17 +56,61 @@ class ChatRunState:
     )
 
 
+@dataclass(slots=True, frozen=True)
+class ChatStageContext:
+    """Shared runtime context for chat stage runnables."""
+
+    config: ChatSettings
+    update_phase: Callable[[Progress | None, TaskID | None, str], None]
+    search_collections: Callable[
+        [str, Progress | None, TaskID | None],
+        list[ChatRetrievedChunk],
+    ]
+    search_seed_context: Callable[
+        [str, ChatSeedBundle | None, tuple[ChatRetrievedChunk, ...]],
+        list[ChatRetrievedChunk],
+    ]
+    get_search_timings: Callable[[], dict[str, float]]
+    to_citations: Callable[[list[ChatRetrievedChunk]], list[ChatCitation]]
+    symbol_coverage_metadata: Callable[
+        [list[ChatCitation]],
+        dict[str, JsonValue],
+    ]
+    build_external_context: Callable[
+        [str, list[ChatCitation]],
+        tuple[str, dict[str, JsonValue]],
+    ]
+    build_answer: Callable[
+        [str, list[ChatCitation], str], tuple[str, list[str]]
+    ]
+    get_answer_timings: Callable[[], dict[str, float]]
+    build_turns: Callable[[str, str, list[str]], list[ChatTurn]]
+    write_outputs: Callable[
+        [
+            str,
+            str,
+            list[ChatCitation],
+            list[str],
+            list[ChatTurn],
+            str,
+            dict[str, JsonValue],
+        ],
+        list[Path],
+    ]
+
+
 class SearchContextStage(PipelineStageRunnable[ChatRunState]):
     """Ingress retrieval stage that sources context from seeds first, then vector search."""
 
     name: str = Field(default="search_context")
+    context: ChatStageContext = Field(repr=False)
 
     def _run(self, state: ChatRunState) -> ChatRunState:
         """Execute the search context stage and return updated run state."""
         has_seed_context = (
             state.seed_context is not None or len(state.seed_chunks) > 0
         )
-        state.runtime._update_phase(
+        self.context.update_phase(
             state.progress,
             state.phase_task,
             (
@@ -75,40 +120,41 @@ class SearchContextStage(PipelineStageRunnable[ChatRunState]):
             ),
         )
         if not has_seed_context:
-            state.chunks = state.runtime._search_collections(
+            state.chunks = self.context.search_collections(
                 state.question,
-                progress=state.progress,
-                phase_task=state.phase_task,
+                state.progress,
+                state.phase_task,
             )
         else:
-            state.chunks = state.runtime._search_seed_context(
-                question=state.question,
-                seed=state.seed_context,
-                seed_chunks=state.seed_chunks,
+            state.chunks = self.context.search_seed_context(
+                state.question,
+                state.seed_context,
+                state.seed_chunks,
             )
             if not state.chunks:
                 logger.warning(
                     "Seeded context returned no chunks; falling back to indexed collections",
                 )
-                state.runtime._update_phase(
+                self.context.update_phase(
                     state.progress,
                     state.phase_task,
                     "Seed context empty; searching indexed collections",
                 )
-                state.chunks = state.runtime._search_collections(
+                state.chunks = self.context.search_collections(
                     state.question,
-                    progress=state.progress,
-                    phase_task=state.phase_task,
+                    state.progress,
+                    state.phase_task,
                 )
                 state.seeded_context_fallback = True
 
+        search_timings = self.context.get_search_timings()
         state.stage_timings.update(
             {
-                "vector_search": state.runtime._last_search_timings.get(
+                "vector_search": search_timings.get(
                     "vector_search",
                     0.0,
                 ),
-                "rerank": state.runtime._last_search_timings.get("rerank", 0.0),
+                "rerank": search_timings.get("rerank", 0.0),
             }
         )
         state.progress.advance(state.overall_task)
@@ -119,24 +165,22 @@ class PrepareContextStage(PipelineStageRunnable[ChatRunState]):
     """Context assembly stage that builds citations, coverage metadata, and external context."""
 
     name: str = Field(default="prepare_context")
+    context: ChatStageContext = Field(repr=False)
 
     def _run(self, state: ChatRunState) -> ChatRunState:
         """Execute the prepare context stage and return updated run state."""
-        state.runtime._update_phase(
+        self.context.update_phase(
             state.progress,
             state.phase_task,
             "Preparing citations and context",
         )
-        state.citations = state.runtime._to_citations(state.chunks)
-        coverage_metadata = state.runtime._symbol_coverage_metadata(
+        state.citations = self.context.to_citations(state.chunks)
+        coverage_metadata = self.context.symbol_coverage_metadata(
             state.citations
         )
         t0 = perf_counter()
         state.external_context, state.external_metadata = (
-            state.runtime._build_external_context(
-                question=state.question,
-                citations=state.citations,
-            )
+            self.context.build_external_context(state.question, state.citations)
         )
         state.stage_timings["external_context"] = perf_counter() - t0
         if state.seeded_context_fallback:
@@ -157,26 +201,28 @@ class GenerateAnswerStage(PipelineStageRunnable[ChatRunState]):
     """Generation stage that produces grounded answer text and used citation identifiers."""
 
     name: str = Field(default="generate_answer")
+    context: ChatStageContext = Field(repr=False)
 
     def _run(self, state: ChatRunState) -> ChatRunState:
         """Execute the generate answer stage and return updated run state."""
-        state.runtime._update_phase(
+        self.context.update_phase(
             state.progress,
             state.phase_task,
             "Generating answer",
         )
-        state.answer, state.used_citation_ids = state.runtime._build_answer(
-            question=state.question,
-            citations=state.citations,
-            external_context=state.external_context,
+        state.answer, state.used_citation_ids = self.context.build_answer(
+            state.question,
+            state.citations,
+            state.external_context,
         )
+        answer_timings = self.context.get_answer_timings()
         state.stage_timings.update(
             {
-                "prompt_build": state.runtime._last_answer_timings.get(
+                "prompt_build": answer_timings.get(
                     "prompt_build",
                     0.0,
                 ),
-                "llm_generate": state.runtime._last_answer_timings.get(
+                "llm_generate": answer_timings.get(
                     "llm_generate",
                     0.0,
                 ),
@@ -190,18 +236,19 @@ class BuildTurnsStage(PipelineStageRunnable[ChatRunState]):
     """Transcript stage that materializes question-answer turns for downstream writing."""
 
     name: str = Field(default="build_turns")
+    context: ChatStageContext = Field(repr=False)
 
     def _run(self, state: ChatRunState) -> ChatRunState:
         """Execute the build turns stage and return updated run state."""
-        state.runtime._update_phase(
+        self.context.update_phase(
             state.progress,
             state.phase_task,
             "Building transcript",
         )
-        state.turns = state.runtime._build_turns(
-            question=state.question,
-            answer=state.answer,
-            citation_ids=state.used_citation_ids,
+        state.turns = self.context.build_turns(
+            state.question,
+            state.answer,
+            state.used_citation_ids,
         )
         state.progress.advance(state.overall_task)
         return state
@@ -211,41 +258,101 @@ class WriteChatOutputsStage(PipelineStageRunnable[ChatRunState]):
     """Egress stage that persists chat transcript and summary artifacts when enabled."""
 
     name: str = Field(default="write_outputs")
+    context: ChatStageContext = Field(repr=False)
 
     def _run(self, state: ChatRunState) -> ChatRunState:
         """Execute the write chat outputs stage and return updated run state."""
-        state.runtime._update_phase(
+        self.context.update_phase(
             state.progress,
             state.phase_task,
             "Writing outputs",
         )
-        if state.runtime.config.transcript_autosave:
+        if self.context.config.transcript_autosave:
             t0 = perf_counter()
-            state.outputs = state.runtime._write_outputs(
-                question=state.question,
-                answer=state.answer,
-                citations=state.citations,
-                citation_ids=state.used_citation_ids,
-                turns=state.turns,
-                external_context=state.external_context,
-                external_metadata=state.external_metadata,
+            state.outputs = self.context.write_outputs(
+                state.question,
+                state.answer,
+                state.citations,
+                state.used_citation_ids,
+                state.turns,
+                state.external_context,
+                state.external_metadata,
             )
             state.stage_timings["write"] = perf_counter() - t0
         state.progress.advance(state.overall_task)
         return state
 
 
-_CHAT_STAGES: tuple[PipelineStageRunnable[ChatRunState], ...] = (
-    SearchContextStage(),
-    PrepareContextStage(),
-    GenerateAnswerStage(),
-    BuildTurnsStage(),
-    WriteChatOutputsStage(),
-)
-
-
 def build_chat_stage_chain(
     pipeline: ChatPipeline,
 ) -> Runnable[ChatRunState, ChatRunState]:
     """Build deterministic chat stage chain."""
-    return pipeline.build_configured_stage_chain(stages=_CHAT_STAGES)
+    context = ChatStageContext(
+        config=pipeline.config,
+        update_phase=pipeline._update_phase,
+        search_collections=(
+            lambda question, progress, phase_task: pipeline._search_collections(
+                question=question,
+                progress=progress,
+                phase_task=phase_task,
+            )
+        ),
+        search_seed_context=(
+            lambda question, seed, seed_chunks: pipeline._search_seed_context(
+                question=question,
+                seed=seed,
+                seed_chunks=seed_chunks,
+            )
+        ),
+        get_search_timings=lambda: pipeline._last_search_timings,
+        to_citations=pipeline._to_citations,
+        symbol_coverage_metadata=pipeline._symbol_coverage_metadata,
+        build_external_context=(
+            lambda question, citations: pipeline._build_external_context(
+                question=question,
+                citations=citations,
+            )
+        ),
+        build_answer=(
+            lambda question,
+            citations,
+            external_context: pipeline._build_answer(
+                question=question,
+                citations=citations,
+                external_context=external_context,
+            )
+        ),
+        get_answer_timings=lambda: pipeline._last_answer_timings,
+        build_turns=(
+            lambda question, answer, citation_ids: pipeline._build_turns(
+                question=question,
+                answer=answer,
+                citation_ids=citation_ids,
+            )
+        ),
+        write_outputs=(
+            lambda question,
+            answer,
+            citations,
+            citation_ids,
+            turns,
+            external_context,
+            external_metadata: pipeline._write_outputs(
+                question=question,
+                answer=answer,
+                citations=citations,
+                citation_ids=citation_ids,
+                turns=turns,
+                external_context=external_context,
+                external_metadata=external_metadata,
+            )
+        ),
+    )
+    stages: tuple[PipelineStageRunnable[ChatRunState], ...] = (
+        SearchContextStage(context=context),
+        PrepareContextStage(context=context),
+        GenerateAnswerStage(context=context),
+        BuildTurnsStage(context=context),
+        WriteChatOutputsStage(context=context),
+    )
+    return pipeline.build_configured_stage_chain(stages=stages)

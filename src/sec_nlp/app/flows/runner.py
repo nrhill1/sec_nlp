@@ -3,7 +3,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from time import perf_counter
 from uuid import uuid4
 
@@ -147,30 +147,6 @@ class FlowRunner:
                 raise ValueError(f"Unsupported flow pipeline '{pipeline_name}'")
 
     @classmethod
-    def _build_stage_result(
-        cls,
-        *,
-        stage: FlowStageSpec,
-        pipeline_result: BasePipelineResult,
-        duration_seconds: float,
-        run_id: str,
-        run_short_id: int,
-    ) -> FlowStageResult:
-        """Build stage result."""
-        return FlowStageResult(
-            stage_id=stage.id,
-            pipeline=stage.pipeline,
-            success=pipeline_result.success,
-            skipped=False,
-            error=pipeline_result.error,
-            duration_seconds=duration_seconds,
-            run_id=run_id,
-            run_short_id=run_short_id if run_short_id > 0 else None,
-            outputs=[str(path) for path in pipeline_result.outputs],
-            metadata=coerce_result_json_dict(pipeline_result.metadata),
-        )
-
-    @classmethod
     def _build_stage_result_for_settings(
         cls,
         *,
@@ -178,14 +154,23 @@ class FlowRunner:
         pipeline_result: BasePipelineResult,
         duration_seconds: float,
         settings: BasePipelineSettings,
+        extra_metadata: Mapping[str, JsonValue] | None = None,
     ) -> FlowStageResult:
         """Build stage result using run identifiers from validated settings."""
-        return cls._build_stage_result(
-            stage=stage,
-            pipeline_result=pipeline_result,
+        metadata = coerce_result_json_dict(pipeline_result.metadata)
+        if extra_metadata is not None:
+            metadata.update(extra_metadata)
+        return FlowStageResult(
+            stage_id=stage.id,
+            pipeline=stage.pipeline,
+            success=pipeline_result.success,
+            skipped=False,
+            error=pipeline_result.error,
             duration_seconds=duration_seconds,
             run_id=str(settings.run_id),
-            run_short_id=settings.short_id,
+            run_short_id=settings.short_id if settings.short_id > 0 else None,
+            outputs=[str(path) for path in pipeline_result.outputs],
+            metadata=metadata,
         )
 
     @classmethod
@@ -272,10 +257,11 @@ class FlowRunner:
             expected_type=expected_type,
             pipeline_name=pipeline_name,
         )
+        pipeline = pipeline_factory(settings)
         return cls._invoke_pipeline(
             stage=stage.stage,
             settings=settings,
-            pipeline=pipeline_factory(settings),
+            pipeline=pipeline,
         )
 
     @staticmethod
@@ -370,13 +356,12 @@ class FlowRunner:
             expected_type=RetrieveSettings,
             pipeline_name="retrieve",
         )
+        pipeline = RetrievePipeline(config=settings)
         return cls._run_chunk_handoff_stage(
             stage=stage.stage,
             settings=settings,
             artifacts=artifacts,
-            run_callback=RetrievePipeline(
-                config=settings
-            ).run_for_flow_with_chunks,
+            run_callback=pipeline.run_for_flow_with_chunks,
             persist_callback=cls._persist_retrieve_artifacts,
         )
 
@@ -421,17 +406,20 @@ class FlowRunner:
         )
         elapsed = perf_counter() - started
 
-        stage_result = cls._build_stage_result_for_settings(
+        answer_preview: str | None = None
+        if result.success and isinstance(result.answer, str) and result.answer:
+            answer_preview = cls._answer_preview(result.answer)
+        return cls._build_stage_result_for_settings(
             stage=stage.stage,
             pipeline_result=result,
             duration_seconds=elapsed,
             settings=settings,
+            extra_metadata=(
+                {"answer_preview": answer_preview}
+                if answer_preview is not None
+                else None
+            ),
         )
-        if result.success and isinstance(result.answer, str) and result.answer:
-            metadata = dict(stage_result.metadata)
-            metadata["answer_preview"] = cls._answer_preview(result.answer)
-            return stage_result.model_copy(update={"metadata": metadata})
-        return stage_result
 
     @classmethod
     def _run_exhibit_stage(
@@ -445,13 +433,12 @@ class FlowRunner:
             expected_type=ExhibitConfig,
             pipeline_name="exhibit",
         )
+        pipeline = ExhibitPipeline(config=settings)
         return cls._run_chunk_handoff_stage(
             stage=stage.stage,
             settings=settings,
             artifacts=artifacts,
-            run_callback=ExhibitPipeline(
-                config=settings
-            ).run_for_flow_with_chunks,
+            run_callback=pipeline.run_for_flow_with_chunks,
             persist_callback=cls._persist_exhibit_artifacts,
         )
 

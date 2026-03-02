@@ -48,7 +48,7 @@ def test_coerce_result_json_dict_converts_paths() -> None:
     assert items[0] == "/tmp/x"
 
 
-def test_build_stage_result_converts_paths_and_metadata() -> None:
+def test_build_stage_result_for_settings_converts_paths_and_metadata() -> None:
     stage = FlowStageSpec(
         id="retrieve_seed",
         pipeline="retrieve",
@@ -63,21 +63,22 @@ def test_build_stage_result_converts_paths_and_metadata() -> None:
         hits_returned=1,
     )
 
-    stage_result = FlowRunner._build_stage_result(
+    settings = RetrieveSettings(email="test@example.com")
+
+    stage_result = FlowRunner._build_stage_result_for_settings(
         stage=stage,
         pipeline_result=pipeline_result,
         duration_seconds=1.25,
-        run_id="run-123",
-        run_short_id=0,
+        settings=settings,
     )
 
     assert stage_result.stage_id == "retrieve_seed"
     assert stage_result.outputs == ["/tmp/output.json"]
-    assert stage_result.run_short_id is None
+    assert stage_result.run_short_id == settings.short_id
     assert stage_result.metadata["path"] == "/tmp/nested.txt"
 
 
-def test_build_stage_result_retains_positive_short_id() -> None:
+def test_build_stage_result_for_settings_uses_settings_short_id() -> None:
     stage = FlowStageSpec(
         id="retrieve_seed",
         pipeline="retrieve",
@@ -92,15 +93,16 @@ def test_build_stage_result_retains_positive_short_id() -> None:
         hits_returned=1,
     )
 
-    stage_result = FlowRunner._build_stage_result(
+    settings = RetrieveSettings(email="test@example.com")
+
+    stage_result = FlowRunner._build_stage_result_for_settings(
         stage=stage,
         pipeline_result=pipeline_result,
         duration_seconds=0.1,
-        run_id="run-123",
-        run_short_id=42,
+        settings=settings,
     )
 
-    assert stage_result.run_short_id == 42
+    assert stage_result.run_short_id == settings.short_id
 
 
 def test_build_unexecuted_stage_result_respects_skipped_state() -> None:

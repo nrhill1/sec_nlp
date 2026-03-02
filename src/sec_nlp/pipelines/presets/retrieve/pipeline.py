@@ -636,7 +636,6 @@ class RetrievePipeline(BasePipeline):
         """Run retrieval for one symbol and return symbol-level output metadata."""
         stage_chain = self.require_stage_chain(self._stage_chain)
         state = RetrieveRunState(
-            runtime=self,
             search_symbol=search_symbol,
             output_symbol=output_symbol,
             candidate_searcher=candidate_searcher,

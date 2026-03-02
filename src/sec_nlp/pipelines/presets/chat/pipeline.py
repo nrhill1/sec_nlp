@@ -304,7 +304,6 @@ class ChatPipeline(BasePipeline):
                 phase_task = progress.add_task("", total=None, visible=False)
                 stage_chain = self.require_stage_chain(self._stage_chain)
                 stage_state = ChatRunState(
-                    runtime=self,
                     question=question,
                     progress=progress,
                     overall_task=overall_task,
