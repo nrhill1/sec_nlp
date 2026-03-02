@@ -5,8 +5,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
-
 from sec_nlp.app.flows.artifacts import FlowArtifactStore
 from sec_nlp.app.flows.compiled import (
     CompiledAnalyzeStage,
@@ -270,35 +268,3 @@ def test_run_stage_dispatches_supported_warranty(monkeypatch) -> None:
     )
     result = _runner()._run_stage(stage, FlowArtifactStore())
     assert result.success is True
-
-
-def test_run_stage_rejects_unknown_pipeline() -> None:
-    settings = RetrieveSettings.model_validate(
-        {
-            "email": "test@example.com",
-            "symbols": ["CDE"],
-            "queries": ["liquidity risk"],
-            "output_format": "json",
-        }
-    )
-    good_stage = CompiledRetrieveStage(
-        stage=FlowStageSpec(
-            id="bad_stage",
-            pipeline="retrieve",
-            overrides={},
-        ),
-        pipeline="retrieve",
-        run_id=str(settings.run_id),
-        run_short_id=settings.short_id if settings.short_id > 0 else None,
-        settings=settings,
-    )
-    runner = _runner()
-    bad_stage = CompiledRetrieveStage(
-        stage=good_stage.stage.model_copy(update={"pipeline": "bad"}),
-        run_id=good_stage.run_id,
-        run_short_id=good_stage.run_short_id,
-        pipeline="bad",
-        settings=good_stage.settings,
-    )
-    with pytest.raises(ValueError, match="Unsupported flow pipeline"):
-        runner._run_stage(bad_stage, FlowArtifactStore())

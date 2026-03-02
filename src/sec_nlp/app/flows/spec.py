@@ -13,6 +13,8 @@ from pathlib import Path
 
 import yaml
 
+from sec_nlp.types import JsonValue
+
 from .models import FlowSpec
 
 
@@ -24,12 +26,12 @@ def load_flow_spec(spec_path: str | Path) -> FlowSpec:
 
     raw_text = path.read_text(encoding="utf-8")
     suffix = path.suffix.casefold()
-    payload: object
+    parsed: JsonValue
     if suffix == ".json":
-        payload = json.loads(raw_text)
+        parsed = json.loads(raw_text)
     else:
-        payload = yaml.safe_load(raw_text)
+        parsed = yaml.safe_load(raw_text)
 
-    if not isinstance(payload, dict):
+    if not isinstance(parsed, dict):
         raise ValueError(f"Flow spec root must be an object mapping: {path}")
-    return FlowSpec.model_validate(payload)
+    return FlowSpec.model_validate(parsed)

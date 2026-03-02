@@ -210,6 +210,3 @@ class FlowRunResult(BaseModel):
     stage_results: list[FlowStageResult] = Field(default_factory=list)
     outputs: list[str] = Field(default_factory=list)
     metadata: dict[str, JsonValue] = Field(default_factory=dict)
-
-
-type FlowResult = FlowRunResult

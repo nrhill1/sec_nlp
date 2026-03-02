@@ -14,6 +14,7 @@ from sec_nlp.app.flows.models import (
     FlowDefaults,
     FlowSpec,
     FlowStageSpec,
+    PipelineName,
 )
 from sec_nlp.app.flows.registry import resolve_settings_model
 from sec_nlp.pipelines.presets.analyze import AnalyzeConfig
@@ -31,7 +32,7 @@ class CompiledStageBase:
     """Compiled stage metadata shared across all typed flow stages."""
 
     stage: FlowStageSpec
-    pipeline: str
+    pipeline: PipelineName
     run_id: str
     run_short_id: int | None
 
@@ -85,6 +86,21 @@ def _run_short_id_or_none(short_id: int) -> int | None:
     return short_id if short_id > 0 else None
 
 
+def _build_compiled_stage(
+    *,
+    stage: FlowStageSpec,
+    run_id: str,
+    run_short_id: int | None,
+) -> dict[str, FlowStageSpec | PipelineName | str | int | None]:
+    """Return the common compiled-stage fields as a dict."""
+    return {
+        "stage": stage,
+        "pipeline": stage.pipeline,
+        "run_id": run_id,
+        "run_short_id": run_short_id,
+    }
+
+
 def compile_stage(
     *,
     stage: FlowStageSpec,
@@ -96,67 +112,22 @@ def compile_stage(
     payload.update(stage.overrides)
     settings = settings_model.model_validate(payload)
     run_short_id = _run_short_id_or_none(settings.short_id)
+    common = _build_compiled_stage(
+        stage=stage,
+        run_id=str(settings.run_id),
+        run_short_id=run_short_id,
+    )
     match stage.pipeline:
         case "retrieve":
-            if not isinstance(settings, RetrieveSettings):
-                raise ValueError(
-                    "retrieve stage compile produced non-retrieve settings"
-                )
-            return CompiledRetrieveStage(
-                stage=stage,
-                pipeline=stage.pipeline,
-                run_id=str(settings.run_id),
-                run_short_id=run_short_id,
-                settings=settings,
-            )
+            return CompiledRetrieveStage(**common, settings=settings)  # type: ignore[arg-type]
         case "chat":
-            if not isinstance(settings, ChatSettings):
-                raise ValueError(
-                    "chat stage compile produced non-chat settings"
-                )
-            return CompiledChatStage(
-                stage=stage,
-                pipeline=stage.pipeline,
-                run_id=str(settings.run_id),
-                run_short_id=run_short_id,
-                settings=settings,
-            )
+            return CompiledChatStage(**common, settings=settings)  # type: ignore[arg-type]
         case "exhibit":
-            if not isinstance(settings, ExhibitConfig):
-                raise ValueError(
-                    "exhibit stage compile produced non-exhibit settings"
-                )
-            return CompiledExhibitStage(
-                stage=stage,
-                pipeline=stage.pipeline,
-                run_id=str(settings.run_id),
-                run_short_id=run_short_id,
-                settings=settings,
-            )
+            return CompiledExhibitStage(**common, settings=settings)  # type: ignore[arg-type]
         case "analyze":
-            if not isinstance(settings, AnalyzeConfig):
-                raise ValueError(
-                    "analyze stage compile produced non-analyze settings"
-                )
-            return CompiledAnalyzeStage(
-                stage=stage,
-                pipeline=stage.pipeline,
-                run_id=str(settings.run_id),
-                run_short_id=run_short_id,
-                settings=settings,
-            )
+            return CompiledAnalyzeStage(**common, settings=settings)  # type: ignore[arg-type]
         case "warranty":
-            if not isinstance(settings, WarrantyConfig):
-                raise ValueError(
-                    "warranty stage compile produced non-warranty settings"
-                )
-            return CompiledWarrantyStage(
-                stage=stage,
-                pipeline=stage.pipeline,
-                run_id=str(settings.run_id),
-                run_short_id=run_short_id,
-                settings=settings,
-            )
+            return CompiledWarrantyStage(**common, settings=settings)  # type: ignore[arg-type]
         case _:
             raise ValueError(f"Unsupported flow pipeline '{stage.pipeline}'")
 

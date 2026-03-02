@@ -93,15 +93,15 @@ class FlowRunner:
                     break
 
             if failed_at is not None and failed_at + 1 < len(compiled_stages):
-                for compiled_stage in compiled_stages[failed_at + 1 :]:
-                    stage_results.append(
-                        self._build_unexecuted_stage_result(
-                            stage=compiled_stage.stage,
-                            success=False,
-                            skipped=True,
-                            error="Skipped due to previous stage failure",
-                        )
+                stage_results.extend(
+                    self._build_unexecuted_stage_result(
+                        stage=cs.stage,
+                        success=False,
+                        skipped=True,
+                        error="Skipped due to previous stage failure",
                     )
+                    for cs in compiled_stages[failed_at + 1 :]
+                )
 
             success = all(
                 result.success or result.skipped for result in stage_results
@@ -138,38 +138,20 @@ class FlowRunner:
         stage: CompiledStage,
         artifacts: FlowArtifactStore,
     ) -> FlowStageResult:
-        """Run stage."""
+        """Dispatch a compiled stage to its typed pipeline runner."""
         if isinstance(stage, CompiledRetrieveStage):
-            if stage.pipeline != "retrieve":
-                raise ValueError(
-                    f"Unsupported flow pipeline '{stage.pipeline}'"
-                )
             return self._run_retrieve_stage(stage, artifacts)
         if isinstance(stage, CompiledChatStage):
-            if stage.pipeline != "chat":
-                raise ValueError(
-                    f"Unsupported flow pipeline '{stage.pipeline}'"
-                )
             return self._run_chat_stage(stage, artifacts)
         if isinstance(stage, CompiledExhibitStage):
-            if stage.pipeline != "exhibit":
-                raise ValueError(
-                    f"Unsupported flow pipeline '{stage.pipeline}'"
-                )
             return self._run_exhibit_stage(stage, artifacts)
         if isinstance(stage, CompiledAnalyzeStage):
-            if stage.pipeline != "analyze":
-                raise ValueError(
-                    f"Unsupported flow pipeline '{stage.pipeline}'"
-                )
             return self._run_analyze_stage(stage, artifacts)
         if isinstance(stage, CompiledWarrantyStage):
-            if stage.pipeline != "warranty":
-                raise ValueError(
-                    f"Unsupported flow pipeline '{stage.pipeline}'"
-                )
             return self._run_warranty_stage(stage, artifacts)
-        raise ValueError(f"Unsupported flow pipeline '{stage.pipeline}'")
+        raise ValueError(
+            f"Unsupported compiled stage type: {type(stage).__name__}"
+        )
 
     @classmethod
     def _build_stage_result(

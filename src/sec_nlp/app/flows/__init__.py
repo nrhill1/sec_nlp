@@ -7,7 +7,6 @@ typed stage results out, with execution details delegated to compile/runner.
 
 from .models import (
     FlowDefaults,
-    FlowResult,
     FlowRunResult,
     FlowSpec,
     FlowStageResult,
@@ -16,7 +15,6 @@ from .models import (
 
 __all__: tuple[str, ...] = (
     "FlowDefaults",
-    "FlowResult",
     "FlowRunResult",
     "FlowSpec",
     "FlowStageResult",
