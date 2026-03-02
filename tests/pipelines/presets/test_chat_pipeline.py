@@ -1159,6 +1159,7 @@ def test_chat_stage_chain_preserves_state_identity(
     overall_task = progress.add_task("chat", total=5)
     phase_task = progress.add_task("phase", total=None, visible=False)
     initial_state = create_initial_chat_state(
+        runtime=pipeline,
         question="What changed?",
         progress=progress,
         overall_task=overall_task,

@@ -222,6 +222,7 @@ class TestExhibitPipeline:
 
         stage_chain = build_exhibit_stage_chain(pipeline)
         state = create_initial_exhibit_state(
+            runtime=pipeline,
             symbol="CAT",
             include_bridge=True,
         )

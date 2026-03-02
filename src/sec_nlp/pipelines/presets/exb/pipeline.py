@@ -390,6 +390,7 @@ class ExhibitPipeline(BasePipeline):
             stage_chain = build_exhibit_stage_chain(self)
             self._stage_chain = stage_chain
         state = create_initial_exhibit_state(
+            runtime=self,
             symbol=symbol,
             include_bridge=include_bridge,
         )

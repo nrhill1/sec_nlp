@@ -308,6 +308,7 @@ class ChatPipeline(BasePipeline):
                     stage_chain = build_chat_stage_chain(self)
                     self._stage_chain = stage_chain
                 stage_state = create_initial_chat_state(
+                    runtime=self,
                     question=question,
                     progress=progress,
                     overall_task=overall_task,

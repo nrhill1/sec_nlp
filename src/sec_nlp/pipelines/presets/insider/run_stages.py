@@ -31,8 +31,9 @@ if TYPE_CHECKING:
 
 @dataclass(slots=True)
 class InsiderRunState:
-    """Mutable in-process state shared across insider runnable stages."""
+    """In-place state carrier for insider stages from filing download to output write."""
 
+    runtime: InsiderPipeline
     symbol: str
     progress: Progress | None
     phase_task: TaskID | None
@@ -49,12 +50,14 @@ class InsiderRunState:
 
 def create_initial_insider_state(
     *,
+    runtime: InsiderPipeline,
     symbol: str,
     progress: Progress | None,
     phase_task: TaskID | None,
 ) -> InsiderRunState:
     """Create initial mutable state for insider runnable stage execution."""
     return InsiderRunState(
+        runtime=runtime,
         symbol=symbol,
         progress=progress,
         phase_task=phase_task,
@@ -62,14 +65,13 @@ def create_initial_insider_state(
 
 
 class DownloadInsiderFilingsStage(PipelineStageRunnable[InsiderRunState]):
-    """Download insider filings for one symbol."""
+    """Ingress acquisition stage that downloads insider filings for a symbol."""
 
-    pipeline: InsiderPipeline = Field(exclude=True, repr=False)
     name: str = Field(default="download_filings")
 
     def _run(self, state: InsiderRunState) -> InsiderRunState:
         """Execute the download insider filings stage and return updated run state."""
-        self.pipeline._update_phase(
+        state.runtime._update_phase(
             state.progress,
             state.phase_task,
             state.symbol,
@@ -77,27 +79,26 @@ class DownloadInsiderFilingsStage(PipelineStageRunnable[InsiderRunState]):
         )
         state.filings = download_insider_filings(
             symbol=state.symbol,
-            settings=self.pipeline.config,
+            settings=state.runtime.config,
         )
         return state
 
 
 class ParseInsiderTransactionsStage(PipelineStageRunnable[InsiderRunState]):
-    """Parse insider transaction rows from downloaded filings."""
+    """Parsing stage that extracts transaction rows from downloaded insider filings."""
 
-    pipeline: InsiderPipeline = Field(exclude=True, repr=False)
     name: str = Field(default="parse_transactions")
 
     def _run(self, state: InsiderRunState) -> InsiderRunState:
         """Execute the parse insider transactions stage and return updated run state."""
-        self.pipeline._update_phase(
+        state.runtime._update_phase(
             state.progress,
             state.phase_task,
             state.symbol,
             "Parsing",
             total=len(state.filings),
         )
-        parser = self.pipeline._get_parser()
+        parser = state.runtime._get_parser()
         state.transactions = []
         for filing in state.filings:
             state.transactions.extend(
@@ -113,14 +114,13 @@ class ParseInsiderTransactionsStage(PipelineStageRunnable[InsiderRunState]):
 
 
 class AggregateInsiderActivityStage(PipelineStageRunnable[InsiderRunState]):
-    """Aggregate insider transactions into ledgers and clusters."""
+    """Aggregation stage that derives ledgers, clusters, and buy ratio signals."""
 
-    pipeline: InsiderPipeline = Field(exclude=True, repr=False)
     name: str = Field(default="aggregate_activity")
 
     def _run(self, state: InsiderRunState) -> InsiderRunState:
         """Execute the aggregate insider activity stage and return updated run state."""
-        self.pipeline._update_phase(
+        state.runtime._update_phase(
             state.progress,
             state.phase_task,
             state.symbol,
@@ -129,22 +129,21 @@ class AggregateInsiderActivityStage(PipelineStageRunnable[InsiderRunState]):
         state.ledgers = build_insider_ledgers(state.transactions)
         state.clusters = find_trade_clusters(
             state.transactions,
-            window_days=self.pipeline.config.alert_window_days,
-            cluster_threshold=self.pipeline.config.alert_cluster_threshold,
+            window_days=state.runtime.config.alert_window_days,
+            cluster_threshold=state.runtime.config.alert_cluster_threshold,
         )
         state.net_buy_ratio = compute_net_buy_ratio(state.transactions)
         return state
 
 
 class CorrelateInsiderActivityStage(PipelineStageRunnable[InsiderRunState]):
-    """Correlate insider activity with market and filing signals."""
+    """Correlation stage that maps insider activity to market and filing context."""
 
-    pipeline: InsiderPipeline = Field(exclude=True, repr=False)
     name: str = Field(default="correlate_activity")
 
     def _run(self, state: InsiderRunState) -> InsiderRunState:
         """Execute the correlate insider activity stage and return updated run state."""
-        self.pipeline._update_phase(
+        state.runtime._update_phase(
             state.progress,
             state.phase_task,
             state.symbol,
@@ -154,26 +153,25 @@ class CorrelateInsiderActivityStage(PipelineStageRunnable[InsiderRunState]):
             symbol=state.symbol,
             transactions=state.transactions,
             clusters=state.clusters,
-            settings=self.pipeline.config,
+            settings=state.runtime.config,
         )
         return state
 
 
 class WriteInsiderOutputsStage(PipelineStageRunnable[InsiderRunState]):
-    """Write insider output artifacts and summary metadata."""
+    """Egress stage that writes insider artifacts and summary metadata."""
 
-    pipeline: InsiderPipeline = Field(exclude=True, repr=False)
     name: str = Field(default="write_outputs")
 
     def _run(self, state: InsiderRunState) -> InsiderRunState:
         """Execute the write insider outputs stage and return updated run state."""
-        self.pipeline._update_phase(
+        state.runtime._update_phase(
             state.progress,
             state.phase_task,
             state.symbol,
             "Writing",
         )
-        state.outputs = self.pipeline._write_outputs(
+        state.outputs = state.runtime._write_outputs(
             symbol=state.symbol,
             filings_processed=len(state.filings),
             transactions=state.transactions,
@@ -204,33 +202,12 @@ def build_insider_stage_chain(
     pipeline: InsiderPipeline,
 ) -> Runnable[InsiderRunState, InsiderRunState]:
     """Build deterministic insider stage chain."""
-    types_namespace = {"InsiderPipeline": pipeline.__class__}
-    DownloadInsiderFilingsStage.model_rebuild(
-        _types_namespace=types_namespace,
-        force=True,
-    )
-    ParseInsiderTransactionsStage.model_rebuild(
-        _types_namespace=types_namespace,
-        force=True,
-    )
-    AggregateInsiderActivityStage.model_rebuild(
-        _types_namespace=types_namespace,
-        force=True,
-    )
-    CorrelateInsiderActivityStage.model_rebuild(
-        _types_namespace=types_namespace,
-        force=True,
-    )
-    WriteInsiderOutputsStage.model_rebuild(
-        _types_namespace=types_namespace,
-        force=True,
-    )
     stages: tuple[PipelineStageRunnable[InsiderRunState], ...] = (
-        DownloadInsiderFilingsStage(pipeline=pipeline),
-        ParseInsiderTransactionsStage(pipeline=pipeline),
-        AggregateInsiderActivityStage(pipeline=pipeline),
-        CorrelateInsiderActivityStage(pipeline=pipeline),
-        WriteInsiderOutputsStage(pipeline=pipeline),
+        DownloadInsiderFilingsStage(),
+        ParseInsiderTransactionsStage(),
+        AggregateInsiderActivityStage(),
+        CorrelateInsiderActivityStage(),
+        WriteInsiderOutputsStage(),
     )
     configured_stages = tuple(
         stage.configured(

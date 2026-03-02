@@ -20,8 +20,9 @@ if TYPE_CHECKING:
 
 @dataclass(slots=True)
 class WarrantyRunState:
-    """Mutable in-process state shared across warranty runnable stages."""
+    """In-place state carrier for warranty stages from symbol prep to filing output."""
 
+    runtime: WarrantyPipeline
     symbol: str
     start_date: date | None
     end_date: date | None
@@ -32,12 +33,14 @@ class WarrantyRunState:
 
 def create_initial_warranty_state(
     *,
+    runtime: WarrantyPipeline,
     symbol: str,
     start_date: date | None,
     end_date: date | None,
 ) -> WarrantyRunState:
     """Create initial mutable state for warranty stage execution."""
     return WarrantyRunState(
+        runtime=runtime,
         symbol=symbol,
         start_date=start_date,
         end_date=end_date,
@@ -45,9 +48,8 @@ def create_initial_warranty_state(
 
 
 class PrepareSymbolStage(PipelineStageRunnable[WarrantyRunState]):
-    """Initialize symbol context and trigger filing downloads."""
+    """Ingress stage that initializes symbol context and triggers filing downloads."""
 
-    pipeline: WarrantyPipeline = Field(exclude=True, repr=False)
     name: str = Field(default="prepare_symbol")
 
     def _run(self, state: WarrantyRunState) -> WarrantyRunState:
@@ -57,19 +59,19 @@ class PrepareSymbolStage(PipelineStageRunnable[WarrantyRunState]):
         log_divider(logger, color="cyan")
         logger.info("Processing symbol: %s", state.symbol)
 
-        self.pipeline._loader.add_symbol(state.symbol)
+        state.runtime._loader.add_symbol(state.symbol)
         downloader = Downloader(
             "SEC NLP Tool",
-            self.pipeline.config.email,
-            str(self.pipeline.config.dl_path),
+            state.runtime.config.email,
+            str(state.runtime.config.dl_path),
         )
         try:
             filing_count = downloader.get(
-                self.pipeline.config.mode.form,
+                state.runtime.config.mode.form,
                 state.symbol,
                 after=state.start_date,
                 before=state.end_date,
-                limit=self.pipeline.config.limit,
+                limit=state.runtime.config.limit,
                 download_details=True,
             )
             if filing_count:
@@ -84,19 +86,18 @@ class PrepareSymbolStage(PipelineStageRunnable[WarrantyRunState]):
 
 
 class ResolveHtmlPathsStage(PipelineStageRunnable[WarrantyRunState]):
-    """Resolve filing HTML paths for one symbol."""
+    """Resolution stage that discovers local HTML filing paths for symbol processing."""
 
-    pipeline: WarrantyPipeline = Field(exclude=True, repr=False)
     name: str = Field(default="resolve_html_paths")
 
     def _run(self, state: WarrantyRunState) -> WarrantyRunState:
         """Execute this warranty stage and return updated run state."""
         try:
-            state.html_paths = self.pipeline._loader.html_paths_for_symbol(
+            state.html_paths = state.runtime._loader.html_paths_for_symbol(
                 symbol=state.symbol,
-                mode=self.pipeline.config.mode,
-                base=self.pipeline.config.dl_path,
-                limit=self.pipeline.config.limit,
+                mode=state.runtime.config.mode,
+                base=state.runtime.config.dl_path,
+                limit=state.runtime.config.limit,
                 start_date=state.start_date,
                 end_date=state.end_date,
             )
@@ -104,7 +105,7 @@ class ResolveHtmlPathsStage(PipelineStageRunnable[WarrantyRunState]):
             logger.warning(
                 "No filings found for %s in %s",
                 state.symbol,
-                self.pipeline.config.dl_path,
+                state.runtime.config.dl_path,
             )
             state.skip_symbol = True
             return state
@@ -123,9 +124,8 @@ class ResolveHtmlPathsStage(PipelineStageRunnable[WarrantyRunState]):
 
 
 class ProcessFilingsStage(PipelineStageRunnable[WarrantyRunState]):
-    """Process each filing path and emit symbol output files."""
+    """Egress processing stage that parses filings and emits symbol output artifacts."""
 
-    pipeline: WarrantyPipeline = Field(exclude=True, repr=False)
     name: str = Field(default="process_filings")
 
     def _run(self, state: WarrantyRunState) -> WarrantyRunState:
@@ -134,7 +134,7 @@ class ProcessFilingsStage(PipelineStageRunnable[WarrantyRunState]):
             return state
         for html_path in state.html_paths:
             state.output_files.extend(
-                self.pipeline._process_filing(
+                state.runtime._process_filing(
                     state.symbol,
                     html_path,
                     state.start_date,
@@ -148,23 +148,10 @@ def build_warranty_stage_chain(
     pipeline: WarrantyPipeline,
 ) -> Runnable[WarrantyRunState, WarrantyRunState]:
     """Build deterministic warranty stage chain."""
-    types_namespace = {"WarrantyPipeline": pipeline.__class__}
-    PrepareSymbolStage.model_rebuild(
-        _types_namespace=types_namespace,
-        force=True,
-    )
-    ResolveHtmlPathsStage.model_rebuild(
-        _types_namespace=types_namespace,
-        force=True,
-    )
-    ProcessFilingsStage.model_rebuild(
-        _types_namespace=types_namespace,
-        force=True,
-    )
     stages: tuple[PipelineStageRunnable[WarrantyRunState], ...] = (
-        PrepareSymbolStage(pipeline=pipeline),
-        ResolveHtmlPathsStage(pipeline=pipeline),
-        ProcessFilingsStage(pipeline=pipeline),
+        PrepareSymbolStage(),
+        ResolveHtmlPathsStage(),
+        ProcessFilingsStage(),
     )
     configured_stages = tuple(
         stage.configured(

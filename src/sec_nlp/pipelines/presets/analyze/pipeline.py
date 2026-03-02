@@ -793,6 +793,7 @@ class AnalyzePipeline(BasePipeline):
             stage_chain = build_analyze_stage_chain(self)
             self._stage_chain = stage_chain
         state = create_initial_analyze_state(
+            runtime=self,
             symbol=symbol,
             progress=progress,
             phase_task=phase_task,

@@ -26,8 +26,9 @@ if TYPE_CHECKING:
 
 @dataclass(slots=True)
 class EventsRunState:
-    """Mutable in-process state shared across events runnable stages."""
+    """In-place state carrier for events stages from scan to output persistence."""
 
+    runtime: EventsPipeline
     symbol: str
     progress: Progress | None
     phase_task: TaskID | None
@@ -44,12 +45,14 @@ class EventsRunState:
 
 def create_initial_events_state(
     *,
+    runtime: EventsPipeline,
     symbol: str,
     progress: Progress | None,
     phase_task: TaskID | None,
 ) -> EventsRunState:
     """Create initial mutable state for events runnable stage execution."""
     return EventsRunState(
+        runtime=runtime,
         symbol=symbol,
         progress=progress,
         phase_task=phase_task,
@@ -57,14 +60,13 @@ def create_initial_events_state(
 
 
 class ScanEventsStage(PipelineStageRunnable[EventsRunState]):
-    """Scan filings and produce event candidates."""
+    """Ingress stage that scans filings and materializes candidate event records."""
 
-    pipeline: EventsPipeline = Field(exclude=True, repr=False)
     name: str = Field(default="scan_events")
 
     def _run(self, state: EventsRunState) -> EventsRunState:
         """Execute this events stage and return updated run state."""
-        self.pipeline._update_phase(
+        state.runtime._update_phase(
             state.progress,
             state.phase_task,
             state.symbol,
@@ -73,21 +75,20 @@ class ScanEventsStage(PipelineStageRunnable[EventsRunState]):
         state.scanned_events, state.downloaded, state.filings_scanned = (
             scan_events_for_symbol(
                 symbol=state.symbol,
-                settings=self.pipeline.config,
+                settings=state.runtime.config,
             )
         )
         return state
 
 
 class EnrichEventsStage(PipelineStageRunnable[EventsRunState]):
-    """Attach related news to scanned events."""
+    """Enrichment stage that links related news context onto scanned event records."""
 
-    pipeline: EventsPipeline = Field(exclude=True, repr=False)
     name: str = Field(default="enrich_events")
 
     def _run(self, state: EventsRunState) -> EventsRunState:
         """Execute this events stage and return updated run state."""
-        self.pipeline._update_phase(
+        state.runtime._update_phase(
             state.progress,
             state.phase_task,
             state.symbol,
@@ -96,20 +97,19 @@ class EnrichEventsStage(PipelineStageRunnable[EventsRunState]):
         state.enriched_events, state.headlines_linked = enrich_events_with_news(
             symbol=state.symbol,
             events=state.scanned_events,
-            settings=self.pipeline.config,
+            settings=state.runtime.config,
         )
         return state
 
 
 class ScoreEventsStage(PipelineStageRunnable[EventsRunState]):
-    """Score impact metrics for enriched events."""
+    """Scoring stage that computes impact metrics for enriched event records."""
 
-    pipeline: EventsPipeline = Field(exclude=True, repr=False)
     name: str = Field(default="score_events")
 
     def _run(self, state: EventsRunState) -> EventsRunState:
         """Execute this events stage and return updated run state."""
-        self.pipeline._update_phase(
+        state.runtime._update_phase(
             state.progress,
             state.phase_task,
             state.symbol,
@@ -118,26 +118,25 @@ class ScoreEventsStage(PipelineStageRunnable[EventsRunState]):
         state.scored_events, state.scored_count = score_event_impacts(
             symbol=state.symbol,
             events=state.enriched_events,
-            settings=self.pipeline.config,
+            settings=state.runtime.config,
         )
         return state
 
 
 class WriteEventsOutputsStage(PipelineStageRunnable[EventsRunState]):
-    """Write event outputs and metadata."""
+    """Egress stage that persists event artifacts and run metadata."""
 
-    pipeline: EventsPipeline = Field(exclude=True, repr=False)
     name: str = Field(default="write_outputs")
 
     def _run(self, state: EventsRunState) -> EventsRunState:
         """Execute this events stage and return updated run state."""
-        self.pipeline._update_phase(
+        state.runtime._update_phase(
             state.progress,
             state.phase_task,
             state.symbol,
             "Writing",
         )
-        state.outputs = self.pipeline._write_outputs(
+        state.outputs = state.runtime._write_outputs(
             symbol=state.symbol,
             events=state.scored_events,
         )
@@ -155,28 +154,11 @@ def build_events_stage_chain(
     pipeline: EventsPipeline,
 ) -> Runnable[EventsRunState, EventsRunState]:
     """Build deterministic events stage chain."""
-    types_namespace = {"EventsPipeline": pipeline.__class__}
-    ScanEventsStage.model_rebuild(
-        _types_namespace=types_namespace,
-        force=True,
-    )
-    EnrichEventsStage.model_rebuild(
-        _types_namespace=types_namespace,
-        force=True,
-    )
-    ScoreEventsStage.model_rebuild(
-        _types_namespace=types_namespace,
-        force=True,
-    )
-    WriteEventsOutputsStage.model_rebuild(
-        _types_namespace=types_namespace,
-        force=True,
-    )
     stages: tuple[PipelineStageRunnable[EventsRunState], ...] = (
-        ScanEventsStage(pipeline=pipeline),
-        EnrichEventsStage(pipeline=pipeline),
-        ScoreEventsStage(pipeline=pipeline),
-        WriteEventsOutputsStage(pipeline=pipeline),
+        ScanEventsStage(),
+        EnrichEventsStage(),
+        ScoreEventsStage(),
+        WriteEventsOutputsStage(),
     )
     configured_stages = tuple(
         stage.configured(

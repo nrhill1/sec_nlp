@@ -31,8 +31,9 @@ if TYPE_CHECKING:
 
 @dataclass(slots=True)
 class AnalyzeRunState:
-    """Mutable in-process state shared across analyze runnable stages."""
+    """In-place state carrier for analyze stages from document load through output write."""
 
+    runtime: AnalyzePipeline
     symbol: str
     progress: Progress | None
     phase_task: TaskID | None
@@ -59,6 +60,7 @@ def _accession_from_doc(doc: Document) -> str | None:
 
 def create_initial_analyze_state(
     *,
+    runtime: AnalyzePipeline,
     symbol: str,
     progress: Progress | None,
     phase_task: TaskID | None,
@@ -66,6 +68,7 @@ def create_initial_analyze_state(
 ) -> AnalyzeRunState:
     """Create initial mutable state for analyze runnable stage execution."""
     return AnalyzeRunState(
+        runtime=runtime,
         symbol=symbol,
         progress=progress,
         phase_task=phase_task,
@@ -74,9 +77,8 @@ def create_initial_analyze_state(
 
 
 class LoadDocsStage(PipelineStageRunnable[AnalyzeRunState]):
-    """Load candidate documents using prefetch or live retrieval."""
+    """Ingress stage that acquires candidate documents from prefetch or live retrieval."""
 
-    pipeline: AnalyzePipeline = Field(exclude=True, repr=False)
     name: str = Field(default="load_docs")
 
     def _run(self, state: AnalyzeRunState) -> AnalyzeRunState:
@@ -84,7 +86,7 @@ class LoadDocsStage(PipelineStageRunnable[AnalyzeRunState]):
         logger.info("\n" + "=" * 70)
         logger.info("Processing symbol: %s", state.symbol)
 
-        self.pipeline._update_phase(
+        state.runtime._update_phase(
             state.progress,
             state.phase_task,
             state.symbol,
@@ -95,22 +97,21 @@ class LoadDocsStage(PipelineStageRunnable[AnalyzeRunState]):
             state.timings.update(state.prefetched["timings"])
             state.already_preprocessed = state.prefetched["preprocessed"]
         else:
-            self.pipeline._loader.add_symbol(state.symbol)
-            state.docs, _allowed = self.pipeline._run_efts_and_load_docs(
+            state.runtime._loader.add_symbol(state.symbol)
+            state.docs, _allowed = state.runtime._run_efts_and_load_docs(
                 state.symbol,
                 state.timings,
             )
         if state.docs:
             return state
-        state.stats = self.pipeline._empty_chunk_stats(state.timings)
+        state.stats = state.runtime._empty_chunk_stats(state.timings)
         state.done = True
         return state
 
 
 class PreprocessStage(PipelineStageRunnable[AnalyzeRunState]):
-    """Preprocess loaded documents into analysis chunks."""
+    """Normalization stage that converts loaded filings into analysis-ready chunks."""
 
-    pipeline: AnalyzePipeline = Field(exclude=True, repr=False)
     name: str = Field(default="preprocess_docs")
 
     def _run(self, state: AnalyzeRunState) -> AnalyzeRunState:
@@ -120,42 +121,41 @@ class PreprocessStage(PipelineStageRunnable[AnalyzeRunState]):
         if state.already_preprocessed:
             return state
 
-        self.pipeline._update_phase(
+        state.runtime._update_phase(
             state.progress,
             state.phase_task,
             state.symbol,
             "Preprocessing",
         )
-        state.docs = self.pipeline._preprocess_documents(
+        state.docs = state.runtime._preprocess_documents(
             state.symbol,
             state.docs,
             state.timings,
         )
         if state.docs:
             return state
-        state.stats = self.pipeline._empty_chunk_stats(state.timings)
+        state.stats = state.runtime._empty_chunk_stats(state.timings)
         state.done = True
         return state
 
 
 class EnrichAndIndexStage(PipelineStageRunnable[AnalyzeRunState]):
-    """Attach market context and index chunks into vector store."""
+    """Enrichment stage that adds market context and indexes chunks for retrieval."""
 
-    pipeline: AnalyzePipeline = Field(exclude=True, repr=False)
     name: str = Field(default="enrich_and_index")
 
     def _run(self, state: AnalyzeRunState) -> AnalyzeRunState:
         """Execute the enrich and index stage and return updated run state."""
         if state.done:
             return state
-        self.pipeline._update_phase(
+        state.runtime._update_phase(
             state.progress,
             state.phase_task,
             state.symbol,
             "Indexing",
         )
         state.stats, state.market_data, state.market_context = (
-            self.pipeline._enrich_and_index(
+            state.runtime._enrich_and_index(
                 state.symbol,
                 state.docs,
                 state.timings,
@@ -165,20 +165,19 @@ class EnrichAndIndexStage(PipelineStageRunnable[AnalyzeRunState]):
 
 
 class SearchAndAnalyzeStage(PipelineStageRunnable[AnalyzeRunState]):
-    """Run vector retrieval and optional LLM analysis."""
+    """Inference stage that executes search queries and optional LLM analysis."""
 
-    pipeline: AnalyzePipeline = Field(exclude=True, repr=False)
     name: str = Field(default="search_and_analyze")
 
     def _run(self, state: AnalyzeRunState) -> AnalyzeRunState:
         """Execute the search and analyze stage and return updated run state."""
         if state.done:
             return state
-        state.search_queries = self.pipeline.config.get_search_queries()
+        state.search_queries = state.runtime.config.get_search_queries()
         (
             state.analysis_results,
             state.docs_for_analysis,
-        ) = self.pipeline._run_search_and_analysis(
+        ) = state.runtime._run_search_and_analysis(
             state.symbol,
             state.search_queries,
             state.timings,
@@ -187,7 +186,7 @@ class SearchAndAnalyzeStage(PipelineStageRunnable[AnalyzeRunState]):
         )
         state.stats["analyzed_count"] = len(state.analysis_results)
 
-        if self.pipeline.config.search.analyze:
+        if state.runtime.config.search.analyze:
             return state
         logger.info(
             "Analysis disabled for %s (--search.analyze=false); exporting search results only",
@@ -199,16 +198,15 @@ class SearchAndAnalyzeStage(PipelineStageRunnable[AnalyzeRunState]):
 
 
 class PostprocessStage(PipelineStageRunnable[AnalyzeRunState]):
-    """Filter analysis outputs and compute market correlation."""
+    """Reduction stage that filters findings and computes market-correlation overlays."""
 
-    pipeline: AnalyzePipeline = Field(exclude=True, repr=False)
     name: str = Field(default="postprocess_results")
 
     def _run(self, state: AnalyzeRunState) -> AnalyzeRunState:
         """Execute the postprocess stage and return updated run state."""
         if state.done:
             return state
-        self.pipeline._update_phase(
+        state.runtime._update_phase(
             state.progress,
             state.phase_task,
             state.symbol,
@@ -217,7 +215,7 @@ class PostprocessStage(PipelineStageRunnable[AnalyzeRunState]):
         (
             state.relevant_results,
             state.market_correlation,
-        ) = self.pipeline._postprocess_results(
+        ) = state.runtime._postprocess_results(
             state.symbol,
             state.analysis_results,
             state.market_data,
@@ -226,22 +224,21 @@ class PostprocessStage(PipelineStageRunnable[AnalyzeRunState]):
 
 
 class WriteOutputsStage(PipelineStageRunnable[AnalyzeRunState]):
-    """Write analysis outputs and finalize timing metadata."""
+    """Egress stage that writes analysis artifacts and finalizes timing metadata."""
 
-    pipeline: AnalyzePipeline = Field(exclude=True, repr=False)
     name: str = Field(default="write_outputs")
 
     def _run(self, state: AnalyzeRunState) -> AnalyzeRunState:
         """Execute the write outputs stage and return updated run state."""
         if state.done:
             return state
-        self.pipeline._update_phase(
+        state.runtime._update_phase(
             state.progress,
             state.phase_task,
             state.symbol,
             "Writing",
         )
-        state.output_files = self.pipeline._write_symbol_outputs(
+        state.output_files = state.runtime._write_symbol_outputs(
             symbol=state.symbol,
             docs=state.docs,
             analysis_results=state.analysis_results,
@@ -254,7 +251,7 @@ class WriteOutputsStage(PipelineStageRunnable[AnalyzeRunState]):
         )
         state.timings["total"] = sum(state.timings.values())
 
-        processing_state = self.pipeline._processing_state
+        processing_state = state.runtime._processing_state
         if processing_state is None or not state.docs:
             return state
         processed_accessions = list(
@@ -271,7 +268,7 @@ class WriteOutputsStage(PipelineStageRunnable[AnalyzeRunState]):
         processing_state.mark_processed_batch(
             symbol=state.symbol,
             accessions=processed_accessions,
-            run_id=self.pipeline.config.run_id,
+            run_id=state.runtime.config.run_id,
             chunk_counts={
                 accession: sum(
                     1
@@ -288,35 +285,13 @@ def build_analyze_stage_chain(
     pipeline: AnalyzePipeline,
 ) -> Runnable[AnalyzeRunState, AnalyzeRunState]:
     """Build deterministic analyze stage chain."""
-    types_namespace = {"AnalyzePipeline": pipeline.__class__}
-    LoadDocsStage.model_rebuild(_types_namespace=types_namespace, force=True)
-    PreprocessStage.model_rebuild(
-        _types_namespace=types_namespace,
-        force=True,
-    )
-    EnrichAndIndexStage.model_rebuild(
-        _types_namespace=types_namespace,
-        force=True,
-    )
-    SearchAndAnalyzeStage.model_rebuild(
-        _types_namespace=types_namespace,
-        force=True,
-    )
-    PostprocessStage.model_rebuild(
-        _types_namespace=types_namespace,
-        force=True,
-    )
-    WriteOutputsStage.model_rebuild(
-        _types_namespace=types_namespace,
-        force=True,
-    )
     stages: tuple[PipelineStageRunnable[AnalyzeRunState], ...] = (
-        LoadDocsStage(pipeline=pipeline),
-        PreprocessStage(pipeline=pipeline),
-        EnrichAndIndexStage(pipeline=pipeline),
-        SearchAndAnalyzeStage(pipeline=pipeline),
-        PostprocessStage(pipeline=pipeline),
-        WriteOutputsStage(pipeline=pipeline),
+        LoadDocsStage(),
+        PreprocessStage(),
+        EnrichAndIndexStage(),
+        SearchAndAnalyzeStage(),
+        PostprocessStage(),
+        WriteOutputsStage(),
     )
     configured_stages = tuple(
         stage.configured(

@@ -123,6 +123,7 @@ class InsiderPipeline(BasePipeline):
                     )
 
                     symbol_state = create_initial_insider_state(
+                        runtime=self,
                         symbol=normalized_symbol,
                         progress=progress,
                         phase_task=phase_task,

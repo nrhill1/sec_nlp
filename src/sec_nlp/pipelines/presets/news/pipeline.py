@@ -106,6 +106,7 @@ class NewsPipeline(BasePipeline):
                     )
 
                     symbol_state = create_initial_news_state(
+                        runtime=self,
                         symbol=normalized_symbol,
                         progress=progress,
                         phase_task=phase_task,

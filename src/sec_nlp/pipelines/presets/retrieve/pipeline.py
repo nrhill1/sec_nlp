@@ -640,6 +640,7 @@ class RetrievePipeline(BasePipeline):
             stage_chain = build_retrieve_stage_chain(self)
             self._stage_chain = stage_chain
         state = create_initial_retrieve_state(
+            runtime=self,
             search_symbol=search_symbol,
             output_symbol=output_symbol,
             candidate_searcher=candidate_searcher,

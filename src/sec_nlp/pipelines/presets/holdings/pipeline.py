@@ -121,6 +121,7 @@ class HoldingsPipeline(BasePipeline):
                         description=f"Processing {normalized_symbol}",
                     )
                     symbol_state = create_initial_holdings_state(
+                        runtime=self,
                         symbol=normalized_symbol,
                         progress=progress,
                         phase_task=phase_task,

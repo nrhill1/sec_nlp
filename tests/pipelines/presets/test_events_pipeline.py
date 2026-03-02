@@ -309,6 +309,7 @@ def test_events_stage_chain_preserves_state_identity(
 
     chain = build_events_stage_chain(pipeline)
     initial_state = create_initial_events_state(
+        runtime=pipeline,
         symbol="ABC",
         progress=None,
         phase_task=None,

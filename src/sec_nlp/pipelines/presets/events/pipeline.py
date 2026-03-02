@@ -106,6 +106,7 @@ class EventsPipeline(BasePipeline):
                     )
 
                     symbol_state = create_initial_events_state(
+                        runtime=self,
                         symbol=normalized_symbol,
                         progress=progress,
                         phase_task=phase_task,

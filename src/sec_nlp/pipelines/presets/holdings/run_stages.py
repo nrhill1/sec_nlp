@@ -28,8 +28,9 @@ if TYPE_CHECKING:
 
 @dataclass(slots=True)
 class HoldingsRunState:
-    """Mutable in-process state shared across holdings runnable stages."""
+    """In-place state carrier for holdings stages from filing download to output write."""
 
+    runtime: HoldingsPipeline
     symbol: str
     progress: Progress | None
     phase_task: TaskID | None
@@ -43,12 +44,14 @@ class HoldingsRunState:
 
 def create_initial_holdings_state(
     *,
+    runtime: HoldingsPipeline,
     symbol: str,
     progress: Progress | None,
     phase_task: TaskID | None,
 ) -> HoldingsRunState:
     """Create initial mutable state for holdings runnable stage execution."""
     return HoldingsRunState(
+        runtime=runtime,
         symbol=symbol,
         progress=progress,
         phase_task=phase_task,
@@ -56,14 +59,13 @@ def create_initial_holdings_state(
 
 
 class DownloadHoldingsFilingsStage(PipelineStageRunnable[HoldingsRunState]):
-    """Download holdings filings for one symbol."""
+    """Ingress acquisition stage that downloads holdings filings for a symbol."""
 
-    pipeline: HoldingsPipeline = Field(exclude=True, repr=False)
     name: str = Field(default="download_filings")
 
     def _run(self, state: HoldingsRunState) -> HoldingsRunState:
         """Execute the download holdings filings stage and return updated run state."""
-        self.pipeline._update_phase(
+        state.runtime._update_phase(
             state.progress,
             state.phase_task,
             state.symbol,
@@ -71,27 +73,26 @@ class DownloadHoldingsFilingsStage(PipelineStageRunnable[HoldingsRunState]):
         )
         state.filings = download_holdings_filings(
             symbol=state.symbol,
-            settings=self.pipeline.config,
+            settings=state.runtime.config,
         )
         return state
 
 
 class ParseHoldingsPositionsStage(PipelineStageRunnable[HoldingsRunState]):
-    """Parse holdings positions from downloaded filing content."""
+    """Parsing stage that extracts position rows from downloaded holdings filings."""
 
-    pipeline: HoldingsPipeline = Field(exclude=True, repr=False)
     name: str = Field(default="parse_positions")
 
     def _run(self, state: HoldingsRunState) -> HoldingsRunState:
         """Execute the parse holdings positions stage and return updated run state."""
-        self.pipeline._update_phase(
+        state.runtime._update_phase(
             state.progress,
             state.phase_task,
             state.symbol,
             "Parsing",
             total=len(state.filings),
         )
-        parser = self.pipeline._get_parser()
+        parser = state.runtime._get_parser()
         state.positions = []
         for filing in state.filings:
             state.positions.extend(
@@ -99,7 +100,7 @@ class ParseHoldingsPositionsStage(PipelineStageRunnable[HoldingsRunState]):
                     symbol=state.symbol,
                     filing=filing,
                     parser=parser,
-                    cusip_filter=self.pipeline.config.cusip,
+                    cusip_filter=state.runtime.config.cusip,
                 )
             )
             if state.progress is not None and state.phase_task is not None:
@@ -108,14 +109,13 @@ class ParseHoldingsPositionsStage(PipelineStageRunnable[HoldingsRunState]):
 
 
 class DiffHoldingsPositionsStage(PipelineStageRunnable[HoldingsRunState]):
-    """Compute quarter-over-quarter holding diffs."""
+    """Diff stage that computes quarter-over-quarter ownership position changes."""
 
-    pipeline: HoldingsPipeline = Field(exclude=True, repr=False)
     name: str = Field(default="diff_positions")
 
     def _run(self, state: HoldingsRunState) -> HoldingsRunState:
         """Execute the diff holdings positions stage and return updated run state."""
-        self.pipeline._update_phase(
+        state.runtime._update_phase(
             state.progress,
             state.phase_task,
             state.symbol,
@@ -129,14 +129,13 @@ class DiffHoldingsPositionsStage(PipelineStageRunnable[HoldingsRunState]):
 
 
 class AggregateHoldingsSummaryStage(PipelineStageRunnable[HoldingsRunState]):
-    """Build holdings ownership summary from parsed positions."""
+    """Aggregation stage that builds ownership summary metrics from parsed positions."""
 
-    pipeline: HoldingsPipeline = Field(exclude=True, repr=False)
     name: str = Field(default="aggregate_summary")
 
     def _run(self, state: HoldingsRunState) -> HoldingsRunState:
         """Execute the aggregate holdings summary stage and return updated run state."""
-        self.pipeline._update_phase(
+        state.runtime._update_phase(
             state.progress,
             state.phase_task,
             state.symbol,
@@ -145,21 +144,20 @@ class AggregateHoldingsSummaryStage(PipelineStageRunnable[HoldingsRunState]):
         state.summary = build_ownership_summary(
             symbol=state.symbol,
             positions=state.positions,
-            top_holders=self.pipeline.config.top_holders,
-            cusip_filter=self.pipeline.config.cusip,
+            top_holders=state.runtime.config.top_holders,
+            cusip_filter=state.runtime.config.cusip,
         )
         return state
 
 
 class WriteHoldingsOutputsStage(PipelineStageRunnable[HoldingsRunState]):
-    """Write holdings output artifacts and summary metadata."""
+    """Egress stage that writes holdings artifacts and summary metadata."""
 
-    pipeline: HoldingsPipeline = Field(exclude=True, repr=False)
     name: str = Field(default="write_outputs")
 
     def _run(self, state: HoldingsRunState) -> HoldingsRunState:
         """Execute the write holdings outputs stage and return updated run state."""
-        self.pipeline._update_phase(
+        state.runtime._update_phase(
             state.progress,
             state.phase_task,
             state.symbol,
@@ -170,11 +168,11 @@ class WriteHoldingsOutputsStage(PipelineStageRunnable[HoldingsRunState]):
             summary = build_ownership_summary(
                 symbol=state.symbol,
                 positions=state.positions,
-                top_holders=self.pipeline.config.top_holders,
-                cusip_filter=self.pipeline.config.cusip,
+                top_holders=state.runtime.config.top_holders,
+                cusip_filter=state.runtime.config.cusip,
             )
             state.summary = summary
-        state.outputs = self.pipeline._write_outputs(
+        state.outputs = state.runtime._write_outputs(
             symbol=state.symbol,
             filings_processed=len(state.filings),
             positions=state.positions,
@@ -197,33 +195,12 @@ def build_holdings_stage_chain(
     pipeline: HoldingsPipeline,
 ) -> Runnable[HoldingsRunState, HoldingsRunState]:
     """Build deterministic holdings stage chain."""
-    types_namespace = {"HoldingsPipeline": pipeline.__class__}
-    DownloadHoldingsFilingsStage.model_rebuild(
-        _types_namespace=types_namespace,
-        force=True,
-    )
-    ParseHoldingsPositionsStage.model_rebuild(
-        _types_namespace=types_namespace,
-        force=True,
-    )
-    DiffHoldingsPositionsStage.model_rebuild(
-        _types_namespace=types_namespace,
-        force=True,
-    )
-    AggregateHoldingsSummaryStage.model_rebuild(
-        _types_namespace=types_namespace,
-        force=True,
-    )
-    WriteHoldingsOutputsStage.model_rebuild(
-        _types_namespace=types_namespace,
-        force=True,
-    )
     stages: tuple[PipelineStageRunnable[HoldingsRunState], ...] = (
-        DownloadHoldingsFilingsStage(pipeline=pipeline),
-        ParseHoldingsPositionsStage(pipeline=pipeline),
-        DiffHoldingsPositionsStage(pipeline=pipeline),
-        AggregateHoldingsSummaryStage(pipeline=pipeline),
-        WriteHoldingsOutputsStage(pipeline=pipeline),
+        DownloadHoldingsFilingsStage(),
+        ParseHoldingsPositionsStage(),
+        DiffHoldingsPositionsStage(),
+        AggregateHoldingsSummaryStage(),
+        WriteHoldingsOutputsStage(),
     )
     configured_stages = tuple(
         stage.configured(

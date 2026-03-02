@@ -167,6 +167,7 @@ class WarrantyPipeline(BasePipeline):
             stage_chain = build_warranty_stage_chain(self)
             self._stage_chain = stage_chain
         state = create_initial_warranty_state(
+            runtime=self,
             symbol=symbol,
             start_date=start_date,
             end_date=end_date,
