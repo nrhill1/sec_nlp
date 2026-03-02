@@ -185,19 +185,17 @@ class FlowRunner:
     def _invoke_pipeline(
         cls,
         *,
-        stage: FlowStageSpec,
-        run_id: str,
-        run_short_id: int | None,
+        compiled: CompiledStage,
         pipeline: BasePipeline,
     ) -> FlowStageResult:
         """Invoke a plain pipeline and normalize the stage result envelope."""
         result, elapsed = cls._timed_call(pipeline.invoke)
         return cls._build_stage_result(
-            stage=stage,
+            stage=compiled.stage,
             pipeline_result=result,
             duration_seconds=elapsed,
-            run_id=run_id,
-            run_short_id=run_short_id,
+            run_id=compiled.run_id,
+            run_short_id=compiled.run_short_id,
         )
 
     @staticmethod
@@ -213,9 +211,7 @@ class FlowRunner:
     def _run_chunk_handoff_stage[BundleT](
         cls,
         *,
-        stage: FlowStageSpec,
-        run_id: str,
-        run_short_id: int | None,
+        compiled: CompiledStage,
         artifacts: FlowArtifactStore,
         run_callback: Callable[
             [],
@@ -229,13 +225,13 @@ class FlowRunner:
         """Run a stage that returns both a result and chunk-based handoff artifacts."""
         (result, bundle, seed_chunks), elapsed = cls._timed_call(run_callback)
         if result.success:
-            persist_callback(artifacts, stage.id, bundle, seed_chunks)
+            persist_callback(artifacts, compiled.stage.id, bundle, seed_chunks)
         return cls._build_stage_result(
-            stage=stage,
+            stage=compiled.stage,
             pipeline_result=result,
             duration_seconds=elapsed,
-            run_id=run_id,
-            run_short_id=run_short_id,
+            run_id=compiled.run_id,
+            run_short_id=compiled.run_short_id,
         )
 
     @staticmethod
@@ -296,12 +292,8 @@ class FlowRunner:
     ) -> FlowStageResult:
         """Run analyze stage."""
         _ = artifacts
-        pipeline = AnalyzePipeline(config=stage.settings)
         return cls._invoke_pipeline(
-            stage=stage.stage,
-            run_id=stage.run_id,
-            run_short_id=stage.run_short_id,
-            pipeline=pipeline,
+            compiled=stage, pipeline=AnalyzePipeline(config=stage.settings)
         )
 
     @classmethod
@@ -312,12 +304,8 @@ class FlowRunner:
     ) -> FlowStageResult:
         """Run warranty stage."""
         _ = artifacts
-        pipeline = WarrantyPipeline(config=stage.settings)
         return cls._invoke_pipeline(
-            stage=stage.stage,
-            run_id=stage.run_id,
-            run_short_id=stage.run_short_id,
-            pipeline=pipeline,
+            compiled=stage, pipeline=WarrantyPipeline(config=stage.settings)
         )
 
     @classmethod
@@ -329,9 +317,7 @@ class FlowRunner:
         """Run retrieve stage."""
         pipeline = RetrievePipeline(config=stage.settings)
         return cls._run_chunk_handoff_stage(
-            stage=stage.stage,
-            run_id=stage.run_id,
-            run_short_id=stage.run_short_id,
+            compiled=stage,
             artifacts=artifacts,
             run_callback=pipeline.run_for_flow_with_chunks,
             persist_callback=cls._persist_retrieve_artifacts,
@@ -381,11 +367,11 @@ class FlowRunner:
             duration_seconds=elapsed,
             run_id=stage.run_id,
             run_short_id=stage.run_short_id,
-            extra_metadata=(
-                {"answer_preview": answer_preview}
-                if answer_preview is not None
-                else None
-            ),
+            extra_metadata={
+                "answer_preview": answer_preview,
+            }
+            if answer_preview is not None
+            else None,
         )
 
     @classmethod
@@ -397,9 +383,7 @@ class FlowRunner:
         """Run exhibit stage."""
         pipeline = ExhibitPipeline(config=stage.settings)
         return cls._run_chunk_handoff_stage(
-            stage=stage.stage,
-            run_id=stage.run_id,
-            run_short_id=stage.run_short_id,
+            compiled=stage,
             artifacts=artifacts,
             run_callback=pipeline.run_for_flow_with_chunks,
             persist_callback=cls._persist_exhibit_artifacts,
