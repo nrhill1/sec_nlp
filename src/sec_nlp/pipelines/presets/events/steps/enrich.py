@@ -1,3 +1,4 @@
+# src/sec_nlp/pipelines/presets/events/steps/enrich.py
 """Attach nearby news headlines to detected events."""
 
 from __future__ import annotations
@@ -13,6 +14,7 @@ from ..models import DetectedEvent, EventHeadline
 
 
 def _parse_timestamp(value: str | None) -> datetime | None:
+    """Parse timestamp strings into timezone-aware datetimes."""
     if value is None:
         return None
     stripped = value.strip()
@@ -31,6 +33,7 @@ def _parse_timestamp(value: str | None) -> datetime | None:
 
 
 def _headline_dedupe_key(headline: EventHeadline) -> str:
+    """Build dedupe key for normalized headline records."""
     return f"{headline.title.strip().lower()}::{headline.url.strip().lower()}"
 
 

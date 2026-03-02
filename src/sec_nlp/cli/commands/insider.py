@@ -1,3 +1,4 @@
+# src/sec_nlp/cli/commands/insider.py
 """Insider pipeline CLI command."""
 
 from pydantic import Field
@@ -20,4 +21,5 @@ class Insider(InsiderSettings, BasePipelineCommand):
     )
 
     def _get_header_subtitle(self) -> str:
+        """Build subtitle text for the insider command header."""
         return "Insider Transactions"

@@ -1,3 +1,4 @@
+# src/sec_nlp/core/llm/ollama.py
 """Ollama client construction helpers."""
 
 import os
@@ -12,6 +13,8 @@ _DEFAULT_OLLAMA_BASE_URL = "http://localhost:11434"
 
 
 class OllamaKwargs(TypedDict, total=False):
+    """Optional generation controls forwarded to the Ollama client."""
+
     reasoning: bool | None
     validate_model_on_init: bool
     mirostat: int | None

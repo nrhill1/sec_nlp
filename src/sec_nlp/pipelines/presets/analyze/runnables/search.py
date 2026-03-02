@@ -39,6 +39,8 @@ from .analysis import AnalysisBatchInput
 
 @dataclass(frozen=True)
 class SearchQueryResults:
+    """Filtered documents and total hit count for one query."""
+
     filtered: list[tuple[Document, float]]
     total: int
 
@@ -48,6 +50,8 @@ type SearchResultsByQuery = dict[str, SearchQueryResults]
 
 @dataclass
 class _UniqueHit:
+    """Internal model for UniqueHit."""
+
     doc: Document
     matches: dict[str, float]
 
@@ -259,6 +263,7 @@ class SearchRunnable(
         *,
         distance_prefers_lower: bool,
     ) -> SearchResultsByQuery:
+        """Trim query results to the configured analysis limit."""
         if not self.search_analyze:
             return results_by_query
 
@@ -292,6 +297,7 @@ class SearchRunnable(
     def _passes_query_term_gate(
         self, query: str | None, content: str | None
     ) -> bool:
+        """Return whether a document passes query-term overlap gates."""
         min_hits = self.query_term_min_hits
         min_ratio = self.query_term_min_ratio
         min_len = self.query_term_min_len
@@ -313,6 +319,7 @@ class SearchRunnable(
         *,
         fallback_symbol: str | None = None,
     ) -> tuple[str | None, str | None, str]:
+        """Build unique hit key."""
         meta = doc.metadata or {}
         symbol_value = meta.get("symbol") or meta.get("ticker")
         symbol = (
@@ -608,6 +615,7 @@ class SearchRunnable(
         return search_outputs
 
     def _get_symbol_output_dir(self, symbol: str) -> Path:
+        """Get symbol output dir."""
         normalized_symbol = symbol.strip().upper()
         run_component = self.run_dir or "run"
         symbol_out_path = (
@@ -621,6 +629,7 @@ class SearchRunnable(
 
     @staticmethod
     def _clean_queries(queries: list[str] | None) -> list[str]:
+        """Normalize and deduplicate query strings."""
         if not queries:
             return []
         return [
@@ -631,12 +640,14 @@ class SearchRunnable(
 
     @staticmethod
     def _round_score(value: float | None) -> float | None:
+        """Round score values for stable output formatting."""
         return round_score(value)
 
     @staticmethod
     def _score_is_better(
         candidate: float, current: float, prefers_lower: bool
     ) -> bool:
+        """Compare two scores using the active distance preference."""
         return candidate < current if prefers_lower else candidate > current
 
     @classmethod
@@ -647,6 +658,7 @@ class SearchRunnable(
         score: float,
         prefers_lower: bool,
     ) -> None:
+        """Update or append a per-query match summary entry."""
         existing = matches.get(query)
         if existing is None or cls._score_is_better(
             score, existing, prefers_lower
@@ -657,12 +669,14 @@ class SearchRunnable(
     def _sort_matches(
         matches: dict[str, float], prefers_lower: bool
     ) -> list[tuple[str, float]]:
+        """Sort matched query entries by score strength."""
         if prefers_lower:
             return sorted(matches.items(), key=lambda item: (item[1], item[0]))
         return sorted(matches.items(), key=lambda item: (-item[1], item[0]))
 
     @staticmethod
     def _best_score(scores: list[float], prefers_lower: bool) -> float | None:
+        """Return the strongest score from a match list."""
         if not scores:
             return None
         return min(scores) if prefers_lower else max(scores)
@@ -671,6 +685,7 @@ class SearchRunnable(
     def _unique_sort_key(
         payload: SearchUniqueResultPayload, prefers_lower: bool
     ) -> float:
+        """Build a deterministic dedupe key for search hits."""
         score = payload.best_score
         if score is None:
             return float("inf") if prefers_lower else float("-inf")
@@ -681,6 +696,7 @@ class SearchRunnable(
         unique_hits: dict[tuple[str | None, str | None, str], _UniqueHit],
         prefers_lower: bool,
     ) -> list[SearchUniqueResultPayload]:
+        """Build unique results."""
         unique_payloads: list[SearchUniqueResultPayload] = []
         for hit in unique_hits.values():
             if not hit.matches:
@@ -712,6 +728,7 @@ class SearchRunnable(
 
     @staticmethod
     def _build_metadata_filters_payload(filters: MetadataFilters) -> JsonDict:
+        """Build metadata filters payload."""
         payload: JsonDict = {}
         for key, values in filters.items():
             cleaned: list[JsonValue] = []

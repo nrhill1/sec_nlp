@@ -1,3 +1,4 @@
+# tests/core/edgar/test_economic.py
 """Tests for economic indicator integration helpers."""
 
 from __future__ import annotations

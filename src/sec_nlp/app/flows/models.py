@@ -1,9 +1,13 @@
-"""Models for multi-pipeline flow orchestration."""
+# src/sec_nlp/app/flows/models.py
+"""Flow-spec and flow-result models used at runtime boundaries.
+
+These models define the contract between user-authored flow specs, compile-time
+settings construction, and execution-time result reporting. They intentionally
+centralize validation at ingress so stage execution can remain lightweight.
+"""
 
 from __future__ import annotations
 
-from datetime import date
-from pathlib import Path
 from typing import Literal
 
 from pydantic import (
@@ -16,6 +20,15 @@ from pydantic import (
 
 from sec_nlp.types import JsonValue
 
+type PipelineName = Literal[
+    "retrieve",
+    "chat",
+    "exhibit",
+    "analyze",
+    "warranty",
+]
+type FlowArtifactName = Literal["retrieve_seed", "contract_evidence"]
+
 
 class FlowDefaults(BaseModel):
     """Shared defaults merged into each stage configuration."""
@@ -25,61 +38,6 @@ class FlowDefaults(BaseModel):
     email: str = Field(
         description="SEC contact email used by downstream pipelines."
     )
-    symbols: list[str] = Field(
-        default_factory=list,
-        description="Default ticker scope for flow stages.",
-    )
-    forms: list[str] | None = Field(
-        default=None,
-        description="Optional default form filters applied to stages.",
-    )
-    start_date: date | None = Field(
-        default=None,
-        description="Optional start date shared by stages.",
-    )
-    end_date: date | None = Field(
-        default=None,
-        description="Optional end date shared by stages.",
-    )
-    dl_path: Path | None = Field(
-        default=None,
-        description="Optional shared downloads path.",
-    )
-    out_path: Path | None = Field(
-        default=None,
-        description="Optional shared outputs path.",
-    )
-    dry_run: bool | None = Field(
-        default=None,
-        description="Optional shared dry-run default for stages.",
-    )
-
-    @field_validator("symbols", mode="before")
-    @classmethod
-    def _normalize_symbols(cls, value: list[str] | str) -> list[str]:
-        if isinstance(value, str):
-            value = [part for part in value.replace(",", " ").split() if part]
-        normalized: list[str] = []
-        seen: set[str] = set()
-        for raw in value:
-            symbol = raw.strip().upper()
-            if not symbol or symbol in seen:
-                continue
-            seen.add(symbol)
-            normalized.append(symbol)
-        return normalized
-
-    @model_validator(mode="after")
-    def _validate_dates(self) -> FlowDefaults:
-        if (
-            self.start_date is not None
-            and self.end_date is not None
-            and self.start_date > self.end_date
-        ):
-            raise ValueError(
-                "defaults.start_date cannot be after defaults.end_date"
-            )
-        return self
 
 
 class FlowStageSpec(BaseModel):
@@ -88,7 +46,7 @@ class FlowStageSpec(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     id: str = Field(description="Stable stage identifier in this flow.")
-    pipeline: Literal["retrieve", "chat"] = Field(
+    pipeline: PipelineName = Field(
         description="Pipeline executed by this stage.",
     )
     overrides: dict[str, JsonValue] = Field(
@@ -101,17 +59,47 @@ class FlowStageSpec(BaseModel):
             description="Execution condition relative to previous stage result.",
         )
     )
-    seed_from_stage: str | None = Field(
-        default=None,
-        description="Optional upstream retrieve stage ID used for chat seeded context.",
+    inputs: list[FlowStageInputBinding] = Field(
+        default_factory=list,
+        description=(
+            "Typed artifact inputs sourced from prior stages and injected into "
+            "this stage at runtime."
+        ),
     )
 
     @field_validator("id")
     @classmethod
     def _validate_id(cls, value: str) -> str:
+        """Validate flow and stage identifiers against allowed patterns."""
         cleaned = value.strip()
         if not cleaned:
             raise ValueError("stage id cannot be empty")
+        return cleaned
+
+
+class FlowStageInputBinding(BaseModel):
+    """Typed artifact binding used to wire stage-to-stage data handoffs."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    from_stage: str = Field(
+        description="Source stage ID that produced the artifact.",
+    )
+    artifact: FlowArtifactName = Field(
+        description="Artifact family produced by the source stage.",
+    )
+    target_field: str | None = Field(
+        default=None,
+        description="Optional stage config field name for artifact injection.",
+    )
+
+    @field_validator("from_stage")
+    @classmethod
+    def _validate_from_stage(cls, value: str) -> str:
+        """Validate input binding references to prior stages."""
+        cleaned = value.strip()
+        if not cleaned:
+            raise ValueError("inputs.from_stage cannot be empty")
         return cleaned
 
 
@@ -138,6 +126,7 @@ class FlowSpec(BaseModel):
 
     @model_validator(mode="after")
     def _validate_stage_graph(self) -> FlowSpec:
+        """Validate stage graph ordering and dependency constraints."""
         if not self.stages:
             raise ValueError("flow spec requires at least one stage")
 
@@ -150,21 +139,46 @@ class FlowSpec(BaseModel):
             stage_pipelines[stage.id] = stage.pipeline
 
         for stage in self.stages:
-            if stage.seed_from_stage is None:
-                continue
-            if stage.pipeline != "chat":
+            if stage.pipeline != "chat" and stage.inputs:
                 raise ValueError(
-                    f"stage '{stage.id}' sets seed_from_stage but is not chat"
+                    f"stage '{stage.id}' ({stage.pipeline}) does not accept "
+                    "input bindings yet"
                 )
-            if stage.seed_from_stage not in stage_ids:
+            if stage.pipeline == "chat" and len(stage.inputs) > 1:
                 raise ValueError(
-                    f"stage '{stage.id}' references unknown seed stage '{stage.seed_from_stage}'"
+                    f"stage '{stage.id}' accepts at most one input binding"
                 )
-            upstream_pipeline = stage_pipelines.get(stage.seed_from_stage)
-            if upstream_pipeline != "retrieve":
-                raise ValueError(
-                    f"stage '{stage.id}' seed_from_stage must reference a retrieve stage"
-                )
+            for binding in stage.inputs:
+                if (
+                    binding.target_field is not None
+                    and binding.target_field != "seed_context"
+                ):
+                    raise ValueError(
+                        f"stage '{stage.id}' input binding target_field "
+                        "must be 'seed_context'"
+                    )
+                if binding.from_stage not in stage_ids:
+                    raise ValueError(
+                        f"stage '{stage.id}' references unknown input stage "
+                        f"'{binding.from_stage}'"
+                    )
+                upstream_pipeline = stage_pipelines.get(binding.from_stage)
+                if (
+                    binding.artifact == "retrieve_seed"
+                    and upstream_pipeline != "retrieve"
+                ):
+                    raise ValueError(
+                        f"stage '{stage.id}' retrieve_seed input must reference "
+                        "a retrieve stage"
+                    )
+                if (
+                    binding.artifact == "contract_evidence"
+                    and upstream_pipeline != "exhibit"
+                ):
+                    raise ValueError(
+                        f"stage '{stage.id}' contract_evidence input must "
+                        "reference an exhibit stage"
+                    )
         return self
 
 
@@ -196,6 +210,3 @@ class FlowRunResult(BaseModel):
     stage_results: list[FlowStageResult] = Field(default_factory=list)
     outputs: list[str] = Field(default_factory=list)
     metadata: dict[str, JsonValue] = Field(default_factory=dict)
-
-
-type FlowResult = FlowRunResult

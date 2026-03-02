@@ -1,3 +1,4 @@
+# src/sec_nlp/pipelines/presets/events/config.py
 """Config model for the events timeline pipeline."""
 
 from __future__ import annotations

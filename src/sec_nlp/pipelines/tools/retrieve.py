@@ -1,3 +1,4 @@
+# src/sec_nlp/pipelines/tools/retrieve.py
 """LangChain tool wrapper for deterministic EFTS retrieval hits."""
 
 from __future__ import annotations
@@ -25,6 +26,7 @@ def _check_timeout(
     timeout_seconds: float | None,
     stage: str,
 ) -> None:
+    """Raise timeout error when execution exceeds configured limit."""
     if timeout_seconds is None:
         return
     elapsed = monotonic() - started_at
@@ -44,6 +46,7 @@ def _build_settings(
     top_k: int,
     collection: str,
 ) -> RetrieveSettings:
+    """Build retrieve settings from tool request input."""
     return RetrieveSettings(
         symbols=symbols,
         queries=queries,
@@ -73,6 +76,7 @@ def _run_retrieve_hits_tool(
     collection: str = "retrieve",
     timeout_seconds: float | None = 30.0,
 ) -> JsonDict:
+    """Execute retrieve hits tool and return normalized retrieval output."""
     started_at = monotonic()
     settings = _build_settings(
         symbols=symbols,

@@ -1,3 +1,4 @@
+# src/sec_nlp/core/stats/correlation.py
 """Thin wrapper around the Rust `corr` extension."""
 
 from __future__ import annotations
@@ -14,6 +15,7 @@ class CorrExtensionError(RuntimeError):
 
 @lru_cache(maxsize=1)
 def _load_corr_module() -> ModuleType:
+    """Load optional native correlation extension module."""
     try:
         return import_module("corr")
     except Exception as exc:  # pragma: no cover - depends on extension install

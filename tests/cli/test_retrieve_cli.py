@@ -1,3 +1,4 @@
+# tests/cli/test_retrieve_cli.py
 """Tests for retrieve CLI wiring."""
 
 from __future__ import annotations

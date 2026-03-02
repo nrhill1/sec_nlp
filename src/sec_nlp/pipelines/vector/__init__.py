@@ -1,3 +1,4 @@
+# src/sec_nlp/pipelines/vector/__init__.py
 """Vector store configuration and helpers."""
 
 from .config import VectorConfig, clear_runtime_caches

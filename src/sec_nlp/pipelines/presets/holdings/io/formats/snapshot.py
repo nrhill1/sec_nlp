@@ -1,3 +1,4 @@
+# src/sec_nlp/pipelines/presets/holdings/io/formats/snapshot.py
 """CSV writer for holdings snapshot exports."""
 
 from __future__ import annotations

@@ -14,6 +14,10 @@ from sec_nlp.pipelines.presets.exb.models import (
     ExhibitResult,
 )
 from sec_nlp.pipelines.presets.exb.pipeline import ExhibitPipeline
+from sec_nlp.pipelines.presets.exb.run_stages import (
+    ExhibitRunState,
+    build_exhibit_stage_chain,
+)
 from sec_nlp.pipelines.vector import VectorConfig
 
 
@@ -145,6 +149,88 @@ class TestExhibitPipeline:
             len(doc.page_content) >= mock_config.min_chunk_chars
             for doc in filtered
         )
+
+    def test_process_symbol_passes_candidate_accessions(
+        self, mock_config: ExhibitConfig, mock_dependencies: None
+    ) -> None:
+        """Candidate-first mode should pass narrowed accession list to extract step."""
+        config = mock_config.model_copy(
+            update={
+                "candidate_first": True,
+                "candidate_fallback_full_scan": False,
+            }
+        )
+        pipeline = ExhibitPipeline(config=config)
+
+        with (
+            patch(
+                "sec_nlp.pipelines.presets.exb.pipeline.build_candidate_accessions",
+                return_value={"0001234567-26-000001"},
+            ) as candidate_mock,
+            patch(
+                "sec_nlp.pipelines.presets.exb.pipeline.collect_exhibit_documents",
+                return_value=([], MagicMock()),
+            ) as collect_mock,
+        ):
+            outputs = pipeline._process_symbol("CAT")
+
+        assert outputs == []
+        assert candidate_mock.called
+        assert collect_mock.call_args.kwargs["allowed_accessions"] == {
+            "0001234567-26-000001"
+        }
+
+    def test_exhibit_stage_chain_preserves_state_identity(
+        self,
+        mock_config: ExhibitConfig,
+        mock_dependencies: None,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Stage chain should mutate one state object in place."""
+        pipeline = ExhibitPipeline(config=mock_config)
+        monkeypatch.setattr(
+            "sec_nlp.pipelines.presets.exb.pipeline.build_candidate_accessions",
+            lambda symbol, config: set(),
+        )
+        monkeypatch.setattr(
+            "sec_nlp.pipelines.presets.exb.pipeline.collect_exhibit_documents",
+            lambda loader,
+            symbol,
+            config,
+            keyword_terms,
+            keyword_categories,
+            adaptive_chunk_size,
+            skip_prefilter,
+            allowed_accessions: (
+                [
+                    Document(
+                        page_content=("exclusive supply agreement " * 30),
+                        metadata={"accession_number": "0001"},
+                    )
+                ],
+                MagicMock(),
+            ),
+        )
+        monkeypatch.setattr(
+            "sec_nlp.pipelines.presets.exb.run_stages.write_exhibit_outputs",
+            lambda symbol, docs, config: [],
+        )
+        monkeypatch.setattr(
+            "sec_nlp.pipelines.presets.exb.run_stages.write_exhibit_summary",
+            lambda symbol, docs, config: [],
+        )
+
+        stage_chain = build_exhibit_stage_chain(pipeline)
+        state = ExhibitRunState(
+            runtime=pipeline,
+            symbol="CAT",
+            include_bridge=True,
+        )
+        final_state = pipeline.run_stage_chain(
+            initial_state=state,
+            stage_chain=stage_chain,
+        )
+        assert id(final_state) == id(state)
 
 
 class TestExhibitContractResult:

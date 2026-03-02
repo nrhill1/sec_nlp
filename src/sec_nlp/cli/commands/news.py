@@ -1,3 +1,4 @@
+# src/sec_nlp/cli/commands/news.py
 """News pipeline CLI command."""
 
 from pydantic import Field
@@ -20,4 +21,5 @@ class News(NewsSettings, BasePipelineCommand):
     )
 
     def _get_header_subtitle(self) -> str:
+        """Build subtitle text for the news command header."""
         return "News Monitoring"

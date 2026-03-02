@@ -83,6 +83,10 @@ from .market import (
     format_market_context,
 )
 from .models import AnalysisInput, AnalysisResult, AnalyzeResult
+from .run_stages import (
+    AnalyzeRunState,
+    build_analyze_stage_chain,
+)
 from .runnables.analysis import AnalyzerRunnable
 from .runnables.efts import EFTSSearchRunnable
 from .runnables.market_correlation import (
@@ -169,6 +173,9 @@ class AnalyzePipeline(BasePipeline):
     _symbol_profiles: dict[str, JsonDict] = PrivateAttr(default_factory=dict)
     _processing_state: ProcessingState | None = PrivateAttr(default=None)
     _phase_start: float = PrivateAttr(default=0.0)
+    _stage_chain: Runnable[AnalyzeRunState, AnalyzeRunState] | None = (
+        PrivateAttr(default=None)
+    )
 
     @classmethod
     def config_model(cls) -> type[AnalyzeConfig]:
@@ -453,6 +460,7 @@ class AnalyzePipeline(BasePipeline):
             # Clear state if fresh mode is enabled
             if self.config.fresh:
                 self._processing_state.clear()
+        self._stage_chain = build_analyze_stage_chain(self)
 
     def run(self) -> AnalyzeResult:
         """Execute the semantic search pipeline."""
@@ -462,6 +470,7 @@ class AnalyzePipeline(BasePipeline):
         prev_handler = signal.getsignal(signal.SIGINT)
 
         def _sigint_handler(signum: int, frame: FrameType | None) -> None:
+            """Handle SIGINT and request graceful pipeline shutdown."""
             if _abort_event.is_set():
                 # Second Ctrl+C — restore previous handler and re-raise.
                 signal.signal(signal.SIGINT, prev_handler)
@@ -670,6 +679,7 @@ class AnalyzePipeline(BasePipeline):
         symbol: str | None,
         label: str | None,
     ) -> None:
+        """Resolve log chunk stats by accession."""
         accession_docs: dict[str | None, list[Document]] = defaultdict(list)
         for doc in docs:
             accession = get_accession_from_metadata(doc.metadata)
@@ -776,108 +786,20 @@ class AnalyzePipeline(BasePipeline):
         phase_task: TaskID | None = None,
         prefetched: PrefetchedSymbolData | None = None,
     ) -> tuple[list[Path], ChunkStats]:
-        """Process a single symbol through the full analysis pipeline."""
-        # Log divider + symbol header
-        logger.info("\n" + "=" * 70)
-        logger.info("Processing symbol: %s", symbol)
-        timings: Timings = {}
-
-        # Phase 1: EFTS discovery and document loading (use prefetched if available)
-        self._update_phase(progress, phase_task, symbol, "Loading")
-        already_preprocessed = False
-        if prefetched is not None:
-            docs = prefetched["docs"]
-            timings.update(prefetched["timings"])
-            already_preprocessed = prefetched["preprocessed"]
-        else:
-            self._loader.add_symbol(symbol)
-            docs, _allowed = self._run_efts_and_load_docs(symbol, timings)
-        if not docs:
-            return [], self._empty_chunk_stats(timings)
-
-        # Phase 2: Preprocessing (skip if already done during prefetch)
-        if not already_preprocessed:
-            self._update_phase(progress, phase_task, symbol, "Preprocessing")
-            docs = self._preprocess_documents(symbol, docs, timings)
-        if not docs:
-            return [], self._empty_chunk_stats(timings)
-
-        # Phase 3: Market enrichment and chunk stats
-        self._update_phase(progress, phase_task, symbol, "Indexing")
-        stats, market_data, market_context = self._enrich_and_index(
-            symbol, docs, timings
-        )
-
-        # Phase 4: Vector search and LLM analysis
-        search_queries = self.config.get_search_queries()
-        analysis_results, docs_for_analysis = self._run_search_and_analysis(
-            symbol,
-            search_queries,
-            timings,
+        """Run a single symbol through the full analysis pipeline."""
+        stage_chain = self.require_stage_chain(self._stage_chain)
+        state = AnalyzeRunState(
+            runtime=self,
+            symbol=symbol,
             progress=progress,
             phase_task=phase_task,
+            prefetched=prefetched,
         )
-        stats["analyzed_count"] = len(analysis_results)
-
-        if not self.config.search.analyze:
-            logger.info(
-                "Analysis disabled for %s (--search.analyze=false); "
-                "exporting search results only",
-                symbol,
-            )
-            timings["total"] = sum(timings.values())
-            return [], stats
-
-        # Phase 5: Post-processing (confidence, correlation)
-        self._update_phase(progress, phase_task, symbol, "Post-processing")
-        relevant_results, market_correlation = self._postprocess_results(
-            symbol, analysis_results, market_data
+        final_state = self.run_stage_chain(
+            initial_state=state,
+            stage_chain=stage_chain,
         )
-
-        # Phase 6: Write outputs
-        self._update_phase(progress, phase_task, symbol, "Writing")
-        output_files = self._write_symbol_outputs(
-            symbol=symbol,
-            docs=docs,
-            analysis_results=analysis_results,
-            relevant_results=relevant_results,
-            search_queries=search_queries,
-            timings=timings,
-            market_data=market_data,
-            market_context=market_context,
-            market_correlation=market_correlation,
-        )
-
-        timings["total"] = sum(timings.values())
-
-        # Mark accessions as processed for incremental mode
-        if self._processing_state is not None and docs:
-            processed_accessions = list(
-                {
-                    get_accession_from_metadata(doc.metadata)
-                    for doc in docs
-                    if get_accession_from_metadata(doc.metadata)
-                }
-            )
-            if processed_accessions:
-                self._processing_state.mark_processed_batch(
-                    symbol=symbol,
-                    accessions=processed_accessions,
-                    run_id=self.config.run_id,
-                    chunk_counts={
-                        acc: len(
-                            [
-                                d
-                                for d in docs
-                                if get_accession_from_metadata(d.metadata)
-                                == acc
-                            ]
-                        )
-                        for acc in processed_accessions
-                    },
-                )
-
-        return output_files, stats
+        return final_state.output_files, final_state.stats
 
     def _run_efts_and_load_docs(
         self,
@@ -985,7 +907,7 @@ class AnalyzePipeline(BasePipeline):
         perform_download: bool,
         timings: Timings,
     ) -> tuple[int | None, bool]:
-        """Handle EFTS auto-download logic."""
+        """Apply EFTS auto-download policy for the current symbol run."""
         limit_per_symbol = efts_utils.cap_efts_download_limit(
             self.config, limit_per_symbol
         )
@@ -1372,7 +1294,13 @@ class AnalyzePipeline(BasePipeline):
         }
 
     @staticmethod
+    def _accession_from_doc(doc: Document) -> str | None:
+        """Return accession number from a document metadata record."""
+        return get_accession_from_metadata(doc.metadata)
+
+    @staticmethod
     def _ensure_filing_dates(docs: list[Document]) -> None:
+        """Ensure filing dates is initialized and available."""
         for doc in docs:
             metadata = dict(doc.metadata or {})
             if metadata.get("filing_date") or metadata.get("acceptance_date"):
@@ -1488,6 +1416,7 @@ class AnalyzePipeline(BasePipeline):
 
     @staticmethod
     def _extract_filing_date_for_macro(docs: list[Document]) -> date | None:
+        """Extract filing date for macro."""
         for doc in docs:
             metadata = doc.metadata or {}
             for key in ("filing_date", "acceptance_date", "filed_date"):
@@ -1501,6 +1430,7 @@ class AnalyzePipeline(BasePipeline):
 
     @staticmethod
     def _combine_contexts(*contexts: str | None) -> str | None:
+        """Resolve combine contexts."""
         parts = [context for context in contexts if context]
         if not parts:
             return None
@@ -1509,6 +1439,7 @@ class AnalyzePipeline(BasePipeline):
     def _update_efts_keywords_from_docs(
         self, symbol: str, docs: list[Document]
     ) -> None:
+        """Update efts keywords from docs."""
         efts_utils.update_efts_keywords_from_docs(
             symbol=symbol,
             docs=docs,

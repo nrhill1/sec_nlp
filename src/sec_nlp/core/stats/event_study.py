@@ -1,3 +1,4 @@
+# src/sec_nlp/core/stats/event_study.py
 """Event study orchestration built on top of the `corr` extension."""
 
 from __future__ import annotations
@@ -47,6 +48,7 @@ class EventStudyResult(BaseModel):
 
 
 def _coerce_event_date(value: str | date | datetime) -> date:
+    """Coerce event date inputs into date objects."""
     if isinstance(value, datetime):
         return value.date()
     if isinstance(value, date):
@@ -55,6 +57,7 @@ def _coerce_event_date(value: str | date | datetime) -> date:
 
 
 def _event_timestamp(event_date: date) -> int:
+    """Convert event date into a timestamp key for alignment."""
     return int(datetime.combine(event_date, time.min, tzinfo=UTC).timestamp())
 
 
@@ -62,6 +65,7 @@ def _align_price_ratio_series(
     symbol_quotes: list[MarketQuote],
     benchmark_quotes: list[MarketQuote],
 ) -> tuple[list[float], list[int], list[float]]:
+    """Align symbol and benchmark price-ratio series by timestamp."""
     by_ts_symbol = {quote.timestamp: quote for quote in symbol_quotes}
     by_ts_benchmark = {quote.timestamp: quote for quote in benchmark_quotes}
 

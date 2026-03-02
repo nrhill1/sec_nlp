@@ -1,3 +1,4 @@
+# src/sec_nlp/core/market.py
 """Market data retrieval helpers backed by the Rust `market` extension."""
 
 from collections import OrderedDict
@@ -7,7 +8,6 @@ from datetime import date, datetime
 from importlib import import_module
 from time import monotonic, sleep
 from types import ModuleType
-from typing import TypeVar
 
 from sec_nlp.core.infra.logger import logger
 from sec_nlp.core.infra.settings import (
@@ -19,7 +19,6 @@ from sec_nlp.core.infra.settings import (
 )
 
 CacheKey = tuple[str, str]
-T = TypeVar("T")
 
 
 class MarketExtensionError(RuntimeError):
@@ -48,6 +47,7 @@ class MarketCacheEntry:
 
 
 def _load_market_module() -> ModuleType:
+    """Load market module."""
     try:
         return import_module("market")
     except Exception as exc:  # pragma: no cover - depends on extension install
@@ -58,6 +58,7 @@ def _load_market_module() -> ModuleType:
 
 
 def _coerce_date(value: date | datetime) -> date:
+    """Coerce user input into a date value when possible."""
     if isinstance(value, datetime):
         return value.date()
     if isinstance(value, date):
@@ -68,6 +69,7 @@ def _coerce_date(value: date | datetime) -> date:
 def _coerce_date_range(
     date_range: Sequence[date | datetime],
 ) -> tuple[date, date]:
+    """Coerce date-range values into timezone-aware date bounds."""
     if len(date_range) != 2:
         raise ValueError("date_range must contain exactly two values")
     start_date = _coerce_date(date_range[0])
@@ -78,6 +80,7 @@ def _coerce_date_range(
 
 
 def _normalize_quote(raw: dict[str, float | int]) -> MarketQuote:
+    """Normalize quote."""
     return MarketQuote(
         timestamp=int(raw["timestamp"]),
         open_price=float(raw["open_price"]),
@@ -102,6 +105,7 @@ class MarketRetriever:
         retry_backoff_seconds: float | None = None,
         retry_backoff_multiplier: float | None = None,
     ) -> None:
+        """Initialize the object."""
         self._market = module or _load_market_module()
         self._cache_ttl_seconds = (
             MARKET_CACHE_TTL_SECONDS
@@ -133,9 +137,11 @@ class MarketRetriever:
         message: str,
         *args: str | int | float | bool | None,
     ) -> None:
+        """Log cache status and market fetch diagnostics."""
         logger.debug(message, *args)
 
     def _cache_enabled(self) -> bool:
+        """Cache enabled."""
         return self._cache_ttl_seconds > 0 and self._cache_max_entries > 0
 
     def _get_cached_quotes(
@@ -143,6 +149,7 @@ class MarketRetriever:
         cache_key: CacheKey,
         now: float,
     ) -> tuple[MarketQuote, ...] | None:
+        """Get cached quotes."""
         if not self._cache_enabled():
             return None
         entry = self._cache.get(cache_key)
@@ -160,6 +167,7 @@ class MarketRetriever:
         now: float,
         quotes: tuple[MarketQuote, ...],
     ) -> None:
+        """Store fetched quotes in the local cache backend."""
         if not self._cache_enabled():
             return
         self._cache[cache_key] = MarketCacheEntry(
@@ -170,11 +178,12 @@ class MarketRetriever:
         while len(self._cache) > self._cache_max_entries:
             self._cache.popitem(last=False)
 
-    def _call_with_retry(
+    def _call_with_retry[T](
         self,
         operation_name: str,
         operation: Callable[[], T],
     ) -> T:
+        """Execute a market-data call with bounded retries."""
         attempt = 0
         delay_seconds = self._retry_backoff_seconds
         while True:
@@ -195,6 +204,7 @@ class MarketRetriever:
         """Fetch the latest close price for a ticker."""
 
         def _fetch() -> float:
+            """Fetch quotes for one ticker in the requested date range."""
             return self._market.fetch_price(ticker)
 
         self._log("fetch_price ticker=%s", ticker)
@@ -209,6 +219,7 @@ class MarketRetriever:
             return {}
 
         def _fetch() -> dict[str, float]:
+            """Fetch quotes for one ticker in the requested date range."""
             return self._market.fetch_prices(list(normalized))
 
         self._log("fetch_prices tickers=%s", ", ".join(normalized))
@@ -232,6 +243,7 @@ class MarketRetriever:
             return list(cached_quotes)
 
         def _fetch() -> list[dict[str, float | int]]:
+            """Fetch quotes for one ticker in the requested date range."""
             return self._market.retrieve_range(ticker, date_range_text)
 
         self._log("retrieve_range ticker=%s range=%s", ticker, date_range_text)

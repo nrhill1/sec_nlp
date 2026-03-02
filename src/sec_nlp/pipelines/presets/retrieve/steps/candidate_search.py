@@ -1,3 +1,4 @@
+# src/sec_nlp/pipelines/presets/retrieve/steps/candidate_search.py
 """EFTS candidate retrieval step."""
 
 from __future__ import annotations
@@ -20,10 +21,12 @@ _TICKER_TOKEN = re.compile(r"^[A-Z][A-Z0-9\.-]{0,9}$")
 
 
 def _date_range(settings: RetrieveSettings) -> tuple[date, date]:
+    """Build a normalized date range tuple for EFTS queries."""
     return settings.date_range
 
 
 def _normalize_symbol(symbol: str | None) -> str | None:
+    """Normalize symbol."""
     if symbol is None:
         return None
     normalized = symbol.strip().upper()
@@ -31,6 +34,7 @@ def _normalize_symbol(symbol: str | None) -> str | None:
 
 
 def _normalize_cik(value: str | None) -> str | None:
+    """Normalize cik."""
     if value is None:
         return None
     digits = "".join(ch for ch in value if ch.isdigit())
@@ -68,6 +72,7 @@ def _scope_queries_for_symbol(
 
 @lru_cache(maxsize=4096)
 def _company_name_tickers(company_name: str) -> frozenset[str]:
+    """Parse candidate ticker symbols from a company name string."""
     if "(" not in company_name:
         return frozenset()
     matches = re.findall(r"\(([^)]+)\)", company_name.upper())
@@ -88,6 +93,7 @@ def _hit_matches_symbol(
     symbol: str,
     symbol_cik: str | None,
 ) -> bool:
+    """Return whether an EFTS hit belongs to the requested symbol."""
     target = symbol.upper()
     hit_tickers = {ticker.strip().upper() for ticker in hit.tickers if ticker}
     if target in hit_tickers:
@@ -111,6 +117,7 @@ def _resolve_symbol_cik(
     symbol: str,
     settings: RetrieveSettings,
 ) -> str | None:
+    """Resolve symbol cik."""
     try:
         cik = get_cik_for_ticker(
             ticker=symbol,
@@ -129,6 +136,7 @@ def _filter_hits_for_symbol(
     symbol: str,
     symbol_cik: str | None,
 ) -> list[EFTSHit]:
+    """Filter hits for symbol."""
     if not symbol.strip():
         return list(hits)
 
@@ -148,6 +156,7 @@ class RetrieveCandidateSearcher:
     """Run-scoped EFTS candidate searcher that reuses client + event loop."""
 
     def __init__(self, settings: RetrieveSettings) -> None:
+        """Initialize the object."""
         self._settings = settings
         self._start_date, self._end_date = _date_range(settings)
         self._client = create_efts_client(
@@ -163,6 +172,7 @@ class RetrieveCandidateSearcher:
         symbol: str | None,
         queries: Sequence[str],
     ) -> list[EFTSBatchResult]:
+        """Execute scoped EFTS searches concurrently for all queries."""
         normalized_symbol = _normalize_symbol(symbol)
         return await self._client.batch_search(
             queries=list(queries),
@@ -174,6 +184,7 @@ class RetrieveCandidateSearcher:
         )
 
     def _resolve_symbol_cik_cached(self, symbol: str) -> str | None:
+        """Resolve symbol cik cached."""
         cached = self._symbol_cik_cache.get(symbol)
         if symbol in self._symbol_cik_cache:
             return cached
@@ -188,6 +199,7 @@ class RetrieveCandidateSearcher:
         queries: Sequence[str],
         batch_results: list[EFTSBatchResult],
     ) -> dict[str, list[EFTSHit]]:
+        """Convert scoped EFTS batch results into ranked candidates."""
         symbol_display = normalized_symbol or "<all>"
         symbol_cik: str | None = None
 
@@ -205,7 +217,7 @@ class RetrieveCandidateSearcher:
             raw_hits = list(result.hits)
             if normalized_symbol is None:
                 candidates[result.query] = raw_hits
-                logger.info(
+                logger.debug(
                     "EFTS hits for %s query=%r: %d",
                     symbol_display,
                     result.query,
@@ -241,7 +253,7 @@ class RetrieveCandidateSearcher:
                     normalized_symbol,
                     result.query,
                 )
-            logger.info(
+            logger.debug(
                 "EFTS hits for %s query=%r: %d",
                 normalized_symbol,
                 result.query,
@@ -250,6 +262,71 @@ class RetrieveCandidateSearcher:
             candidates[result.query] = filtered_hits
 
         return candidates
+
+    @staticmethod
+    def _truncate_query(query: str, *, max_chars: int = 56) -> str:
+        """Truncate query text for compact console summaries."""
+        normalized = " ".join(query.split())
+        if len(normalized) <= max_chars:
+            return normalized
+        return f"{normalized[: max_chars - 1].rstrip()}…"
+
+    @staticmethod
+    def _hit_bar(*, hits: int, max_hits: int, width: int = 10) -> str:
+        """Build a compact fixed-width ASCII bar for per-query hit counts."""
+        if width <= 0 or max_hits <= 0 or hits <= 0:
+            return "." * max(0, width)
+        ratio = min(1.0, hits / max_hits)
+        filled = max(1, int(round(ratio * width)))
+        return ("#" * filled) + ("." * (width - filled))
+
+    @classmethod
+    def _log_query_hit_summary(
+        cls,
+        *,
+        symbol: str,
+        candidates_by_query: dict[str, list[EFTSHit]],
+        max_queries: int = 3,
+    ) -> None:
+        """Emit a compact multi-line summary of EFTS hits per symbol."""
+        total_hits = sum(len(hits) for hits in candidates_by_query.values())
+        query_count = len(candidates_by_query)
+        if query_count == 0:
+            logger.info("EFTS summary for %s: 0 hits across 0 queries", symbol)
+            return
+
+        ranked = sorted(
+            candidates_by_query.items(),
+            key=lambda item: len(item[1]),
+            reverse=True,
+        )
+        snippets: list[str] = []
+        for query, hits in ranked[:max_queries]:
+            snippets.append(
+                f"{len(hits)}:{cls._truncate_query(query, max_chars=44)}"
+            )
+        remaining = max(0, len(ranked) - max_queries)
+        if remaining > 0:
+            snippets.append(f"+{remaining} more")
+
+        logger.info(
+            "EFTS summary for %s: %d hits across %d queries [%s]",
+            symbol,
+            total_hits,
+            query_count,
+            "; ".join(snippets),
+        )
+        max_hits = len(ranked[0][1]) if ranked else 0
+        for idx, (query, hits) in enumerate(ranked[:max_queries], start=1):
+            logger.info(
+                "  %d) %3d |%s| %s",
+                idx,
+                len(hits),
+                cls._hit_bar(hits=len(hits), max_hits=max_hits, width=10),
+                cls._truncate_query(query, max_chars=52),
+            )
+        if remaining > 0:
+            logger.info("  ... +%d additional queries", remaining)
 
     def search(
         self,
@@ -304,12 +381,20 @@ class RetrieveCandidateSearcher:
             batch_results=batch_results,
         )
         if normalized_symbol is None:
+            self._log_query_hit_summary(
+                symbol=symbol_display,
+                candidates_by_query=candidates,
+            )
             return candidates
 
         remapped: dict[str, list[EFTSHit]] = {query: [] for query in queries}
         for scoped_query, hits in candidates.items():
             original_query = reverse_query_map.get(scoped_query, scoped_query)
             remapped[original_query] = hits
+        self._log_query_hit_summary(
+            symbol=normalized_symbol,
+            candidates_by_query=remapped,
+        )
         return remapped
 
     def search_many(
@@ -348,6 +433,7 @@ class RetrieveCandidateSearcher:
             reverse_query_maps[symbol] = reverse_map
 
         async def _search_many_async() -> list[object]:
+            """Execute many scoped EFTS queries concurrently."""
             tasks = [
                 self._batch_search_async(
                     symbol=symbol,
@@ -393,6 +479,10 @@ class RetrieveCandidateSearcher:
             for scoped_query, hits in candidates.items():
                 original_query = reverse_map.get(scoped_query, scoped_query)
                 remapped[original_query] = hits
+            self._log_query_hit_summary(
+                symbol=symbol,
+                candidates_by_query=remapped,
+            )
             results[symbol] = remapped
         return results
 
@@ -402,6 +492,7 @@ class RetrieveCandidateSearcher:
         self._loop.close()
 
     def __enter__(self) -> RetrieveCandidateSearcher:
+        """Enter the candidate search context."""
         return self
 
     def __exit__(
@@ -410,6 +501,7 @@ class RetrieveCandidateSearcher:
         exc: BaseException | None,
         tb: TracebackType | None,
     ) -> None:
+        """Exit the candidate search context and clean up resources."""
         self.close()
 
 

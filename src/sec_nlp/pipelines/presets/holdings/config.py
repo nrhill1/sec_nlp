@@ -1,3 +1,4 @@
+# src/sec_nlp/pipelines/presets/holdings/config.py
 """Config model for holdings pipeline."""
 
 from __future__ import annotations

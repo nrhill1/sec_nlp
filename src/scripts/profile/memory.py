@@ -49,6 +49,8 @@ except ImportError:
 
 
 class MemoryProfileConfig(BaseSettings):
+    """CLI settings for memory profile runs."""
+
     model_config = SettingsConfigDict(
         cli_prog_name="profile_memory",
         cli_enforce_required=False,

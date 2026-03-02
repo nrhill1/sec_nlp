@@ -12,6 +12,8 @@ from sec_nlp.types import JsonObject, JsonValue
 
 
 class RollupWorkItem(TypedDict):
+    """Input row used while building exhibit rollups."""
+
     accession_number: str
     filing_date: str | None
     form_type: str | None
@@ -26,6 +28,8 @@ class RollupWorkItem(TypedDict):
 
 
 class RollupRecord(TypedDict):
+    """Normalized exhibit rollup record emitted to outputs."""
+
     accession_number: str
     filing_date: str | None
     form_type: str | None
@@ -40,6 +44,7 @@ class RollupRecord(TypedDict):
 
 
 def _as_str(value: JsonValue | None) -> str | None:
+    """Coerce str."""
     if value is None:
         return None
     if isinstance(value, bool):
@@ -50,6 +55,7 @@ def _as_str(value: JsonValue | None) -> str | None:
 
 
 def _as_str_list(value: JsonValue | None) -> list[str]:
+    """Coerce str list."""
     if value is None:
         return []
     if isinstance(value, str):
@@ -67,6 +73,7 @@ def _as_str_list(value: JsonValue | None) -> list[str]:
 
 
 def _as_metadata(value: JsonValue | None) -> JsonObject:
+    """Coerce metadata."""
     if isinstance(value, Mapping):
         cleaned: dict[str, JsonValue] = {}
         for key, raw in value.items():

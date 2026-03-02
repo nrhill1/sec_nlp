@@ -1,21 +1,6 @@
 name: quantum_low_chat_preset
 defaults:
   email: you@example.com
-  symbols:
-  - IONQ
-  - RGTI
-  - QBTS
-  - QUBT
-  - IBM
-  - HON
-  forms:
-  - 10-K
-  - 10-Q
-  - 8-K
-  - 6-K
-  - 20-F
-  start_date: '2021-01-01'
-  dry_run: false
 on_failure: stop
 stages:
 - id: chat_answer
@@ -46,3 +31,18 @@ stages:
       vector_size: 384
       qdrant_url: http://localhost:6333
       qdrant_location: null
+    symbols:
+    - IONQ
+    - RGTI
+    - QBTS
+    - QUBT
+    - IBM
+    - HON
+    forms:
+    - 10-K
+    - 10-Q
+    - 8-K
+    - 6-K
+    - 20-F
+    start_date: '2021-01-01'
+    dry_run: false

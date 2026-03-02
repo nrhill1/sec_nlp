@@ -1,3 +1,4 @@
+# src/sec_nlp/pipelines/presets/financials/steps/aggregate.py
 """Aggregation helpers for financial statement facts."""
 
 from __future__ import annotations
@@ -23,6 +24,7 @@ class FinancialDelta:
 def _safe_ratio(
     numerator: float | None, denominator: float | None
 ) -> float | None:
+    """Compute a ratio safely when denominator is non-zero."""
     if numerator is None or denominator is None:
         return None
     if denominator == 0:
@@ -31,12 +33,14 @@ def _safe_ratio(
 
 
 def _choose_value(current: float | None, candidate: float) -> float:
+    """Choose preferred value from candidate numeric fields."""
     if current is None:
         return candidate
     return candidate if abs(candidate) >= abs(current) else current
 
 
 def _period_key(fact: FinancialFact) -> str:
+    """Build a stable key for period-level aggregation."""
     return (
         fact.period_end
         or fact.period_instant
@@ -116,6 +120,7 @@ def aggregate_financials(
 
 
 def _as_float(value: JsonValue) -> float | None:
+    """Coerce numeric values to float when possible."""
     if isinstance(value, bool):
         return None
     if isinstance(value, (int, float)):

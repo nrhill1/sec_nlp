@@ -1,3 +1,4 @@
+# src/sec_nlp/pipelines/presets/events/steps/score.py
 """Compute market-impact metrics for detected events."""
 
 from __future__ import annotations

@@ -1,3 +1,4 @@
+# src/sec_nlp/core/infra/diff.py
 # src/sec_nlp/core/diff.py
 """Diff utilities for comparing SEC filings across periods or companies."""
 

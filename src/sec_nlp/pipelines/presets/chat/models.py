@@ -1,3 +1,4 @@
+# src/sec_nlp/pipelines/presets/chat/models.py
 """Data models for chat pipeline outputs."""
 
 from __future__ import annotations

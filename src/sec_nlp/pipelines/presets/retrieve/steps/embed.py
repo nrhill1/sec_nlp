@@ -1,3 +1,4 @@
+# src/sec_nlp/pipelines/presets/retrieve/steps/embed.py
 """Embedding rerank helpers for retrieve pipeline."""
 
 from __future__ import annotations
@@ -24,11 +25,13 @@ def _cache_key(
     text: str,
     prefix: str,
 ) -> str:
+    """Build a deterministic cache key for embedding text."""
     payload = f"{model_name}|{prefix}|{text}"
     return hashlib.sha1(payload.encode("utf-8")).hexdigest()
 
 
 def _coerce_vector(value) -> list[float] | None:
+    """Coerce embedding payloads into float vectors."""
     if value is None or isinstance(value, (str, bytes, bytearray)):
         return None
     if not isinstance(value, Iterable):
@@ -49,6 +52,7 @@ def _embed_documents(
     settings: RetrieveSettings,
     embedder,
 ) -> list[list[float]]:
+    """Embed document text and attach vectors to metadata."""
     raw_vectors = settings.vdb.batch_embed_documents(
         embedder,
         list(texts),
@@ -64,12 +68,14 @@ def _embed_documents(
 
 
 def _cache_db_path(path: Path) -> Path:
+    """Resolve the sqlite cache path for text embeddings."""
     if path.suffix.casefold() == ".json":
         return path.with_suffix(".sqlite3")
     return path
 
 
 def _open_cache_db(path: Path) -> sqlite3.Connection:
+    """Open the embedding cache database and ensure schema exists."""
     path.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(path)
     conn.execute("PRAGMA journal_mode=WAL")
@@ -93,11 +99,13 @@ def _open_cache_db(path: Path) -> sqlite3.Connection:
 
 
 def _chunked_keys(keys: Sequence[str]) -> Iterator[Sequence[str]]:
+    """Yield cache keys in bounded batches."""
     for idx in range(0, len(keys), _CACHE_BATCH_SIZE):
         yield keys[idx : idx + _CACHE_BATCH_SIZE]
 
 
 def _legacy_json_entries(path: Path) -> dict[str, list[float]]:
+    """Read legacy JSON cache entries for migration."""
     if not path.exists():
         return {}
 
@@ -133,6 +141,7 @@ def _cache_read(
     conn: sqlite3.Connection,
     keys: Sequence[str],
 ) -> dict[str, list[float]]:
+    """Read cached vectors for matching keys."""
     if not keys:
         return {}
 
@@ -157,6 +166,7 @@ def _cache_touch(
     keys: Sequence[str],
     updated_at: int,
 ) -> None:
+    """Update access timestamps for cached embedding rows."""
     if not keys:
         return
     conn.executemany(
@@ -171,6 +181,7 @@ def _cache_upsert(
     entries: dict[str, list[float]],
     updated_at: int,
 ) -> None:
+    """Insert or replace embedding vectors in the cache."""
     if not entries:
         return
     conn.executemany(
@@ -198,6 +209,7 @@ def _cache_prune(
     conn: sqlite3.Connection,
     max_entries: int,
 ) -> None:
+    """Prune least-recently-used cache entries over capacity."""
     if max_entries <= 0:
         return
     row = conn.execute("SELECT COUNT(*) FROM embeddings").fetchone()
@@ -224,6 +236,7 @@ def _migrate_legacy_json_cache(
     conn: sqlite3.Connection,
     legacy_path: Path,
 ) -> None:
+    """Migrate legacy JSON embedding cache data into sqlite."""
     if not legacy_path.exists():
         return
     row = conn.execute("SELECT COUNT(*) FROM embeddings").fetchone()
@@ -251,6 +264,7 @@ def _cached_text_embeddings(
     embedder,
     cache_prefix: str,
 ) -> list[list[float]]:
+    """Embed texts with sqlite-backed caching and deduplication."""
     if not texts:
         return []
 
@@ -365,6 +379,7 @@ def _cosine_similarity(
     left: Sequence[float],
     right: Sequence[float],
 ) -> float:
+    """Compute cosine similarity between two embedding vectors."""
     if not left or not right or len(left) != len(right):
         return 0.0
 

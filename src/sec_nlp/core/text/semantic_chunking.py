@@ -293,6 +293,7 @@ class SemanticChunker:
         return result
 
     def __repr__(self) -> str:
+        """Return a concise debug representation for semantic chunking config."""
         return (
             f"SemanticChunker("
             f"threshold={self._config.similarity_threshold}, "

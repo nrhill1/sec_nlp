@@ -1,3 +1,4 @@
+# src/sec_nlp/cli/commands/events.py
 """Events pipeline CLI command."""
 
 from pydantic import Field
@@ -20,4 +21,5 @@ class Events(EventsSettings, BasePipelineCommand):
     )
 
     def _get_header_subtitle(self) -> str:
+        """Build subtitle text for the events command header."""
         return "Event Timeline"

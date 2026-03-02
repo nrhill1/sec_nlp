@@ -1,3 +1,4 @@
+# tests/cli/test_flow_cli.py
 """Tests for flow CLI wiring and argument handling."""
 
 from __future__ import annotations
@@ -21,7 +22,6 @@ def _write_flow_spec(tmp_path: Path) -> Path:
                 "name: test_flow",
                 "defaults:",
                 "  email: test@example.com",
-                "  symbols: [CDE]",
                 "stages:",
                 "  - id: retrieve_seed",
                 "    pipeline: retrieve",
@@ -30,7 +30,10 @@ def _write_flow_spec(tmp_path: Path) -> Path:
                 "      output_format: json",
                 "  - id: chat_answer",
                 "    pipeline: chat",
-                "    seed_from_stage: retrieve_seed",
+                "    inputs:",
+                "    - from_stage: retrieve_seed",
+                "      artifact: retrieve_seed",
+                "      target_field: seed_context",
                 "    overrides:",
                 "      question: What changed in liquidity risk?",
                 "      interactive: false",

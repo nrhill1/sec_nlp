@@ -46,6 +46,8 @@ from sec_nlp.pipelines.presets.analyze.models import (  # noqa: E402
 
 @dataclass(frozen=True)
 class BenchmarkCase:
+    """Single benchmark scenario and its executable workload."""
+
     name: str
     description: str
     run: Callable[[int], None]
@@ -53,6 +55,8 @@ class BenchmarkCase:
 
 @dataclass(frozen=True)
 class BenchmarkStats:
+    """Aggregate timing and memory metrics for a benchmark case."""
+
     name: str
     iterations: int
     repeats: int
@@ -81,6 +85,7 @@ class BenchmarkStats:
 
 
 def _format_table(headers: list[str], rows: list[list[str]]) -> str:
+    """Format headers and rows as an aligned text table."""
     if not rows:
         return ""
     widths = [len(h) for h in headers]
@@ -89,6 +94,7 @@ def _format_table(headers: list[str], rows: list[list[str]]) -> str:
             widths[idx] = max(widths[idx], len(cell))
 
     def _format_row(values: Iterable[str]) -> str:
+        """Format one table row using precomputed column widths."""
         parts = []
         for idx, value in enumerate(values):
             if idx == 0:
@@ -108,6 +114,7 @@ def _run_case(
     repeats: int,
     warmup: int,
 ) -> BenchmarkStats:
+    """Execute one benchmark case and collect timing statistics."""
     for _ in range(warmup):
         case.run(iterations)
 
@@ -131,6 +138,7 @@ def _run_case(
 
 
 def _random_texts(count: int, length: int, rng: random.Random) -> list[str]:
+    """Generate deterministic random text samples for benchmarks."""
     alphabet = string.ascii_letters + string.digits + " "
     return [
         "".join(rng.choice(alphabet) for _ in range(length))
@@ -139,10 +147,12 @@ def _random_texts(count: int, length: int, rng: random.Random) -> list[str]:
 
 
 def _build_cases(config: BenchmarkConfig) -> list[BenchmarkCase]:
+    """Build cases."""
     rng = random.Random(config.seed)
     texts = _random_texts(config.iterations, config.text_size, rng)
 
     def _run_simhash(iterations: int) -> None:
+        """Run SimHash dedupe microbenchmark for configured iterations."""
         deduper = SimHashDeduplicator(
             config=SimHashConfig(
                 num_bits=config.simhash_bits,
@@ -153,6 +163,7 @@ def _build_cases(config: BenchmarkConfig) -> list[BenchmarkCase]:
             deduper.add_if_unique(text)
 
     def _run_keyword_score(iterations: int) -> None:
+        """Run keyword-scoring microbenchmark for configured iterations."""
         specs = [
             KeywordSpec("warranty", 2, 1.5),
             KeywordSpec("recall", 2, 1.2),
@@ -165,6 +176,7 @@ def _build_cases(config: BenchmarkConfig) -> list[BenchmarkCase]:
             KeywordMatcher.score_keywords(text, specs)
 
     def _run_validation_result(iterations: int) -> None:
+        """Run validation-model construction benchmark iterations."""
         for i in range(iterations):
             ValidationResult(
                 passed=True,
@@ -175,6 +187,7 @@ def _build_cases(config: BenchmarkConfig) -> list[BenchmarkCase]:
             )
 
     def _run_analysis_output(iterations: int) -> None:
+        """Run analysis-output model construction benchmark iterations."""
         for _i in range(iterations):
             AnalysisOutput(
                 symbol="AAPL",
@@ -250,6 +263,7 @@ def _select_cases(
     cases: list[BenchmarkCase],
     selected: list[str],
 ) -> list[BenchmarkCase]:
+    """Select cases."""
     if not selected or "all" in selected:
         return cases
     selected_set = {s.strip() for s in selected}
@@ -257,6 +271,7 @@ def _select_cases(
 
 
 def _print_results(stats: list[BenchmarkStats]) -> None:
+    """Log formatted benchmark results."""
     if not stats:
         logger.info("No benchmarks selected.")
         return
@@ -291,6 +306,8 @@ def _print_results(stats: list[BenchmarkStats]) -> None:
 
 
 class BenchmarkConfig(BaseSettings):
+    """CLI settings for benchmark profile runs."""
+
     model_config = SettingsConfigDict(
         cli_prog_name="bench",
         cli_exit_on_error=True,
@@ -375,6 +392,7 @@ class BenchmarkConfig(BaseSettings):
 
 
 def main() -> None:
+    """Run the command-line entrypoint."""
     CliApp.run(BenchmarkConfig)
 
 

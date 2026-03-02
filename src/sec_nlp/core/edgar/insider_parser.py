@@ -14,6 +14,7 @@ from sec_nlp.types import JsonDict, JsonValue
 
 
 def _local_tag(tag: JsonValue) -> JsonValue:
+    """Return an element tag name without namespace prefixes."""
     if isinstance(tag, str):
         if "}" in tag:
             return tag.split("}", 1)[1]
@@ -24,6 +25,7 @@ def _local_tag(tag: JsonValue) -> JsonValue:
 
 
 def _normalize_text(value: JsonValue) -> JsonValue:
+    """Normalize text."""
     if isinstance(value, str):
         stripped = value.strip()
         if stripped:
@@ -35,6 +37,7 @@ def _normalize_text(value: JsonValue) -> JsonValue:
 def _find_child(
     parent: ElementTree.Element, name: JsonValue
 ) -> ElementTree.Element | None:
+    """Find child."""
     target = _local_tag(name)
     for child in list(parent):
         if _local_tag(child.tag) == target:
@@ -45,6 +48,7 @@ def _find_child(
 def _find_children(
     parent: ElementTree.Element, name: JsonValue
 ) -> list[ElementTree.Element]:
+    """Find children."""
     target = _local_tag(name)
     matches: list[ElementTree.Element] = []
     for child in list(parent):
@@ -54,6 +58,7 @@ def _find_children(
 
 
 def _find_text(parent: ElementTree.Element, name: JsonValue) -> JsonValue:
+    """Find text."""
     child = _find_child(parent, name)
     if child is None or child.text is None:
         return None
@@ -63,6 +68,7 @@ def _find_text(parent: ElementTree.Element, name: JsonValue) -> JsonValue:
 def _find_path_text(
     parent: ElementTree.Element, *names: JsonValue
 ) -> JsonValue:
+    """Find path text."""
     node = parent
     for name in names:
         next_node = _find_child(node, name)
@@ -75,6 +81,7 @@ def _find_path_text(
 
 
 def _parse_number(value: JsonValue) -> JsonValue:
+    """Parse number."""
     if isinstance(value, (int, float)):
         return value
     if isinstance(value, str):
@@ -94,6 +101,7 @@ def _parse_number(value: JsonValue) -> JsonValue:
 
 
 def _parse_bool(value: JsonValue) -> bool | None:
+    """Parse bool."""
     if isinstance(value, bool):
         return value
     if isinstance(value, int):
@@ -108,6 +116,7 @@ def _parse_bool(value: JsonValue) -> bool | None:
 
 
 def _extract_node_text(node: ElementTree.Element) -> JsonValue:
+    """Extract node text."""
     text = "".join(node.itertext()).strip()
     if not text:
         return None
@@ -115,6 +124,7 @@ def _extract_node_text(node: ElementTree.Element) -> JsonValue:
 
 
 def _extract_ownership_xml(text: JsonValue) -> JsonValue:
+    """Extract ownership xml."""
     if not isinstance(text, str):
         return None
     start = text.find("<ownershipDocument")
@@ -129,6 +139,7 @@ def _extract_ownership_xml(text: JsonValue) -> JsonValue:
 def _find_ownership_root(
     root: ElementTree.Element,
 ) -> ElementTree.Element | None:
+    """Find ownership root."""
     if _local_tag(root.tag) == "ownershipDocument":
         return root
     for node in root.iter():
@@ -138,6 +149,7 @@ def _find_ownership_root(
 
 
 def _collect_footnotes(root: ElementTree.Element) -> JsonDict:
+    """Collect footnotes."""
     footnotes_node = _find_child(root, "footnotes")
     if footnotes_node is None:
         return {}
@@ -155,6 +167,7 @@ def _collect_footnotes(root: ElementTree.Element) -> JsonDict:
 
 
 def _collect_footnote_ids(entry: ElementTree.Element) -> list[JsonValue]:
+    """Collect footnote ids."""
     footnote_ids: list[JsonValue] = []
     seen: set[JsonValue] = set()
     for node in entry.iter():
@@ -169,6 +182,7 @@ def _collect_footnote_ids(entry: ElementTree.Element) -> list[JsonValue]:
 
 
 def _classify_transaction_type(code: JsonValue) -> JsonValue:
+    """Classify insider transaction codes into normalized transaction types."""
     if not isinstance(code, str):
         return None
     normalized = code.strip().upper()
@@ -180,6 +194,7 @@ def _classify_transaction_type(code: JsonValue) -> JsonValue:
 
 
 def _parse_reporting_owner(owner: ElementTree.Element) -> JsonDict:
+    """Parse reporting owner."""
     data: JsonDict = {}
     owner_id = _find_child(owner, "reportingOwnerId")
     if owner_id is not None:
@@ -236,6 +251,7 @@ def _parse_reporting_owner(owner: ElementTree.Element) -> JsonDict:
 
 
 def _parse_document_metadata(root: ElementTree.Element) -> JsonDict:
+    """Parse document metadata."""
     doc_meta: JsonDict = {}
     document_type = _find_text(root, "documentType")
     if document_type is not None:
@@ -294,6 +310,7 @@ def _parse_entry(
     footnotes: JsonDict,
     sequence: int,
 ) -> JsonDict:
+    """Parse entry."""
     data: JsonDict = {
         "entry_type": entry_kind,
         "derivative": derivative,
@@ -410,6 +427,7 @@ def _parse_entry(
 
 
 def _parse_ownership_document(xml_text: JsonValue) -> list[JsonDict]:
+    """Parse ownership document."""
     if not isinstance(xml_text, str):
         return []
     text = xml_text.strip()
@@ -467,6 +485,7 @@ def _parse_ownership_document(xml_text: JsonValue) -> list[JsonDict]:
 
 
 def _format_entry(entry: JsonDict) -> JsonValue:
+    """Format entry."""
     parts: list[JsonValue] = []
     security_title = entry.get("security_title")
     if isinstance(security_title, str):
@@ -493,6 +512,7 @@ def _format_entry(entry: JsonDict) -> JsonValue:
 
 
 def _extract_symbol(accession_dir: Path) -> JsonValue:
+    """Extract symbol."""
     parts = accession_dir.parts
     if "sec-edgar-filings" in parts:
         idx = parts.index("sec-edgar-filings")
@@ -502,6 +522,7 @@ def _extract_symbol(accession_dir: Path) -> JsonValue:
 
 
 def _extract_form_type(accession_dir: Path) -> JsonValue:
+    """Extract form type."""
     parent = accession_dir.parent
     if parent.name:
         return parent.name
@@ -546,6 +567,7 @@ class InsiderParser:
 
     def _build_base_metadata(self, accession_dir: Path) -> JsonDict:
         # Local import avoids ingest/loader circular imports at module load.
+        """Build base metadata."""
         from sec_nlp.core.ingest import filings
 
         filing_date = filings.get_filing_date_from_dir(accession_dir)
@@ -558,6 +580,7 @@ class InsiderParser:
         }
 
     def _parse_xml_file(self, xml_file: Path) -> list[JsonDict]:
+        """Parse xml file."""
         try:
             xml_text = xml_file.read_text(errors="ignore")
         except OSError as exc:

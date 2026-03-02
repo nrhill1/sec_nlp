@@ -26,6 +26,7 @@ class VectorIndexer:
         vector_store: QdrantVectorStore | None,
         deduplicator: SimHashDeduplicator,
     ) -> None:
+        """Initialize vector-index manager with configured vector store backend."""
         self.config = config
         self.vector_store = vector_store
         self.deduplicator = deduplicator

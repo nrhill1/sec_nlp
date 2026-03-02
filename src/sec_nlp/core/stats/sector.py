@@ -1,3 +1,4 @@
+# src/sec_nlp/core/stats/sector.py
 """Sector-level correlation helpers built on top of core stats wrappers."""
 
 from __future__ import annotations
@@ -27,6 +28,7 @@ class MarketRangeRetriever(Protocol):
 
 
 def _coerce_as_of(value: date | datetime | None) -> date:
+    """Coerce as of."""
     if value is None:
         return datetime.now(UTC).date()
     if isinstance(value, datetime):
@@ -38,6 +40,7 @@ def _resolve_sic(
     symbol: str,
     symbol_to_sic: Mapping[str, str] | Callable[[str], str | None] | None,
 ) -> str:
+    """Resolve sic."""
     if symbol_to_sic is None:
         return "UNKNOWN"
     if isinstance(symbol_to_sic, Mapping):
@@ -63,6 +66,7 @@ def _resolve_sic(
 def _extract_returns(
     quotes: Sequence[MarketQuote],
 ) -> tuple[dict[int, float], list[float]]:
+    """Extract returns."""
     ordered = sorted(quotes, key=lambda quote: quote.timestamp)
     closes = [quote.close for quote in ordered]
     if len(closes) < 2:
@@ -84,6 +88,7 @@ def _extract_returns(
 
 
 def _simple_returns_fallback(closes: Sequence[float]) -> list[float]:
+    """Resolve simple returns fallback."""
     if len(closes) < 2:
         return []
     output: list[float] = []
@@ -95,6 +100,7 @@ def _simple_returns_fallback(closes: Sequence[float]) -> list[float]:
 
 
 def _pearson_fallback(x: Sequence[float], y: Sequence[float]) -> float | None:
+    """Resolve pearson fallback."""
     if len(x) != len(y) or len(x) < 2:
         return None
     mean_x = sum(x) / len(x)
@@ -119,6 +125,7 @@ def _pairwise_correlation(
     left: dict[int, float],
     right: dict[int, float],
 ) -> float | None:
+    """Resolve pairwise correlation."""
     common_timestamps = sorted(set(left) & set(right))
     if len(common_timestamps) < 2:
         return None

@@ -1,3 +1,4 @@
+# tests/core/test_market_analytics.py
 """Tests for derived market analytics service."""
 
 from __future__ import annotations

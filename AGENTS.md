@@ -41,22 +41,22 @@ When fixing type errors, writing any new code, or modifying existing code:
 9. For Pydantic `model_config`, use `frozen=True` and `extra="forbid"` or `"ignore"` whenever possible.
 10. For Pydantic, never use `SkipValidation`.
 11. Do not create new `Protocol` types.
-12. Do not use reserved Python keywords or function names for any variables, keys, or class names.
-13. Type annotations and aliases should follow guidelines for Python v3.13.9.
+12. Do not use reserved Python keywords or function names for any variable, key, or class names.
+13. Type annotations, generics, and aliases should follow guidelines for Python v3.13.9.
 14. Use the `type` statement for type aliases (e.g. `type JsonDict = dict[str, JsonValue]`).
 15. Import from `collections.abc` (not `typing`) for `Sequence`, `Mapping`, `Callable`, etc.
 16. Use `from __future__ import annotations` only when needed for forward references.
 
 ### File Headers
 
-Every Python source file should start with a module docstring. Files under `src/` and `tests/` may optionally include a path comment before the docstring:
+Every Python source file (including all `__init__.py` files and tests) must start with a repo-relative path comment followed by a module docstring:
 
 ```python
 # src/sec_nlp/pipelines/utils.py
 """Utility functions for pipelines."""
 ```
 
-The path comment, when present, uses the repo-relative path.
+The path comment must use the exact repo-relative path of the file.
 
 ### Pydantic Models
 
@@ -167,6 +167,5 @@ When modifying pipelines or adding features:
 
 ## Commits
 
-- Include `Co-Authored-By: Warp <agent@warp.dev>` at the end of every commit message.
 - Use concise, imperative commit messages (e.g. `"Fix confidence calibration double-penalty"`).
 - Do not commit unless explicitly asked to.

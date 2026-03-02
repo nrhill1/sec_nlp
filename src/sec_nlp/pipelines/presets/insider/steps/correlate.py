@@ -1,3 +1,4 @@
+# src/sec_nlp/pipelines/presets/insider/steps/correlate.py
 """Correlation and alert heuristics for insider transaction data."""
 
 from __future__ import annotations
@@ -31,6 +32,7 @@ class MaterialFilingEvent:
 
 
 def _parse_iso_date(value: str | None) -> date | None:
+    """Parse iso date."""
     if value is None:
         return None
     try:
@@ -40,6 +42,7 @@ def _parse_iso_date(value: str | None) -> date | None:
 
 
 def _owner_name(transaction: InsiderTransaction) -> str:
+    """Normalize owner names for grouping and alerting."""
     if transaction.owner_name:
         return transaction.owner_name
     if transaction.owner_cik is not None:
@@ -48,6 +51,7 @@ def _owner_name(transaction: InsiderTransaction) -> str:
 
 
 def _owner_key(transaction: InsiderTransaction) -> str:
+    """Build a stable owner key for clustering activity."""
     if transaction.owner_cik is not None:
         return str(transaction.owner_cik)
     if transaction.owner_name:
@@ -56,6 +60,7 @@ def _owner_key(transaction: InsiderTransaction) -> str:
 
 
 def _effective_date_range(settings: InsiderSettings) -> tuple[date, date]:
+    """Resolve effective date bounds for market-correlation windows."""
     end_date = settings.end_date or date.today()
     start_date = settings.start_date or (
         end_date - timedelta(days=30 * settings.lookback_months)
@@ -66,6 +71,7 @@ def _effective_date_range(settings: InsiderSettings) -> tuple[date, date]:
 def _collect_material_filing_events(
     *, symbol: str, settings: InsiderSettings
 ) -> list[MaterialFilingEvent]:
+    """Collect material filing events."""
     from sec_edgar_downloader import Downloader
 
     normalized_symbol = symbol.strip().upper()
@@ -129,6 +135,7 @@ def _collect_material_filing_events(
 def _fallback_car(
     symbol_closes: list[float], benchmark_closes: list[float]
 ) -> float | None:
+    """Compute fallback cumulative abnormal return when event study is unavailable."""
     if len(symbol_closes) < 2 or len(benchmark_closes) < 2:
         return None
     first_symbol = symbol_closes[0]
@@ -141,6 +148,7 @@ def _fallback_car(
 
 
 def _fallback_volume_spike(volumes: list[float]) -> float | None:
+    """Compute fallback volume spike metrics from quote windows."""
     if not volumes:
         return None
     avg_volume = sum(volumes) / len(volumes)
@@ -155,6 +163,7 @@ def _market_window_metrics(
     event_date: date,
     window_days: int,
 ) -> tuple[float | None, float | None]:
+    """Compute market-window metrics for insider filing events."""
     retriever = create_market_retriever()
     start_date = event_date - timedelta(days=window_days)
     end_date = event_date + timedelta(days=window_days)
@@ -197,6 +206,7 @@ def _large_trade_alerts(
     transactions: list[InsiderTransaction],
     threshold_shares: float,
 ) -> list[InsiderAlert]:
+    """Generate alerts for unusually large insider trades."""
     alerts: list[InsiderAlert] = []
     for transaction in transactions:
         shares = transaction.transaction_shares
@@ -230,6 +240,7 @@ def _cluster_alerts(
     clusters: list[TradeCluster],
     threshold: int,
 ) -> list[InsiderAlert]:
+    """Generate alerts for clustered insider activity."""
     alerts: list[InsiderAlert] = []
     for cluster in clusters:
         severity = (
@@ -261,6 +272,7 @@ def _pre_filing_sell_alerts(
     material_filings: list[MaterialFilingEvent],
     alert_window_days: int,
 ) -> list[InsiderAlert]:
+    """Generate alerts for sell activity before filing dates."""
     dated_transactions: list[tuple[date, InsiderTransaction]] = []
     for transaction in transactions:
         tx_date = _parse_iso_date(transaction.transaction_date)
@@ -319,6 +331,7 @@ def _market_move_alerts(
     transactions: list[InsiderTransaction],
     alert_window_days: int,
 ) -> tuple[list[InsiderAlert], int]:
+    """Generate alerts for significant post-filing market moves."""
     by_date: dict[date, list[InsiderTransaction]] = {}
     for transaction in transactions:
         tx_date = _parse_iso_date(transaction.transaction_date)
@@ -388,6 +401,7 @@ def _market_move_alerts(
 
 
 def _dedupe_alerts(alerts: list[InsiderAlert]) -> list[InsiderAlert]:
+    """Deduplicate alerts while preserving highest-severity entries."""
     deduped: list[InsiderAlert] = []
     seen: set[tuple[str, str, str | None, tuple[str, ...]]] = set()
 

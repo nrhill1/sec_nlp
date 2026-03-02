@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Mapping
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TextIO
@@ -15,6 +16,15 @@ from pydantic import BaseModel
 from sec_nlp.pipelines.serialization import serialize_payload
 from sec_nlp.pipelines.utils import safe_filename
 from sec_nlp.types import JsonValue
+
+
+@dataclass(frozen=True, slots=True)
+class RunOutputContext:
+    """Computed run-header fields reused across per-symbol output writers."""
+
+    base_stem: str
+    run_header: dict[str, JsonValue]
+    run_short_id: int | None
 
 
 def format_accession(accession: str | None) -> str:
@@ -73,6 +83,31 @@ def build_run_header_fields(
         if short_id is not None
         else run_id_text,
     }
+
+
+def build_run_output_context(
+    *,
+    symbol: str,
+    suffix: str,
+    run_timestamp: datetime,
+    run_id: UUID,
+    run_short_id: int | None,
+) -> RunOutputContext:
+    """Build output filename stem + run header + normalized short ID."""
+    run_header = build_run_header_fields(
+        run_timestamp=run_timestamp,
+        run_id=run_id,
+        run_short_id=run_short_id,
+    )
+    raw_short_id = run_header.get("run_short_id")
+    normalized_short_id = (
+        raw_short_id if isinstance(raw_short_id, int) else None
+    )
+    return RunOutputContext(
+        base_stem=build_run_file_stem(symbol, suffix, run_id),
+        run_header=run_header,
+        run_short_id=normalized_short_id,
+    )
 
 
 def write_csv_metadata_comments(

@@ -1,3 +1,4 @@
+# src/sec_nlp/pipelines/presets/analyze/io/formats/market_correlation.py
 """Market correlation output formatting helpers."""
 
 from __future__ import annotations
@@ -24,6 +25,7 @@ def _select_quotes_for_window(
     start: date,
     end: date,
 ) -> list[MarketQuoteSummary]:
+    """Select quotes for window."""
     return [
         quote
         for quote in quotes
@@ -34,6 +36,7 @@ def _select_quotes_for_window(
 def _compute_cumulative_return(
     quotes: list[MarketQuoteSummary],
 ) -> float | None:
+    """Compute cumulative return."""
     closes = [quote.average_close for quote in quotes]
     if len(closes) < 2:
         return None
@@ -49,6 +52,7 @@ def _compute_cumulative_return(
 def _compute_returns(
     quotes: list[MarketQuoteSummary],
 ) -> list[float]:
+    """Compute returns."""
     closes = [quote.average_close for quote in quotes]
     if len(closes) < 2:
         return []
@@ -66,6 +70,7 @@ def _compute_returns(
 def _compute_volatility(
     returns: list[float],
 ) -> float | None:
+    """Compute volatility."""
     if len(returns) < 2:
         return None
     try:
@@ -79,6 +84,7 @@ def _compute_volatility(
 def _compute_volume_spike(
     quotes: list[MarketQuoteSummary],
 ) -> float | None:
+    """Compute volume spike."""
     volumes = [quote.average_volume for quote in quotes]
     if not volumes:
         return None
@@ -94,6 +100,7 @@ def _compute_volume_spike(
 def _compute_net_sentiment(
     results: list[AnalysisResultDict],
 ) -> float | None:
+    """Compute net sentiment."""
     if not results:
         return None
     score_map = {
@@ -118,6 +125,7 @@ def build_market_correlation(
     market_data: MarketEnrichment | None,
     results: list[AnalysisResultDict],
 ) -> JsonDict | None:
+    """Build market-correlation analytics for an analysis result set."""
     if market_data is None or not market_data.quotes:
         return None
 
@@ -179,6 +187,7 @@ def build_market_correlation(
     }
 
     def _round_value(value: float | None) -> float | None:
+        """Round numeric values with consistent market-correlation precision."""
         return round_score(value)
 
     metrics = {

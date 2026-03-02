@@ -1,3 +1,4 @@
+# src/sec_nlp/core/edgar/xbrl_facts.py
 """Thin wrapper around the Rust `xbrl` extension."""
 
 from __future__ import annotations
@@ -38,6 +39,7 @@ class XbrlFact(BaseModel):
 
 @lru_cache(maxsize=1)
 def _load_xbrl_module() -> ModuleType:
+    """Load the optional native XBRL extension module."""
     try:
         return import_module("xbrl")
     except Exception as exc:  # pragma: no cover - depends on extension install
@@ -48,12 +50,14 @@ def _load_xbrl_module() -> ModuleType:
 
 
 def _field(raw_fact, name: str):
+    """Read a string-key field from a mapping payload."""
     if isinstance(raw_fact, Mapping):
         return raw_fact.get(name)
     return getattr(raw_fact, name, None)
 
 
 def _coerce_str(value) -> str | None:
+    """Coerce scalar values to strings when possible."""
     if value is None:
         return None
     if isinstance(value, str):
@@ -63,6 +67,7 @@ def _coerce_str(value) -> str | None:
 
 
 def _coerce_float(value) -> float | None:
+    """Coerce scalar values to floats when possible."""
     if isinstance(value, bool) or value is None:
         return None
     if isinstance(value, (int, float)):
@@ -79,6 +84,7 @@ def _coerce_float(value) -> float | None:
 
 
 def _coerce_int(value) -> int | None:
+    """Coerce scalar values to integers when possible."""
     if isinstance(value, bool) or value is None:
         return None
     if isinstance(value, int):
@@ -97,6 +103,7 @@ def _coerce_int(value) -> int | None:
 
 
 def _to_fact(raw_fact) -> XbrlFact:
+    """Convert one native fact payload to a typed XBRLFact model."""
     tag = _coerce_str(_field(raw_fact, "tag")) or ""
     namespace = _coerce_str(_field(raw_fact, "namespace")) or ""
     local_name = _coerce_str(_field(raw_fact, "local_name")) or ""
@@ -124,6 +131,7 @@ def _to_fact(raw_fact) -> XbrlFact:
 
 
 def _to_facts(raw_facts: list) -> list[XbrlFact]:
+    """Convert native fact payloads to typed XBRLFact models."""
     return [_to_fact(raw_fact) for raw_fact in raw_facts]
 
 
@@ -131,6 +139,7 @@ class XbrlParser:
     """Adapter around the native `xbrl.PyXbrlParser` class."""
 
     def __init__(self, module: ModuleType | None = None) -> None:
+        """Initialize the XBRL parser wrapper with an optional native handle."""
         self._module = module or _load_xbrl_module()
         self._parser = self._module.PyXbrlParser()
 

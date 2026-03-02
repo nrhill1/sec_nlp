@@ -5,11 +5,9 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Callable, Coroutine
-from typing import Literal, TypeVar
+from typing import Literal
 
 from sec_nlp.core.infra.logger import logger
-
-T = TypeVar("T")
 
 type AsyncMode = Literal["sync", "async", "auto"]
 
@@ -76,7 +74,7 @@ class AsyncPipelineRunner:
         return num_symbols >= 3 or num_files >= 10
 
     @staticmethod
-    async def gather_with_semaphore(
+    async def gather_with_semaphore[T](
         semaphore: asyncio.Semaphore,
         coros: list[Coroutine[None, None, T]],
         *,
@@ -136,7 +134,7 @@ class AsyncPipelineRunner:
         ]
 
     @staticmethod
-    def run_async_in_new_loop(coro: Coroutine[None, None, T]) -> T:
+    def run_async_in_new_loop[T](coro: Coroutine[None, None, T]) -> T:
         """Run an async coroutine in a new event loop.
 
         This is useful for calling async code from sync contexts
@@ -171,7 +169,11 @@ class AsyncPipelineRunner:
             loop.close()
 
     @staticmethod
-    async def to_thread(func: Callable[..., T], *args: T, **kwargs: T) -> T:
+    async def to_thread[T](
+        func: Callable[..., T],
+        *args: T,
+        **kwargs: T,
+    ) -> T:
         """Run a sync function in a thread pool.
 
         This is a thin wrapper around asyncio.to_thread for
@@ -216,7 +218,7 @@ class AsyncSymbolProcessor:
         self._completed = 0
         self._total = 0
 
-    async def process_symbols(
+    async def process_symbols[T](
         self,
         symbols: list[str],
         process_func: Callable[[str], Coroutine[None, None, T]],

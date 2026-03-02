@@ -403,6 +403,7 @@ PRESET_CONFIGS: dict[AnalyzePreset, ConfigData] = {
 
 
 def _is_config_object(value: ConfigValue) -> TypeGuard[ConfigObject]:
+    """Return whether a preset value is a config-like object."""
     if not isinstance(value, Mapping):
         return False
     return all(isinstance(key, str) for key in value)

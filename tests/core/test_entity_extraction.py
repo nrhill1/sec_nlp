@@ -1,3 +1,4 @@
+# tests/core/test_entity_extraction.py
 """Tests for the entity extraction wrapper module."""
 
 from __future__ import annotations

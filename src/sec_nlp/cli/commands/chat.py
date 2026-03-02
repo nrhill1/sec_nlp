@@ -1,3 +1,4 @@
+# src/sec_nlp/cli/commands/chat.py
 """CLI command for RAG chat over indexed filings."""
 
 from __future__ import annotations
@@ -35,9 +36,11 @@ class Chat(ChatSettings, BasePipelineCommand):
     )
 
     def _get_header_subtitle(self) -> str:
+        """Build subtitle text for the chat command header."""
         return "RAG Chat"
 
     def _log_pipeline_run_details(self) -> None:
+        """Log run configuration details before executing chat."""
         collections = [name for name in self.collections if name.strip()]
         if collections:
             logger.info(format_key_value("Collections", ", ".join(collections)))
@@ -78,6 +81,7 @@ class Chat(ChatSettings, BasePipelineCommand):
         self._run_interactive_chat()
 
     def _run_interactive_chat(self) -> None:
+        """Run interactive chat loop and stream model responses."""
         logger.info(
             color_text(
                 "Starting chat session. Type '/exit' to finish.",
@@ -154,6 +158,7 @@ class Chat(ChatSettings, BasePipelineCommand):
                 )
 
     def _handle_result(self, result: BasePipelineResult) -> None:
+        """Render chat result output and transcript artifacts."""
         if not isinstance(result, ChatResult):
             super()._handle_result(result)
             return

@@ -28,6 +28,7 @@ class PipelineProfiler(AbstractContextManager):
         output_root: Path | None = None,
         tracemalloc_frames: int = 8,
     ) -> None:
+        """Initialize profiler state for one pipeline run."""
         self.pipeline_name = pipeline_name
         self.run_id = (
             str(run_id)
@@ -58,6 +59,7 @@ class PipelineProfiler(AbstractContextManager):
 
     # Context manager protocol -------------------------------------------------
     def __enter__(self) -> PipelineProfiler:
+        """Enter profiler context and start timing/memory collection."""
         self._cpu_profiler = Profiler(
             output_file=self.profile_path, print_stats=True, top_n=30
         )
@@ -73,6 +75,7 @@ class PipelineProfiler(AbstractContextManager):
         tb: TracebackType | None,
     ) -> None:
         # Always attempt to capture ending stats even if an exception is raised
+        """Finalize profiler metrics and emit summary output."""
         self.sample_memory()
         if self._cpu_profiler:
             self._cpu_profiler.__exit__(exc_type, exc, tb)
@@ -105,6 +108,7 @@ class PipelineProfiler(AbstractContextManager):
 
     # Tracemalloc --------------------------------------------------------------
     def _start_tracemalloc(self) -> None:
+        """Start tracemalloc when memory profiling is enabled."""
         if self.tracemalloc_frames <= 0:
             return
 
@@ -115,6 +119,7 @@ class PipelineProfiler(AbstractContextManager):
             logger.debug("Failed to start tracemalloc: %s", exc)
 
     def _finalize_tracemalloc(self) -> None:
+        """Collect tracemalloc metrics and peak-memory stats."""
         if not self._tracemalloc_started or not tracemalloc.is_tracing():
             return
 
@@ -159,6 +164,7 @@ class PipelineProfiler(AbstractContextManager):
         return {k: v for k, v in data.items() if v is not None}
 
     def _log_summary(self) -> None:
+        """Log profiling summary metrics for the completed run."""
         meta = self.to_metadata()
         if not meta:
             return

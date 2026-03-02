@@ -1,3 +1,4 @@
+# src/sec_nlp/pipelines/presets/analyze/market.py
 """Optional market enrichment helpers for the analyze pipeline."""
 
 from __future__ import annotations
@@ -223,6 +224,7 @@ def _derive_date_range(
     docs: Sequence[Document],
     fallback: tuple[date, date],
 ) -> tuple[date, date]:
+    """Derive effective market-date bounds from filing metadata and config."""
     candidates: list[date] = []
     for doc in docs:
         metadata = doc.metadata or {}
@@ -239,6 +241,7 @@ def _derive_date_range(
 
 
 def _metadata_sources(metadata: JsonDict) -> Iterable[JsonDict]:
+    """Collect candidate metadata maps for date extraction."""
     yield metadata
     source = metadata.get("source_metadata")
     if isinstance(source, dict):
@@ -246,6 +249,7 @@ def _metadata_sources(metadata: JsonDict) -> Iterable[JsonDict]:
 
 
 def _parse_date_value(value: JsonValue) -> date | None:
+    """Parse supported date-like values into date objects."""
     if value is None:
         return None
     if isinstance(value, date):
@@ -283,6 +287,7 @@ def _parse_date_value(value: JsonValue) -> date | None:
 
 
 def _extract_filing_date(docs: Sequence[Document]) -> date | None:
+    """Extract filing date from result metadata sources."""
     for doc in docs:
         metadata = doc.metadata or {}
         for data in _metadata_sources(metadata):
@@ -294,6 +299,7 @@ def _extract_filing_date(docs: Sequence[Document]) -> date | None:
 
 
 def _extend_window(start: date, end: date) -> tuple[date, date]:
+    """Expand a date window by configured pre/post padding days."""
     limit_min = date(1970, 1, 1)
     limit_max = datetime.now(UTC).date()
     window_start = max(start - _WINDOW_DELTA, limit_min)
@@ -307,6 +313,7 @@ def _aggregate_quotes(
     quotes: list[MarketQuote],
     granularity: MarketGranularity,
 ) -> list[MarketQuoteSummary]:
+    """Aggregate quote rows by day for windowed metrics."""
     groups: dict[tuple[int, ...], list[MarketQuote]] = {}
     for quote in quotes:
         bucket_key = _bucket_key(granularity, quote.timestamp)
@@ -356,6 +363,7 @@ def _aggregate_quotes(
 def _bucket_key(
     granularity: MarketGranularity, timestamp: int
 ) -> tuple[int, ...]:
+    """Build a deterministic bucket key for grouped quote rows."""
     dt = datetime.fromtimestamp(timestamp, UTC)
     if granularity == MarketGranularity.weekly:
         year, week, _ = dt.isocalendar()

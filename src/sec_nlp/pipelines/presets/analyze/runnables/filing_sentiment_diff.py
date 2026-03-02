@@ -1,3 +1,4 @@
+# src/sec_nlp/pipelines/presets/analyze/runnables/filing_sentiment_diff.py
 """Filing sentiment diff runnable for compare-over-time analysis."""
 
 from __future__ import annotations
@@ -108,6 +109,7 @@ class FilingSentimentDiffRunnable(
 
     @staticmethod
     def _normalize_label(value: JsonValue) -> str | None:
+        """Normalize label."""
         if not isinstance(value, str):
             return None
         cleaned = value.strip().lower()
@@ -117,6 +119,7 @@ class FilingSentimentDiffRunnable(
 
     @staticmethod
     def _extract_topics(result: AnalysisResultDict) -> set[str]:
+        """Extract topics."""
         topics: set[str] = set()
 
         tags = result.get("tags")
@@ -145,6 +148,7 @@ class FilingSentimentDiffRunnable(
     def _topic_sentiment_scores(
         results: list[AnalysisResultDict],
     ) -> dict[str, float]:
+        """Resolve topic sentiment scores."""
         topic_scores: dict[str, list[float]] = defaultdict(list)
         for result in results:
             sentiment = FilingSentimentDiffRunnable._normalize_label(
@@ -166,6 +170,7 @@ class FilingSentimentDiffRunnable(
 
     @staticmethod
     def _average_sentiment(results: list[AnalysisResultDict]) -> float:
+        """Resolve average sentiment."""
         weights: list[float] = []
         for result in results:
             sentiment = FilingSentimentDiffRunnable._normalize_label(
@@ -182,6 +187,7 @@ class FilingSentimentDiffRunnable(
 
     @staticmethod
     def _extract_risk_factors(results: list[AnalysisResultDict]) -> set[str]:
+        """Extract risk factors."""
         factors: set[str] = set()
         for result in results:
             tags = result.get("tags")
@@ -217,6 +223,7 @@ class FilingSentimentDiffRunnable(
 
     @staticmethod
     def _direction(change: float) -> str:
+        """Resolve direction."""
         if change > 0.05:
             return "improving"
         if change < -0.05:

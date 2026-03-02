@@ -1,3 +1,4 @@
+# tests/utils/performance.py
 """Helpers for memory tracking and lightweight benchmark comparisons."""
 
 from __future__ import annotations
@@ -6,10 +7,9 @@ import contextlib
 import time
 import tracemalloc
 from collections.abc import Callable, Generator, Iterable
-from typing import ParamSpec, TypeVar
+from typing import ParamSpec
 
 P = ParamSpec("P")
-T = TypeVar("T")
 
 
 def compare_benchmark(
@@ -25,7 +25,7 @@ def compare_benchmark(
     return ratio <= (1 + tolerance)
 
 
-def measure_duration(
+def measure_duration[**P, T](
     func: Callable[P, T], *args: P.args, **kwargs: P.kwargs
 ) -> tuple[T, float]:
     """Execute a callable and return (result, seconds)."""

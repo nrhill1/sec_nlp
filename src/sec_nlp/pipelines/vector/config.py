@@ -46,6 +46,7 @@ _QDRANT_DISK_FALLBACK_LOCATION = ".qdrant"
 
 
 def _env_flag_enabled(name: str) -> bool:
+    """Return whether an environment flag should be treated as enabled."""
     value = os.getenv(name, "")
     return value.strip().lower() in {"1", "true", "yes", "on"}
 

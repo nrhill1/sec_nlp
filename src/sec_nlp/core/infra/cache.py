@@ -1,3 +1,4 @@
+# src/sec_nlp/core/infra/cache.py
 # src/sec_nlp/core/cache.py
 """Simple file-based caching utilities using the OS user cache directory.
 
@@ -55,12 +56,14 @@ def get_cache_dir(*subdirs: str) -> Path:
 
 
 def sha256_hex(payload: str | bytes) -> str:
+    """Return the SHA-256 hex digest for a string or bytes payload."""
     if isinstance(payload, str):
         payload = payload.encode("utf-8")
     return hashlib.sha256(payload).hexdigest()
 
 
 def is_fresh(path: Path, ttl_seconds: int) -> bool:
+    """Return whether a cache file exists and is within the TTL window."""
     if not path.exists():
         return False
     try:
@@ -72,17 +75,21 @@ def is_fresh(path: Path, ttl_seconds: int) -> bool:
 
 @dataclass(frozen=True)
 class CacheEntry:
+    """Resolved cache path paired with freshness state."""
+
     path: Path
     fresh: bool
 
 
 def read_json(path: Path) -> JSONData:
+    """Load JSON data from disk."""
     with open(path, encoding="utf-8") as f:
         data: JSONData = json.load(f)
         return data
 
 
 def write_json(path: Path, data: JSONData) -> None:
+    """Atomically write JSON data to disk."""
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(path.suffix + ".tmp")
     with open(tmp, "w", encoding="utf-8") as f:

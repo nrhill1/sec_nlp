@@ -1,3 +1,4 @@
+# tests/cli/test_financials_cli.py
 """Tests for financials CLI wiring."""
 
 from __future__ import annotations

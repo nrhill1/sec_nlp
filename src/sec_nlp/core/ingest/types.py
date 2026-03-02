@@ -1,3 +1,4 @@
+# src/sec_nlp/core/ingest/types.py
 """Typed results for SEC filing downloads."""
 
 from __future__ import annotations
@@ -6,6 +7,8 @@ from typing import TypedDict
 
 
 class DownloadResult(TypedDict, total=False):
+    """Per-symbol download counters and status fields."""
+
     success: bool
     downloaded: int
     skipped_existing: int

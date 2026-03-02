@@ -1,3 +1,4 @@
+# src/sec_nlp/core/ingest/filings.py
 """Helpers for locating, parsing, and extracting SEC filings on disk."""
 
 from __future__ import annotations
@@ -102,6 +103,8 @@ def html_paths_for_symbol(
 
 
 class _TickerEntry(TypedDict):
+    """Internal ticker-registry entry payload."""
+
     cik: str
     company_name: str
 
@@ -110,6 +113,7 @@ class _TickerEntry(TypedDict):
 def _load_ticker_registry(
     company_name: str, email: str
 ) -> dict[str, _TickerEntry]:
+    """Load cached ticker registry mapping from disk."""
     logger.debug("Fetching ticker-to-CIK mapping from SEC...")
     url = "https://www.sec.gov/files/company_tickers.json"
     headers = {"User-Agent": f"{company_name} {email}"}

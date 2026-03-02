@@ -36,6 +36,8 @@ WARRANTY_XBRL_TAGS: list[str] = [
 
 
 class XbrlValueEntry(TypedDict):
+    """Extracted XBRL fact value with tag and context metadata."""
+
     value: float
     tag: str
     context_ref: str | None
@@ -46,6 +48,8 @@ type XbrlValueSets = dict[str, list[XbrlValueEntry]]
 
 
 class XbrlYearBucket(TypedDict, total=False):
+    """Year bucket for normalized warranty-related XBRL totals."""
+
     warranty_liability: float | None
     warranty_payout: float | None
     net_revenue: float | None
@@ -524,6 +528,7 @@ def _log_xbrl_stats(
     """Log XBRL extraction statistics."""
 
     def _fmt_period(r: WarrantyExtractionDict) -> str:
+        """Format period values into canonical period labels."""
         val = r.get("period") or r.get("period_end")
         if val is None:
             return "?"

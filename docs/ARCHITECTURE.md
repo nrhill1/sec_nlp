@@ -40,8 +40,8 @@ References:
 - `src/sec_nlp/app/flows/models.py`
 - `src/sec_nlp/app/flows/artifacts.py`
 - `src/sec_nlp/app/flows/runner.py`
-- `src/sec_nlp/app/flows/runnables/retrieve.py`
-- `src/sec_nlp/app/flows/runnables/chat.py`
+- `src/sec_nlp/app/flows/compiled.py`
+- `src/sec_nlp/app/flows/contracts/`
 
 ## Analyze Flow
 1. Load filings (optionally with EFTS expansion).

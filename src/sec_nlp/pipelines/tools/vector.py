@@ -1,3 +1,4 @@
+# src/sec_nlp/pipelines/tools/vector.py
 """LangChain tool wrapper for direct Qdrant semantic search."""
 
 from __future__ import annotations
@@ -26,6 +27,7 @@ def _check_timeout(
     timeout_seconds: float | None,
     stage: str,
 ) -> None:
+    """Raise timeout error when execution exceeds configured limit."""
     if timeout_seconds is None:
         return
     elapsed = monotonic() - started_at
@@ -36,6 +38,7 @@ def _check_timeout(
 
 
 def _build_filter(symbols: list[str], forms: list[str]) -> Filter | None:
+    """Build Qdrant payload filter from tool input constraints."""
     must_conditions: list[Condition] = []
     if symbols:
         symbol_conditions: list[Condition] = []
@@ -79,6 +82,7 @@ def _run_qdrant_search_tool(
     score_threshold: float | None = None,
     timeout_seconds: float | None = 30.0,
 ) -> JsonDict:
+    """Execute qdrant search tool and return normalized hits."""
     started_at = monotonic()
     symbols = symbols or []
     forms = forms or []

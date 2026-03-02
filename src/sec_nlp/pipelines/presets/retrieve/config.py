@@ -1,3 +1,4 @@
+# src/sec_nlp/pipelines/presets/retrieve/config.py
 """Config model for retrieve pipeline."""
 
 from __future__ import annotations

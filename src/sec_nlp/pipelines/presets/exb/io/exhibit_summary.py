@@ -79,6 +79,7 @@ def write_exhibit_summary(
     docs: list[Document],
     config: ExhibitConfig,
 ) -> list[Path]:
+    """Build and write exhibit summary files for one symbol."""
     summary = build_exhibit_summary(
         symbol=symbol,
         docs=docs,
@@ -116,6 +117,7 @@ def build_exhibit_summary(
     docs: list[Document],
     config: ExhibitConfig,
 ) -> JsonDict:
+    """Assemble an exhibit-level summary payload from extracted docs."""
     if not docs:
         return {}
 
@@ -176,6 +178,7 @@ def build_exhibit_summary(
 
 
 def _normalize_symbol(value: JsonValue):
+    """Normalize symbol."""
     if isinstance(value, str):
         cleaned = value.strip()
         return cleaned.upper() if cleaned else "unknown"
@@ -185,6 +188,7 @@ def _normalize_symbol(value: JsonValue):
 
 
 def _normalize_exhibit_numbers(values: list[JsonValue]) -> list[JsonValue]:
+    """Normalize exhibit numbers."""
     cleaned: list[JsonValue] = []
     seen = set()
     for item in values:
@@ -202,6 +206,7 @@ def _normalize_exhibit_numbers(values: list[JsonValue]) -> list[JsonValue]:
 
 
 def _collect_exhibit_bases(values: list[JsonValue]) -> list[JsonValue]:
+    """Collect exhibit bases."""
     bases: list[JsonValue] = []
     for item in values:
         if not isinstance(item, str):
@@ -213,6 +218,7 @@ def _collect_exhibit_bases(values: list[JsonValue]) -> list[JsonValue]:
 
 
 def _group_docs_by_accession(docs: list[Document]):
+    """Group docs by accession."""
     grouped = {}
     for doc in docs:
         meta = doc.metadata or {}
@@ -222,6 +228,7 @@ def _group_docs_by_accession(docs: list[Document]):
 
 
 def _group_docs_by_exhibit(docs: list[Document]):
+    """Group docs by exhibit."""
     grouped = {}
     for doc in docs:
         meta = doc.metadata or {}
@@ -234,6 +241,7 @@ def _group_docs_by_exhibit(docs: list[Document]):
 
 
 def _select_accession_meta(docs: list[Document]) -> JsonDict:
+    """Select accession meta."""
     if not docs:
         return {}
     meta = docs[0].metadata or {}
@@ -244,6 +252,7 @@ def _select_accession_meta(docs: list[Document]) -> JsonDict:
 
 
 def _accession_sort_key(entry: JsonDict):
+    """Build a stable sort key for accession records."""
     raw_date = entry.get("filing_date")
     parsed = _parse_date(raw_date)
     if parsed is not None:
@@ -253,6 +262,7 @@ def _accession_sort_key(entry: JsonDict):
 
 
 def _build_exhibit_details(exhibit_number: JsonValue, docs: list[Document]):
+    """Build exhibit details."""
     if not docs:
         return {}
     combined = _collect_text(docs)
@@ -291,6 +301,7 @@ def _build_coverage_gaps(
     accessions: list[JsonDict],
     expected: list[JsonValue],
 ) -> list[JsonDict]:
+    """Build coverage gaps."""
     gaps: list[JsonDict] = []
     for entry in accessions:
         present = entry.get("exhibits_present")
@@ -308,6 +319,7 @@ def _build_coverage_gaps(
 
 
 def _build_change_tracking(accessions: list[JsonDict]) -> JsonDict:
+    """Build change tracking."""
     if len(accessions) < 2:
         return {}
 
@@ -343,6 +355,7 @@ def _build_change_tracking(accessions: list[JsonDict]) -> JsonDict:
 
 
 def _collect_subsidiary_names(entry: JsonDict):
+    """Collect subsidiary names."""
     details = as_json_dict(entry.get("exhibit_details"))
     if details is None:
         return set()
@@ -364,6 +377,7 @@ def _collect_subsidiary_names(entry: JsonDict):
 
 
 def _extract_auditor_name(entry: JsonDict):
+    """Extract auditor name."""
     details = as_json_dict(entry.get("exhibit_details"))
     if details is None:
         return None
@@ -375,6 +389,7 @@ def _extract_auditor_name(entry: JsonDict):
 
 
 def _diff_sets(previous: set, current: set) -> JsonDict:
+    """Compute diff for sets."""
     added = sorted(current - previous)
     removed = sorted(previous - current)
     if not added and not removed:
@@ -383,6 +398,7 @@ def _diff_sets(previous: set, current: set) -> JsonDict:
 
 
 def _collect_text(docs: list[Document]):
+    """Collect text."""
     parts: list[JsonValue] = []
     seen = set()
     for doc in docs:
@@ -398,6 +414,7 @@ def _collect_text(docs: list[Document]):
 
 
 def _collect_meta_values(docs: list[Document], key):
+    """Collect meta values."""
     values: list[JsonValue] = []
     seen = set()
     for doc in docs:
@@ -411,6 +428,7 @@ def _collect_meta_values(docs: list[Document], key):
 
 
 def _exhibit_base(value: JsonValue):
+    """Extract the base exhibit number from a raw exhibit label."""
     if isinstance(value, str):
         cleaned = value.split(".")[0].strip()
         return cleaned if cleaned else None
@@ -418,6 +436,7 @@ def _exhibit_base(value: JsonValue):
 
 
 def _extract_subsidiaries(value: JsonValue) -> list[JsonDict]:
+    """Extract subsidiaries."""
     text = _text_from_html(value)
     if not text:
         return []
@@ -456,6 +475,7 @@ def _extract_subsidiaries(value: JsonValue) -> list[JsonDict]:
 
 
 def _extract_auditor_consent(value: JsonValue) -> JsonDict:
+    """Extract auditor consent."""
     text = _text_from_html(value)
     if not text or "consent" not in text.lower():
         return {}
@@ -471,6 +491,7 @@ def _extract_auditor_consent(value: JsonValue) -> JsonDict:
 
 
 def _find_auditor_name(text):
+    """Find auditor name."""
     lines = [line.strip() for line in text.splitlines() if line.strip()]
     for idx, line in enumerate(lines):
         lower = line.lower()
@@ -482,6 +503,7 @@ def _find_auditor_name(text):
 
 
 def _scan_firm_lines(lines):
+    """Scan lines for likely audit firm signatures."""
     for line in lines:
         match = _FIRM_RE.search(line)
         if match:
@@ -492,6 +514,7 @@ def _scan_firm_lines(lines):
 
 
 def _clean_firm_name(value):
+    """Normalize extracted audit firm names."""
     cleaned = value.strip()
     if ". " in cleaned:
         cleaned = cleaned.split(". ")[-1].strip()
@@ -504,6 +527,7 @@ def _clean_firm_name(value):
 
 
 def _find_consent_date(text):
+    """Find consent date."""
     match = _DATE_RE.search(text)
     if match:
         return match.group(0)
@@ -511,6 +535,7 @@ def _find_consent_date(text):
 
 
 def _extract_counterparties(value: JsonValue) -> list[JsonValue]:
+    """Extract counterparties."""
     text = _text_from_html(value)
     if not text:
         return []
@@ -531,6 +556,7 @@ def _extract_counterparties(value: JsonValue) -> list[JsonValue]:
 
 
 def _extract_obligations(value: JsonValue) -> list[JsonValue]:
+    """Extract obligations."""
     text = _text_from_html(value)
     if not text:
         return []
@@ -553,6 +579,7 @@ def _extract_obligations(value: JsonValue) -> list[JsonValue]:
 
 
 def _extract_press_release_headline(value: JsonValue) -> JsonValue:
+    """Extract press release headline."""
     text = _text_from_html(value)
     if not text:
         return None
@@ -569,6 +596,7 @@ def _extract_press_release_headline(value: JsonValue) -> JsonValue:
 
 
 def _looks_like_party(value) -> bool:
+    """Return whether like party."""
     if not value:
         return False
     lower = value.lower()
@@ -580,18 +608,21 @@ def _looks_like_party(value) -> bool:
 
 
 def _cleanup_party(value):
+    """Clean up party."""
     cleaned = value.strip().strip('"')
     cleaned = re.sub(r"\s*\(.*?\)", "", cleaned)
     return cleaned.strip()
 
 
 def _strip_footnote(value):
+    """Strip footnote."""
     cleaned = re.sub(r"\s*[\*]+", "", value)
     cleaned = re.sub(r"\s*\(\d+\)$", "", cleaned)
     return cleaned.strip()
 
 
 def _text_from_html(value: JsonValue):
+    """Extract text from html."""
     if not isinstance(value, str):
         return ""
     text = re.sub(r"(?is)<(script|style).*?>.*?</\1>", " ", value)
@@ -606,6 +637,7 @@ def _text_from_html(value: JsonValue):
 
 
 def _as_str(value: JsonValue):
+    """Coerce str."""
     if value is None or isinstance(value, bool):
         return None
     if isinstance(value, (str, int, float)):
@@ -615,6 +647,7 @@ def _as_str(value: JsonValue):
 
 
 def _parse_date(value: JsonValue) -> date | None:
+    """Parse date."""
     if isinstance(value, str):
         try:
             return date.fromisoformat(value)

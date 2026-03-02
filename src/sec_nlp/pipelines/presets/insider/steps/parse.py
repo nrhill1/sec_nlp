@@ -1,3 +1,4 @@
+# src/sec_nlp/pipelines/presets/insider/steps/parse.py
 """Parsing helpers for insider filing documents."""
 
 from __future__ import annotations
@@ -14,6 +15,7 @@ from .download import DownloadedInsiderFiling
 
 
 def _coerce_str(value: JsonValue) -> str | None:
+    """Coerce scalar values to strings when possible."""
     if value is None:
         return None
     if isinstance(value, str):
@@ -23,6 +25,7 @@ def _coerce_str(value: JsonValue) -> str | None:
 
 
 def _coerce_int(value: JsonValue) -> int | None:
+    """Coerce scalar values to integers when possible."""
     if isinstance(value, bool):
         return None
     if isinstance(value, int):
@@ -41,6 +44,7 @@ def _coerce_int(value: JsonValue) -> int | None:
 
 
 def _coerce_float(value: JsonValue) -> float | None:
+    """Coerce scalar values to floats when possible."""
     if isinstance(value, bool):
         return None
     if isinstance(value, (int, float)):
@@ -57,6 +61,7 @@ def _coerce_float(value: JsonValue) -> float | None:
 
 
 def _coerce_roles(value: JsonValue) -> list[str]:
+    """Normalize role fields into a list of role strings."""
     if not isinstance(value, list):
         return []
     roles: list[str] = []
@@ -71,6 +76,7 @@ def _coerce_roles(value: JsonValue) -> list[str]:
 
 
 def _source_name(value: JsonValue) -> str | None:
+    """Resolve source name label for an insider record."""
     source = _coerce_str(value)
     if source is None:
         return None
@@ -78,6 +84,7 @@ def _source_name(value: JsonValue) -> str | None:
 
 
 def _tx_date(metadata: dict[str, JsonValue]) -> str | None:
+    """Resolve transaction date for a parsed insider record."""
     transaction_date = _coerce_str(metadata.get("transaction_date"))
     if transaction_date is not None:
         return transaction_date
@@ -93,6 +100,7 @@ def _map_document(
     filing: DownloadedInsiderFiling,
     document: Document,
 ) -> InsiderTransaction:
+    """Map a parsed document into insider transaction payload rows."""
     metadata = document.metadata
 
     return InsiderTransaction(

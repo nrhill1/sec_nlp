@@ -33,6 +33,7 @@ def cap_efts_download_limit(
     config: AnalyzeConfig,
     limit_per_symbol: int | None,
 ) -> int | None:
+    """Clamp per-symbol EFTS downloads to configured hard limits."""
     if limit_per_symbol is not None:
         return limit_per_symbol
     auto_limit = config.efts.auto_download_limit
@@ -44,6 +45,7 @@ def cap_efts_download_limit(
 def efts_date_range(
     config: AnalyzeConfig,
 ) -> tuple[date | None, date | None]:
+    """Resolve the EFTS date window for the current analyze run."""
     if config.efts.expand_date_range:
         end_date = date.today()
         start_date = end_date - timedelta(
@@ -54,6 +56,7 @@ def efts_date_range(
 
 
 def local_accessions(config: AnalyzeConfig, symbol: str) -> set[str]:
+    """Collect local accession directories for a symbol within the date window."""
     start_date, end_date = efts_date_range(config)
     accession_set = set()
     for form_type in config.mode.forms:
@@ -83,6 +86,7 @@ def select_efts_accessions(
     accessions: list[str],
     limit: int | None,
 ) -> list[str]:
+    """Select highest-scoring accession candidates, capped by limit when set."""
     if not accessions:
         return []
     allowed = {accession for accession in accessions if accession}
@@ -116,6 +120,7 @@ def download_efts_accessions(
     accessions: list[str],
     results: list[EFTSSearchResult],
 ) -> int:
+    """Download selected accessions and return count of successful downloads."""
     if not accessions:
         return 0
 
@@ -165,6 +170,7 @@ def run_efts_for_symbol(
     queries: list[str],
     forms: list[str] | None = None,
 ) -> tuple[list[EFTSSearchResult], list[str], bool]:
+    """Run EFTS search for one symbol and optionally identify new accessions."""
     if not queries or not config.efts.enabled:
         return [], [], False
 
@@ -209,6 +215,7 @@ def collect_efts_hits(
     dict[str, list[tuple[Document, float]]],
     dict[str, int],
 ]:
+    """Group EFTS hits by query and collect per-query totals."""
     hits_by_query: dict[str, list[tuple[Document, float]]] = defaultdict(list)
     totals_by_query: dict[str, int] = defaultdict(int)
 
@@ -263,6 +270,7 @@ def collect_efts_hits(
 
 
 def normalize_scores(scores: list[float]) -> list[float]:
+    """Scale score values into a 0..1 range with min-max normalization."""
     if not scores:
         return []
     low = min(scores)
@@ -278,6 +286,7 @@ def adjust_efts_score(
     vector_scores: list[float],
     prefers_lower: bool,
 ) -> float:
+    """Project normalized EFTS scores into the vector scoring scale."""
     if not vector_scores:
         return 1.0 - normalized_score if prefers_lower else normalized_score
     best = min(vector_scores) if prefers_lower else max(vector_scores)
@@ -293,6 +302,7 @@ def update_search_sources(
     metadata: dict[str, MetadataValue],
     source: str,
 ) -> None:
+    """Add a search source label to metadata without duplicates."""
     existing = metadata.get("search_sources")
     sources: list[MetadataScalar] = []
     if isinstance(existing, list):
@@ -312,6 +322,7 @@ def annotate_efts_match(
     query: str,
     score: float,
 ) -> None:
+    """Attach EFTS query match metadata to each overlapping document."""
     for doc in docs:
         metadata: dict[str, MetadataValue] = dict(doc.metadata or {})
         matches = metadata.get("efts_matches")
@@ -349,6 +360,7 @@ def build_hybrid_search_results(
     efts_results_by_symbol: dict[str, list[EFTSSearchResult]],
     market_context_by_symbol: dict[str, str],
 ) -> SearchResultsByQuery:
+    """Merge vector and EFTS results into one ranked query result map."""
     base_results = vector_results or {}
     efts_hits_by_query, efts_totals = collect_efts_hits(
         config=config,
@@ -419,6 +431,7 @@ def build_hybrid_search_results(
 
 
 def efts_accessions(results: list[EFTSSearchResult]) -> set[str]:
+    """Extract unique accession numbers from EFTS results."""
     accessions: set[str] = set()
     for result in results:
         for hit in result.hits:
@@ -430,6 +443,7 @@ def filter_docs_by_accession(
     docs: list[Document],
     accessions: set[str],
 ) -> list[Document]:
+    """Filter documents to those whose accession appears in the allowed set."""
     if not accessions:
         return []
     filtered: list[Document] = []
@@ -446,6 +460,7 @@ def update_efts_keywords_from_docs(
     docs: list[Document],
     results_by_symbol: dict[str, list[EFTSSearchResult]],
 ) -> None:
+    """Populate EFTS hit keywords from downloaded document content."""
     results = results_by_symbol.get(symbol)
     if not results:
         return

@@ -1,3 +1,4 @@
+# src/sec_nlp/core/ingest/exhibit_downloader.py
 # src/sec_nlp/core/exhibit_downloader.py
 """Download and parse exhibit documents from SEC EDGAR filings."""
 
@@ -41,6 +42,7 @@ class ExhibitDocument:
         self.accession_number = accession_number
 
     def __repr__(self) -> str:
+        """Return a concise debug representation for exhibit downloader."""
         return f"<ExhibitDocument {self.exhibit_number} - {self.filename}>"
 
 

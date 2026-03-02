@@ -1,3 +1,4 @@
+# src/sec_nlp/pipelines/presets/holdings/io/formats/diff_report.py
 """JSON/YAML payload writers for holdings summary and diff reports."""
 
 from __future__ import annotations

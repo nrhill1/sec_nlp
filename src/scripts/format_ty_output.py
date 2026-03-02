@@ -13,6 +13,7 @@ HEADER_RE = re.compile(r"file=([^,]+),line=(\d+)")
 
 
 def should_color() -> bool:
+    """Return whether ANSI color should be enabled for stdout."""
     if os.environ.get("NO_COLOR"):
         return False
     if os.environ.get("TERM") == "dumb":
@@ -21,6 +22,7 @@ def should_color() -> bool:
 
 
 def colorize(text: str, code: str, use_color: bool) -> str:
+    """Apply ANSI color codes to text when color output is enabled."""
     if not use_color:
         return text
     return f"\033[{code}m{text}\033[0m"
@@ -28,6 +30,8 @@ def colorize(text: str, code: str, use_color: bool) -> str:
 
 @dataclass(frozen=True)
 class Diagnostic:
+    """Parsed diagnostic entry from `ty` output."""
+
     level: str
     path: str
     line: str
@@ -37,6 +41,7 @@ class Diagnostic:
 def parse_diagnostics(
     lines: list[str],
 ) -> tuple[list[Diagnostic], list[Diagnostic], list[Diagnostic]]:
+    """Parse raw tool output into error, warning, and fallback diagnostics."""
     errors: list[Diagnostic] = []
     warnings: list[Diagnostic] = []
     others: list[Diagnostic] = []
@@ -73,6 +78,7 @@ def parse_diagnostics(
 
 
 def main() -> int:
+    """Run the command-line entrypoint."""
     use_color = should_color()
     errors, warnings, others = parse_diagnostics(list(sys.stdin))
 

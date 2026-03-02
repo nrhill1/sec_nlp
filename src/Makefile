@@ -204,21 +204,21 @@ profile-verbose:
 .PHONY: check-imports
 check-imports:
 	@echo "==> Checking Python imports (including Rust extension)..."
-	@cd $(REPO_ROOT) && uv run python $(PY_SCRIPTS_DIR)/imports/check_imports.py
+	@cd $(REPO_ROOT) && uv run python $(PY_SCRIPTS_DIR)/build/check_imports.py
 	@echo "✓ Import checks complete"
 	@echo ""
 
 .PHONY: check-imports-verbose
 check-imports-verbose:
 	@echo "==> Checking Python imports (verbose)..."
-	@cd $(REPO_ROOT) && uv run python $(PY_SCRIPTS_DIR)/imports/check_imports.py --verbose
+	@cd $(REPO_ROOT) && uv run python $(PY_SCRIPTS_DIR)/build/check_imports.py --verbose
 	@echo "✓ Import checks (verbose) complete"
 	@echo ""
 
 .PHONY: check-imports-no-rust
 check-imports-no-rust:
 	@echo "==> Checking Python imports (skipping Rust check)..."
-	@cd $(REPO_ROOT) && uv run python $(PY_SCRIPTS_DIR)/imports/check_imports.py --no-check-rust
+	@cd $(REPO_ROOT) && uv run python $(PY_SCRIPTS_DIR)/build/check_imports.py --no-check-rust
 	@echo "✓ Import checks (sans Rust) complete"
 	@echo ""
 

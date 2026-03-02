@@ -1,3 +1,4 @@
+# src/sec_nlp/core/infra/logger.py
 # src/sec_nlp/core/logger.py
 """Centralized logging configuration."""
 
@@ -121,6 +122,7 @@ class RichLogFormatter(logging.Formatter):
         show_name: bool,
         datefmt: str | None = None,
     ) -> None:
+        """Initialize formatter state for ANSI-aware log rendering."""
         super().__init__(datefmt=datefmt)
         self._console = create_rich_console(stderr=True)
         self._show_time = show_time
@@ -301,6 +303,7 @@ def setup_logging(
     unstructured_seen: set[str] = set()
 
     def _dedupe_unstructured_profiles(record: logging.LogRecord) -> bool:
+        """Deduplicate unstructured profile entries while preserving order."""
         if not str(record.name).startswith("unstructured"):
             return True
         message = record.getMessage()
@@ -442,6 +445,7 @@ _UNICODE_TRANSLATIONS = {
 
 
 def _sanitize_for_file(text):
+    """Remove ANSI and control characters from file log output."""
     cleaned = _ANSI_RE.sub("", text)
     cleaned = cleaned.translate(_UNICODE_TRANSLATIONS)
     return cleaned.encode("ascii", "ignore").decode()

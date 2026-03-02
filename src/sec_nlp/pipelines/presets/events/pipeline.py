@@ -1,3 +1,4 @@
+# src/sec_nlp/pipelines/presets/events/pipeline.py
 """Pipeline for event detection and timeline scoring."""
 
 from __future__ import annotations
@@ -5,6 +6,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import ClassVar, Literal
 
+from langchain_core.runnables import Runnable
+from pydantic import PrivateAttr
 from rich.progress import (
     BarColumn,
     Progress,
@@ -20,10 +23,7 @@ from sec_nlp.core.infra.logger import logger
 from sec_nlp.core.infra.rich_console import get_rich_console
 from sec_nlp.core.types import coerce_result_json_dict
 from sec_nlp.pipelines import BasePipeline
-from sec_nlp.pipelines.output_io import (
-    build_run_file_stem,
-    build_run_header_fields,
-)
+from sec_nlp.pipelines.output_io import build_run_output_context
 from sec_nlp.types import ResultDict
 
 from .config import EventsSettings
@@ -34,10 +34,9 @@ from .io import (
     write_events_timeline_yaml,
 )
 from .models import DetectedEvent, EventsResult
-from .steps import (
-    enrich_events_with_news,
-    scan_events_for_symbol,
-    score_event_impacts,
+from .run_stages import (
+    EventsRunState,
+    build_events_stage_chain,
 )
 
 
@@ -51,6 +50,9 @@ class EventsPipeline(BasePipeline):
     requires_llm: ClassVar[bool] = False
 
     config: EventsSettings
+    _stage_chain: Runnable[EventsRunState, EventsRunState] | None = PrivateAttr(
+        default=None
+    )
 
     @classmethod
     def config_model(cls) -> type[EventsSettings]:
@@ -61,7 +63,8 @@ class EventsPipeline(BasePipeline):
         return EventsResult
 
     def _build_components(self) -> None:
-        return
+        """Initialize reusable components for events pipeline execution."""
+        self._stage_chain = build_events_stage_chain(self)
 
     def run(self) -> EventsResult:
         try:
@@ -89,6 +92,7 @@ class EventsPipeline(BasePipeline):
                     total=len(self.config.symbols),
                 )
                 phase_task = progress.add_task("", total=None, visible=False)
+                stage_chain = self.require_stage_chain(self._stage_chain)
 
                 for symbol in self.config.symbols:
                     normalized_symbol = symbol.upper()
@@ -97,23 +101,22 @@ class EventsPipeline(BasePipeline):
                         description=f"Processing {normalized_symbol}",
                     )
 
-                    (
-                        symbol_outputs,
-                        symbol_meta,
-                        detected_count,
-                        scored_count,
-                        headline_count,
-                    ) = self._process_symbol(
-                        normalized_symbol,
+                    symbol_state = EventsRunState(
+                        runtime=self,
+                        symbol=normalized_symbol,
                         progress=progress,
                         phase_task=phase_task,
                     )
+                    symbol_state = self.run_stage_chain(
+                        initial_state=symbol_state,
+                        stage_chain=stage_chain,
+                    )
 
-                    outputs.extend(symbol_outputs)
-                    metadata[normalized_symbol] = symbol_meta
-                    total_detected += detected_count
-                    total_scored += scored_count
-                    total_headlines += headline_count
+                    outputs.extend(symbol_state.outputs)
+                    metadata[normalized_symbol] = symbol_state.metadata
+                    total_detected += len(symbol_state.scored_events)
+                    total_scored += symbol_state.scored_count
+                    total_headlines += symbol_state.headlines_linked
 
                     progress.update(phase_task, visible=False)
                     progress.advance(overall_task)
@@ -139,52 +142,6 @@ class EventsPipeline(BasePipeline):
                 error=f"{type(exc).__name__}: {exc}",
             )
 
-    def _process_symbol(
-        self,
-        symbol: str,
-        *,
-        progress: Progress | None = None,
-        phase_task: TaskID | None = None,
-    ) -> tuple[list[Path], dict[str, int | float | str | None], int, int, int]:
-        self._update_phase(progress, phase_task, symbol, "Scanning")
-        scanned_events, downloaded, filings_scanned = scan_events_for_symbol(
-            symbol=symbol,
-            settings=self.config,
-        )
-
-        self._update_phase(progress, phase_task, symbol, "Enriching")
-        enriched_events, headlines_linked = enrich_events_with_news(
-            symbol=symbol,
-            events=scanned_events,
-            settings=self.config,
-        )
-
-        self._update_phase(progress, phase_task, symbol, "Scoring")
-        scored_events, scored_count = score_event_impacts(
-            symbol=symbol,
-            events=enriched_events,
-            settings=self.config,
-        )
-
-        self._update_phase(progress, phase_task, symbol, "Writing")
-        outputs = self._write_outputs(symbol=symbol, events=scored_events)
-
-        metadata: dict[str, int | float | str | None] = {
-            "downloaded": downloaded,
-            "filings_scanned": filings_scanned,
-            "events_detected": len(scored_events),
-            "events_scored": scored_count,
-            "headlines_linked": headlines_linked,
-        }
-
-        return (
-            outputs,
-            metadata,
-            len(scored_events),
-            scored_count,
-            headlines_linked,
-        )
-
     def _update_phase(
         self,
         progress: Progress | None,
@@ -192,6 +149,7 @@ class EventsPipeline(BasePipeline):
         symbol: str,
         phase: str,
     ) -> None:
+        """Update progress state and current events phase metadata."""
         if progress is None or phase_task is None:
             return
 
@@ -214,17 +172,18 @@ class EventsPipeline(BasePipeline):
         symbol: str,
         events: list[DetectedEvent],
     ) -> list[Path]:
+        """Write events outputs and return emitted artifact paths."""
         symbol_out = self.config.get_symbol_output_dir(symbol)
-        base_stem = build_run_file_stem(symbol, "events", self.config.run_id)
-        run_header = build_run_header_fields(
+        output_context = build_run_output_context(
+            symbol=symbol,
+            suffix="events",
             run_timestamp=self.config.run_timestamp,
             run_id=self.config.run_id,
             run_short_id=self.config.short_id,
         )
-        run_short_id_raw = run_header.get("run_short_id")
-        run_short_id = (
-            run_short_id_raw if isinstance(run_short_id_raw, int) else None
-        )
+        base_stem = output_context.base_stem
+        run_header = output_context.run_header
+        run_short_id = output_context.run_short_id
 
         payload = EventsTimelinePayload(
             run_timestamp=str(run_header["run_timestamp"]),

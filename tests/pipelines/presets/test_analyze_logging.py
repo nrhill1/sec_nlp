@@ -15,6 +15,9 @@ from sec_nlp.pipelines.presets.analyze import (
 )
 from sec_nlp.pipelines.presets.analyze.config import EFTSConfig
 from sec_nlp.pipelines.presets.analyze.market import MarketConfig
+from sec_nlp.pipelines.presets.analyze.run_stages import (
+    build_analyze_stage_chain,
+)
 from sec_nlp.pipelines.types import AnalysisResultDict, MetadataScalar
 
 
@@ -72,6 +75,7 @@ class _LoggingPipeline(AnalyzePipeline):
             include_raw_chunks=self.config.include_raw_chunks,
         )
         self._vector_store = Mock(spec=QdrantVectorStore)
+        self._stage_chain = build_analyze_stage_chain(self)
 
 
 def test_vector_search_logs_chunk_stats(tmp_path, monkeypatch) -> None:

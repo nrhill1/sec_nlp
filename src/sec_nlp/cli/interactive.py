@@ -46,6 +46,7 @@ SYMBOL_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9.\-/]{0,14}$")
 
 
 def _print_banner() -> None:
+    """Render the interactive CLI banner."""
     title = Text("SEC-NLP Interactive Setup", style="title")
     subtitle = Text(
         "Guided configuration for the analyze pipeline.", style="muted"
@@ -72,22 +73,26 @@ def _print_banner() -> None:
 
 
 def _print_section(title: str, subtitle: str | None = None) -> None:
+    """Render a titled section header in interactive mode."""
     CONSOLE.print(Rule(Text(title, style="accent_bold"), style="accent"))
     if subtitle:
         CONSOLE.print(Text(subtitle, style="muted"))
 
 
 def _print_notice(message: str, style: str = "muted") -> None:
+    """Render a styled informational notice."""
     CONSOLE.print(Text(message, style=style))
 
 
 def _format_list(values: Sequence[str]) -> str:
+    """Format list."""
     if not values:
         return "—"
     return ", ".join(values)
 
 
 def _format_config_value(value: ConfigValue) -> Text:
+    """Format config value."""
     if isinstance(value, Mapping):
         lines = []
         for key, val in value.items():
@@ -99,6 +104,7 @@ def _format_config_value(value: ConfigValue) -> Text:
 
 
 def _build_config_table(config: ConfigData) -> Table:
+    """Build config table."""
     table = Table(
         show_header=True,
         header_style="accent_bold",
@@ -113,6 +119,7 @@ def _build_config_table(config: ConfigData) -> Table:
 
 
 def _parse_symbols(symbols_input: str) -> tuple[list[str], list[str]]:
+    """Parse symbols."""
     raw_symbols = [
         s.strip().upper()
         for s in symbols_input.replace(",", " ").split()
@@ -174,6 +181,7 @@ def _list_ollama_models() -> list[JsonObject]:
 
 
 def _model_label(value: JsonValue) -> str | None:
+    """Build a display label for a model preset option."""
     if value is None:
         return None
     if isinstance(value, bool):
@@ -193,6 +201,7 @@ def _get_model_name(model: JsonObject) -> str | None:
 
 
 def _model_details(model: JsonObject) -> dict[str, JsonValue]:
+    """Build short model detail text for interactive selection lists."""
     details = model.get("details")
     if not isinstance(details, Mapping):
         return {}
@@ -390,6 +399,7 @@ def _gather_config() -> ConfigData | None:
         )
 
         def _validate_symbols(value: str) -> bool | str:
+            """Validate and normalize symbol input for interactive prompts."""
             valid, invalid = _parse_symbols(value)
             if not valid:
                 return "Enter at least one ticker symbol."

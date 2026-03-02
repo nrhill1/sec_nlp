@@ -1,3 +1,4 @@
+# src/sec_nlp/core/text/chunking.py
 """Sentence-based chunking using NLTK sentence tokenization.
 
 Chunk size and overlap are measured in **sentences**, not characters.
@@ -185,6 +186,7 @@ class SentenceSplitter:
         return result
 
     def __repr__(self) -> str:
+        """Return a concise debug representation for chunking config."""
         tokenizer = "NLTK" if _NLTK_AVAILABLE else "regex-fallback"
         return (
             f"SentenceSplitter(max_sentences={self._max_sentences}, "

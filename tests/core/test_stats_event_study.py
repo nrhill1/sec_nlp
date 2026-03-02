@@ -1,3 +1,4 @@
+# tests/core/test_stats_event_study.py
 """Tests for core stats event-study orchestration."""
 
 from __future__ import annotations

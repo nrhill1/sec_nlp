@@ -1,3 +1,4 @@
+# tests/pipelines/presets/test_news_pipeline.py
 """Tests for the news pipeline and supporting step helpers."""
 
 from __future__ import annotations
@@ -14,6 +15,10 @@ from sec_nlp.pipelines.presets.news.models import (
     NewsTimelineEntry,
 )
 from sec_nlp.pipelines.presets.news.pipeline import NewsPipeline
+from sec_nlp.pipelines.presets.news.run_stages import (
+    NewsRunState,
+    build_news_stage_chain,
+)
 from sec_nlp.pipelines.presets.news.steps.correlate import correlate_news_items
 from sec_nlp.pipelines.presets.news.steps.fetch import (
     parse_feed_specs,
@@ -340,15 +345,15 @@ def test_pipeline_run_writes_outputs_with_mocked_steps(
     ]
 
     monkeypatch.setattr(
-        "sec_nlp.pipelines.presets.news.pipeline.fetch_news_items",
+        "sec_nlp.pipelines.presets.news.run_stages.fetch_news_items",
         lambda symbol, settings: fetched_items,
     )
     monkeypatch.setattr(
-        "sec_nlp.pipelines.presets.news.pipeline.resolve_symbol_aliases",
+        "sec_nlp.pipelines.presets.news.run_stages.resolve_symbol_aliases",
         lambda symbol, settings: ["ABC", "$ABC"],
     )
     monkeypatch.setattr(
-        "sec_nlp.pipelines.presets.news.pipeline.match_news_items",
+        "sec_nlp.pipelines.presets.news.run_stages.match_news_items",
         lambda items,
         symbol,
         topics,
@@ -357,7 +362,7 @@ def test_pipeline_run_writes_outputs_with_mocked_steps(
         symbol_aliases: matched_items,
     )
     monkeypatch.setattr(
-        "sec_nlp.pipelines.presets.news.pipeline.correlate_news_items",
+        "sec_nlp.pipelines.presets.news.run_stages.correlate_news_items",
         lambda symbol, items, settings: (matched_items, timeline, correlation),
     )
 
@@ -384,3 +389,57 @@ def test_pipeline_run_writes_outputs_with_mocked_steps(
     assert lines[2].startswith("# run_id:")
     assert lines[3].startswith("# run_short_id_display:")
     assert lines[4].startswith("symbol,published_date")
+
+
+def test_news_stage_chain_preserves_state_identity(
+    tmp_path: Path, monkeypatch
+) -> None:
+    config = NewsSettings(
+        email="test@example.com",
+        symbols=["ABC"],
+        dl_path=tmp_path / "downloads",
+        out_path=tmp_path / "outputs",
+        output_format="json",
+    )
+    pipeline = NewsPipeline(config=config)
+    monkeypatch.setattr(
+        NewsPipeline,
+        "_write_outputs",
+        lambda self, **_kwargs: [],
+    )
+    monkeypatch.setattr(
+        "sec_nlp.pipelines.presets.news.run_stages.fetch_news_items",
+        lambda symbol, settings: [],
+    )
+    monkeypatch.setattr(
+        "sec_nlp.pipelines.presets.news.run_stages.resolve_symbol_aliases",
+        lambda symbol, settings: [symbol],
+    )
+    monkeypatch.setattr(
+        "sec_nlp.pipelines.presets.news.run_stages.match_news_items",
+        lambda items,
+        symbol,
+        topics,
+        min_relevance,
+        require_symbol_match,
+        symbol_aliases: [],
+    )
+    monkeypatch.setattr(
+        "sec_nlp.pipelines.presets.news.run_stages.correlate_news_items",
+        lambda symbol, items, settings: ([], [], NewsCorrelation()),
+    )
+
+    chain = build_news_stage_chain(pipeline)
+    initial_state = NewsRunState(
+        runtime=pipeline,
+        symbol="ABC",
+        progress=None,
+        phase_task=None,
+    )
+    initial_state_id = id(initial_state)
+    final_state = pipeline.run_stage_chain(
+        initial_state=initial_state,
+        stage_chain=chain,
+    )
+
+    assert id(final_state) == initial_state_id

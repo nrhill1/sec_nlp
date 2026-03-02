@@ -1,3 +1,4 @@
+# src/sec_nlp/pipelines/presets/news/steps/correlate.py
 """Correlate headline activity with filings and market moves."""
 
 from __future__ import annotations
@@ -23,6 +24,7 @@ _DEFAULT_FILING_FORMS: tuple[str, ...] = ("8-K", "10-K", "10-Q")
 
 
 def _parse_iso_datetime(value: str | None) -> datetime | None:
+    """Parse ISO datetime strings safely."""
     if value is None:
         return None
     stripped = value.strip()
@@ -35,6 +37,7 @@ def _parse_iso_datetime(value: str | None) -> datetime | None:
 
 
 def _headline_date(item: NewsHeadline) -> date | None:
+    """Resolve effective event date for a news headline."""
     if item.published_date:
         try:
             return date.fromisoformat(item.published_date)
@@ -50,6 +53,7 @@ def _effective_date_window(
     settings: NewsSettings,
     items: list[NewsHeadline],
 ) -> tuple[date, date]:
+    """Resolve the effective date window for correlation analysis."""
     dated_items = [_headline_date(item) for item in items]
     known_dates = [value for value in dated_items if value is not None]
     if known_dates:
@@ -64,6 +68,7 @@ def _collect_filing_events(
     start_date: date,
     end_date: date,
 ) -> list[FilingEvent]:
+    """Collect filing events aligned to the configured symbol set."""
     from sec_edgar_downloader import Downloader
 
     forms = settings.forms or list(_DEFAULT_FILING_FORMS)
@@ -136,6 +141,7 @@ def _nearest_filing(
     filings: list[FilingEvent],
     max_window_days: int,
 ) -> FilingEvent | None:
+    """Find the nearest filing event for a news headline timestamp."""
     nearest: FilingEvent | None = None
     nearest_delta: int | None = None
 
@@ -160,6 +166,7 @@ def _build_market_series(
     start_date: date,
     end_date: date,
 ) -> tuple[dict[date, float], dict[date, float]]:
+    """Build aligned market return series for event correlation."""
     if not include_market_context:
         return {}, {}
 
@@ -202,6 +209,7 @@ def _build_market_series(
 def _fallback_pearson(
     x_values: list[float], y_values: list[float]
 ) -> float | None:
+    """Compute Pearson correlation without optional numeric dependencies."""
     if len(x_values) < 2 or len(y_values) < 2:
         return None
 
@@ -226,6 +234,7 @@ def _compute_correlation(
     news_counts: dict[date, int],
     market_returns: dict[date, float],
 ) -> tuple[float | None, int]:
+    """Compute correlation metrics between news and filing signals."""
     paired_dates = sorted(set(news_counts) & set(market_returns))
     if len(paired_dates) < 2:
         return None, len(paired_dates)
@@ -249,6 +258,7 @@ def _detect_clusters(
     threshold: int,
     gap_days: int,
 ) -> list[NewsCluster]:
+    """Detect clusters of related headlines around filing events."""
     if not news_counts:
         return []
 

@@ -1,3 +1,4 @@
+# src/sec_nlp/pipelines/tools/__init__.py
 """Reusable LangChain tool wrappers for sec-nlp pipelines/core services."""
 
 from langchain_core.tools import StructuredTool

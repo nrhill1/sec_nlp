@@ -1,3 +1,4 @@
+# src/sec_nlp/pipelines/presets/analyze/runnables/sector_correlation.py
 """Sector-level correlation runnable for the analyze pipeline."""
 
 from __future__ import annotations
@@ -92,6 +93,7 @@ class SectorCorrelationRunnable(
 
     @staticmethod
     def _normalize_symbols(symbols: list[str]) -> list[str]:
+        """Normalize symbol lists for sector correlation analysis."""
         return sorted(
             {symbol.strip().upper() for symbol in symbols if symbol.strip()}
         )
@@ -101,6 +103,7 @@ class SectorCorrelationRunnable(
         symbols: list[str],
         matrix: dict[str, dict[str, float | None]],
     ) -> tuple[tuple[str, str] | None, float | None]:
+        """Select strongest correlation pair from computed pair metrics."""
         best_pair: tuple[str, str] | None = None
         best_value: float | None = None
         best_abs = -1.0

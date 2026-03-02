@@ -1,3 +1,4 @@
+# src/sec_nlp/cli/commands/root.py
 # src/sec_nlp/cli/commands/run.py
 """Run pipeline commands"""
 

@@ -1,3 +1,4 @@
+# src/sec_nlp/pipelines/presets/news/config.py
 """Config model for the news monitoring pipeline."""
 
 from __future__ import annotations

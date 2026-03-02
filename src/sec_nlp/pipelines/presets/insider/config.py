@@ -1,3 +1,4 @@
+# src/sec_nlp/pipelines/presets/insider/config.py
 """Config model for insider pipeline."""
 
 from __future__ import annotations

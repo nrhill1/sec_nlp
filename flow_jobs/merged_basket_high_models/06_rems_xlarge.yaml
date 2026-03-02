@@ -1,21 +1,6 @@
 name: rems_xlarge_merged_hq_retrieve_chat
 defaults:
   email: you@example.com
-  symbols:
-  - MP
-  - LAC
-  - UUUU
-  - TMRC
-  - AREC
-  - USAR
-  forms:
-  - 10-K
-  - 10-Q
-  - 8-K
-  - 6-K
-  - 20-F
-  start_date: '2021-01-01'
-  dry_run: false
 on_failure: stop
 stages:
 - id: retrieve_seed
@@ -61,9 +46,27 @@ stages:
       vector_size: 2560
       qdrant_url: http://localhost:6333
       qdrant_location: null
+    symbols: &id001
+    - MP
+    - LAC
+    - UUUU
+    - TMRC
+    - AREC
+    - USAR
+    forms: &id002
+    - 10-K
+    - 10-Q
+    - 8-K
+    - 6-K
+    - 20-F
+    start_date: '2021-01-01'
+    dry_run: false
 - id: chat_answer
   pipeline: chat
-  seed_from_stage: retrieve_seed
+  inputs:
+  - from_stage: retrieve_seed
+    artifact: retrieve_seed
+    target_field: seed_context
   overrides:
     question: Compare NdPr supply-chain risk, processing bottlenecks, and pricing
       power across the REM basket, highlighting the strongest and weakest positioning.
@@ -90,3 +93,7 @@ stages:
       vector_size: 2560
       qdrant_url: http://localhost:6333
       qdrant_location: null
+    symbols: *id001
+    forms: *id002
+    start_date: '2021-01-01'
+    dry_run: false

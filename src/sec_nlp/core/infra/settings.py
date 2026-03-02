@@ -1,3 +1,4 @@
+# src/sec_nlp/core/infra/settings.py
 """Project-level settings and root discovery."""
 
 from __future__ import annotations
@@ -65,6 +66,7 @@ PROJECT_ROOT: Path = _validate_project_root(
 
 
 def _read_int_setting(name: str, default: int) -> int:
+    """Read integer setting from environment with fallback handling."""
     raw_value = os.getenv(name)
     if raw_value is None:
         return default
@@ -77,6 +79,7 @@ def _read_int_setting(name: str, default: int) -> int:
 
 
 def _read_float_setting(name: str, default: float) -> float:
+    """Read float setting from environment with fallback handling."""
     raw_value = os.getenv(name)
     if raw_value is None:
         return default

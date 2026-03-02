@@ -1,3 +1,4 @@
+# src/sec_nlp/cli/__init__.py
 # sec_nlp/cli/__init__.py
 """CLI entry point and command utilities."""
 

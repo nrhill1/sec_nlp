@@ -1,23 +1,22 @@
-"""Flow orchestration primitives for multi-pipeline runs."""
+# src/sec_nlp/app/flows/__init__.py
+"""Public flow orchestration API for multi-pipeline runs.
+
+Exports here represent the user-facing flow contract: validated specs in,
+typed stage results out, with execution details delegated to compile/runner.
+"""
 
 from .models import (
     FlowDefaults,
-    FlowResult,
     FlowRunResult,
     FlowSpec,
     FlowStageResult,
     FlowStageSpec,
 )
-from .runner import FlowRunner
-from .spec import load_flow_spec
 
 __all__: tuple[str, ...] = (
     "FlowDefaults",
-    "FlowResult",
     "FlowRunResult",
-    "FlowRunner",
     "FlowSpec",
     "FlowStageResult",
     "FlowStageSpec",
-    "load_flow_spec",
 )

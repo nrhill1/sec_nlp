@@ -1,3 +1,4 @@
+# src/sec_nlp/pipelines/presets/analyze/runnables/regulatory_exposure.py
 """Regulatory exposure runnable for filing-document regulatory mentions."""
 
 from __future__ import annotations
@@ -167,6 +168,7 @@ class RegulatoryExposureRunnable(
         self,
         documents: list[Document],
     ) -> tuple[dict[str, int], dict[str, set[str]]]:
+        """Collect per-regulator counts from extracted regulation mentions."""
         counts: defaultdict[str, int] = defaultdict(int)
         sections_by_regulation: defaultdict[str, set[str]] = defaultdict(set)
 
@@ -179,6 +181,7 @@ class RegulatoryExposureRunnable(
         return dict(counts), dict(sections_by_regulation)
 
     def _extract_regulations(self, text: str) -> list[str]:
+        """Extract regulation mentions from model text and metadata."""
         if self.regulation_extractor is not None:
             extracted: list[str] = []
             for regulation in self.regulation_extractor(text):
@@ -212,6 +215,7 @@ class RegulatoryExposureRunnable(
 
     @staticmethod
     def _extract_regulations_from_patterns(text: str) -> list[str]:
+        """Extract regulation references using regex pattern matches."""
         extracted: list[str] = []
         for regulation, pattern in _REGULATION_PATTERNS:
             for _ in pattern.finditer(text):
@@ -220,6 +224,7 @@ class RegulatoryExposureRunnable(
 
     @classmethod
     def _extract_regulations_from_extension(cls, text: str) -> list[str] | None:
+        """Extract regulation references from extension-provided metadata."""
         try:
             tagged_entities = extract_entities(text)
         except EntityExtensionError:
@@ -238,6 +243,7 @@ class RegulatoryExposureRunnable(
 
     @staticmethod
     def _normalize_regulation(regulation: str) -> str | None:
+        """Normalize regulation strings for stable deduplication and grouping."""
         cleaned = " ".join(regulation.strip().split())
         if not cleaned:
             return None
@@ -248,6 +254,7 @@ class RegulatoryExposureRunnable(
 
     @staticmethod
     def _document_section(document: Document) -> str:
+        """Resolve the source section label for a matched document."""
         metadata = (
             document.metadata if isinstance(document.metadata, dict) else {}
         )
@@ -263,6 +270,7 @@ class RegulatoryExposureRunnable(
         counts: dict[str, int],
         sections_by_regulation: dict[str, set[str]],
     ) -> list[RegulatoryReference]:
+        """Build citation references for regulatory exposure output."""
         references: list[RegulatoryReference] = []
         for regulation, mention_count in sorted(
             counts.items(),
@@ -282,10 +290,12 @@ class RegulatoryExposureRunnable(
 
     @staticmethod
     def _regulatory_body(regulation: str) -> str:
+        """Resolve the regulator body name for a regulation identifier."""
         return _REGULATORY_BODY_BY_REGULATION.get(regulation, "Unknown")
 
     @staticmethod
     def _top_regulators(references: list[RegulatoryReference]) -> list[str]:
+        """Select top regulators by mention frequency and confidence."""
         body_counts: defaultdict[str, int] = defaultdict(int)
         for reference in references:
             body_counts[reference.regulatory_body] += reference.mention_count
@@ -302,6 +312,7 @@ class RegulatoryExposureRunnable(
         current_counts: dict[str, int],
         previous_counts: dict[str, int],
     ) -> dict[str, int] | None:
+        """Build trend statistics for regulatory exposure across filings."""
         trend = {
             regulation: current_counts.get(regulation, 0)
             - previous_counts.get(regulation, 0)

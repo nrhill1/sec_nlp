@@ -1,3 +1,4 @@
+# src/sec_nlp/pipelines/presets/insider/models.py
 """Data models for insider pipeline."""
 
 from __future__ import annotations
@@ -83,6 +84,7 @@ class InsiderAlert(BaseModel):
         | tuple[JsonValue, ...]
         | set[JsonValue],
     ) -> list[str]:
+        """Deduplicate related transaction IDs while preserving order."""
         if value is None:
             return []
         if isinstance(value, str):

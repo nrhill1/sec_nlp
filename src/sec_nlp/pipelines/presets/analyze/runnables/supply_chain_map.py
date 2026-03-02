@@ -1,3 +1,4 @@
+# src/sec_nlp/pipelines/presets/analyze/runnables/supply_chain_map.py
 """Supply chain mapping runnable for exhibit and risk-factor text."""
 
 from __future__ import annotations
@@ -175,6 +176,7 @@ class SupplyChainMapRunnable(
         document: Document,
         default_section: str,
     ) -> list[RelatedEntity]:
+        """Extract related supply-chain entities from model output and metadata."""
         text = document.page_content
         if not text.strip():
             return []
@@ -217,6 +219,7 @@ class SupplyChainMapRunnable(
         return related_entities
 
     def _extract_entity_names(self, text: str) -> list[str]:
+        """Extract normalized entity names from a document payload."""
         if self.entity_extractor is not None:
             names: set[str] = set()
             for name in self.entity_extractor(text):
@@ -238,6 +241,7 @@ class SupplyChainMapRunnable(
 
     @classmethod
     def _extract_org_names_from_extension(cls, text: str) -> list[str] | None:
+        """Extract organization names from extension-provided metadata."""
         try:
             tagged_entities = extract_entities(text)
         except EntityExtensionError:
@@ -256,6 +260,7 @@ class SupplyChainMapRunnable(
 
     @staticmethod
     def _normalize_entity_name(name: str | None) -> str | None:
+        """Normalize entity names for dedupe and matching."""
         if name is None:
             return None
         cleaned = " ".join(name.strip().split())
@@ -269,6 +274,7 @@ class SupplyChainMapRunnable(
 
     @staticmethod
     def _coerce_metadata_text(value: JsonValue) -> str | None:
+        """Coerce metadata values to normalized text strings."""
         if isinstance(value, str):
             cleaned = value.strip()
             return cleaned or None
@@ -281,6 +287,7 @@ class SupplyChainMapRunnable(
         entity_name: str,
         default_section: str,
     ) -> str:
+        """Classify relationship type between source and related entities."""
         lowered_text = text.lower()
         lowered_entity = entity_name.lower()
         occurrences: list[tuple[int, int]] = []
@@ -369,6 +376,7 @@ class SupplyChainMapRunnable(
         relationship: str,
         source_section: str,
     ) -> float:
+        """Compute confidence score for a mapped supply-chain relationship."""
         base_confidence = {
             "subsidiary": 0.9,
             "supplier": 0.8,

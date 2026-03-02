@@ -1,3 +1,4 @@
+# src/sec_nlp/pipelines/presets/financials/models.py
 """Data models for financial statement extraction."""
 
 from __future__ import annotations

@@ -1,3 +1,4 @@
+# src/sec_nlp/pipelines/presets/holdings/steps/aggregate.py
 """Aggregate ownership metrics for holdings pipeline."""
 
 from __future__ import annotations
@@ -8,6 +9,7 @@ from ..models import HoldingPosition, OwnershipSummary, TopHolding
 
 
 def _parse_iso_date(value: str | None) -> date:
+    """Parse ISO-formatted date strings safely."""
     if value is None:
         return date.min
     try:
@@ -19,6 +21,7 @@ def _parse_iso_date(value: str | None) -> date:
 def _latest_accession_positions(
     positions: list[HoldingPosition],
 ) -> tuple[str | None, str | None, list[HoldingPosition]]:
+    """Select latest accession positions for each holding key."""
     if not positions:
         return None, None, []
 
@@ -41,6 +44,7 @@ def _latest_accession_positions(
 def _normalize_latest_snapshot(
     positions: list[HoldingPosition],
 ) -> list[TopHolding]:
+    """Normalize latest holdings snapshot rows for output."""
     by_cusip: dict[str, TopHolding] = {}
     for position in positions:
         if not position.cusip:
@@ -69,6 +73,7 @@ def _normalize_latest_snapshot(
 
 
 def _compute_hhi(holdings: list[TopHolding]) -> float | None:
+    """Compute HHI concentration score from position weights."""
     total_value = sum(holding.value_thousands for holding in holdings)
     if total_value <= 0:
         return None

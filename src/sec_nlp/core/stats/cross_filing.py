@@ -1,3 +1,4 @@
+# src/sec_nlp/core/stats/cross_filing.py
 """Cross-filing trend analysis helpers."""
 
 from __future__ import annotations
@@ -37,6 +38,7 @@ class FilingTrend(BaseModel):
 def _parse_filing_date(
     raw_value: JsonValue | date | datetime,
 ) -> date | None:
+    """Parse filing-date values into date objects."""
     if isinstance(raw_value, datetime):
         return raw_value.date()
     if isinstance(raw_value, date):
@@ -53,6 +55,7 @@ def _parse_filing_date(
 
 
 def _sentiment_score(results: list[AnalysisResultDict]) -> float | None:
+    """Map sentiment labels to numeric sentiment scores."""
     counts: Counter[str] = Counter()
     for result in results:
         sentiment = result.get("sentiment")
@@ -79,6 +82,7 @@ def _sentiment_score(results: list[AnalysisResultDict]) -> float | None:
 
 
 def _trend_direction(scores: list[float]) -> str:
+    """Classify directional trend from ordered sentiment values."""
     if len(scores) < 2:
         return "stable"
 
@@ -105,6 +109,7 @@ def _trend_direction(scores: list[float]) -> str:
 
 
 def _inflection_points(scores: list[float]) -> list[int]:
+    """Detect inflection points in ordered sentiment values."""
     if len(scores) < 3:
         return []
 
@@ -215,6 +220,7 @@ def _accession_sort_key(
     accession: str,
     date_by_accession: dict[str, date | None],
 ) -> tuple[int, str, str]:
+    """Build deterministic sort key for accession ordering."""
     filing_date = date_by_accession.get(accession)
     if filing_date is None:
         return (1, accession, accession)

@@ -1,3 +1,4 @@
+# src/sec_nlp/pipelines/presets/news/pipeline.py
 """Pipeline for monitoring company-centric financial news."""
 
 from __future__ import annotations
@@ -5,6 +6,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import ClassVar, Literal
 
+from langchain_core.runnables import Runnable
+from pydantic import PrivateAttr
 from rich.progress import (
     BarColumn,
     Progress,
@@ -20,10 +23,7 @@ from sec_nlp.core.infra.logger import logger
 from sec_nlp.core.infra.rich_console import get_rich_console
 from sec_nlp.core.types import coerce_result_json_dict
 from sec_nlp.pipelines import BasePipeline
-from sec_nlp.pipelines.output_io import (
-    build_run_file_stem,
-    build_run_header_fields,
-)
+from sec_nlp.pipelines.output_io import build_run_output_context
 from sec_nlp.types import ResultDict
 
 from .config import NewsSettings
@@ -34,11 +34,9 @@ from .io import (
     write_news_timeline_yaml,
 )
 from .models import NewsCorrelation, NewsHeadline, NewsResult, NewsTimelineEntry
-from .steps import (
-    correlate_news_items,
-    fetch_news_items,
-    match_news_items,
-    resolve_symbol_aliases,
+from .run_stages import (
+    NewsRunState,
+    build_news_stage_chain,
 )
 
 
@@ -52,6 +50,9 @@ class NewsPipeline(BasePipeline):
     requires_llm: ClassVar[bool] = False
 
     config: NewsSettings
+    _stage_chain: Runnable[NewsRunState, NewsRunState] | None = PrivateAttr(
+        default=None
+    )
 
     @classmethod
     def config_model(cls) -> type[NewsSettings]:
@@ -62,7 +63,8 @@ class NewsPipeline(BasePipeline):
         return NewsResult
 
     def _build_components(self) -> None:
-        return
+        """Initialize reusable components for news pipeline execution."""
+        self._stage_chain = build_news_stage_chain(self)
 
     def run(self) -> NewsResult:
         try:
@@ -90,6 +92,7 @@ class NewsPipeline(BasePipeline):
                     total=len(self.config.symbols),
                 )
                 phase_task = progress.add_task("", total=None, visible=False)
+                stage_chain = self.require_stage_chain(self._stage_chain)
 
                 for symbol in self.config.symbols:
                     normalized_symbol = symbol.upper()
@@ -98,23 +101,22 @@ class NewsPipeline(BasePipeline):
                         description=f"Processing {normalized_symbol}",
                     )
 
-                    (
-                        symbol_outputs,
-                        symbol_meta,
-                        fetched_count,
-                        emitted_count,
-                        cluster_count,
-                    ) = self._process_symbol(
-                        normalized_symbol,
+                    symbol_state = NewsRunState(
+                        runtime=self,
+                        symbol=normalized_symbol,
                         progress=progress,
                         phase_task=phase_task,
                     )
+                    symbol_state = self.run_stage_chain(
+                        initial_state=symbol_state,
+                        stage_chain=stage_chain,
+                    )
 
-                    outputs.extend(symbol_outputs)
-                    metadata[normalized_symbol] = symbol_meta
-                    items_fetched += fetched_count
-                    items_emitted += emitted_count
-                    clusters_detected += cluster_count
+                    outputs.extend(symbol_state.outputs)
+                    metadata[normalized_symbol] = symbol_state.metadata
+                    items_fetched += len(symbol_state.fetched_items)
+                    items_emitted += len(symbol_state.correlated_items)
+                    clusters_detected += len(symbol_state.correlation.clusters)
 
                     progress.update(phase_task, visible=False)
                     progress.advance(overall_task)
@@ -140,66 +142,6 @@ class NewsPipeline(BasePipeline):
                 error=f"{type(exc).__name__}: {exc}",
             )
 
-    def _process_symbol(
-        self,
-        symbol: str,
-        *,
-        progress: Progress | None = None,
-        phase_task: TaskID | None = None,
-    ) -> tuple[list[Path], dict[str, int | float | str | None], int, int, int]:
-        symbol_aliases = resolve_symbol_aliases(
-            symbol=symbol,
-            settings=self.config,
-        )
-
-        self._update_phase(progress, phase_task, symbol, "Fetching")
-        fetched_items = fetch_news_items(symbol=symbol, settings=self.config)
-
-        self._update_phase(progress, phase_task, symbol, "Matching")
-        matched_items = match_news_items(
-            items=fetched_items,
-            symbol=symbol,
-            topics=self.config.topics,
-            min_relevance=self.config.min_relevance,
-            require_symbol_match=self.config.require_symbol_match,
-            symbol_aliases=symbol_aliases,
-        )
-
-        self._update_phase(progress, phase_task, symbol, "Correlating")
-        correlated_items, timeline, correlation = correlate_news_items(
-            symbol=symbol,
-            items=matched_items,
-            settings=self.config,
-        )
-
-        self._update_phase(progress, phase_task, symbol, "Writing")
-        outputs = self._write_outputs(
-            symbol=symbol,
-            items=correlated_items,
-            timeline=timeline,
-            correlation=correlation,
-            symbol_aliases=symbol_aliases,
-        )
-
-        metadata: dict[str, int | float | str | None] = {
-            "items_fetched": len(fetched_items),
-            "items_emitted": len(correlated_items),
-            "timeline_days": len(timeline),
-            "days_compared": correlation.days_compared,
-            "news_to_return_correlation": correlation.news_to_return_correlation,
-            "filings_linked": correlation.filings_linked,
-            "clusters_detected": len(correlation.clusters),
-            "symbol_alias_count": len(symbol_aliases),
-        }
-
-        return (
-            outputs,
-            metadata,
-            len(fetched_items),
-            len(correlated_items),
-            len(correlation.clusters),
-        )
-
     def _update_phase(
         self,
         progress: Progress | None,
@@ -209,6 +151,7 @@ class NewsPipeline(BasePipeline):
         *,
         total: int | None = None,
     ) -> None:
+        """Update progress state and current news phase metadata."""
         if progress is None or phase_task is None:
             return
 
@@ -244,17 +187,18 @@ class NewsPipeline(BasePipeline):
         correlation: NewsCorrelation,
         symbol_aliases: list[str],
     ) -> list[Path]:
+        """Write news outputs and return emitted artifact paths."""
         symbol_out = self.config.get_symbol_output_dir(symbol)
-        base_stem = build_run_file_stem(symbol, "news", self.config.run_id)
-        run_header = build_run_header_fields(
+        output_context = build_run_output_context(
+            symbol=symbol,
+            suffix="news",
             run_timestamp=self.config.run_timestamp,
             run_id=self.config.run_id,
             run_short_id=self.config.short_id,
         )
-        run_short_id_raw = run_header.get("run_short_id")
-        run_short_id = (
-            run_short_id_raw if isinstance(run_short_id_raw, int) else None
-        )
+        base_stem = output_context.base_stem
+        run_header = output_context.run_header
+        run_short_id = output_context.run_short_id
 
         payload = NewsTimelinePayload(
             run_timestamp=str(run_header["run_timestamp"]),

@@ -1,3 +1,4 @@
+# src/sec_nlp/core/edgar/economic.py
 """Economic indicator integration utilities backed by FRED data."""
 
 from __future__ import annotations
@@ -83,6 +84,7 @@ class MarketRangeRetriever(Protocol):
 
 
 def _load_fred_module() -> ModuleType:
+    """Load fred module."""
     try:
         return import_module("fredapi")
     except Exception as exc:  # pragma: no cover - depends on environment
@@ -92,6 +94,7 @@ def _load_fred_module() -> ModuleType:
 
 
 def _require_fred_api_key() -> str:
+    """Read and validate the configured FRED API key."""
     api_key = os.getenv("FRED_API_KEY", "").strip()
     if not api_key:
         raise EconomicDataError("FRED_API_KEY environment variable is not set.")
@@ -99,6 +102,7 @@ def _require_fred_api_key() -> str:
 
 
 def _coerce_date(value: str | date | datetime) -> date:
+    """Coerce date-like inputs to date values."""
     if isinstance(value, datetime):
         return value.date()
     if isinstance(value, date):
@@ -109,6 +113,7 @@ def _coerce_date(value: str | date | datetime) -> date:
 def _normalize_observation_date(
     value: JsonValue | date | datetime,
 ) -> str | None:
+    """Normalize observation date."""
     if isinstance(value, datetime):
         return value.date().isoformat()
     if isinstance(value, date):
@@ -125,6 +130,7 @@ def _normalize_observation_date(
 
 
 def _normalize_observation_value(value: JsonValue) -> float | None:
+    """Normalize observation value."""
     if isinstance(value, bool) or value is None:
         return None
     if isinstance(value, (int, float)):
@@ -150,6 +156,7 @@ def _macro_context_from_series(
     series_id: str,
     value: float | None,
 ) -> MacroContext:
+    """Build filing-aligned macro context records from one indicator series."""
     if value is None:
         return MacroContext(filing_date=filing_date)
 
@@ -256,6 +263,7 @@ def _nearest_observation_value(
     observation_dates: list[date],
     observation_values: list[float],
 ) -> float | None:
+    """Return the closest observation value on or before a target date."""
     if not observation_dates:
         return None
 
@@ -347,6 +355,7 @@ def compute_macro_sensitivity(
 
 
 def _daily_returns(quotes: list[MarketQuote]) -> list[tuple[date, float]]:
+    """Compute simple daily returns from ordered close prices."""
     ordered_quotes = sorted(quotes, key=lambda quote: quote.timestamp)
     returns: list[tuple[date, float]] = []
     for previous_quote, current_quote in zip(
@@ -368,6 +377,7 @@ def _daily_returns(quotes: list[MarketQuote]) -> list[tuple[date, float]]:
 def _indicator_values_by_day(
     series: EconomicSeries,
 ) -> list[tuple[date, float]]:
+    """Map indicator observations to normalized day keys."""
     values: list[tuple[date, float]] = []
     for day_text, value in series.observations:
         values.append((_coerce_date(day_text), value))
@@ -379,6 +389,7 @@ def _latest_indicator_on_or_before(
     day: date,
     indicator_by_day: list[tuple[date, float]],
 ) -> float | None:
+    """Return the latest indicator value on or before a given day."""
     dates = [series_day for series_day, _ in indicator_by_day]
     insertion_index = bisect_left(dates, day)
 
@@ -390,6 +401,7 @@ def _latest_indicator_on_or_before(
 
 
 def _fallback_pearson(x: list[float], y: list[float]) -> float:
+    """Compute Pearson correlation without optional third-party deps."""
     if len(x) != len(y):
         raise EconomicDataError("series lengths must match for correlation")
     if len(x) < 2:
@@ -410,6 +422,7 @@ def _fallback_pearson(x: list[float], y: list[float]) -> float:
 
 
 def _approximate_p_value(correlation: float, sample_size: int) -> float:
+    """Approximate a two-tailed p-value from a correlation coefficient."""
     if sample_size <= 2:
         return 1.0
     bounded_r = max(min(correlation, 0.999_999), -0.999_999)

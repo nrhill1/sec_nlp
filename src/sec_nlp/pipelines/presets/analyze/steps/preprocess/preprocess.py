@@ -41,6 +41,7 @@ class ChunkPreprocessor:
         prioritize_topics: bool = True,
         embedder: OllamaEmbeddings | None = None,
     ) -> None:
+        """Initialize preprocessing state and optional embedding helpers."""
         self.config = config
         self.section_extractor = section_extractor
         self.topics = normalize_topics(topics)

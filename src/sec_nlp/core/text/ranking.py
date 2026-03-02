@@ -76,6 +76,7 @@ EFTS_AVAILABLE = _check_efts_available()
 
 
 def _require_efts(feature: str) -> None:
+    """Require native EFTS extension and raise clear error when missing."""
     if not EFTS_AVAILABLE:
         raise RuntimeError(
             f"{feature} requires the EFTS Rust extension; Python fallback is disabled."

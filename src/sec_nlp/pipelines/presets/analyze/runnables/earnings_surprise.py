@@ -1,3 +1,4 @@
+# src/sec_nlp/pipelines/presets/analyze/runnables/earnings_surprise.py
 """Earnings surprise runnable for EPS surprise and post-event CAR metrics."""
 
 from __future__ import annotations
@@ -136,6 +137,7 @@ class EarningsSurpriseRunnable(
     def _resolve_eps_and_event_date(
         self, input: EarningsSurpriseInput
     ) -> tuple[float, date]:
+        """Resolve EPS metrics and event date for surprise analysis."""
         reported_eps = input.reported_eps
         event_day = (
             self._coerce_date(input.event_date)
@@ -166,6 +168,7 @@ class EarningsSurpriseRunnable(
 
     @staticmethod
     def _coerce_date(value: date | str) -> date:
+        """Coerce date-like values to date objects when possible."""
         if isinstance(value, date):
             return value
         return date.fromisoformat(value)
@@ -179,6 +182,7 @@ class EarningsSurpriseRunnable(
         event_day: date,
         sessions: int,
     ) -> float:
+        """Compute post-event cumulative abnormal return window metrics."""
         window_end = event_day + timedelta(days=max(10, sessions * 3))
         symbol_quotes = retriever.retrieve_range(
             symbol, (event_day, window_end)
@@ -213,6 +217,7 @@ class EarningsSurpriseRunnable(
         symbol_quotes: list[MarketQuote],
         benchmark_quotes: list[MarketQuote],
     ) -> tuple[list[float], list[float]]:
+        """Build aligned close-price series for benchmark comparisons."""
         by_timestamp_symbol = {
             quote.timestamp: float(quote.close) for quote in symbol_quotes
         }
@@ -235,6 +240,7 @@ class EarningsSurpriseRunnable(
         symbol_closes: list[float],
         benchmark_closes: list[float],
     ) -> float | None:
+        """Compute fallback CAR when event-study output is unavailable."""
         if len(symbol_closes) < 2 or len(benchmark_closes) < 2:
             return None
         first_symbol = symbol_closes[0]

@@ -1,64 +1,126 @@
-"""Typed in-memory artifact storage for flow stage handoff."""
+# src/sec_nlp/app/flows/artifacts.py
+"""In-memory artifact store for typed stage-to-stage handoff.
+
+The store keeps artifact families keyed by stage ID so downstream stages can
+consume upstream outputs by reference during a single process run, minimizing
+serialization and conversion overhead.
+"""
 
 from __future__ import annotations
 
-from sec_nlp.pipelines.presets.chat.bridge import ChatSeedBundle, ChatSeedChunk
-from sec_nlp.pipelines.presets.retrieve.bridge import (
-    RetrieveChatSeedBundle,
-    RetrieveChatSeedChunk,
+from sec_nlp.app.flows.contracts import (
+    ContractEvidenceBundle,
+    FlowArtifactValue,
+    FlowRetrievedChunk,
+    FlowSeedBundle,
 )
+from sec_nlp.app.flows.models import FlowStageInputBinding
 
 
 class FlowArtifactStore:
-    """Stage-scoped in-memory artifact store for local flow runs."""
+    """In-memory artifact registry keyed by flow stage ID.
+
+    The store is optimized for local single-process execution, where downstream
+    stages consume upstream artifacts by reference rather than via JSON files.
+    """
 
     def __init__(self) -> None:
-        self._retrieve_seed_by_stage: dict[str, RetrieveChatSeedBundle] = {}
-        self._chat_seed_cache: dict[str, ChatSeedBundle] = {}
+        """Initialize an in-memory artifact store for flow stage handoffs."""
+        self._seed_by_stage: dict[str, FlowSeedBundle] = {}
+        self._seed_chunks_by_stage: dict[
+            str, tuple[FlowRetrievedChunk, ...]
+        ] = {}
+        self._contract_evidence_by_stage: dict[str, ContractEvidenceBundle] = {}
 
-    def put_retrieve_seed(
-        self, stage_id: str, bundle: RetrieveChatSeedBundle
+    def put_seed_bundle(self, stage_id: str, bundle: FlowSeedBundle) -> None:
+        """Register a retrieve-style seed bundle for a producing stage."""
+        self._seed_by_stage[stage_id] = bundle
+
+    def get_seed_bundle(self, stage_id: str) -> FlowSeedBundle | None:
+        """Return a previously stored seed bundle for `stage_id`."""
+        return self._seed_by_stage.get(stage_id)
+
+    def put_seed_chunks(
+        self,
+        stage_id: str,
+        chunks: tuple[FlowRetrievedChunk, ...] | list[FlowRetrievedChunk],
     ) -> None:
-        """Store retrieve handoff bundle keyed by stage ID."""
-        self._retrieve_seed_by_stage[stage_id] = bundle
-        self._chat_seed_cache.pop(stage_id, None)
+        """Store prebuilt chat chunks for zero-copy stage handoff.
 
-    def get_retrieve_seed(self, stage_id: str) -> RetrieveChatSeedBundle | None:
-        """Load retrieve seed bundle for a stage ID."""
-        return self._retrieve_seed_by_stage.get(stage_id)
+        Tuple inputs are preserved as-is to avoid extra allocations when
+        upstream already materialized an immutable chunk tuple.
+        """
+        if isinstance(chunks, tuple):
+            self._seed_chunks_by_stage[stage_id] = chunks
+            return
+        self._seed_chunks_by_stage[stage_id] = tuple(chunks)
 
-    def get_chat_seed(self, stage_id: str) -> ChatSeedBundle | None:
-        """Get chat seed bundle converted from retrieve artifact once."""
-        cached = self._chat_seed_cache.get(stage_id)
-        if cached is not None:
-            return cached
+    def get_seed_chunks(
+        self,
+        stage_id: str,
+    ) -> tuple[FlowRetrievedChunk, ...] | None:
+        """Return prebuilt chat chunks for `stage_id`, if available."""
+        return self._seed_chunks_by_stage.get(stage_id)
 
-        retrieve_bundle = self.get_retrieve_seed(stage_id)
-        if retrieve_bundle is None:
-            return None
+    def put_contract_evidence(
+        self, stage_id: str, bundle: ContractEvidenceBundle
+    ) -> None:
+        """Register an EXB contract-evidence bundle for a producing stage."""
+        self._contract_evidence_by_stage[stage_id] = bundle
 
-        chat_bundle = ChatSeedBundle(
-            upstream_pipeline="retrieve",
-            upstream_run_id=retrieve_bundle.run_id,
-            upstream_short_id=retrieve_bundle.run_short_id,
-            symbols=list(retrieve_bundle.symbols),
-            queries=list(retrieve_bundle.queries),
-            chunks=[
-                self._to_chat_chunk(chunk) for chunk in retrieve_bundle.chunks
-            ],
+    def get_contract_evidence(
+        self, stage_id: str
+    ) -> ContractEvidenceBundle | None:
+        """Return contract evidence for `stage_id`, if one was stored."""
+        return self._contract_evidence_by_stage.get(stage_id)
+
+    def has_artifact(self, stage_id: str) -> bool:
+        """Return whether any artifact family exists for `stage_id`."""
+        return (
+            stage_id in self._seed_by_stage
+            or stage_id in self._seed_chunks_by_stage
+            or stage_id in self._contract_evidence_by_stage
         )
-        self._chat_seed_cache[stage_id] = chat_bundle
-        return chat_bundle
+
+    def stage_artifact(self, stage_id: str) -> FlowArtifactValue | None:
+        """Return the primary typed artifact for a stage.
+
+        Current precedence is seed bundle first, then contract evidence.
+        """
+        seed = self.get_seed_bundle(stage_id)
+        if seed is not None:
+            return seed
+        return self.get_contract_evidence(stage_id)
+
+    def resolve_chat_seed_input(
+        self,
+        binding: FlowStageInputBinding,
+    ) -> tuple[FlowSeedBundle | None, tuple[FlowRetrievedChunk, ...]]:
+        """Resolve one chat input binding into seed bundle + prebuilt chunks.
+
+        For `retrieve_seed`, this returns the stored seed bundle.
+        For `contract_evidence`, this projects EXB evidence into a seed-like
+        bundle while preserving any prebuilt chunks from the same stage.
+        """
+        seed_chunks = self.get_seed_chunks(binding.from_stage) or ()
+        if binding.artifact == "retrieve_seed":
+            return self.get_seed_bundle(binding.from_stage), seed_chunks
+
+        contract_bundle = self.get_contract_evidence(binding.from_stage)
+        if contract_bundle is None:
+            return None, seed_chunks
+        return self._seed_from_contract_evidence(contract_bundle), seed_chunks
 
     @staticmethod
-    def _to_chat_chunk(chunk: RetrieveChatSeedChunk) -> ChatSeedChunk:
-        return ChatSeedChunk(
-            collection=chunk.collection,
-            score=chunk.score,
-            symbol=chunk.symbol,
-            accession_number=chunk.accession_number,
-            form_type=chunk.form_type,
-            filed_date=chunk.filed_date,
-            source=chunk.source,
-            snippet=chunk.snippet,
+    def _seed_from_contract_evidence(
+        evidence: ContractEvidenceBundle,
+    ) -> FlowSeedBundle:
+        """Project EXB contract evidence into chat's seed-bundle shape."""
+        return FlowSeedBundle(
+            upstream_pipeline=evidence.upstream_pipeline,
+            upstream_run_id=evidence.upstream_run_id,
+            upstream_short_id=evidence.upstream_short_id,
+            symbols=evidence.symbols,
+            queries=evidence.queries,
+            chunks=[],
         )

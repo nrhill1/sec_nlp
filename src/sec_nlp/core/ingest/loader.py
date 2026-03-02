@@ -1,3 +1,4 @@
+# src/sec_nlp/core/ingest/loader.py
 # src/sec_nlp/core/loader.py
 """Unified Loader that downloads and preprocesses SEC filings.
 
@@ -39,6 +40,8 @@ from sec_nlp.types import JsonDict
 
 
 class LoaderRunMetadata(TypedDict):
+    """Metadata summary emitted after a loader run."""
+
     work_folder: str
     download_results: DownloadResults
     per_symbol_doc_counts: dict[str, int]
@@ -47,10 +50,13 @@ class LoaderRunMetadata(TypedDict):
 
 
 class FilingRecord(Protocol):
+    """Minimal filing record interface used by timestamp helpers."""
+
     acceptance_date: str
 
 
 def _default_meta() -> LoaderRunMetadata:
+    """Return default meta."""
     return {
         "work_folder": "",
         "download_results": {},
@@ -134,6 +140,7 @@ class Loader(BaseModel):
     @field_validator("downloads_folder", mode="before")
     @classmethod
     def _ensure_path(cls, v: str | Path) -> Path:
+        """Normalize path-like values into a Path instance."""
         if isinstance(v, str):
             return Path(v)
         if isinstance(v, Path):
@@ -143,6 +150,7 @@ class Loader(BaseModel):
     @field_validator("chunk_size", "chunk_overlap")
     @classmethod
     def _positive(cls, v: int) -> int:
+        """Return a positive integer value when valid, else None."""
         if v <= 0:
             raise ValueError("must be positive")
         return v
@@ -375,6 +383,7 @@ class Loader(BaseModel):
         return [d.page_content for d in docs]
 
     def _filing_dir(self, symbol: str, mode: FilingMode, base: Path) -> Path:
+        """Resolve the symbol-specific filing directory for the active mode."""
         return filings.filing_dir(base, symbol, mode)
 
     def _get_filing_date_from_dir(self, filing_dir: Path) -> date | None:
@@ -391,6 +400,7 @@ class Loader(BaseModel):
     def _build_relationships_for_symbol(
         self, symbol: str
     ) -> tuple[dict[str, list[JsonDict]], JsonDict]:
+        """Build relationships for symbol."""
         resolver = RelationshipResolver(self.downloads_folder)
         graph = resolver.resolve_symbol(symbol)
         related_map = build_related_filings_map(graph)
@@ -446,6 +456,7 @@ class Loader(BaseModel):
         start_date: date | None,
         end_date: date | None,
     ) -> list[Path]:
+        """Resolve accession directories within a filing-type directory."""
         if not filing_dir.exists():
             raise FileNotFoundError(f"No filings found at {filing_dir}")
 
@@ -468,6 +479,7 @@ class Loader(BaseModel):
         start_date: date | None,
         end_date: date | None,
     ) -> list[Path]:
+        """Resolve accession directories across all filing-type directories."""
         existing_dirs = [path for path in filing_dirs if path.exists()]
         if not existing_dirs:
             raise FileNotFoundError("No filings found in configured folders")
@@ -492,6 +504,7 @@ class Loader(BaseModel):
         start_date: date | None,
         end_date: date | None,
     ) -> list[Document]:
+        """Load holdings documents for configured symbols and forms."""
         accession_dirs = self._accession_dirs_for_filing_dir(
             filing_dir=filing_dir,
             limit=limit,
@@ -513,6 +526,7 @@ class Loader(BaseModel):
         start_date: date | None,
         end_date: date | None,
     ) -> list[Document]:
+        """Load insider-trading documents for configured symbols and forms."""
         form_dirs = [
             base / "sec-edgar-filings" / symbol.upper() / form_type
             for form_type in FilingMode.insider.forms
@@ -534,6 +548,7 @@ class Loader(BaseModel):
         docs: Sequence[Document],
         related_map: dict[str, list[JsonDict]],
     ) -> None:
+        """Attach related filing metadata to documents when available."""
         if not docs or not related_map:
             return
 
@@ -553,6 +568,7 @@ class Loader(BaseModel):
 
     @staticmethod
     def _extract_accession(metadata: JsonDict) -> str | None:
+        """Extract accession."""
         accession_value = metadata.get("accession_number") or metadata.get(
             "accession"
         )
@@ -601,11 +617,13 @@ class Loader(BaseModel):
     def _build_section_extractor(
         self, section_filter: SectionFilter | None
     ) -> SectionExtractor | None:
+        """Build section extractor."""
         return self._parser._build_section_extractor(section_filter)
 
     def _log_section_chunk_summary(
         self, section_chunks: list[Document]
     ) -> None:
+        """Log per-symbol section and chunk counts for diagnostics."""
         self._parser._log_section_chunk_summary(section_chunks)
 
     def _chunk_text(
@@ -614,6 +632,7 @@ class Loader(BaseModel):
         metadata: JsonDict | None,
         section_filter: SectionFilter | None,
     ) -> list[Document]:
+        """Split text into sections and chunks for downstream indexing."""
         return self._parser._chunk_text(
             text_content,
             metadata,
@@ -820,6 +839,7 @@ class Loader(BaseModel):
     def _run_async(
         coro: Coroutine[None, None, list[Document]],
     ) -> list[Document]:
+        """Run document loading in an async context and return loaded documents."""
         loop = asyncio.new_event_loop()
         try:
             asyncio.set_event_loop(loop)
@@ -1173,6 +1193,7 @@ class Loader(BaseModel):
         )
 
     def __repr__(self) -> str:
+        """Return a concise debug representation for the loader."""
         symbols = ",".join(sorted(self._symbols)) or "<none>"
         return (
             f"<Loader company_name={self.company_name} symbols=[{symbols}] "
@@ -1181,5 +1202,6 @@ class Loader(BaseModel):
         )
 
     def __str__(self) -> str:
+        """Return a human-readable loader summary string."""
         mode_str = self.fetch_mode
         return f"Loader({mode_str}) with {len(self._symbols)} symbol(s)"

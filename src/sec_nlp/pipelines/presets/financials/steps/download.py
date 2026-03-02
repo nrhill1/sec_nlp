@@ -1,3 +1,4 @@
+# src/sec_nlp/pipelines/presets/financials/steps/download.py
 """Download helpers for the financials pipeline."""
 
 from __future__ import annotations
@@ -29,6 +30,7 @@ def _collect_form_dirs(
     form_type: str,
     base_dir: Path,
 ) -> list[DownloadedFiling]:
+    """Collect existing financials form directories for symbols."""
     form_dir = base_dir / "sec-edgar-filings" / symbol.upper() / form_type
     if not form_dir.exists():
         return []
@@ -50,6 +52,7 @@ def _collect_form_dirs(
 
 
 def _sort_key(filing: DownloadedFiling) -> tuple[date, float]:
+    """Build deterministic sort key for downloaded financial docs."""
     filed_date = filing.filed_date or date.min
     try:
         mtime = filing.filing_dir.stat().st_mtime

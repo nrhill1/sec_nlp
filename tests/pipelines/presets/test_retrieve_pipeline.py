@@ -1,3 +1,4 @@
+# tests/pipelines/presets/test_retrieve_pipeline.py
 """Tests for retrieve pipeline and ranking helpers."""
 
 from __future__ import annotations
@@ -20,6 +21,10 @@ from sec_nlp.pipelines.presets.retrieve import (
     RetrieveSettings,
 )
 from sec_nlp.pipelines.presets.retrieve.models import RetrievalHit
+from sec_nlp.pipelines.presets.retrieve.run_stages import (
+    RetrieveRunState,
+    build_retrieve_stage_chain,
+)
 from sec_nlp.pipelines.presets.retrieve.steps import (
     candidate_search as candidate_search_steps,
     download_and_chunk_hits,
@@ -399,7 +404,7 @@ def test_candidate_search_filters_cross_symbol_hits() -> None:
     assert filtered[0].cik == "0001326801"
 
 
-def test_candidates_from_batch_results_logs_hit_counts_at_info(
+def test_candidates_from_batch_results_logs_compact_summary_at_info(
     tmp_path: Path,
     caplog,
 ) -> None:
@@ -448,9 +453,15 @@ def test_candidates_from_batch_results_logs_hit_counts_at_info(
         queries=["rare earth"],
         batch_results=batch_results,
     )
+    searcher._log_query_hit_summary(
+        symbol="MP",
+        candidates_by_query=candidates,
+    )
 
     assert len(candidates["rare earth"]) == 1
-    assert "EFTS hits for MP query='rare earth': 1" in caplog.text
+    assert "EFTS summary for MP: 1 hits across 1 queries" in caplog.text
+    assert "1)   1 |##########| rare earth" in caplog.text
+    assert "EFTS hits for MP query='rare earth': 1" not in caplog.text
     assert "Filtered " not in caplog.text
 
 
@@ -952,6 +963,47 @@ def test_retrieve_pipeline_run_for_flow_returns_seed_bundle(
     assert bundle.chunks[0].snippet
 
 
+def test_retrieve_pipeline_run_for_flow_with_chunks(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    config = RetrieveSettings(
+        email="test@example.com",
+        symbols=["ABC"],
+        queries=["supply chain"],
+        dl_path=tmp_path / "downloads",
+        out_path=tmp_path / "outputs",
+        output_format="json",
+        top_k=5,
+        download_missing=False,
+    )
+    candidates = {
+        "supply chain": [
+            _efts_hit(
+                accession="0000123456-26-000101",
+                filed=date(2026, 2, 3),
+                score=0.88,
+                company="ABC Co",
+            )
+        ]
+    }
+    monkeypatch.setattr(
+        "sec_nlp.pipelines.presets.retrieve.pipeline.run_candidate_search",
+        lambda symbol, queries, settings: candidates,
+    )
+
+    result, bundle, chunks = RetrievePipeline(
+        config=config
+    ).run_for_flow_with_chunks()
+
+    assert result.success is True
+    assert isinstance(bundle, RetrieveChatSeedBundle)
+    assert len(bundle.chunks) == 0
+    assert len(chunks) == 1
+    assert chunks[0].collection == "retrieve"
+    assert chunks[0].snippet
+
+
 def test_retrieve_pipeline_runs_unscoped_without_symbols(
     tmp_path: Path,
     monkeypatch,
@@ -1074,6 +1126,65 @@ def test_retrieve_pipeline_respects_hydrate_top_n(
     assert symbol_meta["hydrated_hits"] == 1
     assert symbol_meta["passthrough_hits"] == 2
     assert "stage_timings" in symbol_meta
+
+
+def test_retrieve_stage_chain_preserves_state_identity(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    config = RetrieveSettings(
+        email="test@example.com",
+        symbols=["ABC"],
+        queries=["supply chain"],
+        forms=["10-K"],
+        top_k=5,
+        efts_candidates=10,
+        hydrate_top_n=2,
+        rerank_with_embeddings=False,
+        index_results=False,
+        download_missing=False,
+        dl_path=tmp_path / "downloads",
+        out_path=tmp_path / "outputs",
+    )
+
+    candidates = {
+        "supply chain": [
+            _efts_hit(
+                accession="0000123456-26-000331",
+                filed=date(2026, 2, 1),
+                score=0.95,
+                company="ABC Co",
+            )
+        ]
+    }
+    monkeypatch.setattr(
+        "sec_nlp.pipelines.presets.retrieve.pipeline.run_candidate_search",
+        lambda symbol, queries, settings: candidates,
+    )
+    monkeypatch.setattr(
+        "sec_nlp.pipelines.presets.retrieve.pipeline.download_and_chunk_hits",
+        lambda symbol, hits, settings: hits,
+    )
+
+    pipeline = RetrievePipeline(config=config)
+    state = RetrieveRunState(
+        search_symbol="ABC",
+        output_symbol="ABC",
+        candidate_searcher=None,
+        precomputed_candidates=None,
+        shared_candidate_overhead=0.0,
+        progress=None,
+        phase_task=None,
+    )
+    stage_chain = build_retrieve_stage_chain(pipeline)
+
+    final_state = pipeline.run_stage_chain(
+        initial_state=state,
+        stage_chain=stage_chain,
+    )
+
+    assert id(final_state) == id(state)
+    assert final_state.final_hits
 
 
 def test_download_and_chunk_hits_enriches_snippet_and_chunk_metadata(

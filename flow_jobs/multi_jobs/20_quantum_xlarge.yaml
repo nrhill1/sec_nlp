@@ -1,21 +1,6 @@
 name: quantum_xlarge_retrieve_chat
 defaults:
   email: you@example.com
-  symbols:
-  - IONQ
-  - RGTI
-  - QBTS
-  - QUBT
-  - IBM
-  - HON
-  forms:
-  - 10-K
-  - 10-Q
-  - 8-K
-  - 6-K
-  - 20-F
-  start_date: '2021-01-01'
-  dry_run: false
 on_failure: stop
 stages:
 - id: retrieve_seed
@@ -60,9 +45,27 @@ stages:
       collection_name: flow_quantum_xlarge
       qdrant_url: http://localhost:6333
       qdrant_location: null
+    symbols: &id001
+    - IONQ
+    - RGTI
+    - QBTS
+    - QUBT
+    - IBM
+    - HON
+    forms: &id002
+    - 10-K
+    - 10-Q
+    - 8-K
+    - 6-K
+    - 20-F
+    start_date: '2021-01-01'
+    dry_run: false
 - id: chat_answer
   pipeline: chat
-  seed_from_stage: retrieve_seed
+  inputs:
+  - from_stage: retrieve_seed
+    artifact: retrieve_seed
+    target_field: seed_context
   overrides:
     question: Assess commercialization readiness and funding durability across the
       quantum basket, and identify which names have the clearest path to scalable
@@ -78,3 +81,7 @@ stages:
     include_news_context: true
     rerank_mode: mmr
     generation_token_cap: 1024
+    symbols: *id001
+    forms: *id002
+    start_date: '2021-01-01'
+    dry_run: false

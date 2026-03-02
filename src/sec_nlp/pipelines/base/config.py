@@ -274,6 +274,7 @@ class BasePipelineSettings(BaseSettings, ABC):
 
     @classmethod
     def _generate_run_id(cls) -> UUID:
+        """Generate default run ID with timestamp and UUID suffix."""
         return uuid.uuid4()
 
     def run_path_component(self) -> str:
@@ -544,4 +545,5 @@ class BasePipelineSettings(BaseSettings, ABC):
         return logging.getLevelName(level)
 
     def __repr__(self) -> str:
+        """Return a concise debug representation of pipeline settings."""
         return f"<{self.__class__.__name__} type={self.pipeline_type}>"

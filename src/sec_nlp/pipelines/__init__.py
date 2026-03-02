@@ -5,6 +5,7 @@ from .base import (  # noqa: I001
     BasePipelineSettings,
     BasePipeline,
     BasePipelineResult,
+    PipelineStageRunnable,
     PipelineValidator,
     ValidationReport,
     ValidationResult,
@@ -32,6 +33,7 @@ __all__: tuple[str, ...] = (
     # Base
     "BasePipeline",
     "BasePipelineResult",
+    "PipelineStageRunnable",
     # Config
     "BasePipelineSettings",
     "LLMConfig",

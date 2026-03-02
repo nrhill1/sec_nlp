@@ -1,3 +1,4 @@
+# src/sec_nlp/pipelines/presets/financials/pipeline.py
 """Pipeline for extracting normalized financial statement data."""
 
 from __future__ import annotations
@@ -5,6 +6,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import ClassVar, Literal
 
+from langchain_core.runnables import Runnable
 from pydantic import PrivateAttr
 from rich.progress import (
     BarColumn,
@@ -22,10 +24,7 @@ from sec_nlp.core.infra.logger import logger
 from sec_nlp.core.infra.rich_console import get_rich_console
 from sec_nlp.core.types import coerce_result_json_dict
 from sec_nlp.pipelines import BasePipeline
-from sec_nlp.pipelines.output_io import (
-    build_run_file_stem,
-    build_run_header_fields,
-)
+from sec_nlp.pipelines.output_io import build_run_output_context
 from sec_nlp.types import ResultDict
 
 from .config import FinancialsSettings
@@ -36,11 +35,9 @@ from .io import (
     write_financials_yaml,
 )
 from .models import FinancialsResult
-from .steps import (
-    aggregate_financials,
-    build_delta_report,
-    download_financial_filings,
-    extract_financial_facts,
+from .run_stages import (
+    FinancialsRunState,
+    build_financials_stage_chain,
 )
 
 
@@ -56,6 +53,9 @@ class FinancialsPipeline(BasePipeline):
     config: FinancialsSettings
 
     _parser: XbrlParser | None = PrivateAttr(default=None)
+    _stage_chain: Runnable[FinancialsRunState, FinancialsRunState] | None = (
+        PrivateAttr(default=None)
+    )
 
     @classmethod
     def config_model(cls) -> type[FinancialsSettings]:
@@ -65,13 +65,15 @@ class FinancialsPipeline(BasePipeline):
     def result_model(cls) -> type[FinancialsResult]:
         return FinancialsResult
 
-    def _build_components(self) -> None:
-        self._parser = None
-
     def _get_parser(self) -> XbrlParser:
+        """Get the filing parser instance used by the financials pipeline."""
         if self._parser is None:
             self._parser = create_xbrl_parser()
         return self._parser
+
+    def _build_components(self) -> None:
+        """Initialize reusable components for financials execution."""
+        self._stage_chain = build_financials_stage_chain(self)
 
     def run(self) -> FinancialsResult:
         try:
@@ -97,6 +99,7 @@ class FinancialsPipeline(BasePipeline):
                     total=len(self.config.symbols),
                 )
                 phase_task = progress.add_task("", total=None, visible=False)
+                stage_chain = self.require_stage_chain(self._stage_chain)
 
                 for symbol in self.config.symbols:
                     normalized_symbol = symbol.upper()
@@ -105,16 +108,19 @@ class FinancialsPipeline(BasePipeline):
                         description=f"Processing {normalized_symbol}",
                     )
 
-                    symbol_outputs, symbol_meta, symbol_periods = (
-                        self._process_symbol(
-                            normalized_symbol,
-                            progress=progress,
-                            phase_task=phase_task,
-                        )
+                    symbol_state = FinancialsRunState(
+                        runtime=self,
+                        symbol=normalized_symbol,
+                        progress=progress,
+                        phase_task=phase_task,
                     )
-                    outputs.extend(symbol_outputs)
-                    metadata[normalized_symbol] = symbol_meta
-                    periods_generated += symbol_periods
+                    symbol_state = self.run_stage_chain(
+                        initial_state=symbol_state,
+                        stage_chain=stage_chain,
+                    )
+                    outputs.extend(symbol_state.outputs)
+                    metadata[normalized_symbol] = symbol_state.metadata
+                    periods_generated += len(symbol_state.statements)
 
                     progress.update(phase_task, visible=False)
                     progress.advance(overall_task)
@@ -137,62 +143,6 @@ class FinancialsPipeline(BasePipeline):
                 success=False, error=f"{type(exc).__name__}: {exc}"
             )
 
-    def _process_symbol(
-        self,
-        symbol: str,
-        *,
-        progress: Progress | None = None,
-        phase_task: TaskID | None = None,
-    ) -> tuple[list[Path], dict[str, int | str], int]:
-        self._update_phase(progress, phase_task, symbol, "Downloading")
-        filings = download_financial_filings(
-            symbol=symbol, settings=self.config
-        )
-        parser = self._get_parser()
-
-        self._update_phase(
-            progress,
-            phase_task,
-            symbol,
-            "Extracting",
-            total=len(filings),
-        )
-        all_facts = []
-        for filing in filings:
-            all_facts.extend(
-                extract_financial_facts(
-                    symbol=symbol, filing=filing, parser=parser
-                )
-            )
-            if progress is not None and phase_task is not None:
-                progress.advance(phase_task)
-
-        self._update_phase(progress, phase_task, symbol, "Aggregating")
-        statements = aggregate_financials(
-            all_facts, compute_ratios=self.config.compute_ratios
-        )
-        self._update_phase(progress, phase_task, symbol, "Delta report")
-        delta_report = (
-            build_delta_report(statements)
-            if self.config.include_delta_report
-            else {}
-        )
-
-        self._update_phase(progress, phase_task, symbol, "Writing")
-        outputs = self._write_outputs(
-            symbol=symbol,
-            filings_processed=len(filings),
-            statements=statements,
-            delta_report=delta_report,
-        )
-
-        metadata = {
-            "filings_processed": len(filings),
-            "facts_extracted": len(all_facts),
-            "periods_generated": len(statements),
-        }
-        return outputs, metadata, len(statements)
-
     def _update_phase(
         self,
         progress: Progress | None,
@@ -202,6 +152,7 @@ class FinancialsPipeline(BasePipeline):
         *,
         total: int | None = None,
     ) -> None:
+        """Update progress state and current financials phase metadata."""
         if progress is None or phase_task is None:
             return
 
@@ -236,19 +187,18 @@ class FinancialsPipeline(BasePipeline):
         statements,
         delta_report,
     ) -> list[Path]:
+        """Write financials outputs and return artifact file paths."""
         symbol_out = self.config.get_symbol_output_dir(symbol)
-        base_stem = build_run_file_stem(
-            symbol, "financials", self.config.run_id
-        )
-        run_header = build_run_header_fields(
+        output_context = build_run_output_context(
+            symbol=symbol,
+            suffix="financials",
             run_timestamp=self.config.run_timestamp,
             run_id=self.config.run_id,
             run_short_id=self.config.short_id,
         )
-        run_short_id_raw = run_header.get("run_short_id")
-        run_short_id = (
-            run_short_id_raw if isinstance(run_short_id_raw, int) else None
-        )
+        base_stem = output_context.base_stem
+        run_header = output_context.run_header
+        run_short_id = output_context.run_short_id
 
         payload = FinancialsOutputPayload(
             run_timestamp=str(run_header["run_timestamp"]),

@@ -1,3 +1,4 @@
+# src/sec_nlp/pipelines/presets/retrieve/steps/index.py
 """Qdrant indexing helpers for retrieve pipeline."""
 
 from __future__ import annotations
@@ -18,6 +19,7 @@ from .embed import embed_texts_with_cache
 
 
 def _resolve_collection_name(settings: RetrieveSettings) -> str:
+    """Resolve the target collection name for indexing hits."""
     configured = settings.vdb.collection_name
     if isinstance(configured, str) and configured.strip():
         return configured.strip()
@@ -25,6 +27,7 @@ def _resolve_collection_name(settings: RetrieveSettings) -> str:
 
 
 def _point_id(symbol: str, hit: RetrievalHit) -> str:
+    """Build a stable vector-point identifier for a retrieval hit."""
     raw = (
         f"{symbol}|{hit.query}|{hit.accession_number}|{hit.chunk_index}|"
         f"{hit.section_number}|{hit.filed_date}"
@@ -39,6 +42,7 @@ def _payload(
     settings: RetrieveSettings,
     market_signals: dict[str, JsonValue] | None = None,
 ) -> dict[str, JsonValue]:
+    """Build vector payload metadata for one indexed retrieval hit."""
     snippet_text = _snippet_for_index(hit)
     payload: dict[str, JsonValue] = {
         "symbol": symbol,
@@ -63,6 +67,7 @@ def _payload(
 
 
 def _snippet_for_index(hit: RetrievalHit) -> str:
+    """Build index snippet text with bounded length."""
     if isinstance(hit.snippet, str) and hit.snippet.strip():
         return hit.snippet.strip()
     return (
@@ -78,6 +83,7 @@ def _existing_point_ids(
     point_ids: list[str],
     batch_size: int = 128,
 ) -> set[str]:
+    """Fetch existing point IDs for dedupe-aware upserts."""
     existing: set[str] = set()
     for start in range(0, len(point_ids), batch_size):
         batch_ids = point_ids[start : start + batch_size]
