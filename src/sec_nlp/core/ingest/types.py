@@ -1,5 +1,5 @@
 # src/sec_nlp/core/ingest/types.py
-"""Typed results for SEC filing downloads."""
+"""Typed result models for SEC filing download and ingestion operations."""
 
 from __future__ import annotations
 

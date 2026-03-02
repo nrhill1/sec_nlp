@@ -38,7 +38,11 @@ PIPELINE_SETTINGS_MODELS: dict[PipelineName, StageSettingsModel] = {
 
 
 def resolve_settings_model(pipeline: PipelineName) -> StageSettingsModel:
-    """Resolve settings model class for a pipeline name."""
+    """Return the authoritative settings class for *pipeline*.
+
+    Raises:
+        ValueError: If *pipeline* is not in the registry.
+    """
     model = PIPELINE_SETTINGS_MODELS.get(pipeline)
     if model is None:
         raise ValueError(f"Unsupported flow pipeline '{pipeline}'")

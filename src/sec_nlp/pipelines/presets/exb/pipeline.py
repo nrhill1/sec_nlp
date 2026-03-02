@@ -74,7 +74,12 @@ def _normalize_symbol(value: JsonValue) -> str:
 
 
 class ExhibitPipeline(BasePipeline):
-    """Pipeline for extracting exhibit content by category."""
+    """Download, categorize, and extract legal clauses from SEC exhibit filings.
+
+    Runs EFTS candidate search scoped to material contracts, downloads
+    exhibit documents, extracts category-tagged clauses, and emits
+    contract evidence bundles for downstream flow consumers.
+    """
 
     # Class attributes
     pipeline_type: ClassVar[Literal["exhibit"]] = "exhibit"

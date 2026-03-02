@@ -3,6 +3,7 @@
 `sec-nlp` is a Python-first orchestration system with Rust extensions for performance-critical integration points (EFTS and market data). It supports both LLM-driven and deterministic SEC/market workflows behind one CLI.
 
 ## Code Layout
+
 - `src/sec_nlp/cli/` - command models, argument normalization, and command dispatch.
 - `src/sec_nlp/app/flows/` - typed multi-stage flow specs, in-memory artifacts, and runnable adapters.
 - `src/sec_nlp/pipelines/base/` - shared pipeline lifecycle, config, validation, and result models.
@@ -13,6 +14,7 @@
 - `crates/` - Rust crates (`efts`, `market`, `xbrl`, `corr`, `entity`, `newswatch`).
 
 ## Runtime Layers
+
 1. CLI layer: parses/normalizes args and instantiates command config.
 2. Flow orchestration layer (optional): executes multi-stage specs and passes typed in-memory artifacts between stages.
 3. Pipeline config layer: immutable Pydantic settings merged from CLI/env/.env.
@@ -21,6 +23,7 @@
 6. Observability layer: run registry (SQLite) + optional metrics/tracing.
 
 ## Pipeline Families
+
 - LLM-centric: `analyze`, `chat`
 - Retrieval/indexing: `retrieve`, `exb`
 - Deterministic SEC extraction: `warranty`, `financials`, `holdings`, `insider`
@@ -29,14 +32,17 @@
 `retrieve` is EFTS-first and uses lexical ranking/pruning (stopword-aware by default) with selective chunk hydration before optional embedding rerank/index.
 
 ## Retrieve->Chat Flow Runtime
+
 The `flow` CLI command supports deterministic single-run multi-stage execution.
 
 Current phase supports `retrieve -> chat` with typed handoff:
+
 - Retrieve stage emits `RetrieveChatSeedBundle` in memory.
 - Chat stage can accept `seed_context` and skip Qdrant collection search.
 - Artifact handoff avoids JSON round-trip serialization loops.
 
 References:
+
 - `src/sec_nlp/app/flows/models.py`
 - `src/sec_nlp/app/flows/artifacts.py`
 - `src/sec_nlp/app/flows/runner.py`
@@ -44,6 +50,7 @@ References:
 - `src/sec_nlp/app/flows/contracts/`
 
 ## Analyze Flow
+
 1. Load filings (optionally with EFTS expansion).
 2. Chunk/filter/dedupe content.
 3. Optional vector indexing/search retrieval.
@@ -53,13 +60,16 @@ References:
 Reference: `src/sec_nlp/pipelines/presets/analyze/README.md`
 
 ## Deterministic Pipeline Pattern
+
 Most non-LLM presets follow:
+
 1. Download filings or external source records.
 2. Parse/normalize structured entities.
 3. Compute diffs, clusters, correlations, or timeline rollups.
 4. Export symbol-scoped run artifacts.
 
 ## Output Conventions
+
 All pipelines use run-scoped output roots:
 
 ```text
@@ -76,11 +86,13 @@ outputs/<run_timestamp>/analyze/<SYMBOL>/search/summary.yaml
 ```
 
 ## Run Registry
+
 - SQLite registry path: `.cache/sec-nlp/runs.db`
 - Tracks run id, short id, pipeline type, status, timestamps, and metadata
 - Managed via `sec-nlp runs ...`
 
 ## Design Priorities
+
 - Repeatable run-scoped outputs with provenance fields.
 - Clear separation between config, execution, and serialization.
 - Fast-path native integrations through Rust extensions.

@@ -42,7 +42,7 @@ Examples:
 Validate all:
 
 ```bash
-for spec in flow_jobs/industry_tier_jobs/*.yaml; do
+for spec in jobs/industry_tier_jobs/*.yaml; do
   .venv/bin/sec-nlp flow validate --spec "$spec"
 done
 ```
@@ -50,16 +50,16 @@ done
 Run one:
 
 ```bash
-.venv/bin/sec-nlp flow run --spec flow_jobs/industry_tier_jobs/01_flow_rems_low.yaml
+.venv/bin/sec-nlp flow run --spec jobs/industry_tier_jobs/01_flow_rems_low.yaml
 ```
 
 Run all flow jobs first, then standalone chat/retrieve jobs:
 
 ```bash
-for spec in flow_jobs/industry_tier_jobs/*_flow_*.yaml; do
+for spec in jobs/industry_tier_jobs/*_flow_*.yaml; do
   .venv/bin/sec-nlp flow run --spec "$spec"
 done
-for spec in flow_jobs/industry_tier_jobs/*_retrieve_*.yaml flow_jobs/industry_tier_jobs/*_chat_*.yaml; do
+for spec in jobs/industry_tier_jobs/*_retrieve_*.yaml jobs/industry_tier_jobs/*_chat_*.yaml; do
   .venv/bin/sec-nlp flow run --spec "$spec"
 done
 ```

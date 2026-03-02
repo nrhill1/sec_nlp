@@ -31,7 +31,7 @@ type FlowArtifactName = Literal["retrieve_seed", "contract_evidence"]
 
 
 class FlowDefaults(BaseModel):
-    """Shared defaults merged into each stage configuration."""
+    """Flow-level defaults merged into every stage's settings at compile time."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -41,7 +41,7 @@ class FlowDefaults(BaseModel):
 
 
 class FlowStageSpec(BaseModel):
-    """Single stage definition in a flow spec."""
+    """One stage entry in a flow spec, identifying a pipeline and its overrides."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -78,7 +78,7 @@ class FlowStageSpec(BaseModel):
 
 
 class FlowStageInputBinding(BaseModel):
-    """Typed artifact binding used to wire stage-to-stage data handoffs."""
+    """Declarative artifact binding wiring one stage's output to another's input."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -96,7 +96,7 @@ class FlowStageInputBinding(BaseModel):
     @field_validator("from_stage")
     @classmethod
     def _validate_from_stage(cls, value: str) -> str:
-        """Validate input binding references to prior stages."""
+        """Reject empty ``from_stage`` references in input bindings."""
         cleaned = value.strip()
         if not cleaned:
             raise ValueError("inputs.from_stage cannot be empty")
@@ -104,7 +104,12 @@ class FlowStageInputBinding(BaseModel):
 
 
 class FlowSpec(BaseModel):
-    """Top-level multi-stage flow specification."""
+    """Top-level flow specification parsed from user-authored YAML or JSON.
+
+    The model validates stage ordering, unique IDs, and input-binding
+    constraints at construction time so that the compile/run layers can
+    operate without redundant checks.
+    """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -126,7 +131,7 @@ class FlowSpec(BaseModel):
 
     @model_validator(mode="after")
     def _validate_stage_graph(self) -> FlowSpec:
-        """Validate stage graph ordering and dependency constraints."""
+        """Enforce unique stage IDs, valid input bindings, and pipeline compatibility."""
         if not self.stages:
             raise ValueError("flow spec requires at least one stage")
 
@@ -183,7 +188,7 @@ class FlowSpec(BaseModel):
 
 
 class FlowStageResult(BaseModel):
-    """Execution result for one stage."""
+    """Frozen result envelope for a single flow stage execution."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -200,7 +205,7 @@ class FlowStageResult(BaseModel):
 
 
 class FlowRunResult(BaseModel):
-    """Aggregate result for a full flow run."""
+    """Aggregate result carrying per-stage outcomes and flow-level metadata."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 

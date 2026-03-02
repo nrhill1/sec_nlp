@@ -1,5 +1,5 @@
 # src/sec_nlp/core/edgar/xbrl_facts.py
-"""Thin wrapper around the Rust `xbrl` extension."""
+"""Thin wrapper around the Rust ``xbrl`` extension for XBRL fact extraction."""
 
 from __future__ import annotations
 

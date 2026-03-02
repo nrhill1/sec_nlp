@@ -1,5 +1,11 @@
 # src/sec_nlp/pipelines/presets/chat/pipeline.py
-"""Pipeline for RAG chat over indexed filing chunks."""
+"""Retrieval-augmented Q&A pipeline over indexed SEC filing chunks.
+
+The chat pipeline retrieves chunks from a Qdrant collection (or accepts
+pre-seeded context from a flow), optionally reranks via embeddings,
+builds a citation-aware prompt, and generates an LLM answer. Outputs
+include a structured transcript with per-citation provenance.
+"""
 
 from __future__ import annotations
 
@@ -106,7 +112,13 @@ class _SnippetEmbedder(Protocol):
 
 
 class ChatPipeline(BasePipeline):
-    """Answer questions against indexed SEC filing chunks."""
+    """Retrieval-augmented Q&A pipeline with citation-aware answer generation.
+
+    Resolves filing chunks from Qdrant or flow-injected seed context,
+    applies optional embedding rerank, constructs a grounded prompt,
+    and returns an LLM-generated answer with extracted citations.
+    Also supports inline retrieve mode for standalone usage.
+    """
 
     pipeline_type: ClassVar[Literal["chat"]] = "chat"
     description: ClassVar[str] = (
@@ -288,8 +300,10 @@ class ChatPipeline(BasePipeline):
             console = get_rich_console()
             with Progress(
                 SpinnerColumn(),
-                TextColumn("[bold cyan]{task.description}"),
-                BarColumn(complete_style="green", finished_style="bold green"),
+                TextColumn("[bold #00d75f]{task.description}"),
+                BarColumn(
+                    complete_style="#00d75f", finished_style="bold #00ff87"
+                ),
                 TaskProgressColumn(),
                 TimeElapsedColumn(),
                 TextColumn("[dim]-[/dim]"),

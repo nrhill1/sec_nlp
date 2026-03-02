@@ -1,5 +1,12 @@
 # src/sec_nlp/pipelines/base/pipeline.py
-"""Abstract base classes for all pipelines."""
+"""Abstract pipeline base providing lifecycle hooks, stage chain execution, and validation.
+
+Every preset pipeline inherits from ``BasePipeline`` which combines a Pydantic
+model (for frozen config validation) with a LangChain ``Runnable`` interface
+(for composability). The class enforces subclass metadata (``pipeline_type``,
+``description``), wires ``model_post_init`` to requirement checks and component
+building, and exposes helpers for constructing and running stage chains.
+"""
 
 from abc import ABC, abstractmethod
 from collections.abc import Sequence
@@ -25,14 +32,13 @@ class BasePipeline(
     Runnable[ConfigValue | None, BasePipelineResult],
     ABC,
 ):
-    """
-    Abstract base class for all pipeline types.
+    """Abstract base for all pipeline types, combining Pydantic config with LangChain Runnable.
 
-    This class inherits from BaseModel to leverage Pydantic's
-    lifecycle hooks (model_post_init) for clean initialization.
-
-    Subclasses must implement config_model() and result_model(), and
-    the config field is validated against config_model().
+    Subclasses define ``pipeline_type``, ``description``, ``config_model()``,
+    ``result_model()``, and ``run()``. The base wires ``model_post_init`` so
+    that requirement validation and component building happen automatically
+    after config is frozen. Stage chains can be built via
+    ``build_configured_stage_chain`` and executed via ``run_stage_chain``.
     """
 
     model_config = ConfigDict(
@@ -53,7 +59,7 @@ class BasePipeline(
 
     @classmethod
     def __pydantic_init_subclass__(cls, **kwargs: InitSubclassKwargs) -> None:
-        """Validate subclass metadata and declared model types."""
+        """Enforce required ClassVars and frozen config on every pipeline subclass."""
         super().__pydantic_init_subclass__(**kwargs)
 
         if cls.model_config.get("frozen") is not True:
@@ -86,14 +92,12 @@ class BasePipeline(
         return value
 
     def model_post_init(self, __context: dict[str, ConfigValue] | None) -> None:
-        """
-        Called after Pydantic initialization.
-        """
+        """Run requirement checks and build reusable components after config freezes."""
         self._validate_requirements()
         self._build_components()
 
     def cli_cmd(self) -> BasePipelineResult:
-        """Run the pipeline with CliApp.run(<pipeline_class>)"""
+        """Execute the pipeline as a CLI subcommand and return the result."""
         return self.run()
 
     def invoke(
@@ -102,7 +106,7 @@ class BasePipeline(
         config: RunnableConfig | None = None,
         **kwargs: ConfigValue,
     ) -> BasePipelineResult:
-        """LangChain Runnable entrypoint mapped to run()."""
+        """LangChain ``Runnable.invoke`` entrypoint delegating to ``run()``."""
         _ = config
         _ = kwargs
         if input is not None:
@@ -117,7 +121,7 @@ class BasePipeline(
         initial_state: StageStateT,
         stages: Sequence[Runnable[StageStateT, StageStateT]],
     ) -> StageStateT:
-        """Run pipeline stages in order using runnable stage adapters."""
+        """Build a stage chain from *stages* and invoke it on *initial_state*."""
         chain = self.build_stage_chain(stages=stages)
         return self.run_stage_chain(
             initial_state=initial_state,
@@ -130,14 +134,14 @@ class BasePipeline(
         initial_state: StageStateT,
         stage_chain: Runnable[StageStateT, StageStateT],
     ) -> StageStateT:
-        """Run a prebuilt stage chain on one mutable state instance."""
+        """Invoke a prebuilt stage chain against a single mutable state object."""
         return stage_chain.invoke(initial_state)
 
     def require_stage_chain[StageStateT](
         self,
         stage_chain: Runnable[StageStateT, StageStateT] | None,
     ) -> Runnable[StageStateT, StageStateT]:
-        """Return a stage chain or raise when pipeline components are uninitialized."""
+        """Return *stage_chain* or raise ``RuntimeError`` if not yet built."""
         if stage_chain is None:
             raise RuntimeError(
                 "Stage chain not initialized; _build_components() must set _stage_chain"
@@ -149,7 +153,7 @@ class BasePipeline(
         *,
         stages: Sequence[Runnable[StageStateT, StageStateT]],
     ) -> Runnable[StageStateT, StageStateT]:
-        """Build a reusable runnable sequence from ordered stage runnables."""
+        """Pipe ordered stage runnables into a single composite ``Runnable``."""
         if not stages:
             raise ValueError("Stage chains require at least one stage")
         chain: Runnable[StageStateT, StageStateT] = stages[0]
@@ -162,7 +166,7 @@ class BasePipeline(
         *,
         stages: Sequence[PipelineStageRunnable[StageStateT]],
     ) -> tuple[Runnable[StageStateT, StageStateT], ...]:
-        """Attach standard runnable tracing metadata to stage runnables."""
+        """Attach pipeline-type and run-id tracing metadata to each stage runnable."""
         run_id = str(self.config.run_id)
         return tuple(
             stage.configured(
@@ -177,17 +181,13 @@ class BasePipeline(
         *,
         stages: Sequence[PipelineStageRunnable[StageStateT]],
     ) -> Runnable[StageStateT, StageStateT]:
-        """Build a stage chain after applying standard runnable stage metadata."""
+        """Configure tracing metadata on *stages*, then pipe them into a chain."""
         return self.build_stage_chain(
             stages=self.configure_stage_runnables(stages=stages)
         )
 
     def _validate_requirements(self) -> None:
-        """
-        Validate pipeline requirements are met.
-
-        Override this method to add custom requirement validation.
-        """
+        """Warn when declared LLM or vector-DB requirements lack config."""
         if self.requires_llm:
             llm_config = getattr(self.config, "llm", None)
             if llm_config is None:
@@ -206,55 +206,32 @@ class BasePipeline(
 
     @abstractmethod
     def run(self) -> BasePipelineResult:
-        """
-        Execute the pipeline.
-
-        Returns:
-            Result object with outputs and metadata
-        """
+        """Execute the pipeline and return a typed result with outputs and metadata."""
 
     def _build_components(self) -> None:
-        """
-        Build pipeline components that depend on config.
-        """
+        """Build reusable pipeline components from frozen config (override in subclasses)."""
         return
 
     @classmethod
     @abstractmethod
     def config_model(cls) -> type[BasePipelineSettings]:
-        """Return the configuration class for this pipeline."""
+        """Return the Pydantic settings class for this pipeline."""
         raise NotImplementedError
 
     @classmethod
     @abstractmethod
     def result_model(cls) -> type[BasePipelineResult]:
-        """Return the result class for this pipeline."""
+        """Return the result model class for this pipeline."""
         raise NotImplementedError
 
     @classmethod
     def get_config_model(cls) -> type[BasePipelineSettings]:
-        """
-        Get the config class for this pipeline type.
-
-        Returns:
-            The configuration class.
-
-        Raises:
-            NotImplementedError: If config_model() is not implemented.
-        """
+        """Resolve the config model via ``config_model()``."""
         return cls.config_model()
 
     @classmethod
     def get_result_model(cls) -> type[BasePipelineResult]:
-        """
-        Get the result class for this pipeline type.
-
-        Returns:
-            The result class.
-
-        Raises:
-            NotImplementedError: If result_model() is not implemented.
-        """
+        """Resolve the result model via ``result_model()``."""
         return cls.result_model()
 
     def __repr__(self) -> str:

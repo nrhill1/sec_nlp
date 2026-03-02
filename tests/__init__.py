@@ -1,2 +1,2 @@
 # tests/__init__.py
-"""Testing module"""
+"""Root test package for sec-nlp, mirroring src/sec_nlp/ layout."""

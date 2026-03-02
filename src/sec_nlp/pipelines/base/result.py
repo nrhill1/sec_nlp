@@ -1,5 +1,11 @@
 # src/sec_nlp/pipelines/base/result.py
-"""Base result types for pipelines."""
+"""Frozen base result model returned by every pipeline after execution.
+
+Every preset pipeline defines a result subclass of ``BasePipelineResult`` that
+carries success/failure status, output file paths, free-form metadata, and an
+optional error message. The base enforces ``pipeline_type``, ``frozen=True``,
+and a ``summary_fields()`` contract for CLI/flow result reporting.
+"""
 
 from abc import ABC, abstractmethod
 from pathlib import Path
@@ -15,7 +21,12 @@ type SummaryFieldValue = str | bool | int | float | None
 
 
 class BasePipelineResult(BaseModel, ABC):
-    """Base result type for all pipelines."""
+    """Frozen result envelope returned by every pipeline after execution.
+
+    Subclasses must set ``pipeline_type`` and implement ``summary_fields()``.
+    The base carries common fields (success, outputs, metadata, error) and
+    utility methods for summary rendering.
+    """
 
     pipeline_type: ClassVar[str] = _CLASSVAR_UNSET
 
@@ -51,7 +62,7 @@ class BasePipelineResult(BaseModel, ABC):
 
     @classmethod
     def __pydantic_init_subclass__(cls, **kwargs: InitSubclassKwargs) -> None:
-        """Ensure pipeline_type is set and frozen is not overridden."""
+        """Enforce ``pipeline_type`` ClassVar and ``frozen=True`` on every result subclass."""
         super().__pydantic_init_subclass__(**kwargs)
 
         if cls.pipeline_type == _CLASSVAR_UNSET:

@@ -153,7 +153,7 @@ def migrate_flow_tree(root: Path) -> MigrationStats:
 def main() -> int:
     """Run CLI migration for repository flow jobs."""
     repo_root = Path(__file__).resolve().parents[3]
-    flow_root = repo_root / "flow_jobs"
+    flow_root = repo_root / "jobs"
     stats = migrate_flow_tree(flow_root)
     print(
         "migrated flow specs:",

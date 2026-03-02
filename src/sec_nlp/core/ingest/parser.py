@@ -138,14 +138,14 @@ class HtmlProcessor:
         entries = []
         for section, count in sorted(section_counts.items(), key=sort_key):
             entries.append(
-                f"{color_text(section, color='cyan')}"
+                f"{color_text(section, color='blue')}"
                 f"{color_text(':', color='dim')} "
-                f"{color_text(str(count), color='magenta')}"
+                f"{color_text(str(count), color='yellow')}"
             )
 
         header = (
             f"{color_text('Sections', color='green')}: "
-            f"{color_text(str(section_total), color='magenta')} "
+            f"{color_text(str(section_total), color='yellow')} "
             f"{color_text('(chunks per section)', color='dim')}"
         )
         logger.info("%s %s", header, suffix)

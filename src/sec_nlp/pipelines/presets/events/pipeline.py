@@ -1,5 +1,10 @@
 # src/sec_nlp/pipelines/presets/events/pipeline.py
-"""Pipeline for event detection and timeline scoring."""
+"""Event detection and timeline scoring pipeline for current-report filings.
+
+Scans 8-K and 6-K filings per symbol, classifies event types (e.g.
+acquisition, leadership change, material agreement), scores significance,
+and produces chronological timelines exported as YAML/CSV.
+"""
 
 from __future__ import annotations
 
@@ -41,7 +46,12 @@ from .run_stages import (
 
 
 class EventsPipeline(BasePipeline):
-    """Detect events from current-report filings and produce a scored timeline."""
+    """Detect and score material events from current-report filings.
+
+    Downloads 8-K/6-K filings, classifies each into event categories,
+    enriches with market-impact scoring, and exports a chronological
+    timeline per symbol.
+    """
 
     pipeline_type: ClassVar[Literal["events"]] = "events"
     description: ClassVar[str] = (
@@ -78,8 +88,10 @@ class EventsPipeline(BasePipeline):
             console = get_rich_console()
             with Progress(
                 SpinnerColumn(),
-                TextColumn("[bold cyan]{task.description}"),
-                BarColumn(complete_style="green", finished_style="bold green"),
+                TextColumn("[bold #00d75f]{task.description}"),
+                BarColumn(
+                    complete_style="#00d75f", finished_style="bold #00ff87"
+                ),
                 TaskProgressColumn(),
                 TimeElapsedColumn(),
                 TextColumn("[dim]-[/dim]"),

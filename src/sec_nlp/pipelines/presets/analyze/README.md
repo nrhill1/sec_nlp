@@ -140,6 +140,24 @@ See also:
 - `OUTPUTS_ANALYZE.md`
 - `OUTPUTS_SEARCH_SUMMARY.md`
 
+## Analyze vs Chat
+
+`analyze` and `chat` are complementary, not competing. They serve different stages of a research workflow.
+
+**`analyze`** is a batch, offline pipeline. It downloads filings, splits them into chunks, runs LLM analysis on every retrieved chunk, and writes structured output files (YAML/JSON/CSV) to disk. Because it calls the LLM once per chunk across many filings and symbols, it is compute-intensive and measured in minutes. The payoff is a persistent, structured record of what each filing says about your topics, with calibrated confidence scores and evidence excerpts.
+
+**`chat`** is an interactive pipeline. It retrieves the most relevant pre-indexed chunks for a single question and calls the LLM once. It is fast (seconds) precisely because it assumes the vector index already exists.
+
+**Recommended workflow:**
+1. Run `analyze` once (or on a schedule) to download, preprocess, index, and LLM-analyze new filings.
+2. Use `chat` for real-time, ad-hoc questions against the content that `analyze` already indexed.
+
+If you find `analyze` too slow, consider:
+- Enabling the LLM response cache (`--llm-response-cache`) so chunks analyzed in a previous run are served from disk on re-runs. This dramatically reduces inference time when filings overlap between runs.
+- Using `--preset quick` or `--preset sentiment` to reduce the prompt and field set.
+- Setting `OLLAMA_NUM_PARALLEL=2` (or higher) in your environment to allow Ollama to process multiple chunks concurrently.
+- Running `analyze` in the background or overnight for large symbol sets, then using `chat` during the day.
+
 ## Key Config Gates
 
 - `search.queries` (or `topics` when queries are empty) must be set to retrieve hits and run analysis.

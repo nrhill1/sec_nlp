@@ -25,7 +25,7 @@ class FlowArtifactStore:
     """
 
     def __init__(self) -> None:
-        """Initialize an in-memory artifact store for flow stage handoffs."""
+        """Construct an empty artifact store with seed, chunk, and evidence registries."""
         self._seed_by_stage: dict[str, FlowSeedBundle] = {}
         self._seed_chunks_by_stage: dict[
             str, tuple[FlowRetrievedChunk, ...]

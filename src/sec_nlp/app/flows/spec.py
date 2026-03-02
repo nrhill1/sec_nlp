@@ -19,7 +19,15 @@ from .models import FlowSpec
 
 
 def load_flow_spec(spec_path: str | Path) -> FlowSpec:
-    """Load and validate a flow spec from JSON or YAML."""
+    """Load a flow spec file, decode it, and return a validated ``FlowSpec``.
+
+    Args:
+        spec_path: Path to a ``.json`` or ``.yaml``/``.yml`` spec file.
+
+    Raises:
+        FileNotFoundError: If *spec_path* does not exist on disk.
+        ValueError: If the decoded content is not a mapping.
+    """
     path = Path(spec_path).expanduser().resolve()
     if not path.exists():
         raise FileNotFoundError(f"Flow spec not found: {path}")

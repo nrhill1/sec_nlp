@@ -63,7 +63,7 @@ def format_section_header(
     subtitle: str | None = None,
     width: int | None = None,
     style: Literal["box", "line", "minimal"] = "box",
-    color: str = "cyan",
+    color: str = "#00d75f",
     centered: bool = True,
 ) -> str:
     """Create a styled section header for CLI output.
@@ -97,7 +97,7 @@ def build_section_header_renderable(
     subtitle: str | None = None,
     width: int | None = None,
     style: Literal["box", "line", "minimal"] = "box",
-    color: str = "cyan",
+    color: str = "#00d75f",
     centered: bool = True,
 ) -> HeaderRenderable:
     """Create a Rich renderable section header for direct console printing."""
@@ -147,7 +147,7 @@ def format_divider(
     char: str = "─",
     length: int | None = None,
     width: int | None = None,
-    color: str = "dim",
+    color: str = "grey37",
     centered: bool = True,
 ) -> str:
     """Create a horizontal divider line.
@@ -176,8 +176,8 @@ def format_key_value(
     value: str | None,
     *,
     label_width: int = 15,
-    icon: str = "➜",
-    label_color: str = "blue",
+    icon: str = "▸",
+    label_color: str = "#00d75f",
     value_color: str | None = None,
 ) -> str:
     """Format a key-value pair for display.
@@ -207,7 +207,7 @@ def format_table(
     column_specs: Sequence[ColumnSpec] | None = None,
     border: bool = True,
     centered: bool = True,
-    header_color: str = "cyan",
+    header_color: str = "#00d75f",
     header_align: Literal["left", "right", "center"] | None = None,
     row_colors: list[str] | None = None,
 ) -> str:
@@ -385,7 +385,7 @@ def format_config_block(
 
     lines: list[str] = []
     if title:
-        lines.append(color_text(f"  {title}  ", color="cyan"))
+        lines.append(color_text(f"  {title}  ", color="green"))
         lines.append(color_text("─" * (label_width + 20), color="dim"))
 
     for label, value in items:
@@ -416,16 +416,16 @@ def format_status(
     """
     icons = {
         "success": "✓",
-        "error": "✗",
-        "warning": "⚠",
-        "info": "ℹ",
+        "error": "✖",
+        "warning": "▲",
+        "info": "●",
     }
     colors = {
-        "success": "green",
-        "error": "red",
-        "warning": "yellow",
-        "info": "cyan",
+        "success": "#00d75f",
+        "error": "#ff5f5f",
+        "warning": "#ffaf00",
+        "info": "#00d75f",
     }
-    icon = icons.get(status, "•")
-    c = colors.get(status, "dim")
+    icon = icons.get(status, "●")
+    c = colors.get(status, "grey37")
     return _render_rich(Text(f"{icon} {message}", style=c))

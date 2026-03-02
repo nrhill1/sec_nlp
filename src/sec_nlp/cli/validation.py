@@ -68,7 +68,7 @@ def format_validation_error(error: ValidationError) -> str:
     # Footer with general help
     lines.append(format_divider(width=60))
     lines.append(
-        f"  {color_text('Tip:', color='cyan')} "
+        f"  {color_text('Tip:', color='green')} "
         "Run 'sec-nlp <command> --help' for available options."
     )
 
@@ -146,12 +146,12 @@ def format_unknown_arg_error(
         lines.append("  Did you mean one of these?")
         lines.append("")
         for suggestion in suggestions[:3]:
-            lines.append(f"    {color_text('→', color='cyan')} --{suggestion}")
+            lines.append(f"    {color_text('→', color='green')} --{suggestion}")
         lines.append("")
 
     lines.append(format_divider(width=60))
     lines.append(
-        f"  {color_text('Tip:', color='cyan')} "
+        f"  {color_text('Tip:', color='green')} "
         "Run 'sec-nlp <command> --help' for available options."
     )
 

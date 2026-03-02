@@ -49,12 +49,18 @@ from sec_nlp.types import JsonValue
 
 
 class FlowRunner:
-    """Execute a flow spec with direct compiled-stage pipeline dispatch."""
+    """Compile and execute a multi-stage flow spec end-to-end.
+
+    The runner compiles stages once, dispatches each to its typed pipeline,
+    manages in-memory artifact handoff between stages, enforces
+    ``on_failure`` policy, and aggregates results into a ``FlowRunResult``.
+    Runtime caches are cleared before and after every run.
+    """
 
     __slots__ = ("spec",)
 
     def __init__(self, *, spec: FlowSpec) -> None:
-        """Initialize the object."""
+        """Construct a runner for the given validated flow spec."""
         self.spec = spec
 
     def run(self) -> FlowRunResult:
@@ -164,7 +170,7 @@ class FlowRunner:
         run_short_id: int | None,
         extra_metadata: Mapping[str, JsonValue] | None = None,
     ) -> FlowStageResult:
-        """Build stage result using precomputed stage run identifiers."""
+        """Wrap a pipeline result into a ``FlowStageResult`` with run identifiers."""
         metadata = coerce_result_json_dict(pipeline_result.metadata)
         if extra_metadata is not None:
             metadata.update(extra_metadata)
@@ -222,7 +228,7 @@ class FlowRunner:
             None,
         ],
     ) -> FlowStageResult:
-        """Run a stage that returns both a result and chunk-based handoff artifacts."""
+        """Execute a pipeline that emits both a result and typed handoff artifacts."""
         (result, bundle, seed_chunks), elapsed = cls._timed_call(run_callback)
         if result.success:
             persist_callback(artifacts, compiled.stage.id, bundle, seed_chunks)
@@ -264,7 +270,7 @@ class FlowRunner:
         skipped: bool,
         error: str,
     ) -> FlowStageResult:
-        """Build unexecuted stage result."""
+        """Build a zero-duration result for a stage that was not executed."""
         return FlowStageResult(
             stage_id=stage.id,
             pipeline=stage.pipeline,
@@ -290,7 +296,7 @@ class FlowRunner:
         stage: CompiledAnalyzeStage,
         artifacts: FlowArtifactStore,
     ) -> FlowStageResult:
-        """Run analyze stage."""
+        """Dispatch a compiled analyze stage to ``AnalyzePipeline``."""
         _ = artifacts
         return cls._invoke_pipeline(
             compiled=stage, pipeline=AnalyzePipeline(config=stage.settings)
@@ -302,7 +308,7 @@ class FlowRunner:
         stage: CompiledWarrantyStage,
         artifacts: FlowArtifactStore,
     ) -> FlowStageResult:
-        """Run warranty stage."""
+        """Dispatch a compiled warranty stage to ``WarrantyPipeline``."""
         _ = artifacts
         return cls._invoke_pipeline(
             compiled=stage, pipeline=WarrantyPipeline(config=stage.settings)
@@ -314,7 +320,7 @@ class FlowRunner:
         stage: CompiledRetrieveStage,
         artifacts: FlowArtifactStore,
     ) -> FlowStageResult:
-        """Run retrieve stage."""
+        """Dispatch a compiled retrieve stage and persist seed artifacts."""
         pipeline = RetrievePipeline(config=stage.settings)
         return cls._run_chunk_handoff_stage(
             compiled=stage,
@@ -329,7 +335,7 @@ class FlowRunner:
         stage: CompiledChatStage,
         artifacts: FlowArtifactStore,
     ) -> FlowStageResult:
-        """Run chat stage."""
+        """Resolve seed inputs from upstream artifacts and run the chat pipeline."""
         seed_binding = stage.stage.inputs[0] if stage.stage.inputs else None
 
         seed_bundle: FlowSeedBundle | None = None
@@ -394,7 +400,7 @@ class FlowRunner:
         stage: FlowStageSpec,
         previous: FlowStageResult | None,
     ) -> bool:
-        """Return whether run stage."""
+        """Evaluate the stage condition against the previous result."""
         if stage.condition == "always":
             return True
         if previous is None:

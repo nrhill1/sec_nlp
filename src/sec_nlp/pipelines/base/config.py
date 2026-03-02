@@ -1,5 +1,12 @@
 # src/sec_nlp/pipelines/base/config.py
-"""Base configuration for pipelines."""
+"""Frozen base settings shared by every pipeline preset.
+
+All pipeline configs inherit from ``BasePipelineSettings``, which layers
+Pydantic settings (CLI → env → .env) on top of common fields: symbols, date
+range, filing mode, run identifiers, and output paths. The class also handles
+run-registry bookkeeping (register on init, mark complete via
+``complete_run``) and provides convenience properties for run metadata.
+"""
 
 from __future__ import annotations
 
@@ -39,12 +46,13 @@ _CLASSVAR_UNSET = "__UNSET__"
 
 
 class BasePipelineSettings(BaseSettings, ABC):
-    """Base config type for all pipelines.
+    """Frozen base settings shared by every pipeline preset.
 
-    Configuration is loaded from (in order of precedence):
-    1. Command-line arguments (highest)
-    2. Environment variables
-    3. .env file
+    Configuration values are resolved in descending precedence:
+    CLI arguments → environment variables → ``.env`` file → field defaults.
+    Subclasses must set ``pipeline_type`` and implement ``pipeline_label()``.
+    The model registers each run in the SQLite run registry at init time and
+    exposes ``complete_run()`` for status/metadata recording.
     """
 
     pipeline_type: ClassVar[str] = _CLASSVAR_UNSET
@@ -151,7 +159,7 @@ class BasePipelineSettings(BaseSettings, ABC):
 
     @classmethod
     def __pydantic_init_subclass__(cls, **kwargs: InitSubclassKwargs) -> None:
-        """Ensure pipeline_type is set and frozen=True is not overridden."""
+        """Enforce ``pipeline_type`` ClassVar and ``frozen=True`` on every subclass."""
         super().__pydantic_init_subclass__(**kwargs)
 
         # Ensure pipeline_type is set
@@ -170,13 +178,12 @@ class BasePipelineSettings(BaseSettings, ABC):
         cls,
         values: Mapping[str, ConfigValue | BaseModel] | BaseModel,
     ) -> Mapping[str, ConfigValue | BaseModel] | BaseModel:
-        """Preserve pipeline-specific nested defaults during partial overrides.
+        """Merge partial CLI overrides into nested model defaults.
 
-        CLI dotted args (for example, ``--llm.model-name`` or
-        ``--vdb.qdrant-location``) provide partial dictionaries for nested
-        config fields. Without an explicit merge, those partial dictionaries can
-        replace the entire default nested model and drop pipeline-specific
-        defaults.
+        CLI dotted args (e.g. ``--llm.model-name``) arrive as partial dicts
+        that would otherwise replace the entire nested model and drop its
+        pipeline-specific defaults. This validator overlays those partials
+        onto the full default payload before Pydantic validation.
         """
         if not isinstance(values, Mapping):
             return values
@@ -206,7 +213,7 @@ class BasePipelineSettings(BaseSettings, ABC):
         return merged_values
 
     def model_post_init(self, __context: JsonObject | None) -> None:
-        """Register the run after validation completes."""
+        """Register this run in the SQLite run registry after config freezes."""
         try:
             from sec_nlp.pipelines.observability.run_registry import (
                 get_registry,
@@ -232,7 +239,7 @@ class BasePipelineSettings(BaseSettings, ABC):
     @field_validator("start_date", mode="before")
     @classmethod
     def parse_start_date(cls, v: str | date | None) -> date | None:
-        """Parse start_date from string to date."""
+        """Coerce an ISO-format string into a ``date`` for the start bound."""
         if isinstance(v, str):
             return datetime.strptime(v, "%Y-%m-%d").date()
         return v
@@ -240,7 +247,7 @@ class BasePipelineSettings(BaseSettings, ABC):
     @field_validator("end_date", mode="before")
     @classmethod
     def parse_end_date(cls, v: str | date | None) -> date | None:
-        """Parse start_date from string to date."""
+        """Coerce an ISO-format string into a ``date`` for the end bound."""
         if isinstance(v, str):
             return datetime.strptime(v, "%Y-%m-%d").date()
         return v
@@ -248,7 +255,7 @@ class BasePipelineSettings(BaseSettings, ABC):
     @field_validator("symbols", mode="before")
     @classmethod
     def normalize_symbols(cls, v: list[str] | str) -> list[str]:
-        """Normalize symbols to uppercase."""
+        """Split comma/space-separated input and uppercase each ticker symbol."""
         if isinstance(v, str):
             v = [part for part in v.replace(",", " ").split() if part]
         return [s.strip().upper() for s in v]
@@ -256,7 +263,7 @@ class BasePipelineSettings(BaseSettings, ABC):
     @field_validator("forms", mode="before")
     @classmethod
     def normalize_forms(cls, v: list[str] | str | None) -> list[str] | None:
-        """Normalize form types."""
+        """Normalize form types (e.g. ``10K`` → ``10-K``) and uppercase."""
         if v is None:
             return None
         if isinstance(v, str):
@@ -274,7 +281,7 @@ class BasePipelineSettings(BaseSettings, ABC):
 
     @classmethod
     def _generate_run_id(cls) -> UUID:
-        """Generate default run ID with timestamp and UUID suffix."""
+        """Generate a fresh UUID4 run identifier."""
         return uuid.uuid4()
 
     def run_path_component(self) -> str:
@@ -283,7 +290,7 @@ class BasePipelineSettings(BaseSettings, ABC):
     @field_validator("run_id", mode="before")
     @classmethod
     def coerce_run_id(cls, v: JsonValue) -> UUID:
-        """Ensure run_id is a valid UUID."""
+        """Coerce string, UUID, or sentinel values into a valid ``UUID``."""
         if v in (None, "", 0, "0"):
             return cls._generate_run_id()
         if isinstance(v, UUID):
@@ -298,13 +305,13 @@ class BasePipelineSettings(BaseSettings, ABC):
     @field_validator("log_file", mode="after")
     @classmethod
     def validate_log_file(cls, v: Path | None) -> Path | None:
-        """Return log file path without side effects."""
+        """Pass through the log file path unchanged."""
         return v
 
     @field_validator("email")
     @classmethod
     def validate_email(cls, v: str) -> str:
-        """Validate email format."""
+        """Reject malformed email addresses required by SEC EDGAR."""
         if not is_valid_email(v):
             raise ValueError("Invalid email format")
         return v
@@ -324,10 +331,7 @@ class BasePipelineSettings(BaseSettings, ABC):
 
     @cached_property
     def date_range(self) -> tuple[date, date]:
-        """
-        Get computed date range as a tuple[start, end] (cached).
-        Defaults to ~10 years ago through today for broader history coverage.
-        """
+        """Compute the effective (start, end) date range, defaulting to ~10 years."""
         today = datetime.today().date()
         ten_years_ago = today - timedelta(days=365 * 10)
         start = self.start_date or ten_years_ago
@@ -345,15 +349,7 @@ class BasePipelineSettings(BaseSettings, ABC):
         return list(self.mode.forms)
 
     def setup_paths(self) -> None:
-        """
-        Create output and download directories if they don't exist.
-        Clear directory contents if self.fresh=True
-
-        Note: Downloads use a flat structure (sec_edgar_downloader creates its own
-        sec-edgar-filings/SYMBOL/FORM_TYPE/ hierarchy inside dl_path).
-        Outputs use run-scoped subdirectories for organization
-        (e.g., outputs/<run_timestamp>/warranty/AAPL).
-        """
+        """Create output/download directories and optionally wipe them when ``fresh=True``."""
 
         if self.fresh:
             self._fresh()
@@ -368,15 +364,10 @@ class BasePipelineSettings(BaseSettings, ABC):
             self.get_symbol_output_dir(symbol)
 
     def get_symbol_output_dir(self, symbol: str) -> Path:
-        """
-        Get (and create) the output directory for a symbol scoped to the pipeline
-        and run.
-
-        Args:
-            symbol: Stock ticker symbol
+        """Return (and create) the run-scoped output dir for *symbol*.
 
         Returns:
-            Path in the form <out_path>/<run_timestamp>/<pipeline_type>/<SYMBOL>
+            ``<out_path>/<run_timestamp>/<pipeline_type>/<SYMBOL>``
         """
         normalized_symbol = symbol.strip().upper()
         run_component = self.run_path_component()
@@ -390,7 +381,7 @@ class BasePipelineSettings(BaseSettings, ABC):
         return symbol_out_path
 
     def summary(self) -> str:
-        """Get human-readable summary of configuration."""
+        """Return a human-readable multi-line config summary for logging."""
         start, end = self.date_range
         days = (end - start).days
         forms_display = ", ".join(self.effective_forms)
@@ -408,7 +399,7 @@ class BasePipelineSettings(BaseSettings, ABC):
         return "\n".join(lines)
 
     def print_summary(self) -> None:
-        """Print configuration summary to logger."""
+        """Log each line of the config summary at INFO level."""
         logger.info("Configuration Summary:")
         for line in self.summary().split("\n"):
             logger.info("  %s", line)
@@ -427,7 +418,7 @@ class BasePipelineSettings(BaseSettings, ABC):
         return f"#{sid}" if sid else str(self.run_id)
 
     def _ensure_short_id(self) -> None:
-        """Populate _short_id_ref from the run registry if missing."""
+        """Lazily resolve the sequential short ID from the run registry."""
         if self._short_id_ref["value"]:
             return
         try:
@@ -463,11 +454,11 @@ class BasePipelineSettings(BaseSettings, ABC):
         success: bool = True,
         metadata: str | JsonDict | None = None,
     ) -> None:
-        """Mark this run as completed in the registry.
+        """Mark this run as completed in the SQLite run registry.
 
         Args:
-            success: Whether the run succeeded
-            metadata: Optional JSON metadata string or metadata mapping
+            success: Whether the run succeeded.
+            metadata: Optional JSON string or dict persisted alongside the run record.
         """
         try:
             from sec_nlp.pipelines.observability.run_registry import (
@@ -518,7 +509,7 @@ class BasePipelineSettings(BaseSettings, ABC):
         return (end - start).days
 
     def _fresh(self) -> None:
-        """Delete old download and output directories"""
+        """Remove existing download and output directories before a fresh run."""
         import shutil
 
         logger.info(
@@ -535,11 +526,11 @@ class BasePipelineSettings(BaseSettings, ABC):
             shutil.rmtree(self.dl_path)
 
     def get_date_range(self) -> tuple[date, date]:
-        """Return the date range as a tuple[start, end]"""
+        """Return the computed (start, end) date range."""
         return self.date_range
 
     def get_log_level(self) -> str:
-        """Get log level string and apply it to the package logger."""
+        """Apply verbose/default log level to the package logger and return the name."""
         level = logging.DEBUG if self.verbose else logging.INFO
         logger.setLevel(level)
         return logging.getLevelName(level)

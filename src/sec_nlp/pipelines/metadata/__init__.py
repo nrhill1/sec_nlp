@@ -1,5 +1,5 @@
 # src/sec_nlp/pipelines/metadata/__init__.py
-"""Shared metadata helpers for pipelines."""
+"""Metadata extraction, normalization, and filter helpers for pipeline outputs."""
 
 from .accession import get_accession_from_metadata, group_results_by_accession
 from .exhibit import build_rollups, prepare_vector_docs

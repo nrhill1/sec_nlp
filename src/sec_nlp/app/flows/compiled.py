@@ -29,7 +29,14 @@ type StageConfigValue = JsonValue
 
 @dataclass(frozen=True, slots=True)
 class CompiledStageBase:
-    """Compiled stage metadata shared across all typed flow stages."""
+    """Frozen base carrying run identifiers shared by all compiled stage variants.
+
+    Attributes:
+        stage: Original spec-level stage definition.
+        pipeline: Pipeline name used for dispatch routing.
+        run_id: UUID string generated during settings compilation.
+        run_short_id: Sequential registry ID, or ``None`` if unavailable.
+    """
 
     stage: FlowStageSpec
     pipeline: PipelineName
@@ -106,7 +113,23 @@ def compile_stage(
     stage: FlowStageSpec,
     defaults: FlowDefaults,
 ) -> CompiledStage:
-    """Compile one stage into a prevalidated pipeline settings object."""
+    """Compile one flow stage into a prevalidated, typed pipeline config.
+
+    Merges flow-level defaults with stage overrides, resolves the settings
+    model from the pipeline registry, and returns a frozen compiled stage
+    that the runner can dispatch without further validation.
+
+    Args:
+        stage: Raw stage definition from the user-authored flow spec.
+        defaults: Shared flow defaults (currently just email).
+
+    Returns:
+        A typed compiled stage variant with pre-validated settings and
+        deterministic run identifiers.
+
+    Raises:
+        ValueError: If the stage references an unsupported pipeline name.
+    """
     settings_model = resolve_settings_model(stage.pipeline)
     payload: dict[str, StageConfigValue] = {"email": defaults.email}
     payload.update(stage.overrides)
@@ -133,7 +156,7 @@ def compile_stage(
 
 
 def compile_flow_stages(spec: FlowSpec) -> tuple[CompiledStage, ...]:
-    """Compile all stages in a flow spec with prevalidated settings."""
+    """Compile every stage in a flow spec into a prevalidated tuple."""
     return tuple(
         compile_stage(stage=stage, defaults=spec.defaults)
         for stage in spec.stages

@@ -1,6 +1,11 @@
 # src/sec_nlp/core/infra/logger.py
-# src/sec_nlp/core/logger.py
-"""Centralized logging configuration."""
+"""Centralized logging configuration, formatters, and styled output helpers.
+
+Provides ``setup_logging()`` for one-time application-wide log setup with
+console and file handlers, colored and Rich-aware formatters, and a suite
+of styled output helpers (dividers, headers, badges, bullets) used by CLI
+commands and pipeline progress reporting.
+"""
 
 import logging
 import re
@@ -15,13 +20,14 @@ from rich.traceback import Traceback
 from tqdm import tqdm
 
 from sec_nlp.core.infra.rich_console import (
+    ANSI_PALETTE,
     create_rich_console,
     get_rich_console,
 )
 
 
 class TqdmLoggingHandler(logging.StreamHandler[TextIO]):
-    """StreamHandler that writes via tqdm.write when available."""
+    """Log handler that routes output through ``tqdm.write`` to avoid clobbering progress bars."""
 
     def emit(self, record: logging.LogRecord) -> None:
         try:
@@ -39,26 +45,27 @@ _logging_configured: bool = False
 
 
 class ColoredFormatter(logging.Formatter):
-    """Colored formatter for console output."""
+    """ANSI color and icon formatter for human-readable console log output."""
 
     COLORS: dict[str, str] = {
-        "DEBUG": "\033[36m",  # Cyan
-        "INFO": "\033[32m",  # Green
-        "WARNING": "\033[33m",  # Yellow
-        "ERROR": "\033[31m",  # Red
-        "CRITICAL": "\033[38;5;160m",  # Crimson
+        "DEBUG": ANSI_PALETTE["dim_green"],
+        "INFO": ANSI_PALETTE["primary"],
+        "WARNING": ANSI_PALETTE["warn"],
+        "ERROR": ANSI_PALETTE["error"],
+        "CRITICAL": ANSI_PALETTE["critical"],
     }
-    TIME_COLOR: str = "\033[2m"  # Dim
-    TZ_OFFSET_COLOR: str = "\033[35m"  # Magenta
-    TZ_NAME_COLOR: str = "\033[95m"  # Bright magenta
+    DATE_COLOR: str = ANSI_PALETTE["muted"]
+    TIME_COLOR: str = ANSI_PALETTE["secondary"]
+    TZ_OFFSET_COLOR: str = ANSI_PALETTE["muted"]
+    TZ_NAME_COLOR: str = ANSI_PALETTE["dim_green"]
     ICONS: dict[str, str] = {
-        "DEBUG": "🐛",
-        "INFO": "ℹ️ ",
-        "WARNING": "⚠️ ",
-        "ERROR": "❌",
-        "CRITICAL": "💥",
+        "DEBUG": "●",
+        "INFO": "▸",
+        "WARNING": "▲",
+        "ERROR": "✖",
+        "CRITICAL": "◆",
     }
-    RESET: str = "\033[0m"
+    RESET: str = ANSI_PALETTE["reset"]
 
     def format(self, record: logging.LogRecord) -> str:
         """Add color and icon to log level."""
@@ -74,13 +81,17 @@ class ColoredFormatter(logging.Formatter):
     def formatTime(
         self, record: logging.LogRecord, datefmt: str | None = None
     ) -> str:
-        """Colorize the timestamp with distinct timezone styling."""
+        """Colorize the timestamp with distinct date, time, and timezone styling."""
         dt = datetime.fromtimestamp(record.created).astimezone()
-        time_str = dt.strftime("%Y-%m-%d %H:%M:%S")
+        date_part = dt.strftime("%Y-%m-%d")
+        time_part = dt.strftime("%H:%M:%S")
         offset = dt.strftime("%z")
         tz_name = dt.tzname() or ""
 
-        result = f"{self.TIME_COLOR}{time_str}{self.RESET}"
+        result = (
+            f"{self.DATE_COLOR}{date_part}{self.RESET}"
+            f" {self.TIME_COLOR}{time_part}{self.RESET}"
+        )
         if offset:
             result += f" {self.TZ_OFFSET_COLOR}{offset}{self.RESET}"
         if tz_name:
@@ -89,7 +100,7 @@ class ColoredFormatter(logging.Formatter):
 
 
 class PaddedFormatter(logging.Formatter):
-    """Formatter with standard spacing (no extra padding)."""
+    """Plain formatter that strips trailing newlines for clean log output."""
 
     def format(self, record: logging.LogRecord) -> str:
         base = super().format(record)
@@ -97,7 +108,7 @@ class PaddedFormatter(logging.Formatter):
 
 
 class PaddedColoredFormatter(ColoredFormatter):
-    """Colored formatter with standard spacing (no extra padding)."""
+    """Colored formatter that strips trailing newlines for clean log output."""
 
     def format(self, record: logging.LogRecord) -> str:
         base = super().format(record)
@@ -105,7 +116,7 @@ class PaddedColoredFormatter(ColoredFormatter):
 
 
 class FileSafeFormatter(logging.Formatter):
-    """Formatter that strips ANSI + non-ASCII for file logs."""
+    """Formatter that strips ANSI codes and non-ASCII characters for file logs."""
 
     def format(self, record: logging.LogRecord):
         base = super().format(record)
@@ -113,7 +124,7 @@ class FileSafeFormatter(logging.Formatter):
 
 
 class RichLogFormatter(logging.Formatter):
-    """Rich-based formatter for console logging."""
+    """Rich-aware log formatter rendering styled text, timestamps, and tracebacks."""
 
     def __init__(
         self,
@@ -122,7 +133,7 @@ class RichLogFormatter(logging.Formatter):
         show_name: bool,
         datefmt: str | None = None,
     ) -> None:
-        """Initialize formatter state for ANSI-aware log rendering."""
+        """Construct a Rich log formatter with configurable timestamp and name display."""
         super().__init__(datefmt=datefmt)
         self._console = create_rich_console(stderr=True)
         self._show_time = show_time
@@ -358,7 +369,7 @@ def setup_logging(
 
 
 class LogContext:
-    """Context manager for temporary log level changes."""
+    """Context manager that temporarily overrides a logger's level and restores it on exit."""
 
     def __init__(self, logger: logging.Logger | str, level: str | int):
         """
@@ -408,16 +419,16 @@ logger.propagate = True
 def color_text(text: str, *, color: str) -> str:
     """Wrap text with ANSI color codes if supported."""
     colors: dict[str, str] = {
-        "red": "\033[31m",
-        "green": "\033[32m",
-        "yellow": "\033[33m",
-        "blue": "\033[34m",
-        "magenta": "\033[35m",
-        "cyan": "\033[36m",
-        "dim": "\033[2m",
-        "bold": "\033[1m",
+        "red": ANSI_PALETTE["error"],
+        "green": ANSI_PALETTE["primary"],
+        "yellow": ANSI_PALETTE["warn"],
+        "blue": ANSI_PALETTE["secondary"],
+        "magenta": ANSI_PALETTE["accent"],
+        "cyan": ANSI_PALETTE["primary"],
+        "dim": ANSI_PALETTE["dim"],
+        "bold": ANSI_PALETTE["bold"],
     }
-    reset: str = "\033[0m"
+    reset: str = ANSI_PALETTE["reset"]
     if color not in colors:
         return text
     return f"{colors[color]}{text}{reset}"
@@ -433,13 +444,12 @@ _UNICODE_TRANSLATIONS = {
     ord("═"): "-",
     ord("─"): "-",
     ord("•"): "*",
-    ord("➜"): ">",
+    ord("▸"): ">",
+    ord("●"): "*",
+    ord("▲"): "WARN",
+    ord("✖"): "ERR",
+    ord("◆"): "FAIL",
     ord("✓"): "OK",
-    ord("⚠"): "WARN",
-    ord("❌"): "ERR",
-    ord("💥"): "FAIL",
-    ord("ℹ"): "INFO",
-    ord("🐛"): "DBG",
     ord("✗"): "ERR",
 }
 
@@ -480,24 +490,24 @@ def center_block(text: str, width: int | None = None) -> str:
 
 
 def styled_divider(
-    char: str = "─", length: int = 50, color: str = "cyan"
+    char: str = "─", length: int = 50, color: str = "green"
 ) -> str:
     """Create a colored divider line."""
     return color_text(char * length, color=color)
 
 
-def styled_title(title: str, color: str = "magenta") -> str:
+def styled_title(title: str, color: str = "green") -> str:
     """Create a simple colored title line."""
     return color_text(title, color=color)
 
 
-def divider_line(length: int = 70, color: str = "cyan") -> str:
+def divider_line(length: int = 70, color: str = "green") -> str:
     """Helper to build a standardized divider line for logs."""
     return styled_divider(length=length, color=color)
 
 
 def log_divider(
-    logger: logging.Logger, length: int = 70, color: str = "cyan"
+    logger: logging.Logger, length: int = 70, color: str = "green"
 ) -> None:
     """Render a divider via Rich (coordinates with live displays) and to log files."""
     # Console: Rich rule — goes through the singleton Console so it
@@ -552,15 +562,15 @@ def styled_header(
     bottom = f"╚{'═' * (box_width - 2)}╝"
     lines.append(bottom)
 
-    return "\n".join(color_text(line, color="cyan") for line in lines)
+    return "\n".join(color_text(line, color="green") for line in lines)
 
 
 def bullet_line(
     label: str,
     value: str | None = None,
     *,
-    color: str = "blue",
-    icon: str = "➜",
+    color: str = "green",
+    icon: str = "▸",
 ) -> str:
     """Format a colored bullet line with optional value."""
     label_part = f"{icon} {label}"
@@ -569,7 +579,7 @@ def bullet_line(
     return color_text(f"{label_part}: {value}", color=color)
 
 
-def badge(text: str, *, color: str = "magenta") -> str:
+def badge(text: str, *, color: str = "green") -> str:
     """Render a small badge-style label."""
     return color_text(f"[ {text} ]", color=color)
 
@@ -597,12 +607,12 @@ def info_line(
     return color_text(text, color="dim" if dim else "cyan")
 
 
-def format_path(path: str | Path, *, color: str = "blue") -> str:
+def format_path(path: str | Path, *, color: str = "green") -> str:
     """Format a path with color."""
     return color_text(str(path), color=color)
 
 
-def format_number(num: int | float, *, color: str = "magenta") -> str:
+def format_number(num: int | float, *, color: str = "green") -> str:
     """Format a number with thousands separators and color."""
     if isinstance(num, float):
         formatted = f"{num:,.2f}"
@@ -611,7 +621,7 @@ def format_number(num: int | float, *, color: str = "magenta") -> str:
     return color_text(formatted, color=color)
 
 
-def format_size(size_bytes: int | float, *, color: str = "magenta") -> str:
+def format_size(size_bytes: int | float, *, color: str = "green") -> str:
     """Format byte size as human-readable string with color.
 
     Args:
