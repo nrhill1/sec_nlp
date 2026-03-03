@@ -349,7 +349,11 @@ class BasePipelineSettings(BaseSettings, ABC):
         return list(self.mode.forms)
 
     def setup_paths(self) -> None:
-        """Create output/download directories and optionally wipe them when ``fresh=True``."""
+        """Create base output/download directories and optional log parent.
+
+        Symbol-specific output directories are created lazily only when a stage
+        actually writes output artifacts.
+        """
 
         if self.fresh:
             self._fresh()
@@ -358,10 +362,6 @@ class BasePipelineSettings(BaseSettings, ABC):
         self.dl_path.mkdir(parents=True, exist_ok=True)
         if self.log_file is not None:
             self.log_file.parent.mkdir(parents=True, exist_ok=True)
-
-        # Create per-symbol output directories
-        for symbol in self.symbols:
-            self.get_symbol_output_dir(symbol)
 
     def get_symbol_output_dir(self, symbol: str) -> Path:
         """Return (and create) the run-scoped output dir for *symbol*.
@@ -460,6 +460,7 @@ class BasePipelineSettings(BaseSettings, ABC):
             success: Whether the run succeeded.
             metadata: Optional JSON string or dict persisted alongside the run record.
         """
+        self._prune_empty_output_dirs()
         try:
             from sec_nlp.pipelines.observability.run_registry import (
                 get_registry,
@@ -496,6 +497,43 @@ class BasePipelineSettings(BaseSettings, ABC):
             )
         except (ImportError, OSError, sqlite3.Error):
             logger.debug("Run registry unavailable for run completion")
+
+    def _prune_empty_output_dirs(self) -> None:
+        """Remove empty symbol/run output directories created during no-output runs."""
+        pipeline_output_root = (
+            self.out_path / self.run_path_component() / self.pipeline_type
+        )
+        if not pipeline_output_root.exists():
+            return
+        if not pipeline_output_root.is_dir():
+            return
+
+        child_dirs = sorted(
+            (path for path in pipeline_output_root.rglob("*") if path.is_dir()),
+            key=lambda path: len(path.parts),
+            reverse=True,
+        )
+        for directory in child_dirs:
+            self._remove_dir_if_empty(directory)
+
+        self._remove_dir_if_empty(pipeline_output_root)
+        self._remove_dir_if_empty(pipeline_output_root.parent)
+
+    @staticmethod
+    def _remove_dir_if_empty(path: Path) -> None:
+        """Remove ``path`` if it exists and has no children."""
+        if not path.exists() or not path.is_dir():
+            return
+        try:
+            next(path.iterdir())
+            return
+        except StopIteration:
+            path.rmdir()
+        except OSError:
+            logger.debug(
+                "Could not remove non-empty output directory: %s",
+                path,
+            )
 
     @property
     def num_symbols(self) -> int:

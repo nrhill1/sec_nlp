@@ -146,6 +146,50 @@ class TestBasePipelineSettings:
         assert config.log_file == log_file
         assert log_file.parent.exists()
 
+    def test_setup_paths_does_not_precreate_symbol_output_dirs(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """setup_paths should not create symbol dirs until output write time."""
+        config = _ConcreteConfig(
+            symbols=["ABC"],
+            out_path=tmp_path / "outputs",
+            dl_path=tmp_path / "downloads",
+        )
+        config.setup_paths()
+
+        symbol_dir = (
+            config.out_path
+            / config.run_path_component()
+            / config.pipeline_type
+            / "ABC"
+        )
+        assert symbol_dir.exists() is False
+
+    def test_complete_run_prunes_empty_symbol_and_run_dirs(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """complete_run should remove empty symbol and run directories."""
+        config = _ConcreteConfig(
+            symbols=["ABC"],
+            out_path=tmp_path / "outputs",
+            dl_path=tmp_path / "downloads",
+        )
+        config.setup_paths()
+        symbol_dir = config.get_symbol_output_dir("ABC")
+        assert symbol_dir.exists() is True
+
+        config.complete_run(success=True)
+
+        pipeline_dir = (
+            config.out_path / config.run_path_component() / config.pipeline_type
+        )
+        run_dir = config.out_path / config.run_path_component()
+        assert symbol_dir.exists() is False
+        assert pipeline_dir.exists() is False
+        assert run_dir.exists() is False
+
 
 class TestBasePipeline:
     """Tests for BasePipeline class."""
