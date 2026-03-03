@@ -128,7 +128,7 @@ class AnalyzePipeline(BasePipeline):
 Every public function and method must have a docstring. Private methods (`_name`) should have at least a summary line.
 
 - **Summary line** (required): Imperative mood ("Return...", "Build...", "Validate..."). Must end with a period.
-- **Args section** (required when ≥ 2 non-self parameters or when semantics are non-obvious): Each parameter on its own indented line with type and purpose.
+- **Args section** (required when ≥ 2 non-self parameters or when semantics are not obvious): Each parameter on its own indented line with type and purpose.
 - **Returns section** (required when the return type is non-trivial or non-obvious): Describe what is returned and its structure.
 - **Raises section** (required when the function raises exceptions as part of its contract): List each exception type and when it occurs.
 
