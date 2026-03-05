@@ -84,7 +84,7 @@ Code: `src/sec_nlp/pipelines/presets/analyze/pipeline.py`
 
 ### 4) Chunk and preprocess
 Documents are split into chunks and filtered. Preprocessing handles:
-- Section-based extraction or sentence splitting.
+- Section-based extraction, sentence splitting, or semantic splitting via LangChain Experimental `SemanticChunker`.
 - Length filters and empty/oversized chunk drops.
 - Topic scoring and prioritization.
 - SimHash-based deduplication.
@@ -126,6 +126,17 @@ Code: `src/sec_nlp/pipelines/presets/analyze/runnables/search.py`
 If enabled, the pipeline computes market correlation metrics for relevant results and attaches them to the analysis output.
 
 Code: `src/sec_nlp/pipelines/presets/analyze/runnables/market_correlation.py`
+
+## Shared Semantic Chunking
+
+All presets expose `semantic_chunking.*` nested settings from `BasePipelineSettings`.
+
+Common CLI overrides:
+- `--semantic-chunking.enabled true`
+- `--semantic-chunking.embedding-model qwen3-embedding:4b`
+- `--semantic-chunking.breakpoint-threshold-type gradient`
+
+Pipelines that chunk filing text directly (`retrieve`, `exb`, `warranty`, and loader-backed `analyze`) apply these settings during chunk generation. Other presets keep the same config surface for CLI/flow consistency.
 
 ## Output Files
 

@@ -306,8 +306,8 @@ def setup_logging(
     console_handler.setLevel(level)
     # Suppress noisy third-party warning spam from console while keeping it in file logs
     console_handler.addFilter(
-        lambda record: not str(record.name).startswith(
-            "langchain_core.prompts.loading"
+        lambda record: (
+            not str(record.name).startswith("langchain_core.prompts.loading")
         )
     )
     # Collapse repeated unstructured warnings to keep console output readable

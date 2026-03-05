@@ -33,6 +33,9 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from sec_nlp.core.edgar.filing_mode import FilingMode
 from sec_nlp.core.infra.logger import logger
+from sec_nlp.core.text.semantic_settings import SemanticChunkingSettings
+from sec_nlp.core.types import as_json_dict
+from sec_nlp.pipelines.serialization import serialize_payload
 from sec_nlp.pipelines.utils import is_valid_email
 from sec_nlp.types import (
     ConfigValue,
@@ -147,6 +150,10 @@ class BasePipelineSettings(BaseSettings, ABC):
     forms: list[str] | None = Field(
         default=None,
         description="SEC form types to search (e.g., ['10-K', '10-Q', '8-K', '6-K']). Overrides mode if specified.",
+    )
+    semantic_chunking: SemanticChunkingSettings = Field(
+        default_factory=SemanticChunkingSettings,
+        description="Shared semantic chunking controls available to all pipelines.",
     )
     start_date: date | None = Field(
         default=None,
@@ -461,6 +468,7 @@ class BasePipelineSettings(BaseSettings, ABC):
             metadata: Optional JSON string or dict persisted alongside the run record.
         """
         self._prune_empty_output_dirs()
+        settings_snapshot_path = self._write_settings_snapshot()
         try:
             from sec_nlp.pipelines.observability.run_registry import (
                 get_registry,
@@ -483,6 +491,12 @@ class BasePipelineSettings(BaseSettings, ABC):
                 and "profiling" not in merged_metadata
             ):
                 merged_metadata["profiling"] = self._profiling_metadata
+            if settings_snapshot_path is not None:
+                if merged_metadata is None:
+                    merged_metadata = {}
+                merged_metadata["settings_snapshot"] = str(
+                    settings_snapshot_path
+                )
 
             serialized_metadata: str | None = None
             if merged_metadata is not None:
@@ -498,11 +512,43 @@ class BasePipelineSettings(BaseSettings, ABC):
         except (ImportError, OSError, sqlite3.Error):
             logger.debug("Run registry unavailable for run completion")
 
+    def get_pipeline_output_dir(self) -> Path:
+        """Return the run-scoped output directory for this pipeline."""
+        return self.out_path / self.run_path_component() / self.pipeline_type
+
+    def _write_settings_snapshot(self) -> Path | None:
+        """Write run settings JSON into the pipeline output directory when present."""
+        pipeline_output_dir = self.get_pipeline_output_dir()
+        if not pipeline_output_dir.exists() or not pipeline_output_dir.is_dir():
+            return None
+
+        settings_payload = as_json_dict(
+            serialize_payload(self, exclude_none=False)
+        )
+        if settings_payload is None:
+            logger.debug(
+                "Could not serialize settings snapshot for run %s",
+                self.run_id,
+            )
+            return None
+
+        snapshot_payload: JsonDict = {
+            "pipeline_type": self.pipeline_type,
+            "pipeline_label": self.pipeline_label(),
+            "run_id": str(self.run_id),
+            "run_short_id": self.short_id if self.short_id > 0 else None,
+            "run_short_id_display": self.short_id_display,
+            "run_timestamp": self.run_timestamp.astimezone(UTC).isoformat(),
+            "settings": settings_payload,
+        }
+        snapshot_path = pipeline_output_dir / "pipeline_settings.json"
+        with open(snapshot_path, "w", encoding="utf-8") as handle:
+            json.dump(snapshot_payload, handle, indent=2, ensure_ascii=True)
+        return snapshot_path
+
     def _prune_empty_output_dirs(self) -> None:
         """Remove empty symbol/run output directories created during no-output runs."""
-        pipeline_output_root = (
-            self.out_path / self.run_path_component() / self.pipeline_type
-        )
+        pipeline_output_root = self.get_pipeline_output_dir()
         if not pipeline_output_root.exists():
             return
         if not pipeline_output_root.is_dir():

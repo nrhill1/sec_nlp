@@ -200,6 +200,50 @@ def test_retrieve_cli_integration_with_market_signals_flag(
     assert config.include_market_signals is True
 
 
+@patch("sec_nlp.cli.command.BasePipelineCommand._run_pipeline", autospec=True)
+def test_retrieve_cli_integration_with_semantic_chunking_flags(
+    mock_run_pipeline: Mock, tmp_path: Path
+) -> None:
+    """Nested semantic chunking flags parse correctly from CLI."""
+    from pydantic_settings import CliApp
+
+    from sec_nlp.cli.commands import Root
+
+    dl_path = tmp_path / "downloads"
+    out_path = tmp_path / "outputs"
+    dl_path.mkdir()
+    out_path.mkdir()
+
+    sys.argv = [
+        "cli",
+        "retrieve",
+        "AAPL",
+        "--email",
+        "test@example.com",
+        "--dl-path",
+        str(dl_path),
+        "--out-path",
+        str(out_path),
+        "--queries",
+        "supply chain disruption",
+        "--semantic-chunking.enabled",
+        "--semantic-chunking.embedding-model",
+        "qwen3-embedding:4b",
+        "--semantic-chunking.breakpoint-threshold-type",
+        "gradient",
+        "--semantic-chunking.breakpoint-threshold-amount",
+        "4.5",
+    ]
+
+    CliApp.run(Root)
+    assert mock_run_pipeline.called
+    config = mock_run_pipeline.call_args[0][0]
+    assert config.semantic_chunking.enabled is True
+    assert config.semantic_chunking.embedding_model == "qwen3-embedding:4b"
+    assert config.semantic_chunking.breakpoint_threshold_type == "gradient"
+    assert config.semantic_chunking.breakpoint_threshold_amount == 4.5
+
+
 def test_retrieve_logs_run_details_in_config_header(
     tmp_path: Path,
     caplog,

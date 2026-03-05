@@ -2,14 +2,14 @@
 """Preset configurations for the analyze pipeline."""
 
 from collections.abc import Mapping
-from enum import Enum
+from enum import StrEnum
 from typing import TypeGuard
 
 from sec_nlp.prompts import ANALYZE_PROMPT_PATH, ANALYZE_SENTIMENT_PROMPT_PATH
 from sec_nlp.types import ConfigData, ConfigObject, ConfigValue
 
 
-class AnalyzePreset(str, Enum):
+class AnalyzePreset(StrEnum):
     """Available preset configurations for the analyze pipeline."""
 
     quick = "quick"

@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable, Sequence
 from datetime import UTC, date, datetime, timedelta
-from enum import Enum
+from enum import StrEnum
 
 from langchain_core.documents import Document
 from pydantic import BaseModel, ConfigDict, Field
@@ -21,7 +21,7 @@ from sec_nlp.pipelines.serialization import round_float
 from sec_nlp.types import JsonDict, JsonValue
 
 
-class MarketGranularity(str, Enum):
+class MarketGranularity(StrEnum):
     """Supported buckets for reducing quote granularity."""
 
     daily = "daily"

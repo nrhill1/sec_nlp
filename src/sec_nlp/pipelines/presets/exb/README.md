@@ -29,6 +29,17 @@ sec-nlp exb DE --exhibit-categories contracts subsidiaries consents
 - `candidate_queries`, `candidate_top_k`, `efts_candidates`
 - `candidate_fallback_full_scan` for safe fallback when no candidate accessions are found
 
+## Shared Semantic Chunking
+
+All presets expose `semantic_chunking.*` nested settings from `BasePipelineSettings`.
+
+Common CLI overrides:
+- `--semantic-chunking.enabled true`
+- `--semantic-chunking.embedding-model qwen3-embedding:4b`
+- `--semantic-chunking.breakpoint-threshold-type gradient`
+
+Pipelines that chunk filing text directly (`retrieve`, `exb`, `warranty`, and loader-backed `analyze`) apply these settings during chunk generation. Other presets keep the same config surface for CLI/flow consistency.
+
 ## Outputs
 
 Main run-scoped path:

@@ -61,11 +61,21 @@ class ChunkPreprocessor:
                 "Semantic chunking requires an embedder but none was provided"
             )
 
-        semantic_config = SemanticChunkerConfig(
-            min_chunk_sentences=self.config.semantic_min_chunk_sentences,
-            max_chunk_sentences=self.config.semantic_max_chunk_sentences,
-            similarity_threshold=self.config.semantic_similarity_threshold,
+        semantic_settings = self.config.semantic_chunking.model_copy(
+            update={
+                "similarity_threshold": self.config.semantic_similarity_threshold,
+                "breakpoint_threshold_type": self.config.semantic_breakpoint_threshold_type,
+                "breakpoint_threshold_amount": self.config.semantic_breakpoint_threshold_amount,
+                "buffer_size": self.config.semantic_buffer_size,
+                "number_of_chunks": self.config.semantic_number_of_chunks,
+                "sentence_split_regex": self.config.semantic_sentence_split_regex,
+                "min_chunk_size": self.config.semantic_min_chunk_size,
+                "add_start_index": self.config.semantic_add_start_index,
+                "min_chunk_sentences": self.config.semantic_min_chunk_sentences,
+                "max_chunk_sentences": self.config.semantic_max_chunk_sentences,
+            }
         )
+        semantic_config = SemanticChunkerConfig.from_settings(semantic_settings)
         self._semantic_chunker = SemanticChunker(
             embedder=self._embedder,
             config=semantic_config,

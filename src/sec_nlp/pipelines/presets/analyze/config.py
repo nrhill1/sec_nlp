@@ -786,6 +786,50 @@ class AnalyzeConfig(BasePipelineSettings):
             "Similarity threshold for semantic chunking; lower values create more splits"
         ),
     )
+    semantic_breakpoint_threshold_type: Literal[
+        "percentile",
+        "standard_deviation",
+        "interquartile",
+        "gradient",
+    ] = Field(
+        default="percentile",
+        description="Experimental breakpoint strategy used by semantic chunking.",
+    )
+    semantic_breakpoint_threshold_amount: float | None = Field(
+        default=None,
+        ge=0.0,
+        description=(
+            "Optional explicit breakpoint amount for semantic chunking. "
+            "When omitted, similarity_threshold is mapped automatically."
+        ),
+    )
+    semantic_buffer_size: int = Field(
+        default=2,
+        ge=1,
+        description="Sentence buffer size used by semantic chunking.",
+    )
+    semantic_number_of_chunks: int | None = Field(
+        default=None,
+        ge=1,
+        description="Optional target chunk count hint for semantic chunking.",
+    )
+    semantic_sentence_split_regex: str = Field(
+        default=r"(?<=[.?!])\s+",
+        description=(
+            "Regex used for sentence segmentation in semantic chunking."
+        ),
+    )
+    semantic_min_chunk_size: int | None = Field(
+        default=None,
+        ge=1,
+        description="Optional minimum semantic chunk size in characters.",
+    )
+    semantic_add_start_index: bool = Field(
+        default=False,
+        description=(
+            "Include start index metadata on semantic chunks when supported."
+        ),
+    )
     semantic_min_chunk_sentences: int = Field(
         default=3,
         ge=1,

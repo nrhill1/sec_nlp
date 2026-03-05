@@ -8,6 +8,7 @@ compile-time guarantees and only operating on compiled stage types.
 
 from __future__ import annotations
 
+import json
 from collections.abc import Callable, Mapping
 from time import perf_counter
 from uuid import uuid4
@@ -33,7 +34,7 @@ from sec_nlp.app.flows.models import (
     FlowStageResult,
     FlowStageSpec,
 )
-from sec_nlp.core.types import coerce_result_json_dict
+from sec_nlp.core.types import as_json_dict, coerce_result_json_dict
 from sec_nlp.pipelines.base.pipeline import BasePipeline
 from sec_nlp.pipelines.base.result import BasePipelineResult
 from sec_nlp.pipelines.presets.analyze import AnalyzePipeline
@@ -44,6 +45,8 @@ from sec_nlp.pipelines.presets.retrieve import (
     RetrievePipeline,
 )
 from sec_nlp.pipelines.presets.warranty import WarrantyPipeline
+from sec_nlp.pipelines.serialization import serialize_payload
+from sec_nlp.pipelines.utils import safe_filename
 from sec_nlp.pipelines.vector import clear_runtime_caches
 from sec_nlp.types import JsonValue
 
@@ -73,6 +76,12 @@ class FlowRunner:
             stage_results: list[FlowStageResult] = []
             outputs: list[str] = []
             compiled_stages = compile_flow_stages(self.spec)
+            flow_settings_snapshot = self._write_flow_settings_snapshot(
+                flow_run_id=flow_run_id,
+                compiled_stages=compiled_stages,
+            )
+            if flow_settings_snapshot is not None:
+                outputs.append(flow_settings_snapshot)
 
             previous: FlowStageResult | None = None
             failed_at: int | None = None
@@ -128,6 +137,8 @@ class FlowRunner:
                 ),
                 "duration_seconds": perf_counter() - flow_started,
             }
+            if flow_settings_snapshot is not None:
+                metadata["flow_settings_snapshot"] = flow_settings_snapshot
             return FlowRunResult(
                 flow_run_id=flow_run_id,
                 flow_name=self.spec.name,
@@ -168,12 +179,18 @@ class FlowRunner:
         duration_seconds: float,
         run_id: str,
         run_short_id: int | None,
+        settings_snapshot: str | None = None,
         extra_metadata: Mapping[str, JsonValue] | None = None,
     ) -> FlowStageResult:
         """Wrap a pipeline result into a ``FlowStageResult`` with run identifiers."""
         metadata = coerce_result_json_dict(pipeline_result.metadata)
         if extra_metadata is not None:
             metadata.update(extra_metadata)
+        output_paths = [str(path) for path in pipeline_result.outputs]
+        if settings_snapshot is not None:
+            if settings_snapshot not in output_paths:
+                output_paths.append(settings_snapshot)
+            metadata.setdefault("settings_snapshot", settings_snapshot)
         return FlowStageResult(
             stage_id=stage.id,
             pipeline=stage.pipeline,
@@ -183,7 +200,7 @@ class FlowRunner:
             duration_seconds=duration_seconds,
             run_id=run_id,
             run_short_id=run_short_id,
-            outputs=[str(path) for path in pipeline_result.outputs],
+            outputs=output_paths,
             metadata=metadata,
         )
 
@@ -202,6 +219,7 @@ class FlowRunner:
             duration_seconds=elapsed,
             run_id=compiled.run_id,
             run_short_id=compiled.run_short_id,
+            settings_snapshot=cls._resolve_stage_settings_snapshot(compiled),
         )
 
     @staticmethod
@@ -238,6 +256,7 @@ class FlowRunner:
             duration_seconds=elapsed,
             run_id=compiled.run_id,
             run_short_id=compiled.run_short_id,
+            settings_snapshot=cls._resolve_stage_settings_snapshot(compiled),
         )
 
     @staticmethod
@@ -373,6 +392,7 @@ class FlowRunner:
             duration_seconds=elapsed,
             run_id=stage.run_id,
             run_short_id=stage.run_short_id,
+            settings_snapshot=cls._resolve_stage_settings_snapshot(stage),
             extra_metadata={
                 "answer_preview": answer_preview,
             }
@@ -413,3 +433,64 @@ class FlowRunner:
         if stage.condition == "previous_has_outputs":
             return bool(previous.outputs)
         return True
+
+    @staticmethod
+    def _resolve_stage_settings_snapshot(compiled: CompiledStage) -> str | None:
+        """Return the stage settings snapshot path when the file exists."""
+        settings_path = (
+            compiled.settings.get_pipeline_output_dir()
+            / "pipeline_settings.json"
+        )
+        if not settings_path.exists():
+            return None
+        return str(settings_path)
+
+    def _write_flow_settings_snapshot(
+        self,
+        *,
+        flow_run_id: str,
+        compiled_stages: tuple[CompiledStage, ...],
+    ) -> str | None:
+        """Write one top-level flow settings JSON artifact for this run."""
+        if not compiled_stages:
+            return None
+
+        first_settings = compiled_stages[0].settings
+        flow_output_dir = (
+            first_settings.out_path
+            / first_settings.run_path_component()
+            / "flow"
+        )
+        flow_output_dir.mkdir(parents=True, exist_ok=True)
+        flow_name = safe_filename(self.spec.name.lower())
+        flow_settings_path = (
+            flow_output_dir / f"{flow_name}_flow_{flow_run_id}_settings.json"
+        )
+
+        payload: dict[str, JsonValue] = {
+            "flow_run_id": flow_run_id,
+            "flow_name": self.spec.name,
+            "spec": as_json_dict(serialize_payload(self.spec)) or {},
+            "stages": [
+                self._compiled_stage_payload(compiled_stage)
+                for compiled_stage in compiled_stages
+            ],
+        }
+        with open(flow_settings_path, "w", encoding="utf-8") as handle:
+            json.dump(payload, handle, indent=2, ensure_ascii=True)
+        return str(flow_settings_path)
+
+    @staticmethod
+    def _compiled_stage_payload(compiled_stage: CompiledStage) -> JsonValue:
+        """Build a JSON-serializable payload for one compiled flow stage."""
+        settings_payload = as_json_dict(
+            serialize_payload(compiled_stage.settings, exclude_none=False)
+        )
+        stage_payload: dict[str, JsonValue] = {
+            "stage_id": compiled_stage.stage.id,
+            "pipeline": compiled_stage.pipeline,
+            "run_id": compiled_stage.run_id,
+            "run_short_id": compiled_stage.run_short_id,
+            "settings": settings_payload or {},
+        }
+        return stage_payload

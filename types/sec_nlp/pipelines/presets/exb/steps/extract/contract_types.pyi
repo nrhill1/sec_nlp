@@ -1,6 +1,6 @@
-from enum import Enum
+from enum import StrEnum
 
-class ContractCategory(str, Enum):
+class ContractCategory(StrEnum):
     SUPPLY = "supply"
     CREDIT = "credit"
     EMPLOYMENT = "employment"

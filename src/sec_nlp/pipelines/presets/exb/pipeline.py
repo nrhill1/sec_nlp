@@ -130,6 +130,7 @@ class ExhibitPipeline(BasePipeline):
                 downloads_folder=self.config.dl_path,
                 chunk_size=self.config.chunk_size,
                 chunk_overlap=self.config.chunk_overlap,
+                semantic_chunking=self.config.semantic_chunking,
             )
         except Exception as e:
             raise ValueError(

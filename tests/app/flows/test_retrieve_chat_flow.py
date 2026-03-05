@@ -603,3 +603,59 @@ def test_flow_runner_passes_contract_evidence_into_chat(monkeypatch) -> None:
     assert observed["seed_run_id"] == "00000000-0000-0000-0000-000000000402"
     assert observed["seed_chunk_collection"] == "exhibit"
     assert observed["seed_chunk_score"] == 0.87
+
+
+def test_flow_runner_writes_flow_settings_snapshot(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    """Flow runner should emit a top-level flow settings artifact."""
+
+    def _fake_chat_run_for_flow(
+        self: ChatPipeline,
+        *,
+        seed_context: ChatSeedBundle | None,
+        seed_chunks: tuple[ChatRetrievedChunk, ...],
+    ) -> ChatResult:
+        _ = (self, seed_context, seed_chunks)
+        return ChatResult(
+            success=True,
+            outputs=[Path("/tmp/chat_summary.json")],
+            metadata={},
+            turns_processed=1,
+            hits_retrieved=0,
+            citations_returned=0,
+            answer="Answer. [C1]",
+            citation_ids=["C1"],
+        )
+
+    monkeypatch.setattr(ChatPipeline, "_build_components", lambda self: None)
+    monkeypatch.setattr(ChatPipeline, "run_for_flow", _fake_chat_run_for_flow)
+
+    spec = FlowSpec(
+        name="flow-settings-smoke",
+        defaults=FlowDefaults(email="test@example.com"),
+        stages=[
+            FlowStageSpec(
+                id="chat_answer",
+                pipeline="chat",
+                overrides={
+                    "question": "What changed?",
+                    "output_format": "json",
+                    "interactive": False,
+                    "collections": ["retrieve"],
+                    "symbols": ["CDE"],
+                    "out_path": str(tmp_path / "outputs"),
+                },
+            )
+        ],
+    )
+
+    result = FlowRunner(spec=spec).run()
+
+    assert result.success is True
+    snapshot_value = result.metadata.get("flow_settings_snapshot")
+    assert isinstance(snapshot_value, str)
+    assert snapshot_value.endswith("_settings.json")
+    assert snapshot_value in result.outputs
+    assert Path(snapshot_value).exists() is True

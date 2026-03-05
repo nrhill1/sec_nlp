@@ -11,6 +11,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from pydantic_settings import CliSubCommand
 from qdrant_client import QdrantClient
+from qdrant_client.http.models import CollectionInfo
 from qdrant_client.models import Distance, VectorParams
 
 from sec_nlp.core.infra.logger import (
@@ -116,6 +117,20 @@ class QdrantBaseConfig(BaseModel):
             https=self.qdrant_https,
         )
 
+    @staticmethod
+    def _vector_count_from_info(info: CollectionInfo) -> int:
+        """Return the best available vector-count value for a collection."""
+        indexed = getattr(info, "indexed_vectors_count", None)
+        if isinstance(indexed, int):
+            return indexed
+        vectors = getattr(info, "vectors_count", None)
+        if isinstance(vectors, int):
+            return vectors
+        points = getattr(info, "points_count", None)
+        if isinstance(points, int):
+            return points
+        return 0
+
 
 class QdrantList(QdrantBaseConfig):
     """List all Qdrant collections."""
@@ -147,9 +162,7 @@ class QdrantList(QdrantBaseConfig):
                     logger.info(
                         f"\n  {color_text(collection.name, color='green')}"
                     )
-                    vectors_count = (
-                        info.indexed_vectors_count or info.vectors_count or 0
-                    )
+                    vectors_count = self._vector_count_from_info(info)
                     points_count = info.points_count or 0
                     logger.info(f"    Vectors: {vectors_count:,}")
                     logger.info(f"    Points: {points_count:,}")
@@ -208,9 +221,7 @@ class QdrantInfo(QdrantBaseConfig):
                 f"  Name: {color_text(self.collection_name, color='green')}"
             )
             logger.info(f"  Status: {info.status}")
-            vectors_count = (
-                info.indexed_vectors_count or info.vectors_count or 0
-            )
+            vectors_count = self._vector_count_from_info(info)
             points_count = info.points_count or 0
             indexed_count = info.indexed_vectors_count or 0
             logger.info(f"  Vectors: {vectors_count:,}")

@@ -481,11 +481,11 @@ def test_search_collections_prefetches_missing_collection(
     monkeypatch.setattr(
         ChatPipeline,
         "_hydrate_retrieve_collection",
-        lambda self, collection, symbols, question: hydrated.update(
-            {"called": True}
-        )
-        or setattr(fake_qdrant, "exists", True)
-        or True,
+        lambda self, collection, symbols, question: (
+            hydrated.update({"called": True})
+            or setattr(fake_qdrant, "exists", True)
+            or True
+        ),
     )
 
     chunks = ChatPipeline(config=config)._search_collections("neodymium")

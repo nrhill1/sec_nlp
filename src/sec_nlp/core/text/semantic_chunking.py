@@ -1,287 +1,314 @@
 # src/sec_nlp/core/text/semantic_chunking.py
-"""Semantic chunking using embeddings to find natural topic boundaries.
+"""Semantic chunking adapter built on LangChain experimental SemanticChunker.
 
-Chunks text by detecting semantic shifts using embedding similarity,
-preserving topical coherence within chunks.
+This module keeps a stable local chunker interface used by analyze preprocessing
+while delegating boundary detection to LangChain's experimental splitter.
+Local post-processing still enforces sentence-count bounds so existing pipeline
+controls remain meaningful.
 """
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+import re
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
+from inspect import Parameter, Signature, signature
+from typing import Literal
 
-import numpy as np
 from langchain_core.documents import Document
-from langchain_ollama.embeddings import OllamaEmbeddings
+from langchain_core.embeddings import Embeddings
 
 from sec_nlp.core.infra.logger import logger
-from sec_nlp.core.text.chunking import _NLTK_AVAILABLE, _fallback_sent_tokenize
+from sec_nlp.core.text.chunking import _fallback_sent_tokenize
+from sec_nlp.core.text.semantic_settings import SemanticChunkingSettings
+from sec_nlp.types import JsonValue
 
-if _NLTK_AVAILABLE:
-    from nltk.tokenize import sent_tokenize
+type ChunkMetadata = dict[str, JsonValue]
+type CreateDocumentsFn = Callable[
+    [list[str], list[ChunkMetadata] | None], list[Document]
+]
 
 
 @dataclass(frozen=True)
 class SemanticChunkerConfig:
-    """Configuration for semantic chunking."""
+    """Store semantic chunking controls used by analyze preprocessing."""
 
     min_chunk_sentences: int = 3
-    """Minimum sentences per chunk to avoid overly fragmented output."""
+    """Minimum sentences per chunk after post-processing."""
 
     max_chunk_sentences: int = 50
-    """Maximum sentences per chunk to prevent overly large chunks."""
+    """Maximum sentences per chunk after post-processing."""
 
     similarity_threshold: float = 0.5
-    """Similarity below this triggers a chunk boundary (0-1, lower = more splits)."""
+    """Boundary aggressiveness mapped to experimental threshold amount."""
 
     window_size: int = 2
-    """Number of sentences to combine when computing embeddings for comparison."""
+    """Context window hint mapped to experimental buffer size when available."""
+
+    breakpoint_threshold_type: Literal[
+        "percentile",
+        "standard_deviation",
+        "interquartile",
+        "gradient",
+    ] = "percentile"
+    """Experimental threshold strategy used to place semantic breakpoints."""
+
+    breakpoint_threshold_amount: float | None = None
+    """Optional explicit threshold amount for the selected strategy."""
+
+    number_of_chunks: int | None = None
+    """Optional target number of chunks passed through to experimental splitter."""
+
+    sentence_split_regex: str = r"(?<=[.?!])\s+"
+    """Regex pattern used for sentence splitting in chunk post-processing."""
+
+    min_chunk_size: int | None = None
+    """Optional minimum chunk size in characters for experimental splitter."""
+
+    add_start_index: bool = False
+    """When true, include start offsets in splitter metadata."""
 
     embedding_batch_size: int = 32
-    """Batch size for embedding generation."""
+    """Unused compatibility field retained for stable config shape."""
+
+    @classmethod
+    def from_settings(
+        cls, settings: SemanticChunkingSettings
+    ) -> SemanticChunkerConfig:
+        """Build runtime chunker config from shared semantic settings."""
+        return cls(
+            min_chunk_sentences=settings.min_chunk_sentences,
+            max_chunk_sentences=settings.max_chunk_sentences,
+            similarity_threshold=settings.similarity_threshold,
+            window_size=settings.buffer_size,
+            breakpoint_threshold_type=settings.breakpoint_threshold_type,
+            breakpoint_threshold_amount=settings.breakpoint_threshold_amount,
+            number_of_chunks=settings.number_of_chunks,
+            sentence_split_regex=settings.sentence_split_regex,
+            min_chunk_size=settings.min_chunk_size,
+            add_start_index=settings.add_start_index,
+        )
 
 
-def _tokenize_sentences(text: str) -> list[str]:
-    """Tokenize text into sentences using NLTK or fallback."""
+def _tokenize_sentences(text: str, sentence_split_regex: str) -> list[str]:
+    """Tokenize text into sentences using the configured regex."""
     if not text or not text.strip():
         return []
-    if _NLTK_AVAILABLE:
-        return list(sent_tokenize(text))
+    regex_sentences = [
+        sentence.strip()
+        for sentence in re.split(sentence_split_regex, text)
+        if sentence.strip()
+    ]
+    if regex_sentences:
+        return regex_sentences
     return _fallback_sent_tokenize(text)
 
 
-def _cosine_similarity(vec_a: np.ndarray, vec_b: np.ndarray) -> float:
-    """Compute cosine similarity between two vectors."""
-    norm_a = np.linalg.norm(vec_a)
-    norm_b = np.linalg.norm(vec_b)
-    if norm_a == 0 or norm_b == 0:
-        return 0.0
-    return float(np.dot(vec_a, vec_b) / (norm_a * norm_b))
+def _load_experimental_chunker() -> type:
+    """Load LangChain experimental SemanticChunker."""
+    try:
+        from langchain_experimental.text_splitter import (
+            SemanticChunker as ExperimentalSemanticChunker,
+        )
+    except ModuleNotFoundError as exc:
+        raise RuntimeError(
+            "Semantic chunking requires 'langchain-experimental'. "
+            "Install it before running analyze with chunking_mode='semantic'."
+        ) from exc
+    return ExperimentalSemanticChunker
+
+
+def _signature_accepts(signature_obj: Signature, name: str) -> bool:
+    """Return whether a callable signature accepts a named parameter."""
+    param = signature_obj.parameters.get(name)
+    return isinstance(param, Parameter)
 
 
 class SemanticChunker:
-    """Chunk text by detecting semantic boundaries using embeddings.
-
-    This chunker groups sentences based on semantic similarity rather than
-    fixed counts, creating more coherent chunks that preserve topical flow.
-    """
+    """Split text with LangChain semantic chunking plus local sentence bounds."""
 
     def __init__(
         self,
-        embedder: OllamaEmbeddings,
+        embedder: Embeddings,
         config: SemanticChunkerConfig | None = None,
     ) -> None:
-        """Initialize the semantic chunker.
+        """Initialize the semantic chunker adapter.
 
         Args:
-            embedder: Embedding model for computing sentence embeddings.
-            config: Chunker configuration. Uses defaults if not provided.
+            embedder: Embeddings backend passed to experimental chunker.
+            config: Optional local chunking controls.
         """
         self._embedder = embedder
         self._config = config or SemanticChunkerConfig()
+        self._create_documents_fn = self._build_create_documents_fn()
 
     @property
     def config(self) -> SemanticChunkerConfig:
         """Return chunker configuration."""
         return self._config
 
-    def _get_window_texts(self, sentences: list[str]) -> list[str]:
-        """Create windowed text groups for embedding comparison.
+    def _build_create_documents_fn(self) -> CreateDocumentsFn:
+        """Build and wrap the experimental splitter's create-documents callable."""
+        splitter_cls = _load_experimental_chunker()
+        init_signature = signature(splitter_cls.__init__)
+        splitter_kwargs: dict[str, bool | int | float | str] = {}
 
-        Combines adjacent sentences into windows for smoother similarity
-        computation that's less sensitive to individual sentence noise.
-        """
-        if len(sentences) <= self._config.window_size:
-            return [" ".join(sentences)]
-
-        windows: list[str] = []
-        for i in range(len(sentences) - self._config.window_size + 1):
-            window = sentences[i : i + self._config.window_size]
-            windows.append(" ".join(window))
-        return windows
-
-    def _compute_embeddings(self, texts: list[str]) -> np.ndarray:
-        """Compute embeddings for a list of texts in batches."""
-        if not texts:
-            return np.array([])
-
-        all_embeddings: list[list[float]] = []
-        batch_size = self._config.embedding_batch_size
-
-        for i in range(0, len(texts), batch_size):
-            batch = texts[i : i + batch_size]
-            try:
-                batch_embeddings = self._embedder.embed_documents(batch)
-                all_embeddings.extend(batch_embeddings)
-            except Exception as e:
-                logger.warning("Failed to embed batch at index %d: %s", i, e)
-                # Use zero vectors as fallback to maintain alignment
-                dim = len(all_embeddings[0]) if all_embeddings else 384
-                all_embeddings.extend([[0.0] * dim for _ in batch])
-
-        return np.array(all_embeddings)
-
-    def _find_breakpoints(
-        self,
-        sentences: list[str],
-        embeddings: np.ndarray,
-    ) -> list[int]:
-        """Find indices where semantic shifts occur.
-
-        Returns sentence indices after which a chunk boundary should be placed.
-        """
-        if len(embeddings) < 2:
-            return []
-
-        # Compute similarities between adjacent windows
-        similarities: list[float] = []
-        for i in range(len(embeddings) - 1):
-            sim = _cosine_similarity(embeddings[i], embeddings[i + 1])
-            similarities.append(sim)
-
-        # Find breakpoints where similarity drops below threshold
-        breakpoints: list[int] = []
-        current_chunk_size = 0
-
-        for i, sim in enumerate(similarities):
-            # Map window index back to sentence index
-            # Window i covers sentences [i, i+window_size)
-            # A break after window i means break after sentence i+window_size-1
-            sentence_idx = i + self._config.window_size - 1
-            current_chunk_size += 1
-
-            # Force break at max chunk size
-            if current_chunk_size >= self._config.max_chunk_sentences:
-                breakpoints.append(sentence_idx)
-                current_chunk_size = 0
-                continue
-
-            # Check for semantic boundary
-            if (
-                sim < self._config.similarity_threshold
-                and current_chunk_size >= self._config.min_chunk_sentences
-            ):
-                breakpoints.append(sentence_idx)
-                current_chunk_size = 0
-
-        return breakpoints
-
-    def split_text(self, text: str) -> list[str]:
-        """Split text into semantically coherent chunks.
-
-        Args:
-            text: Input text to chunk.
-
-        Returns:
-            List of chunk strings.
-        """
-        sentences = _tokenize_sentences(text)
-        if not sentences:
-            return []
-
-        # Handle small documents that don't need chunking
-        if len(sentences) <= self._config.min_chunk_sentences:
-            return [" ".join(sentences)]
-
-        # Create windows and compute embeddings
-        windows = self._get_window_texts(sentences)
-        embeddings = self._compute_embeddings(windows)
-
-        if len(embeddings) == 0:
-            # Fallback: return as single chunk if embedding fails
-            logger.warning(
-                "Embedding computation failed, returning single chunk"
+        if _signature_accepts(init_signature, "breakpoint_threshold_type"):
+            splitter_kwargs["breakpoint_threshold_type"] = (
+                self._config.breakpoint_threshold_type
             )
-            return [" ".join(sentences)]
+        if _signature_accepts(init_signature, "breakpoint_threshold_amount"):
+            threshold_amount = self._config.breakpoint_threshold_amount
+            if threshold_amount is None:
+                threshold_amount = self._config.similarity_threshold * 100.0
+            if self._config.breakpoint_threshold_type == "percentile":
+                threshold_amount = max(0.0, min(100.0, threshold_amount))
+            else:
+                threshold_amount = max(0.0, threshold_amount)
+            splitter_kwargs["breakpoint_threshold_amount"] = float(
+                threshold_amount
+            )
+        if _signature_accepts(init_signature, "buffer_size"):
+            splitter_kwargs["buffer_size"] = max(1, self._config.window_size)
+        if _signature_accepts(init_signature, "add_start_index"):
+            splitter_kwargs["add_start_index"] = self._config.add_start_index
+        if (
+            _signature_accepts(init_signature, "number_of_chunks")
+            and self._config.number_of_chunks is not None
+        ):
+            splitter_kwargs["number_of_chunks"] = max(
+                1, self._config.number_of_chunks
+            )
+        if _signature_accepts(init_signature, "sentence_split_regex"):
+            splitter_kwargs["sentence_split_regex"] = (
+                self._config.sentence_split_regex
+            )
+        if (
+            _signature_accepts(init_signature, "min_chunk_size")
+            and self._config.min_chunk_size is not None
+        ):
+            splitter_kwargs["min_chunk_size"] = max(
+                1, self._config.min_chunk_size
+            )
 
-        # Find semantic breakpoints
-        breakpoints = self._find_breakpoints(sentences, embeddings)
+        splitter = splitter_cls(self._embedder, **splitter_kwargs)
+        create_documents = splitter.create_documents
+        call_signature = signature(create_documents)
+        supports_metadata = _signature_accepts(call_signature, "metadatas")
 
-        # Create chunks from breakpoints
-        chunks: list[str] = []
-        start_idx = 0
+        def _invoke(
+            texts: list[str],
+            metadatas: list[ChunkMetadata] | None,
+        ) -> list[Document]:
+            if supports_metadata and metadatas is not None:
+                raw_documents = create_documents(texts, metadatas=metadatas)
+            else:
+                raw_documents = create_documents(texts)
+            return self._coerce_documents(raw_documents)
 
-        for break_idx in breakpoints:
-            # break_idx is the last sentence index in the current chunk
-            end_idx = break_idx + 1
-            if end_idx > start_idx:
-                chunk_text = " ".join(sentences[start_idx:end_idx])
-                if chunk_text.strip():
-                    chunks.append(chunk_text)
-            start_idx = end_idx
+        return _invoke
 
-        # Add remaining sentences as final chunk
-        if start_idx < len(sentences):
-            final_chunk = " ".join(sentences[start_idx:])
-            if final_chunk.strip():
-                chunks.append(final_chunk)
-
-        # If no chunks created, return original as single chunk
-        if not chunks:
-            return [" ".join(sentences)]
-
-        logger.debug(
-            "Semantic chunking: %d sentences -> %d chunks",
-            len(sentences),
-            len(chunks),
-        )
-        return chunks
-
-    def split_text_with_counts(self, text: str) -> list[tuple[str, int]]:
-        """Split text and return (chunk_text, sentence_count) tuples."""
-        sentences = _tokenize_sentences(text)
-        if not sentences:
-            return []
-
-        if len(sentences) <= self._config.min_chunk_sentences:
-            return [(" ".join(sentences), len(sentences))]
-
-        windows = self._get_window_texts(sentences)
-        embeddings = self._compute_embeddings(windows)
-
-        if len(embeddings) == 0:
-            return [(" ".join(sentences), len(sentences))]
-
-        breakpoints = self._find_breakpoints(sentences, embeddings)
-
-        result: list[tuple[str, int]] = []
-        start_idx = 0
-
-        for break_idx in breakpoints:
-            end_idx = break_idx + 1
-            if end_idx > start_idx:
-                chunk_sentences = sentences[start_idx:end_idx]
-                chunk_text = " ".join(chunk_sentences)
-                if chunk_text.strip():
-                    result.append((chunk_text, len(chunk_sentences)))
-            start_idx = end_idx
-
-        if start_idx < len(sentences):
-            final_sentences = sentences[start_idx:]
-            final_chunk = " ".join(final_sentences)
-            if final_chunk.strip():
-                result.append((final_chunk, len(final_sentences)))
-
-        if not result:
-            return [(" ".join(sentences), len(sentences))]
-
+    @staticmethod
+    def _coerce_documents(raw_documents: Sequence[Document]) -> list[Document]:
+        """Validate that the splitter returned LangChain Document instances."""
+        result: list[Document] = []
+        for doc in raw_documents:
+            if not isinstance(doc, Document):
+                raise TypeError(
+                    "Experimental SemanticChunker returned non-Document value"
+                )
+            result.append(doc)
         return result
 
-    def split_documents(self, docs: Sequence[Document]) -> list[Document]:
-        """Split Documents while preserving metadata.
+    def _create_documents(
+        self,
+        *,
+        texts: list[str],
+        metadatas: list[ChunkMetadata] | None = None,
+    ) -> list[Document]:
+        """Create chunks using the wrapped experimental splitter."""
+        return self._create_documents_fn(texts, metadatas)
 
-        Adds 'sentence_count' and 'chunk_index' to each chunk's metadata.
-        """
-        result: list[Document] = []
+    def _normalize_sentence_groups(
+        self, groups: list[list[str]]
+    ) -> list[list[str]]:
+        """Enforce max/min sentence constraints across sequential groups."""
+        if not groups:
+            return []
 
+        max_sentences = max(1, self._config.max_chunk_sentences)
+        min_sentences = max(1, self._config.min_chunk_sentences)
+
+        split_groups: list[list[str]] = []
+        for group in groups:
+            start_idx = 0
+            while start_idx < len(group):
+                end_idx = min(start_idx + max_sentences, len(group))
+                split_groups.append(group[start_idx:end_idx])
+                start_idx = end_idx
+
+        merged_groups: list[list[str]] = []
+        for group in split_groups:
+            if merged_groups and len(group) < min_sentences:
+                merged_groups[-1].extend(group)
+                continue
+            merged_groups.append(list(group))
+
+        if len(merged_groups) >= 2 and len(merged_groups[-1]) < min_sentences:
+            trailing = merged_groups.pop()
+            merged_groups[-1].extend(trailing)
+
+        return [group for group in merged_groups if group]
+
+    def split_text_with_counts(self, text: str) -> list[tuple[str, int]]:
+        """Split text into semantic chunks with sentence counts."""
+        stripped = text.strip()
+        if not stripped:
+            return []
+
+        docs = self._create_documents(texts=[stripped], metadatas=None)
+        sentence_groups: list[list[str]] = []
         for doc in docs:
+            sentences = _tokenize_sentences(
+                doc.page_content,
+                self._config.sentence_split_regex,
+            )
+            if sentences:
+                sentence_groups.append(sentences)
+
+        if not sentence_groups:
+            fallback = _tokenize_sentences(
+                stripped,
+                self._config.sentence_split_regex,
+            )
+            if not fallback:
+                return []
+            sentence_groups = [fallback]
+
+        normalized = self._normalize_sentence_groups(sentence_groups)
+        return [(" ".join(group), len(group)) for group in normalized]
+
+    def split_text(self, text: str) -> list[str]:
+        """Split text into semantically coherent chunks."""
+        return [
+            chunk_text
+            for chunk_text, _sentence_count in self.split_text_with_counts(text)
+        ]
+
+    def split_documents(self, docs: Sequence[Document]) -> list[Document]:
+        """Split documents into semantic chunks while preserving metadata."""
+        result: list[Document] = []
+        for doc in docs:
+            base_metadata = (
+                dict(doc.metadata) if isinstance(doc.metadata, dict) else {}
+            )
             chunks_with_counts = self.split_text_with_counts(doc.page_content)
-            for idx, (chunk_text, sentence_count) in enumerate(
+            for chunk_index, (chunk_text, sentence_count) in enumerate(
                 chunks_with_counts
             ):
-                metadata = dict(doc.metadata) if doc.metadata else {}
+                metadata = dict(base_metadata)
                 metadata["sentence_count"] = sentence_count
-                metadata["chunk_index"] = idx
+                metadata["chunk_index"] = chunk_index
                 metadata["chunking_mode"] = "semantic"
                 result.append(
                     Document(
@@ -290,12 +317,17 @@ class SemanticChunker:
                     )
                 )
 
+        logger.debug(
+            "Semantic chunking: %d documents -> %d chunks",
+            len(docs),
+            len(result),
+        )
         return result
 
     def __repr__(self) -> str:
         """Return a concise debug representation for semantic chunking config."""
         return (
-            f"SemanticChunker("
+            "SemanticChunker("
             f"threshold={self._config.similarity_threshold}, "
             f"min={self._config.min_chunk_sentences}, "
             f"max={self._config.max_chunk_sentences})"
