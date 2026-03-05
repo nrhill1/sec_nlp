@@ -5,8 +5,14 @@ from pathlib import Path
 
 from sec_nlp.pipelines.presets.analyze import AnalyzeConfig
 from sec_nlp.pipelines.presets.chat import ChatSettings
+from sec_nlp.pipelines.presets.events import EventsSettings
 from sec_nlp.pipelines.presets.exb import ExhibitConfig
+from sec_nlp.pipelines.presets.financials import FinancialsSettings
+from sec_nlp.pipelines.presets.holdings import HoldingsSettings
+from sec_nlp.pipelines.presets.insider import InsiderSettings
+from sec_nlp.pipelines.presets.news import NewsSettings
 from sec_nlp.pipelines.presets.retrieve import RetrieveSettings
+from sec_nlp.pipelines.presets.warranty import WarrantyConfig
 
 
 def test_chat_partial_llm_override_preserves_pipeline_defaults(
@@ -85,3 +91,39 @@ def test_analyze_partial_vdb_override_preserves_pipeline_defaults(
     assert config.vdb.search_type == "mmr"
     assert config.vdb.vector_size == 1024
     assert config.vdb.qdrant_location == ".qdrant/rems"
+
+
+def test_all_pipeline_configs_include_semantic_chunking_subconfig() -> None:
+    config_models = (
+        AnalyzeConfig,
+        ChatSettings,
+        EventsSettings,
+        ExhibitConfig,
+        FinancialsSettings,
+        HoldingsSettings,
+        InsiderSettings,
+        NewsSettings,
+        RetrieveSettings,
+        WarrantyConfig,
+    )
+    for config_model in config_models:
+        assert "semantic_chunking" in config_model.model_fields
+
+
+def test_retrieve_partial_semantic_override_preserves_defaults(
+    tmp_path: Path,
+) -> None:
+    config = RetrieveSettings.model_validate(
+        {
+            "email": "test@example.com",
+            "symbols": ["MP"],
+            "queries": ["rare earth"],
+            "dl_path": str(tmp_path / "downloads"),
+            "out_path": str(tmp_path / "outputs"),
+            "semantic_chunking": {"embedding_model": "qwen3-embedding:4b"},
+        }
+    )
+
+    assert config.semantic_chunking.enabled is True
+    assert config.semantic_chunking.embedding_model == "qwen3-embedding:4b"
+    assert config.semantic_chunking.breakpoint_threshold_type == "percentile"

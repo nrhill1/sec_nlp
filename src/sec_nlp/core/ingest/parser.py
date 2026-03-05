@@ -10,10 +10,12 @@ from pathlib import Path
 
 from langchain_community.document_loaders import UnstructuredHTMLLoader
 from langchain_core.documents import Document
+from langchain_ollama.embeddings import OllamaEmbeddings
 from unstructured.documents.elements import Element
 from unstructured.partition.html import partition_html
 
 from sec_nlp.core.infra.logger import color_text, logger
+from sec_nlp.core.llm.ollama import resolve_ollama_base_url
 from sec_nlp.core.text.chunking import SentenceSplitter
 from sec_nlp.core.text.filters import (
     SectionFilter,
@@ -21,6 +23,11 @@ from sec_nlp.core.text.filters import (
 )
 from sec_nlp.core.text.keyword import KeywordMatcher, KeywordSpec
 from sec_nlp.core.text.section_extractor import SectionExtractor
+from sec_nlp.core.text.semantic_chunking import (
+    SemanticChunker,
+    SemanticChunkerConfig,
+)
+from sec_nlp.core.text.semantic_settings import SemanticChunkingSettings
 from sec_nlp.types import JsonDict
 
 
@@ -35,6 +42,7 @@ class HtmlProcessor:
         section_chunking: bool,
         section_chunk_max_length: int,
         keyword_mode: str,
+        semantic_chunking: SemanticChunkingSettings,
     ) -> None:
         """Initialize the parser with chunking and section-extraction settings."""
         self.chunk_size = chunk_size
@@ -42,6 +50,7 @@ class HtmlProcessor:
         self.section_chunking = section_chunking
         self.section_chunk_max_length = section_chunk_max_length
         self.keyword_mode = keyword_mode
+        self.semantic_chunking = semantic_chunking
 
         self._splitter = SentenceSplitter(
             chunk_size=self.chunk_size, chunk_overlap=self.chunk_overlap
@@ -54,6 +63,33 @@ class HtmlProcessor:
                 max_section_length=self.section_chunk_max_length,
                 detect_boundaries=True,
             )
+        self._semantic_chunker: SemanticChunker | None = (
+            self._build_semantic_chunker()
+        )
+
+    def _build_semantic_chunker(self) -> SemanticChunker | None:
+        """Build semantic chunker when semantic chunking is enabled."""
+        if not self.semantic_chunking.enabled:
+            return None
+        try:
+            embedding_base_url = self.semantic_chunking.embedding_base_url
+            if embedding_base_url is None:
+                embedding_base_url = resolve_ollama_base_url()
+
+            embedder = OllamaEmbeddings(
+                model=self.semantic_chunking.embedding_model,
+                base_url=embedding_base_url,
+            )
+            semantic_config = SemanticChunkerConfig.from_settings(
+                self.semantic_chunking
+            )
+            return SemanticChunker(embedder=embedder, config=semantic_config)
+        except Exception as exc:
+            logger.warning(
+                "Semantic chunker initialization failed; falling back to sentence chunking: %s",
+                exc,
+            )
+            return None
 
     def _build_section_extractor(
         self, section_filter: SectionFilter | None
@@ -186,13 +222,49 @@ class HtmlProcessor:
                 section_chunks = []
             if section_chunks:
                 self._log_section_chunk_summary(section_chunks)
+                if self._semantic_chunker is not None:
+                    return self._semantic_chunk_documents(section_chunks)
                 return section_chunks
 
         doc = Document(page_content=text_content, metadata=base_meta)
+        if self._semantic_chunker is not None:
+            semantic_chunks = self._semantic_chunk_documents([doc])
+            if section_filter:
+                return list(section_filter.filter_documents(semantic_chunks))
+            return semantic_chunks
         chunk_list = self._splitter.split_documents([doc])
         if section_filter:
             return list(section_filter.filter_documents(chunk_list))
         return chunk_list
+
+    def _semantic_chunk_documents(self, docs: list[Document]) -> list[Document]:
+        """Split documents with semantic chunking while preserving metadata."""
+        semantic_chunker = self._semantic_chunker
+        if semantic_chunker is None:
+            return docs
+
+        chunked_docs: list[Document] = []
+        for doc in docs:
+            base_meta = dict(doc.metadata) if doc.metadata else {}
+            try:
+                semantic_chunks = semantic_chunker.split_documents([doc])
+            except Exception as exc:
+                logger.warning(
+                    "Semantic chunking failed; preserving original chunk: %s",
+                    exc,
+                )
+                semantic_chunks = [doc]
+            for chunk in semantic_chunks:
+                chunk_metadata = dict(chunk.metadata) if chunk.metadata else {}
+                merged_metadata = dict(base_meta)
+                merged_metadata.update(chunk_metadata)
+                chunked_docs.append(
+                    Document(
+                        page_content=chunk.page_content,
+                        metadata=merged_metadata,
+                    )
+                )
+        return chunked_docs
 
     def _filter_elements_by_keywords(
         self,

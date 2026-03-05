@@ -210,6 +210,7 @@ class AnalyzePipeline(BasePipeline):
                 downloads_folder=self.config.dl_path,
                 chunk_size=self.config.chunk_size,
                 chunk_overlap=self.config.chunk_overlap,
+                semantic_chunking=self.config.semantic_chunking,
                 keywords=loader_keywords,
                 keyword_mode=self.config.keyword_mode,
                 use_async=self.config.loader_use_async,

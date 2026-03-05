@@ -272,10 +272,11 @@ def build_retrieve_stage_chain(
         config=pipeline.config,
         update_phase=pipeline._update_phase,
         search_candidates_for_symbol=(
-            lambda search_symbol,
-            candidate_searcher: pipeline._search_candidates_for_symbol(
-                search_symbol=search_symbol,
-                candidate_searcher=candidate_searcher,
+            lambda search_symbol, candidate_searcher: (
+                pipeline._search_candidates_for_symbol(
+                    search_symbol=search_symbol,
+                    candidate_searcher=candidate_searcher,
+                )
             )
         ),
         rank_hits=(

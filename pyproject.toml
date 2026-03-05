@@ -16,6 +16,7 @@ dependencies = [
   "langchain-community",
   "langchain-qdrant",
   "langchain-text-splitters",
+  "langchain-experimental",
   "beautifulsoup4",
   "lxml",
   "markdownify",

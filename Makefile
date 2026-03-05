@@ -45,7 +45,7 @@ STAMP_BOOTSTRAP := .bootstrap.stamp
 STAMP_UVSYNC := .uvsync.stamp
 UV_SYNC_FLAGS ?= --frozen
 UV_NO_BUILD_ISOLATION ?= 1
-UV_CACHE_DIR ?= $(ROOT_DIR)/.uv-cache
+UV_CACHE_DIR ?= $(ROOT_DIR)/.uv_cache
 PIP_CACHE_DIR ?= $(ROOT_DIR)/.pip-cache
 export UV_CACHE_DIR
 export PIP_CACHE_DIR

@@ -399,6 +399,7 @@ def download_and_chunk_hits(
         downloads_folder=settings.dl_path,
         chunk_size=settings.chunk_size,
         chunk_overlap=settings.chunk_overlap,
+        semantic_chunking=settings.semantic_chunking,
     )
 
     chunk_candidates: dict[str, list[_ChunkCandidate]] = {}

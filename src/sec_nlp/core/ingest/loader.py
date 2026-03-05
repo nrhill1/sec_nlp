@@ -36,6 +36,7 @@ from sec_nlp.core.ingest.parser import HtmlProcessor
 from sec_nlp.core.ingest.types import DownloadResults
 from sec_nlp.core.text.filters import SectionFilter
 from sec_nlp.core.text.section_extractor import SectionExtractor
+from sec_nlp.core.text.semantic_settings import SemanticChunkingSettings
 from sec_nlp.types import JsonDict
 
 
@@ -110,6 +111,10 @@ class Loader(BaseModel):
         ge=1000,
         description="Maximum characters to keep per section before truncation",
     )
+    semantic_chunking: SemanticChunkingSettings = Field(
+        default_factory=SemanticChunkingSettings,
+        description="Semantic chunking controls shared across pipeline presets.",
+    )
 
     # Content filtering
     keywords: list[str] | None = None
@@ -162,6 +167,7 @@ class Loader(BaseModel):
             section_chunking=self.section_chunking,
             section_chunk_max_length=self.section_chunk_max_length,
             keyword_mode=self.keyword_mode,
+            semantic_chunking=self.semantic_chunking,
         )
         logger.debug("Loader initialized with %s", self._parser)
         self.downloads_folder.mkdir(parents=True, exist_ok=True)

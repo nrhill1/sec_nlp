@@ -3,10 +3,10 @@
 
 from __future__ import annotations
 
-from enum import Enum
+from enum import StrEnum
 
 
-class ContractCategory(str, Enum):
+class ContractCategory(StrEnum):
     """Categories of contracts found in contract exhibits."""
 
     SUPPLY = "supply"

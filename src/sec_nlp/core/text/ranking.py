@@ -8,7 +8,7 @@ using Rust-based algorithms (YAKE, RAKE, TextRank, TF-IDF).
 from __future__ import annotations
 
 from collections.abc import Sequence
-from enum import Enum
+from enum import StrEnum
 from typing import TYPE_CHECKING
 
 from langchain_core.documents import Document
@@ -25,7 +25,7 @@ if TYPE_CHECKING:
     )
 
 
-class RankingAlgorithm(str, Enum):
+class RankingAlgorithm(StrEnum):
     """Available keyword extraction/ranking algorithms."""
 
     YAKE = "yake"

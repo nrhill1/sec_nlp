@@ -354,12 +354,9 @@ def test_pipeline_run_writes_outputs_with_mocked_steps(
     )
     monkeypatch.setattr(
         "sec_nlp.pipelines.presets.news.run_stages.match_news_items",
-        lambda items,
-        symbol,
-        topics,
-        min_relevance,
-        require_symbol_match,
-        symbol_aliases: matched_items,
+        lambda items, symbol, topics, min_relevance, require_symbol_match, symbol_aliases: (
+            matched_items
+        ),
     )
     monkeypatch.setattr(
         "sec_nlp.pipelines.presets.news.run_stages.correlate_news_items",
@@ -417,12 +414,7 @@ def test_news_stage_chain_preserves_state_identity(
     )
     monkeypatch.setattr(
         "sec_nlp.pipelines.presets.news.run_stages.match_news_items",
-        lambda items,
-        symbol,
-        topics,
-        min_relevance,
-        require_symbol_match,
-        symbol_aliases: [],
+        lambda items, symbol, topics, min_relevance, require_symbol_match, symbol_aliases: [],
     )
     monkeypatch.setattr(
         "sec_nlp.pipelines.presets.news.run_stages.correlate_news_items",

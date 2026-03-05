@@ -28,6 +28,17 @@ If `--question` is omitted and `--interactive` is enabled (default), it starts a
 - `include_market_context`, `market_context_profile`, `include_news_context`
 - `strict_citations` and `transcript_autosave`
 
+## Shared Semantic Chunking
+
+All presets expose `semantic_chunking.*` nested settings from `BasePipelineSettings`.
+
+Common CLI overrides:
+- `--semantic-chunking.enabled true`
+- `--semantic-chunking.embedding-model qwen3-embedding:4b`
+- `--semantic-chunking.breakpoint-threshold-type gradient`
+
+Pipelines that chunk filing text directly (`retrieve`, `exb`, `warranty`, and loader-backed `analyze`) apply these settings during chunk generation. Other presets keep the same config surface for CLI/flow consistency.
+
 ## Outputs
 
 Run-scoped path:

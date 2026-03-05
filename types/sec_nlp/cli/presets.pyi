@@ -1,9 +1,9 @@
-from enum import Enum
+from enum import StrEnum
 
 from sec_nlp.prompts import ANALYZE_PROMPT_PATH as ANALYZE_PROMPT_PATH
 from sec_nlp.types import ConfigData as ConfigData
 
-class AnalyzePreset(str, Enum):
+class AnalyzePreset(StrEnum):
     quick = "quick"
     laptop = "laptop"
     thorough = "thorough"

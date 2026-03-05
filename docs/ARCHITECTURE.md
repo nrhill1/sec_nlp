@@ -18,6 +18,7 @@
 1. CLI layer: parses/normalizes args and instantiates command config.
 2. Flow orchestration layer (optional): executes multi-stage specs and passes typed in-memory artifacts between stages.
 3. Pipeline config layer: immutable Pydantic settings merged from CLI/env/.env.
+   Every preset now exposes a shared `semantic_chunking` nested config.
 4. Pipeline execution layer: per-symbol phase execution with run metadata.
 5. IO/export layer: run-scoped artifacts written in CSV/JSON/YAML.
 6. Observability layer: run registry (SQLite) + optional metrics/tracing.
@@ -52,7 +53,7 @@ References:
 ## Analyze Flow
 
 1. Load filings (optionally with EFTS expansion).
-2. Chunk/filter/dedupe content.
+2. Chunk/filter/dedupe content (semantic mode uses LangChain Experimental `SemanticChunker`).
 3. Optional vector indexing/search retrieval.
 4. LLM analysis for retrieved chunks.
 5. Aggregate, enrich (market correlation optional), and export.

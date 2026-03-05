@@ -1,0 +1,78 @@
+name: biotech_low_granite_ministral
+defaults:
+  email: your-real-email@example.com
+on_failure: stop
+stages:
+- id: retrieve_seed
+  pipeline: retrieve
+  overrides:
+    queries:
+    - clinical milestone timing, enrollment risk, and endpoint sensitivity for event-driven positioning
+    - regulatory uncertainty, complete-response risk, and post-marketing burdens affecting probability-weighted value
+    - partnership economics, royalty terms, and milestone dependence for downside protection assessment
+    - cash runway, financing plans, and dilution timing relative to catalyst windows
+    - manufacturing readiness and CMC execution risk impacting launch assumptions and risk premium
+    output_format: json
+    top_k: 70
+    efts_candidates: 280
+    hydrate_top_n: 90
+    query_term_min_hits: 0
+    query_term_min_ratio: 0.0
+    stopword_aware_lexical: true
+    rerank_with_embeddings: true
+    index_results: true
+    vdb:
+      collection_name: variety_biotech_low
+      embedding_model: granite-embedding:30m
+      vector_size: 384
+      qdrant_url: http://localhost:6333
+      qdrant_location: null
+    symbols: &symbols
+    - CRSP
+    - NTLA
+    - BEAM
+    - RXRX
+    - MRNA
+    forms: &forms
+    - 10-K
+    - 10-Q
+    - 8-K
+    - 6-K
+    - 20-F
+    start_date: '2021-01-01'
+    dry_run: false
+- id: chat_answer
+  pipeline: chat
+  inputs:
+  - from_stage: retrieve_seed
+    artifact: retrieve_seed
+    target_field: seed_context
+  overrides:
+    question: Draft a biotech investment strategy that ranks names by risk-adjusted expected return, defines position sizing, and maps catalyst timelines to hedge and exit rules.
+    interactive: false
+    output_format: yaml
+    collections:
+    - variety_biotech_low
+    top_k: 12
+    max_context_chunks: 40
+    context_token_budget: 30000
+    include_market_context: true
+    include_news_context: true
+    rerank_mode: score
+    generation_token_cap: 0
+    llm:
+      model_name: ministral-3:3b
+      require_json: false
+      temperature: 0.05
+      max_new_tokens: 8192
+      num_ctx: 32768
+    vdb:
+      collection_name: variety_biotech_low
+      embedding_model: granite-embedding:30m
+      vector_size: 384
+      qdrant_url: http://localhost:6333
+      qdrant_location: null
+    symbols: *symbols
+    forms: *forms
+    start_date: '2021-01-01'
+    dry_run: false

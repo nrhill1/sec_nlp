@@ -114,7 +114,10 @@ def test_run_stage_dispatches_supported_retrieve(monkeypatch) -> None:
     assert result.success is True
 
 
-def test_run_stage_dispatches_supported_chat(monkeypatch) -> None:
+def test_run_stage_dispatches_supported_chat(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
     def _fake_chat_run_for_flow(
         self: ChatPipeline,
         *,
@@ -122,6 +125,11 @@ def test_run_stage_dispatches_supported_chat(monkeypatch) -> None:
         seed_chunks: tuple[FlowRetrievedChunk, ...],
     ) -> ChatResult:
         _ = (self, seed_context, seed_chunks)
+        snapshot_path = (
+            self.config.get_pipeline_output_dir() / "pipeline_settings.json"
+        )
+        snapshot_path.parent.mkdir(parents=True, exist_ok=True)
+        snapshot_path.write_text("{}", encoding="utf-8")
         return ChatResult(
             success=True,
             outputs=[Path("/tmp/chat_summary.json")],
@@ -142,6 +150,7 @@ def test_run_stage_dispatches_supported_chat(monkeypatch) -> None:
             "interactive": False,
             "collections": ["retrieve"],
             "output_format": "json",
+            "out_path": str(tmp_path / "outputs"),
         }
     )
     stage = CompiledChatStage(
@@ -157,6 +166,9 @@ def test_run_stage_dispatches_supported_chat(monkeypatch) -> None:
     )
     result = _runner()._run_stage(stage, FlowArtifactStore())
     assert result.success is True
+    assert any(
+        path.endswith("pipeline_settings.json") for path in result.outputs
+    )
 
 
 def test_run_stage_dispatches_supported_exhibit(monkeypatch) -> None:

@@ -41,8 +41,10 @@ class TracingCallbackHandler(BaseCallbackHandler):
         *,
         run_id: UUID,
         parent_run_id: UUID | None = None,
+        tags: list[str] | None = None,
         **kwargs: MetadataValue,
     ) -> None:
+        _ = (response, run_id, parent_run_id, tags, kwargs)
         logger.info("LLM end: response received")
 
     def on_llm_error(
@@ -51,8 +53,10 @@ class TracingCallbackHandler(BaseCallbackHandler):
         *,
         run_id: UUID,
         parent_run_id: UUID | None = None,
+        tags: list[str] | None = None,
         **kwargs: MetadataValue,
     ) -> None:
+        _ = (tags, kwargs)
         logger.error(
             "LLM error: %s (run_id=%s parent=%s)",
             error,

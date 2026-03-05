@@ -2,6 +2,7 @@
 """Unit tests for sec_nlp.pipelines.base module."""
 
 import inspect
+import json
 from pathlib import Path
 
 import pytest
@@ -189,6 +190,32 @@ class TestBasePipelineSettings:
         assert symbol_dir.exists() is False
         assert pipeline_dir.exists() is False
         assert run_dir.exists() is False
+
+    def test_complete_run_writes_pipeline_settings_snapshot(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """complete_run should persist run settings JSON when outputs exist."""
+        config = _ConcreteConfig(
+            symbols=["ABC"],
+            out_path=tmp_path / "outputs",
+            dl_path=tmp_path / "downloads",
+        )
+        config.setup_paths()
+        symbol_dir = config.get_symbol_output_dir("ABC")
+        output_file = symbol_dir / "artifact.json"
+        output_file.write_text("{}", encoding="utf-8")
+
+        config.complete_run(success=True)
+
+        pipeline_dir = config.get_pipeline_output_dir()
+        settings_path = pipeline_dir / "pipeline_settings.json"
+        assert settings_path.exists() is True
+
+        payload = json.loads(settings_path.read_text(encoding="utf-8"))
+        assert payload["pipeline_type"] == "concrete"
+        assert payload["run_id"] == str(config.run_id)
+        assert payload["settings"]["email"] == config.email
 
 
 class TestBasePipeline:

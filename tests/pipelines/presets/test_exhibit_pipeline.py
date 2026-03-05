@@ -194,14 +194,7 @@ class TestExhibitPipeline:
         )
         monkeypatch.setattr(
             "sec_nlp.pipelines.presets.exb.pipeline.collect_exhibit_documents",
-            lambda loader,
-            symbol,
-            config,
-            keyword_terms,
-            keyword_categories,
-            adaptive_chunk_size,
-            skip_prefilter,
-            allowed_accessions: (
+            lambda loader, symbol, config, keyword_terms, keyword_categories, adaptive_chunk_size, skip_prefilter, allowed_accessions: (
                 [
                     Document(
                         page_content=("exclusive supply agreement " * 30),

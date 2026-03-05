@@ -314,12 +314,12 @@ def build_chat_stage_chain(
             )
         ),
         build_answer=(
-            lambda question,
-            citations,
-            external_context: pipeline._build_answer(
-                question=question,
-                citations=citations,
-                external_context=external_context,
+            lambda question, citations, external_context: (
+                pipeline._build_answer(
+                    question=question,
+                    citations=citations,
+                    external_context=external_context,
+                )
             )
         ),
         get_answer_timings=lambda: pipeline._last_answer_timings,
@@ -331,20 +331,16 @@ def build_chat_stage_chain(
             )
         ),
         write_outputs=(
-            lambda question,
-            answer,
-            citations,
-            citation_ids,
-            turns,
-            external_context,
-            external_metadata: pipeline._write_outputs(
-                question=question,
-                answer=answer,
-                citations=citations,
-                citation_ids=citation_ids,
-                turns=turns,
-                external_context=external_context,
-                external_metadata=external_metadata,
+            lambda question, answer, citations, citation_ids, turns, external_context, external_metadata: (
+                pipeline._write_outputs(
+                    question=question,
+                    answer=answer,
+                    citations=citations,
+                    citation_ids=citation_ids,
+                    turns=turns,
+                    external_context=external_context,
+                    external_metadata=external_metadata,
+                )
             )
         ),
     )

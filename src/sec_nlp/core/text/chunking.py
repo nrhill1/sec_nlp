@@ -13,7 +13,8 @@ from __future__ import annotations
 
 import os
 import re
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
+from importlib import import_module
 from pathlib import Path
 
 from langchain_core.documents import Document
@@ -36,22 +37,37 @@ NLTK_DATA_DIR: Path = (
 )
 
 _NLTK_AVAILABLE: bool
+_SENT_TOKENIZE: Callable[[str], list[str]] | None = None
 
 try:
-    import nltk
-    from nltk.tokenize import sent_tokenize
+    nltk_module = import_module("nltk")
+    tokenize_module = import_module("nltk.tokenize")
+    sent_tokenize_fn = getattr(tokenize_module, "sent_tokenize", None)
+    if callable(sent_tokenize_fn):
+        _SENT_TOKENIZE = sent_tokenize_fn
+        nltk_data = getattr(nltk_module, "data", None)
+        nltk_data_dir = str(NLTK_DATA_DIR)
+        if nltk_data is not None:
+            data_path = getattr(nltk_data, "path", None)
+            if isinstance(data_path, list) and nltk_data_dir not in data_path:
+                data_path.insert(0, nltk_data_dir)
 
-    nltk_data_dir = str(NLTK_DATA_DIR)
-    if nltk_data_dir not in nltk.data.path:
-        nltk.data.path.insert(0, nltk_data_dir)
-
-    # Ensure punkt tokenizer data is available
-    try:
-        nltk.data.find("tokenizers/punkt")
-    except LookupError:
-        NLTK_DATA_DIR.mkdir(parents=True, exist_ok=True)
-        nltk.download("punkt", quiet=True, download_dir=nltk_data_dir)
-    _NLTK_AVAILABLE = True
+            find_fn = getattr(nltk_data, "find", None)
+            if callable(find_fn):
+                try:
+                    find_fn("tokenizers/punkt")
+                except LookupError:
+                    NLTK_DATA_DIR.mkdir(parents=True, exist_ok=True)
+                    download_fn = getattr(nltk_module, "download", None)
+                    if callable(download_fn):
+                        download_fn(
+                            "punkt",
+                            quiet=True,
+                            download_dir=nltk_data_dir,
+                        )
+        _NLTK_AVAILABLE = True
+    else:
+        _NLTK_AVAILABLE = False
 except (ImportError, OSError):
     _NLTK_AVAILABLE = False
 
@@ -68,8 +84,8 @@ def count_sentences(text: str) -> int:
     """Count sentences in text using the available tokenizer."""
     if not text or not text.strip():
         return 0
-    if _NLTK_AVAILABLE:
-        return len(sent_tokenize(text))
+    if _NLTK_AVAILABLE and _SENT_TOKENIZE is not None:
+        return len(_SENT_TOKENIZE(text))
     return len(_fallback_sent_tokenize(text))
 
 
@@ -117,8 +133,8 @@ class SentenceSplitter:
         if not text or not text.strip():
             return []
 
-        if _NLTK_AVAILABLE:
-            return list(sent_tokenize(text))
+        if _NLTK_AVAILABLE and _SENT_TOKENIZE is not None:
+            return list(_SENT_TOKENIZE(text))
         return _fallback_sent_tokenize(text)
 
     def split_text(self, text: str) -> list[str]:

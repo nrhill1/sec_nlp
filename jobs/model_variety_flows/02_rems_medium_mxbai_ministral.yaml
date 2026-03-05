@@ -1,0 +1,79 @@
+name: rems_medium_mxbai_ministral
+defaults:
+  email: your-real-email@example.com
+on_failure: stop
+stages:
+- id: retrieve_seed
+  pipeline: retrieve
+  overrides:
+    queries:
+    - neodymium-praseodymium pricing outlook, volume commitments, and contract reset clauses affecting forward earnings
+    - feedstock quality, recovery yields, and separation throughput impacts on free-cash-flow conversion
+    - debt maturities, covenant headroom, and refinancing risk under stressed commodity assumptions
+    - tariff and policy shifts affecting sourcing concentration, realized pricing, and customer elasticity
+    - project slippage, cost inflation, and capital-allocation alternatives for portfolio risk control
+    output_format: json
+    top_k: 80
+    efts_candidates: 360
+    hydrate_top_n: 120
+    query_term_min_hits: 0
+    query_term_min_ratio: 0.0
+    stopword_aware_lexical: true
+    rerank_with_embeddings: true
+    index_results: true
+    vdb:
+      collection_name: variety_rems_medium
+      embedding_model: mxbai-embed-large:latest
+      vector_size: 1024
+      qdrant_url: http://localhost:6333
+      qdrant_location: null
+    symbols: &symbols
+    - MP
+    - LAC
+    - UUUU
+    - TMRC
+    - AREC
+    - USAR
+    forms: &forms
+    - 10-K
+    - 10-Q
+    - 8-K
+    - 6-K
+    - 20-F
+    start_date: '2021-01-01'
+    dry_run: false
+- id: chat_answer
+  pipeline: chat
+  inputs:
+  - from_stage: retrieve_seed
+    artifact: retrieve_seed
+    target_field: seed_context
+  overrides:
+    question: Build an investable REM basket strategy with position sizing guidance, expected return drivers, key risk controls, and near-term catalyst watchlists by issuer.
+    interactive: false
+    output_format: yaml
+    collections:
+    - variety_rems_medium
+    top_k: 14
+    max_context_chunks: 40
+    context_token_budget: 30000
+    include_market_context: true
+    include_news_context: true
+    rerank_mode: mmr
+    generation_token_cap: 0
+    llm:
+      model_name: ministral-3:3b
+      require_json: false
+      temperature: 0.05
+      max_new_tokens: 8192
+      num_ctx: 32768
+    vdb:
+      collection_name: variety_rems_medium
+      embedding_model: mxbai-embed-large:latest
+      vector_size: 1024
+      qdrant_url: http://localhost:6333
+      qdrant_location: null
+    symbols: *symbols
+    forms: *forms
+    start_date: '2021-01-01'
+    dry_run: false
