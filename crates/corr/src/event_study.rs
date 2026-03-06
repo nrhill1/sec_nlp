@@ -7,7 +7,7 @@ use crate::util::{ensure_finite, mean, variance};
 
 const SECONDS_PER_DAY: i64 = 86_400;
 
-#[pyclass(name = "EventStudyResult", frozen, module = "corr")]
+#[pyclass(from_py_object, name = "EventStudyResult", frozen, module = "corr")]
 #[derive(Debug, Clone)]
 pub struct EventStudyResult {
     #[pyo3(get)]
@@ -20,11 +20,7 @@ pub struct EventStudyResult {
     pub p_value: Option<f64>,
 }
 
-fn window_prices(
-    data: &[(i64, f64)],
-    start: i64,
-    end: i64,
-) -> Vec<f64> {
+fn window_prices(data: &[(i64, f64)], start: i64, end: i64) -> Vec<f64> {
     data.iter()
         .filter(|(ts, _)| *ts >= start && *ts <= end)
         .map(|(_, price)| *price)
@@ -52,9 +48,12 @@ fn t_test(pre: &[f64], post: &[f64]) -> CorrResult<(f64, f64)> {
     let t_stat = (mean_post - mean_pre) / denom;
 
     let numerator = (var_pre / n1 + var_post / n2).powi(2);
-    let denom_df = (var_pre / n1).powi(2) / (n1 - 1.0)
-        + (var_post / n2).powi(2) / (n2 - 1.0);
-    let df = if denom_df == 0.0 { 1.0 } else { numerator / denom_df };
+    let denom_df = (var_pre / n1).powi(2) / (n1 - 1.0) + (var_post / n2).powi(2) / (n2 - 1.0);
+    let df = if denom_df == 0.0 {
+        1.0
+    } else {
+        numerator / denom_df
+    };
 
     let dist = StudentsT::new(0.0, 1.0, df)
         .map_err(|_| CorrError::InvalidParameter("invalid t distribution"))?;
@@ -89,10 +88,7 @@ pub fn event_study(
     }
     ensure_finite(&prices, "prices").map_err(|err| err.to_py_err())?;
 
-    let mut data: Vec<(i64, f64)> = timestamps
-        .into_iter()
-        .zip(prices.into_iter())
-        .collect();
+    let mut data: Vec<(i64, f64)> = timestamps.into_iter().zip(prices).collect();
     data.sort_by_key(|(ts, _)| *ts);
 
     let pre_start = event_timestamp - pre_window * SECONDS_PER_DAY;

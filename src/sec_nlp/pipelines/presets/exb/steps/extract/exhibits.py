@@ -21,7 +21,7 @@ from sec_nlp.pipelines.observability.telemetry import (
     log_exhibit_stats,
 )
 from sec_nlp.pipelines.presets.exb.config import ExhibitConfig
-from sec_nlp.types import JsonValue
+from sec_nlp.types import JsonDict, JsonValue
 
 
 @dataclass
@@ -335,7 +335,7 @@ def collect_exhibit_documents(
                 html_file.name,
             )
 
-            filing_metadata = {
+            filing_metadata: JsonDict = {
                 "ticker": symbol,
                 "form_type": config.mode.form,
                 "accession_number": accession_number,

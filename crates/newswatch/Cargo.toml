@@ -9,6 +9,7 @@ name = "newswatch"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
+futures = "0.3"
 pyo3 = { version = "0.28.2", features = ["extension-module", "abi3-py313"] }
 pyo3-async-runtimes = { version = "0.28", features = ["tokio-runtime"] }
 feed-rs = "2.3"

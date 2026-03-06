@@ -360,3 +360,28 @@ def test_limit_query_results_for_analysis_uses_rank_order_for_mmr() -> None:
     assert len(limited_hits) == 2
     assert limited_hits[0][0].page_content == "B"
     assert limited_hits[1][0].page_content == "C"
+
+
+def test_search_queries_does_not_probe_exact_collection_count() -> None:
+    class _FailingClient:
+        def count(self, collection_name: str, exact: bool) -> None:
+            _ = collection_name
+            _ = exact
+            raise AssertionError("count should not be called")
+
+    vector_store = Mock(spec=QdrantVectorStore)
+    vector_store.collection_name = "analyze"
+    vector_store.client = _FailingClient()
+    vector_store.similarity_search_with_score.return_value = []
+
+    runner = SearchRunnable(
+        vector_store=vector_store,
+        vector_mode="read",
+        search_limit=5,
+        score_threshold=0.7,
+    )
+
+    results = runner.search_queries(["liquidity"])
+
+    assert list(results) == ["liquidity"]
+    assert results["liquidity"].total == 0

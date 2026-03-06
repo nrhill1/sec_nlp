@@ -10,6 +10,7 @@ from sec_nlp.core.text.risk_factors import (
     dedupe_risk_factor_statements,
     extract_risk_factor_statements,
 )
+from sec_nlp.types import JsonDict
 
 
 def test_extract_risk_factor_statements_skips_headers() -> None:
@@ -46,7 +47,7 @@ def test_extract_risk_factor_statements_skips_headers() -> None:
 
 
 def test_cluster_risk_factors_groups_similar_statements() -> None:
-    statements = [
+    statements: list[JsonDict] = [
         {
             "statement": "Supply chain disruptions could delay shipments.",
             "normalized": "supply chain disruptions could delay shipments.",

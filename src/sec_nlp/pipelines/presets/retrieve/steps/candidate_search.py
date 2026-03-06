@@ -432,7 +432,9 @@ class RetrieveCandidateSearcher:
             scoped_queries_by_symbol[symbol] = scoped_queries
             reverse_query_maps[symbol] = reverse_map
 
-        async def _search_many_async() -> list[object]:
+        async def _search_many_async() -> list[
+            list[EFTSBatchResult] | BaseException
+        ]:
             """Execute many scoped EFTS queries concurrently."""
             tasks = [
                 self._batch_search_async(

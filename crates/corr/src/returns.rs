@@ -64,8 +64,7 @@ pub fn cumulative_return(prices: Vec<f64>) -> PyResult<Option<f64>> {
 #[pyfunction]
 pub fn car(asset_prices: Vec<f64>, benchmark_prices: Vec<f64>) -> PyResult<Option<f64>> {
     let asset = cumulative_return_impl(&asset_prices).map_err(|err| err.to_py_err())?;
-    let benchmark =
-        cumulative_return_impl(&benchmark_prices).map_err(|err| err.to_py_err())?;
+    let benchmark = cumulative_return_impl(&benchmark_prices).map_err(|err| err.to_py_err())?;
     match (asset, benchmark) {
         (Some(a), Some(b)) => Ok(Some(a - b)),
         _ => Ok(None),

@@ -36,10 +36,7 @@ pub fn extract(text: &str) -> Vec<Entity> {
         } else if let Some(number_match) = captures.name("usd_num") {
             (
                 number_match.as_str(),
-                captures
-                    .name("usd_unit")
-                    .map(|m| m.as_str())
-                    .unwrap_or(""),
+                captures.name("usd_unit").map(|m| m.as_str()).unwrap_or(""),
             )
         } else if let Some(number_match) = captures.name("plain_num") {
             (

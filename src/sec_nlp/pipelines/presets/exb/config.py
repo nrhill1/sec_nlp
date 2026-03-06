@@ -425,7 +425,10 @@ class ExhibitConfig(BasePipelineSettings):
                 continue
             bases = _EXHIBIT_CATEGORY_NUMBERS.get(category, [])
             derived.extend(bases)
-        return derived or ["10"]
+        if derived:
+            return derived
+        default_numbers: list[JsonValue] = ["10"]
+        return default_numbers
 
     def get_exhibit_categories(self) -> list[JsonValue]:
         """Return normalized categories, falling back to exhibit numbers."""

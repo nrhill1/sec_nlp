@@ -84,3 +84,40 @@ def test_news_retriever_requires_non_empty_feeds() -> None:
             "SEC NLP Tool (you@example.com)",
             module=ModuleType("newswatch_test_module"),
         )
+
+
+def test_create_news_retriever_reuses_cached_client(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client._cached_news_retriever.cache_clear()
+    client._load_newswatch_module.cache_clear()
+    constructor_calls = 0
+
+    fake_client = SimpleNamespace(fetch=lambda keywords, max_results: [])
+
+    def _construct(feeds, user_agent, rate_limit_secs):
+        nonlocal constructor_calls
+        constructor_calls += 1
+        assert feeds == [("https://example.com/feed.xml", "rss", "Sample Feed")]
+        assert user_agent == "SEC NLP Tool (cache@example.com)"
+        assert rate_limit_secs == 0.15
+        return fake_client
+
+    fake_module = SimpleNamespace(NewsClient=_construct)
+    monkeypatch.setattr(client, "_load_newswatch_module", lambda: fake_module)
+
+    first = client.create_news_retriever(
+        "SEC NLP Tool (cache@example.com)",
+        feeds=[("https://example.com/feed.xml", "rss", "Sample Feed")],
+        rate_limit_secs=0.15,
+    )
+    second = client.create_news_retriever(
+        "SEC NLP Tool (cache@example.com)",
+        feeds=[("https://example.com/feed.xml", "rss", "Sample Feed")],
+        rate_limit_secs=0.15,
+    )
+
+    assert first is second
+    assert constructor_calls == 1
+
+    client._cached_news_retriever.cache_clear()

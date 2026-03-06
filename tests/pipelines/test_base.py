@@ -13,7 +13,7 @@ from sec_nlp.pipelines import (
     BasePipelineResult,
     BasePipelineSettings,
 )
-from sec_nlp.types import JsonValue
+from sec_nlp.types import JsonValue, ResultDict
 
 
 class _ConcreteResult(BasePipelineResult):
@@ -50,7 +50,7 @@ class TestBasePipelineResult:
     def test_concrete_result_with_custom_values(self) -> None:
         """Test BasePipelineResult subclass with custom values."""
         outputs = [Path("/tmp/output1.txt"), Path("/tmp/output2.txt")]
-        metadata = {"key": "value", "count": 42}
+        metadata: ResultDict = {"key": "value", "count": 42}
 
         result = _ConcreteResult(
             success=False,

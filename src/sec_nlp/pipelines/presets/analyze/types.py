@@ -1,8 +1,17 @@
 # src/sec_nlp/pipelines/presets/analyze/types.py
-"""Shared types for the analyze pipeline."""
+"""Shared state and payload types for the analyze pipeline."""
+
+from __future__ import annotations
 
 import threading
-from typing import TypedDict
+from typing import TYPE_CHECKING, TypedDict
+
+from sec_nlp.types import JsonDict
+
+if TYPE_CHECKING:
+    from langchain_core.documents import Document
+
+    from .steps.search.efts_search import EFTSSearchResult
 
 type Timings = dict[str, float]
 
@@ -18,10 +27,12 @@ def is_abort_requested() -> bool:
 
 
 class PrefetchedSymbolData(TypedDict):
-    """Data prepared in a background thread for the next symbol."""
+    """Symbol-scoped data prepared in a background worker ahead of execution."""
 
-    docs: list  # list[Document] — avoids circular import
-    allowed_accessions: set[str] | None
+    docs: list[Document]
+    efts_ok: bool
+    efts_results: list[EFTSSearchResult]
+    relationships: JsonDict
     timings: Timings
     preprocessed: bool
 

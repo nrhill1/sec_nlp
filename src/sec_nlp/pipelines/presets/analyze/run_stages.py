@@ -15,7 +15,7 @@ from rich.progress import Progress, TaskID
 from sec_nlp.core.infra.logger import logger
 from sec_nlp.pipelines.base.stages import PipelineStageRunnable
 from sec_nlp.pipelines.metadata.accession import get_accession_from_metadata
-from sec_nlp.pipelines.types import AnalysisResultDict
+from sec_nlp.pipelines.types import AnalysisResultDict, MetadataRecord
 from sec_nlp.types import JsonDict
 
 from .market import MarketEnrichment
@@ -44,10 +44,12 @@ class AnalyzeRunState:
     done: bool = False
     search_queries: list[str] | None = None
     stats: ChunkStats = field(default_factory=dict)
+    filing_meta: MetadataRecord = field(default_factory=dict)
+    processed_accessions: list[str] = field(default_factory=list)
+    chunk_counts_by_accession: dict[str, int] = field(default_factory=dict)
     market_data: MarketEnrichment | None = None
     market_context: str | None = None
     analysis_results: list[AnalysisResultDict] = field(default_factory=list)
-    docs_for_analysis: list[Document] = field(default_factory=list)
     relevant_results: list[AnalysisResultDict] = field(default_factory=list)
     market_correlation: JsonDict | None = None
     output_files: list[Path] = field(default_factory=list)
@@ -56,6 +58,31 @@ class AnalyzeRunState:
 def _accession_from_doc(doc: Document) -> str | None:
     """Return accession number from a document metadata record."""
     return get_accession_from_metadata(doc.metadata)
+
+
+def _summarize_loaded_docs(
+    docs: list[Document],
+) -> tuple[MetadataRecord, list[str], dict[str, int]]:
+    """Return compact filing metadata needed after indexing completes."""
+    fallback_meta: MetadataRecord = {}
+    chunk_counts_by_accession: dict[str, int] = {}
+
+    for doc in docs:
+        metadata = doc.metadata or {}
+        if not fallback_meta and metadata:
+            fallback_meta = dict(metadata)
+        accession = _accession_from_doc(doc)
+        if accession is None:
+            continue
+        chunk_counts_by_accession[accession] = (
+            chunk_counts_by_accession.get(accession, 0) + 1
+        )
+
+    return (
+        fallback_meta,
+        list(chunk_counts_by_accession),
+        chunk_counts_by_accession,
+    )
 
 
 class LoadDocsStage(PipelineStageRunnable[AnalyzeRunState]):
@@ -78,11 +105,28 @@ class LoadDocsStage(PipelineStageRunnable[AnalyzeRunState]):
             state.docs = state.prefetched["docs"]
             state.timings.update(state.prefetched["timings"])
             state.already_preprocessed = state.prefetched["preprocessed"]
+            state.runtime._record_symbol_discovery(
+                symbol=state.symbol,
+                efts_results=state.prefetched["efts_results"],
+                efts_ok=state.prefetched["efts_ok"],
+                relationships=state.prefetched["relationships"],
+            )
+            state.prefetched = None
         else:
-            state.runtime._loader.add_symbol(state.symbol)
-            state.docs, _allowed = state.runtime._run_efts_and_load_docs(
+            (
+                state.docs,
+                efts_results,
+                efts_ok,
+                relationships,
+            ) = state.runtime._load_symbol_documents(
                 state.symbol,
                 state.timings,
+            )
+            state.runtime._record_symbol_discovery(
+                symbol=state.symbol,
+                efts_results=efts_results,
+                efts_ok=efts_ok,
+                relationships=relationships,
             )
         if state.docs:
             return state
@@ -143,6 +187,12 @@ class EnrichAndIndexStage(PipelineStageRunnable[AnalyzeRunState]):
                 state.timings,
             )
         )
+        (
+            state.filing_meta,
+            state.processed_accessions,
+            state.chunk_counts_by_accession,
+        ) = _summarize_loaded_docs(state.docs)
+        state.docs = []
         return state
 
 
@@ -156,10 +206,7 @@ class SearchAndAnalyzeStage(PipelineStageRunnable[AnalyzeRunState]):
         if state.done:
             return state
         state.search_queries = state.runtime.config.get_search_queries()
-        (
-            state.analysis_results,
-            state.docs_for_analysis,
-        ) = state.runtime._run_search_and_analysis(
+        state.analysis_results, _ = state.runtime._run_search_and_analysis(
             state.symbol,
             state.search_queries,
             state.timings,
@@ -222,7 +269,7 @@ class WriteOutputsStage(PipelineStageRunnable[AnalyzeRunState]):
         )
         state.output_files = state.runtime._write_symbol_outputs(
             symbol=state.symbol,
-            docs=state.docs,
+            filing_meta=state.filing_meta,
             analysis_results=state.analysis_results,
             relevant_results=state.relevant_results,
             search_queries=state.search_queries,
@@ -234,32 +281,23 @@ class WriteOutputsStage(PipelineStageRunnable[AnalyzeRunState]):
         state.timings["total"] = sum(state.timings.values())
 
         processing_state = state.runtime._processing_state
-        if processing_state is None or not state.docs:
-            return state
-        processed_accessions = list(
-            {
-                accession
-                for accession in (
-                    _accession_from_doc(doc) for doc in state.docs
-                )
-                if accession
-            }
-        )
-        if not processed_accessions:
-            return state
-        processing_state.mark_processed_batch(
-            symbol=state.symbol,
-            accessions=processed_accessions,
-            run_id=state.runtime.config.run_id,
-            chunk_counts={
-                accession: sum(
-                    1
-                    for doc in state.docs
-                    if _accession_from_doc(doc) == accession
-                )
-                for accession in processed_accessions
-            },
-        )
+        if processing_state is not None and state.processed_accessions:
+            processing_state.mark_processed_batch(
+                symbol=state.symbol,
+                accessions=state.processed_accessions,
+                run_id=state.runtime.config.run_id,
+                chunk_counts=state.chunk_counts_by_accession,
+            )
+
+        state.analysis_results = []
+        state.relevant_results = []
+        state.market_data = None
+        state.market_context = None
+        state.market_correlation = None
+        state.filing_meta = {}
+        state.chunk_counts_by_accession = {}
+        state.processed_accessions = []
+        state.search_queries = None
         return state
 
 

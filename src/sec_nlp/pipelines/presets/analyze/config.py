@@ -1,6 +1,12 @@
 # src/sec_nlp/pipelines/presets/analyze/config.py
-"""Configuration for generalized document analysis pipeline."""
+"""Configuration models and validation for the analyze pipeline.
 
+This module defines the user-facing analyze settings, applies preset and CLI
+overrides, and normalizes nested execution options before pipeline components
+are built.
+"""
+
+from collections.abc import Mapping
 from pathlib import Path
 from typing import ClassVar, Literal, Self
 
@@ -417,6 +423,20 @@ class AnalyzeConfig(BasePipelineSettings):
         le=16,
         description="Maximum concurrent operations when using async mode",
     )
+    symbol_prefetch_window: int = Field(
+        default=1,
+        ge=0,
+        le=8,
+        description=(
+            "Number of future symbols to prefetch with isolated loader/EFTS "
+            "workers while the current symbol is processing"
+        ),
+        json_schema_extra={
+            "cli_args": {
+                "aliases": ["--symbol-prefetch-window"],
+            }
+        },
+    )
 
     limit: int | None = Field(
         default=5,
@@ -582,7 +602,7 @@ class AnalyzeConfig(BasePipelineSettings):
         return values
 
     @staticmethod
-    def _combine_section_patterns(patterns: JsonDict) -> JsonValue:
+    def _combine_section_patterns(patterns: Mapping[str, str]) -> str | None:
         """Resolve combine section patterns."""
         combined_parts = []
         for pattern in patterns.values():

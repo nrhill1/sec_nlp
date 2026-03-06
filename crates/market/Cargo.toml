@@ -9,6 +9,7 @@ name = "market"
 crate-type = ["cdylib"]
 
 [dependencies]
+futures = "0.3"
 pyo3 = { version = "0.28.2", features = ["extension-module", "abi3-py313"] }
 tokio = { version = "1.37", features = ["rt-multi-thread"] }
 yahoo_finance_api = "2.4"

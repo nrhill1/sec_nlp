@@ -85,9 +85,7 @@ pub fn parse_numeric_value(raw_value: &str, scale: i32) -> Option<f64> {
     let cleaned = trimmed
         .trim_start_matches('(')
         .trim_end_matches(')')
-        .replace(',', "")
-        .replace('$', "")
-        .replace(' ', "");
+        .replace([',', '$', ' '], "");
     let lowered = cleaned.to_ascii_lowercase();
     if matches!(
         lowered.as_str(),

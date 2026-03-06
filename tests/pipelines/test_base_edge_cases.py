@@ -12,7 +12,7 @@ from sec_nlp.pipelines import (
     BasePipelineResult,
     BasePipelineSettings,
 )
-from sec_nlp.types import JsonObject
+from sec_nlp.types import JsonObject, ResultDict
 
 
 class EdgeCaseConfig(BasePipelineSettings):
@@ -71,14 +71,18 @@ class TestBasePipelineResultEdgeCases:
 
     def test_result_with_large_metadata(self) -> None:
         """Test result can handle large metadata dictionaries."""
-        large_metadata = {f"key_{i}": f"value_{i}" for i in range(1000)}
+        large_metadata: ResultDict = {
+            f"key_{i}": f"value_{i}" for i in range(1000)
+        }
         result = EdgeCaseResult(metadata=large_metadata)
         assert len(result.metadata) == 1000
         assert result.metadata["key_500"] == "value_500"
 
     def test_result_with_nested_metadata(self) -> None:
         """Test result with deeply nested metadata."""
-        nested = {"level1": {"level2": {"level3": {"data": "deep"}}}}
+        nested: ResultDict = {
+            "level1": {"level2": {"level3": {"data": "deep"}}}
+        }
         result = EdgeCaseResult(metadata=nested)
         assert result.metadata == nested
 

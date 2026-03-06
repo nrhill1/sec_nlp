@@ -1,5 +1,10 @@
 # src/sec_nlp/pipelines/presets/analyze/steps/indexing/vector_index.py
-"""Vector indexing utilities for the analyze pipeline."""
+"""Vector indexing utilities for the analyze pipeline.
+
+The indexer filters duplicate chunks locally, batches remote existence checks
+against Qdrant, and only submits new symbol-scoped chunks for embedding and
+storage.
+"""
 
 from __future__ import annotations
 
@@ -10,10 +15,13 @@ from langchain_qdrant import QdrantVectorStore
 
 from sec_nlp.core.infra.logger import logger
 from sec_nlp.core.text.deduplication import SimHashDeduplicator
-from sec_nlp.pipelines.vector.query import scroll_exists
+from sec_nlp.pipelines.types import MetadataRecord
+from sec_nlp.pipelines.vector.query import scroll_records
 
 from ...config import AnalyzeConfig
 from ...types import Timings
+
+_SIMHASH_SCROLL_BATCH_SIZE = 128
 
 
 class VectorIndexer:
@@ -41,21 +49,33 @@ class VectorIndexer:
 
         t_store_start = perf_counter()
         vstore = self.vector_store
+        candidates: list[tuple[Document, MetadataRecord, int | None]] = []
+        unique_hashes: list[int] = []
+        seen_hashes: set[int] = set()
         to_store: list[Document] = []
 
         for doc in docs:
-            base_meta = doc.metadata or {}
+            base_meta = dict(doc.metadata or {})
             content = doc.page_content or ""
 
             is_unique, hash_value = self.deduplicator.add_if_unique(content)
             if not is_unique:
                 continue
 
-            if hash_value is not None and self._simhash_exists(
-                hash_value, symbol
-            ):
+            candidates.append((doc, base_meta, hash_value))
+            if hash_value is None or hash_value in seen_hashes:
                 continue
+            seen_hashes.add(hash_value)
+            unique_hashes.append(hash_value)
 
+        existing_hashes = self._existing_simhashes(
+            simhashes=unique_hashes,
+            symbol=symbol,
+        )
+
+        for doc, base_meta, hash_value in candidates:
+            if hash_value is not None and hash_value in existing_hashes:
+                continue
             doc.metadata = {
                 **base_meta,
                 "symbol": symbol,
@@ -82,49 +102,61 @@ class VectorIndexer:
         vstore.add_documents(documents=to_store)
         timings["store"] = perf_counter() - t_store_start
         added = len(to_store)
-
-        try:
-            collection = vstore.collection_name
-            client = vstore.client
-            if collection and client:
-                count = client.count(collection, exact=True).count
-                logger.info(
-                    "Indexed %d chunks for %s (collection=%s total=%d)",
-                    added,
-                    symbol,
-                    collection,
-                    count,
-                )
-                return added
-        except Exception:
-            logger.debug("Could not fetch Qdrant count after indexing")
-
+        collection = vstore.collection_name
+        if collection:
+            logger.info(
+                "Indexed %d chunks for %s (collection=%s)",
+                added,
+                symbol,
+                collection,
+            )
         return added
 
-    def _simhash_exists(self, simhash: int, symbol: str) -> bool:
-        """Check if a simhash is already stored in the collection."""
+    def _existing_simhashes(
+        self,
+        *,
+        simhashes: list[int],
+        symbol: str,
+    ) -> set[int]:
+        """Return the subset of simhash values already present in Qdrant."""
+        if not simhashes:
+            return set()
         try:
             vstore = self.vector_store
             if not vstore:
-                return False
+                return set()
             try:
                 client = vstore.client
                 collection = vstore.collection_name
             except AttributeError:
-                return False
+                return set()
             if not client or not collection:
-                return False
+                return set()
 
-            return scroll_exists(
-                client,
-                collection,
-                {"simhash": [simhash], "symbol": [symbol]},
-            )
+            existing: set[int] = set()
+            for start in range(0, len(simhashes), _SIMHASH_SCROLL_BATCH_SIZE):
+                batch = simhashes[start : start + _SIMHASH_SCROLL_BATCH_SIZE]
+                records = scroll_records(
+                    client,
+                    collection,
+                    {"simhash": batch, "symbol": [symbol]},
+                    limit=max(len(batch), 1),
+                )
+                for record in records:
+                    payload = record.payload
+                    if not isinstance(payload, dict):
+                        continue
+                    metadata = payload.get("metadata")
+                    if not isinstance(metadata, dict):
+                        continue
+                    simhash_value = metadata.get("simhash")
+                    if isinstance(simhash_value, int):
+                        existing.add(simhash_value)
+            return existing
         except Exception as exc:
             logger.debug(
-                "simhash existence check failed for %s/%s: %s",
+                "simhash existence check failed for %s: %s",
                 symbol,
-                simhash,
                 exc,
             )
-            return False
+            return set()

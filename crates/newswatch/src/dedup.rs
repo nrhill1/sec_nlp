@@ -33,11 +33,11 @@ fn simhash(title: &str) -> u64 {
         normalized.hash(&mut hasher);
         let hash = hasher.finish();
 
-        for bit in 0..64 {
+        for (bit, weight) in weights.iter_mut().enumerate() {
             if (hash >> bit) & 1 == 1 {
-                weights[bit] += 1;
+                *weight += 1;
             } else {
-                weights[bit] -= 1;
+                *weight -= 1;
             }
         }
     }

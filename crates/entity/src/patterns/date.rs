@@ -64,11 +64,8 @@ fn entity_from_date_capture(
         return None;
     }
 
-    let normalized = if iso_style {
-        format!("{year:04}-{month:02}-{day:02}")
-    } else {
-        format!("{year:04}-{month:02}-{day:02}")
-    };
+    let _ = iso_style;
+    let normalized = format!("{year:04}-{month:02}-{day:02}");
 
     Some(Entity::from_type(
         EntityType::Date,

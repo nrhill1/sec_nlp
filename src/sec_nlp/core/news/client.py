@@ -10,6 +10,9 @@ from types import ModuleType
 
 from pydantic import BaseModel, ConfigDict, Field
 
+type FeedTuple = tuple[str, str, str]
+type FeedConfigKey = tuple[FeedTuple, ...]
+
 
 class NewswatchExtensionError(RuntimeError):
     """Raised when the Rust `newswatch` extension is unavailable."""
@@ -89,6 +92,13 @@ def _to_news_items(raw_items: list) -> list[NewsItem]:
     return [_to_news_item(raw_item) for raw_item in raw_items]
 
 
+def _normalize_feeds(feeds: list[FeedTuple]) -> FeedConfigKey:
+    """Return immutable feed tuples for cache-key generation."""
+    return tuple(
+        (str(url), str(feed_type), str(name)) for url, feed_type, name in feeds
+    )
+
+
 class NewsRetriever:
     """Python adapter around `newswatch.NewsClient`."""
 
@@ -115,6 +125,7 @@ class NewsRetriever:
         keywords: list[str],
         max_results: int = 100,
     ) -> list[NewsItem]:
+        """Fetch headlines for the provided keywords."""
         raw_items = self._client.fetch(list(keywords), int(max_results))
         return _to_news_items(raw_items)
 
@@ -134,16 +145,30 @@ _DEFAULT_RSS_FEEDS: tuple[tuple[str, str, str], ...] = (
 )
 
 
+@lru_cache(maxsize=64)
+def _cached_news_retriever(
+    user_agent: str,
+    feeds_key: FeedConfigKey,
+    rate_limit_secs: float,
+) -> NewsRetriever:
+    """Build or reuse a retriever for one feed/user-agent configuration."""
+    return NewsRetriever(
+        list(feeds_key),
+        user_agent,
+        rate_limit_secs=rate_limit_secs,
+    )
+
+
 def create_news_retriever(
     user_agent: str,
     *,
-    feeds: list[tuple[str, str, str]] | None = None,
+    feeds: list[FeedTuple] | None = None,
     rate_limit_secs: float = 0.0,
 ) -> NewsRetriever:
-    """Create a news retriever backed by the Rust extension."""
+    """Create or reuse a news retriever backed by the Rust extension."""
     configured_feeds = feeds if feeds is not None else list(_DEFAULT_RSS_FEEDS)
-    return NewsRetriever(
-        configured_feeds,
+    return _cached_news_retriever(
         user_agent,
-        rate_limit_secs=rate_limit_secs,
+        _normalize_feeds(configured_feeds),
+        float(rate_limit_secs),
     )

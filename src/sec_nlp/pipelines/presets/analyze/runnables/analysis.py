@@ -1,5 +1,11 @@
 # src/sec_nlp/pipelines/presets/analyze/runnables/analysis.py
-"""LLM analysis runner for analyze pipeline chunks."""
+"""LLM analysis runner for analyze pipeline chunks.
+
+This module executes batched analyze prompts, formats model outputs, and
+optionally persists successful results in a disk-backed cache. The cache uses
+SQLite so repeated runs can reuse prior chunk analyses without rewriting an
+entire JSON file on each batch flush.
+"""
 
 from __future__ import annotations
 
@@ -7,7 +13,9 @@ import asyncio
 import hashlib
 import json
 import re
+import sqlite3
 import time
+from collections.abc import Iterator, Sequence
 from pathlib import Path
 from time import perf_counter
 from uuid import UUID
@@ -33,6 +41,20 @@ from ..utils import query_term_overlap, resolve_symbol_for_output
 
 NUMERIC_SIGNAL_RE = re.compile(r"[$€£]?\d")
 _LLM_CACHE_SCHEMA_VERSION = 1
+_LLM_CACHE_BATCH_SIZE = 400
+
+
+def _cache_db_path(path: Path) -> Path:
+    """Resolve the SQLite cache path for analyze responses."""
+    if path.suffix.casefold() == ".json":
+        return path.with_suffix(".sqlite3")
+    return path
+
+
+def _chunked_keys(keys: Sequence[str]) -> Iterator[Sequence[str]]:
+    """Yield cache keys in bounded batches for SQLite `IN` queries."""
+    for idx in range(0, len(keys), _LLM_CACHE_BATCH_SIZE):
+        yield keys[idx : idx + _LLM_CACHE_BATCH_SIZE]
 
 
 class AnalysisBatchInput(BaseModel):
@@ -92,10 +114,9 @@ class AnalyzerRunnable(
     llm_cache_namespace: str = Field(default="")
 
     _cache_loaded: bool = PrivateAttr(default=False)
-    _cache_dirty: bool = PrivateAttr(default=False)
-    _cache_entries: dict[str, dict[str, JsonValue]] = PrivateAttr(
-        default_factory=dict
-    )
+    _cache_conn: sqlite3.Connection | None = PrivateAttr(default=None)
+    _cache_pending_entries: dict[str, str] = PrivateAttr(default_factory=dict)
+    _cache_touched_keys: set[str] = PrivateAttr(default_factory=set)
 
     def invoke(
         self,
@@ -234,24 +255,71 @@ class AnalyzerRunnable(
 
     def _cache_path(self) -> Path | None:
         """Cache path."""
-        if not self.llm_cache_enabled:
+        cache_file = self.llm_cache_file
+        if not self.llm_cache_enabled or cache_file is None:
             return None
-        return self.llm_cache_file
+        return _cache_db_path(cache_file)
 
-    def _ensure_cache_loaded(self) -> None:
-        """Ensure cache loaded is initialized and available."""
-        cache_path = self._cache_path()
-        if self._cache_loaded or cache_path is None:
+    def _legacy_cache_path(self) -> Path | None:
+        """Return the legacy JSON cache path, when one exists."""
+        cache_file = self.llm_cache_file
+        if cache_file is None or cache_file.suffix.casefold() != ".json":
+            return None
+        return cache_file
+
+    @staticmethod
+    def _open_cache_db(path: Path) -> sqlite3.Connection:
+        """Open the SQLite cache database and ensure the schema exists."""
+        path.parent.mkdir(parents=True, exist_ok=True)
+        conn = sqlite3.connect(path)
+        conn.execute("PRAGMA journal_mode=WAL")
+        conn.execute("PRAGMA synchronous=NORMAL")
+        conn.execute(f"PRAGMA user_version={_LLM_CACHE_SCHEMA_VERSION}")
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS analysis_cache (
+                cache_key TEXT PRIMARY KEY,
+                result_json TEXT NOT NULL,
+                updated_at INTEGER NOT NULL
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_analysis_cache_updated_at
+            ON analysis_cache(updated_at)
+            """
+        )
+        return conn
+
+    @staticmethod
+    def _cache_count(conn: sqlite3.Connection) -> int:
+        """Return the number of cached analysis rows."""
+        row = conn.execute("SELECT COUNT(*) FROM analysis_cache").fetchone()
+        if row is None:
+            return 0
+        count = row[0]
+        return int(count) if isinstance(count, int) else 0
+
+    def _migrate_legacy_cache(
+        self,
+        *,
+        conn: sqlite3.Connection,
+        legacy_path: Path,
+    ) -> None:
+        """Migrate the legacy JSON cache file into SQLite on first use."""
+        if not legacy_path.exists():
             return
-        self._cache_loaded = True
-        self._cache_entries = {}
-        if not cache_path.exists():
+        if self._cache_count(conn) > 0:
             return
+
         try:
-            payload = json.loads(cache_path.read_text(encoding="utf-8"))
+            payload = json.loads(legacy_path.read_text(encoding="utf-8"))
         except Exception as exc:
             logger.debug(
-                "Failed to read LLM response cache %s: %s", cache_path, exc
+                "Failed to read legacy analyze cache %s: %s",
+                legacy_path,
+                exc,
             )
             return
 
@@ -261,17 +329,74 @@ class AnalyzerRunnable(
         if not isinstance(entries_raw, dict):
             return
 
-        loaded: dict[str, dict[str, JsonValue]] = {}
+        updated_at = int(time.time())
+        entries: list[tuple[str, str, int]] = []
         for key, raw in entries_raw.items():
             if not isinstance(key, str) or not isinstance(raw, dict):
                 continue
             try:
-                # Validate payload shape up-front.
                 parsed = AnalysisResult.model_validate(raw)
-                loaded[key] = parsed.model_dump(mode="json", exclude_none=True)
             except Exception:
                 continue
-        self._cache_entries = loaded
+            entries.append(
+                (
+                    key,
+                    parsed.model_dump_json(exclude_none=True),
+                    updated_at,
+                )
+            )
+
+        if not entries:
+            return
+
+        conn.executemany(
+            """
+            INSERT INTO analysis_cache (cache_key, result_json, updated_at)
+            VALUES (?, ?, ?)
+            ON CONFLICT(cache_key)
+            DO UPDATE SET
+                result_json = excluded.result_json,
+                updated_at = excluded.updated_at
+            """,
+            entries,
+        )
+        logger.info(
+            "Migrated %d analyze LLM cache entries from %s",
+            len(entries),
+            legacy_path,
+        )
+
+    def _ensure_cache_loaded(self) -> None:
+        """Ensure the SQLite cache connection is initialized and available."""
+        cache_path = self._cache_path()
+        if self._cache_loaded or cache_path is None:
+            return
+        self._cache_loaded = True
+        self._cache_pending_entries.clear()
+        self._cache_touched_keys.clear()
+        try:
+            conn = self._open_cache_db(cache_path)
+        except Exception as exc:
+            logger.debug(
+                "Failed to open analyze LLM cache DB %s: %s",
+                cache_path,
+                exc,
+            )
+            return
+
+        self._cache_conn = conn
+        legacy_path = self._legacy_cache_path()
+        if legacy_path is None or legacy_path == cache_path:
+            return
+        try:
+            with conn:
+                self._migrate_legacy_cache(conn=conn, legacy_path=legacy_path)
+        except Exception as exc:
+            logger.debug(
+                "Failed to migrate analyze cache %s: %s",
+                legacy_path,
+                exc,
+            )
 
     def _cache_key(self, item: AnalysisInput) -> str:
         """Build a deterministic cache key for analysis input."""
@@ -287,25 +412,77 @@ class AnalyzerRunnable(
         ).encode("utf-8")
         return hashlib.sha256(encoded).hexdigest()
 
+    def _lookup_cached_results(
+        self,
+        items: Sequence[AnalysisInput],
+    ) -> dict[str, AnalysisResult]:
+        """Look up cached analysis results for a batch of items."""
+        if not items:
+            return {}
+
+        self._ensure_cache_loaded()
+        conn = self._cache_conn
+        if conn is None:
+            return {}
+
+        keys = [self._cache_key(item) for item in items]
+        found: dict[str, AnalysisResult] = {}
+        invalid_keys: list[str] = []
+
+        try:
+            for batch in _chunked_keys(keys):
+                placeholders = ",".join("?" for _ in batch)
+                query = (
+                    "SELECT cache_key, result_json "
+                    f"FROM analysis_cache WHERE cache_key IN ({placeholders})"
+                )
+                rows = conn.execute(query, tuple(batch)).fetchall()
+                for row in rows:
+                    cache_key = row[0]
+                    result_json = row[1]
+                    if not isinstance(cache_key, str) or not isinstance(
+                        result_json, str
+                    ):
+                        if isinstance(cache_key, str):
+                            invalid_keys.append(cache_key)
+                        continue
+                    try:
+                        found[cache_key] = AnalysisResult.model_validate_json(
+                            result_json
+                        )
+                    except Exception:
+                        invalid_keys.append(cache_key)
+        except Exception as exc:
+            logger.debug(
+                "Failed to read analyze cache entries from %s: %s",
+                self._cache_path(),
+                exc,
+            )
+            return {}
+
+        if invalid_keys:
+            try:
+                with conn:
+                    conn.executemany(
+                        "DELETE FROM analysis_cache WHERE cache_key = ?",
+                        [(cache_key,) for cache_key in invalid_keys],
+                    )
+            except Exception as exc:
+                logger.debug(
+                    "Failed to clean invalid analyze cache entries from %s: %s",
+                    self._cache_path(),
+                    exc,
+                )
+
+        self._cache_touched_keys.update(found.keys())
+        return found
+
     def _lookup_cached_result(
         self, item: AnalysisInput
     ) -> AnalysisResult | None:
         """Look up a cached analysis result for the current item."""
-        self._ensure_cache_loaded()
         key = self._cache_key(item)
-        raw = self._cache_entries.get(key)
-        if raw is None:
-            return None
-        if not isinstance(raw, dict):
-            self._cache_entries.pop(key, None)
-            self._cache_dirty = True
-            return None
-        try:
-            return AnalysisResult.model_validate(raw)
-        except Exception:
-            self._cache_entries.pop(key, None)
-            self._cache_dirty = True
-            return None
+        return self._lookup_cached_results([item]).get(key)
 
     def _store_cached_result(
         self,
@@ -315,44 +492,79 @@ class AnalyzerRunnable(
     ) -> None:
         """Store a computed analysis result in the response cache."""
         self._ensure_cache_loaded()
+        if self._cache_conn is None:
+            return
         key = self._cache_key(item)
-        self._cache_entries[key] = result.model_dump(
-            mode="json",
-            exclude_none=True,
+        self._cache_pending_entries[key] = result.model_dump_json(
+            exclude_none=True
         )
-        self._cache_dirty = True
+
+    def _prune_cache(self, conn: sqlite3.Connection) -> None:
+        """Prune least-recently-used cache entries over the configured cap."""
+        if self.llm_cache_max_entries <= 0:
+            return
+        overflow = self._cache_count(conn) - self.llm_cache_max_entries
+        if overflow <= 0:
+            return
+        conn.execute(
+            """
+            DELETE FROM analysis_cache
+            WHERE cache_key IN (
+                SELECT cache_key
+                FROM analysis_cache
+                ORDER BY updated_at ASC, cache_key ASC
+                LIMIT ?
+            )
+            """,
+            (overflow,),
+        )
 
     def _flush_cache(self) -> None:
         """Flush pending cache writes to disk."""
-        if not self._cache_dirty:
+        if not self._cache_pending_entries and not self._cache_touched_keys:
             return
-        cache_path = self._cache_path()
-        if cache_path is None:
-            self._cache_dirty = False
+        self._ensure_cache_loaded()
+        conn = self._cache_conn
+        if conn is None:
+            self._cache_pending_entries.clear()
+            self._cache_touched_keys.clear()
             return
-        entries = self._cache_entries
-        if (
-            self.llm_cache_max_entries > 0
-            and len(entries) > self.llm_cache_max_entries
-        ):
-            overflow = len(entries) - self.llm_cache_max_entries
-            for key in list(entries.keys())[:overflow]:
-                entries.pop(key, None)
 
-        payload = {
-            "version": _LLM_CACHE_SCHEMA_VERSION,
-            "entries": entries,
-        }
+        now = int(time.time())
+        pending_keys = set(self._cache_pending_entries)
+        touch_keys = [
+            key for key in self._cache_touched_keys if key not in pending_keys
+        ]
         try:
-            cache_path.parent.mkdir(parents=True, exist_ok=True)
-            cache_path.write_text(
-                json.dumps(payload, separators=(",", ":"), ensure_ascii=True),
-                encoding="utf-8",
-            )
-            self._cache_dirty = False
+            with conn:
+                if touch_keys:
+                    conn.executemany(
+                        "UPDATE analysis_cache SET updated_at = ? WHERE cache_key = ?",
+                        [(now, key) for key in touch_keys],
+                    )
+                if self._cache_pending_entries:
+                    conn.executemany(
+                        """
+                        INSERT INTO analysis_cache (cache_key, result_json, updated_at)
+                        VALUES (?, ?, ?)
+                        ON CONFLICT(cache_key)
+                        DO UPDATE SET
+                            result_json = excluded.result_json,
+                            updated_at = excluded.updated_at
+                        """,
+                        [
+                            (key, value, now)
+                            for key, value in self._cache_pending_entries.items()
+                        ],
+                    )
+                self._prune_cache(conn)
+            self._cache_pending_entries.clear()
+            self._cache_touched_keys.clear()
         except Exception as exc:
             logger.debug(
-                "Failed to write LLM response cache %s: %s", cache_path, exc
+                "Failed to flush analyze LLM cache %s: %s",
+                self._cache_path(),
+                exc,
             )
 
     def analyze_search_hits(
@@ -421,13 +633,16 @@ class AnalyzerRunnable(
             model_results = self._invoke_batch_models(batch)
             return self._format_model_results(batch, docs, model_results)
 
-        formatted_results: list[AnalysisResultDict | None] = [None] * len(batch)
+        formatted_results: list[AnalysisResultDict | None] = []
+        for _ in batch:
+            formatted_results.append(None)
+        cached_results = self._lookup_cached_results(batch)
         missing_indices: list[int] = []
         missing_items: list[AnalysisInput] = []
         missing_docs: list[Document] = []
 
         for idx, (item, doc) in enumerate(zip(batch, docs, strict=True)):
-            cached_result = self._lookup_cached_result(item)
+            cached_result = cached_results.get(self._cache_key(item))
             if cached_result is None:
                 missing_indices.append(idx)
                 missing_items.append(item)

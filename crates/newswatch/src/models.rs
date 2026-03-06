@@ -2,7 +2,7 @@ use pyo3::prelude::*;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[pyclass]
+#[pyclass(skip_from_py_object)]
 pub struct NewsItem {
     #[pyo3(get)]
     pub title: String,

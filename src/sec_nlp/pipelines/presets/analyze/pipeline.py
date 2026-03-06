@@ -198,24 +198,104 @@ class AnalyzePipeline(BasePipeline):
     def result_model(cls) -> type[AnalyzeResult]:
         return AnalyzeResult
 
+    def _effective_topics(self) -> list[str] | None:
+        """Return the effective topic or keyword terms for analyze helpers."""
+        return self.config.topics or self.config.keywords
+
+    def _create_loader(self) -> Loader:
+        """Build a fresh loader instance for main-thread or prefetch work."""
+        loader_keywords = self.config.keywords or None
+        return Loader(
+            email=self.config.email,
+            downloads_folder=self.config.dl_path,
+            chunk_size=self.config.chunk_size,
+            chunk_overlap=self.config.chunk_overlap,
+            semantic_chunking=self.config.semantic_chunking,
+            keywords=loader_keywords,
+            keyword_mode=self.config.keyword_mode,
+            use_async=self.config.loader_use_async,
+            max_workers=self.config.loader_max_workers,
+        )
+
+    def _create_preprocessor(self) -> ChunkPreprocessor:
+        """Build a chunk preprocessor for the current analyze settings."""
+        return build_preprocessor(
+            config=self.config,
+            section_extractor=self._section_extractor,
+            topics=self._effective_topics(),
+            embedder=self._embedder,
+        )
+
+    def _create_efts_runner(self) -> EFTSSearchRunnable:
+        """Build an EFTS search runnable for symbol discovery."""
+        return EFTSSearchRunnable(
+            efts_config=self.config.efts,
+            forms=list(self.config.mode.forms),
+            mode=self.config.mode,
+            start_date=self.config.start_date,
+            end_date=self.config.end_date,
+            email=self.config.email,
+        )
+
+    def _fill_prefetch_queue(
+        self,
+        *,
+        symbols: list[str],
+        next_index: int,
+        prefetch_executor: ThreadPoolExecutor | None,
+        prefetch_futures: dict[str, Future[PrefetchedSymbolData]],
+    ) -> int:
+        """Schedule enough symbol prefetch work to fill the configured window."""
+        window = self.config.symbol_prefetch_window
+        if prefetch_executor is None or window <= 0:
+            return next_index
+
+        while next_index < len(symbols) and len(prefetch_futures) < window:
+            next_symbol = symbols[next_index]
+            prefetch_futures[next_symbol] = prefetch_executor.submit(
+                self._prefetch_symbol,
+                next_symbol,
+            )
+            next_index += 1
+        return next_index
+
+    def _consume_prefetched_symbol(
+        self,
+        *,
+        symbol: str,
+        prefetch_futures: dict[str, Future[PrefetchedSymbolData]],
+    ) -> PrefetchedSymbolData | None:
+        """Return prefetched symbol data when one has already been queued."""
+        prefetch_future = prefetch_futures.pop(symbol, None)
+        if prefetch_future is None:
+            return None
+        try:
+            return prefetch_future.result()
+        except Exception:
+            logger.debug("Prefetch failed for %s", symbol, exc_info=True)
+            return None
+
+    def _record_symbol_discovery(
+        self,
+        *,
+        symbol: str,
+        efts_results: list[EFTSSearchResult],
+        efts_ok: bool,
+        relationships: JsonDict,
+    ) -> None:
+        """Merge symbol discovery artifacts into the run-level caches."""
+        if efts_ok:
+            self._efts_results_by_symbol[symbol] = efts_results
+        if relationships:
+            self._relationship_graphs.update(relationships)
+
     def _build_components(self) -> None:
         """Build pipeline components from config."""
-        keyword_terms = self.config.topics or self.config.keywords
-        loader_keywords = self.config.keywords or None
+        keyword_terms = self._effective_topics()
 
         try:
             # Initialize loader
-            self._loader = Loader(
-                email=self.config.email,
-                downloads_folder=self.config.dl_path,
-                chunk_size=self.config.chunk_size,
-                chunk_overlap=self.config.chunk_overlap,
-                semantic_chunking=self.config.semantic_chunking,
-                keywords=loader_keywords,
-                keyword_mode=self.config.keyword_mode,
-                use_async=self.config.loader_use_async,
-                max_workers=self.config.loader_max_workers,
-            )
+            self._loader = self._create_loader()
 
             # Build section filter if section filtering is configured
             if self.config.section_type and (
@@ -431,12 +511,7 @@ class AnalyzePipeline(BasePipeline):
             config=self.config,
             topics=keyword_terms,
         )
-        self._preprocessor = build_preprocessor(
-            config=self.config,
-            section_extractor=self._section_extractor,
-            topics=keyword_terms,
-            embedder=self._embedder,
-        )
+        self._preprocessor = self._create_preprocessor()
         self._vector_indexer = VectorIndexer(
             config=self.config,
             vector_store=self._vector_store,
@@ -454,14 +529,7 @@ class AnalyzePipeline(BasePipeline):
             config=self.config,
             vector_store=self._vector_store,
         )
-        self._efts_runner = EFTSSearchRunnable(
-            efts_config=self.config.efts,
-            forms=list(self.config.mode.forms),
-            mode=self.config.mode,
-            start_date=self.config.start_date,
-            end_date=self.config.end_date,
-            email=self.config.email,
-        )
+        self._efts_runner = self._create_efts_runner()
         self._market_correlation_runner = MarketCorrelationRunnable()
 
         # Initialize processing state for incremental mode
@@ -544,13 +612,19 @@ class AnalyzePipeline(BasePipeline):
                 # Row 2: per-symbol phase detail (hidden until needed)
                 phase_task = progress.add_task("", total=None, visible=False)
                 symbols = self.config.symbols
-                prefetch_future: Future[PrefetchedSymbolData] | None = None
-                prefetch_executor = ThreadPoolExecutor(
-                    max_workers=1, thread_name_prefix="prefetch"
+                prefetch_futures: dict[str, Future[PrefetchedSymbolData]] = {}
+                prefetch_executor = (
+                    ThreadPoolExecutor(
+                        max_workers=self.config.symbol_prefetch_window,
+                        thread_name_prefix="prefetch",
+                    )
+                    if self.config.symbol_prefetch_window > 0
+                    else None
                 )
+                next_prefetch_index = 1
 
                 try:
-                    for idx, symbol in enumerate(symbols):
+                    for symbol in symbols:
                         if _abort_event.is_set():
                             logger.info(
                                 "Abort requested — skipping remaining symbols"
@@ -562,28 +636,16 @@ class AnalyzePipeline(BasePipeline):
                         )
                         symbol_start = perf_counter()
 
-                        # Collect prefetched data if available
-                        prefetched: PrefetchedSymbolData | None = None
-                        if prefetch_future is not None:
-                            try:
-                                prefetched = prefetch_future.result()
-                            except Exception:
-                                logger.debug(
-                                    "Prefetch failed for %s",
-                                    symbol,
-                                    exc_info=True,
-                                )
-                                prefetched = None
-                            prefetch_future = None
-
-                        # Start prefetching next symbol's EFTS + docs
-                        next_symbol = (
-                            symbols[idx + 1] if idx + 1 < len(symbols) else None
+                        prefetched = self._consume_prefetched_symbol(
+                            symbol=symbol,
+                            prefetch_futures=prefetch_futures,
                         )
-                        if next_symbol is not None:
-                            prefetch_future = prefetch_executor.submit(
-                                self._prefetch_symbol, next_symbol
-                            )
+                        next_prefetch_index = self._fill_prefetch_queue(
+                            symbols=symbols,
+                            next_index=next_prefetch_index,
+                            prefetch_executor=prefetch_executor,
+                            prefetch_futures=prefetch_futures,
+                        )
 
                         symbol_outputs, chunk_stats = self._process_symbol(
                             symbol,
@@ -610,9 +672,10 @@ class AnalyzePipeline(BasePipeline):
                         self._phase_start = 0.0
                         progress.advance(overall_task)
                 finally:
-                    if prefetch_future is not None:
-                        prefetch_future.cancel()
-                    prefetch_executor.shutdown(wait=False)
+                    for future in prefetch_futures.values():
+                        future.cancel()
+                    if prefetch_executor is not None:
+                        prefetch_executor.shutdown(wait=False)
 
             if len(self._symbol_profiles) > 1:
                 run_component = self.config.run_path_component()
@@ -727,21 +790,38 @@ class AnalyzePipeline(BasePipeline):
         """Prefetch EFTS + loading + preprocessing for a symbol.
 
         Runs in a background thread to overlap I/O-bound work with the
-        LLM analysis of the current symbol.  Indexing is deliberately
-        omitted because the SimHashDeduplicator is shared mutable state.
+        LLM analysis of the current symbol. Worker-local loader and EFTS
+        instances avoid mutating shared pipeline state before the main
+        symbol loop consumes the prefetched result.
         """
-        self._loader.add_symbol(symbol)
         timings: Timings = {}
-        docs, allowed_accessions = self._run_efts_and_load_docs(symbol, timings)
+        preprocessor = self._create_preprocessor()
+        loader = self._create_loader()
+        efts_runner = self._create_efts_runner()
+        docs, efts_results, efts_ok, relationships = (
+            self._load_symbol_documents(
+                symbol,
+                timings,
+                loader=loader,
+                efts_runner=efts_runner,
+            )
+        )
 
         preprocessed = False
         if docs:
-            docs = self._preprocess_documents(symbol, docs, timings)
+            docs = self._preprocess_documents(
+                symbol,
+                docs,
+                timings,
+                preprocessor=preprocessor,
+            )
             preprocessed = True
 
         return PrefetchedSymbolData(
             docs=docs,
-            allowed_accessions=allowed_accessions,
+            efts_ok=efts_ok,
+            efts_results=efts_results,
+            relationships=relationships,
             timings=timings,
             preprocessed=preprocessed,
         )
@@ -817,24 +897,31 @@ class AnalyzePipeline(BasePipeline):
         )
         return final_state.output_files, final_state.stats
 
-    def _run_efts_and_load_docs(
+    def _load_symbol_documents(
         self,
         symbol: str,
         timings: Timings,
-    ) -> tuple[list[Document], set[str] | None]:
+        *,
+        loader: Loader | None = None,
+        efts_runner: EFTSSearchRunnable | None = None,
+    ) -> tuple[list[Document], list[EFTSSearchResult], bool, JsonDict]:
         """Run EFTS discovery and load documents for a symbol."""
+        active_loader = loader or self._loader
+        active_loader.add_symbol(symbol)
         start_date, end_date = self.config.date_range
         search_queries = self.config.get_search_queries()
         limit_per_symbol = self.config.limit
         perform_download = True
         allowed_accessions: set[str] | None = None
+        efts_results: list[EFTSSearchResult] = []
+        efts_ok = False
 
         if self.config.efts.enabled and search_queries:
             t0 = perf_counter()
             efts_results, new_accessions, efts_ok = (
                 efts_utils.run_efts_for_symbol(
                     config=self.config,
-                    efts_runner=self._efts_runner,
+                    efts_runner=efts_runner or self._efts_runner,
                     symbol=symbol,
                     queries=search_queries,
                     forms=self.config.effective_forms,
@@ -842,7 +929,6 @@ class AnalyzePipeline(BasePipeline):
             )
             timings["efts"] = perf_counter() - t0
             if efts_ok:
-                self._efts_results_by_symbol[symbol] = efts_results
                 allowed_accessions = efts_utils.efts_accessions(efts_results)
                 total_hits = len(allowed_accessions)
                 logger.info(
@@ -867,11 +953,12 @@ class AnalyzePipeline(BasePipeline):
                             limit_per_symbol,
                             perform_download,
                             timings,
+                            company_name=active_loader.company_name,
                         )
                     )
 
         t0 = perf_counter()
-        docs = self._loader.load_documents(
+        docs = active_loader.load_documents(
             mode=self.config.mode,
             start_date=start_date.isoformat() if start_date else None,
             end_date=end_date.isoformat() if end_date else None,
@@ -905,14 +992,12 @@ class AnalyzePipeline(BasePipeline):
                             "Incremental mode: all accessions already processed for %s",
                             symbol,
                         )
-        relationships = self._loader.last_meta["relationships"]
-        if relationships:
-            self._relationship_graphs.update(relationships)
+        relationships = active_loader.last_meta["relationships"]
         timings["load"] = perf_counter() - t0
 
         if not docs:
             logger.warning("No documents found for %s", symbol)
-        return docs, allowed_accessions
+        return docs, efts_results, efts_ok, relationships
 
     def _handle_efts_download(
         self,
@@ -922,6 +1007,8 @@ class AnalyzePipeline(BasePipeline):
         limit_per_symbol: int | None,
         perform_download: bool,
         timings: Timings,
+        *,
+        company_name: str | None,
     ) -> tuple[int | None, bool]:
         """Apply EFTS auto-download policy for the current symbol run."""
         limit_per_symbol = efts_utils.cap_efts_download_limit(
@@ -940,7 +1027,7 @@ class AnalyzePipeline(BasePipeline):
             t_download = perf_counter()
             downloaded = efts_utils.download_efts_accessions(
                 config=self.config,
-                company_name=self._loader.company_name,
+                company_name=company_name,
                 symbol=symbol,
                 accessions=accessions_to_download,
                 results=efts_results,
@@ -969,10 +1056,13 @@ class AnalyzePipeline(BasePipeline):
         symbol: str,
         docs: list[Document],
         timings: Timings,
+        *,
+        preprocessor: ChunkPreprocessor | None = None,
     ) -> list[Document]:
         """Preprocess and chunk documents."""
         t0 = perf_counter()
-        docs = self._preprocessor.chunk_and_prepare(docs)
+        active_preprocessor = preprocessor or self._preprocessor
+        docs = active_preprocessor.chunk_and_prepare(docs)
         self._ensure_filing_dates(docs)
         timings["prepare"] = perf_counter() - t0
 
@@ -1228,7 +1318,7 @@ class AnalyzePipeline(BasePipeline):
         self,
         *,
         symbol: str,
-        docs: list[Document],
+        filing_meta: MetadataRecord,
         analysis_results: list[AnalysisResultDict],
         relevant_results: list[AnalysisResultDict],
         search_queries: list[str] | None,
@@ -1239,7 +1329,7 @@ class AnalyzePipeline(BasePipeline):
     ) -> list[Path]:
         """Write all output files for a symbol."""
         t_write_start = perf_counter()
-        fallback_meta = docs[0].metadata or {}
+        fallback_meta = filing_meta
 
         output_files = self._write_results(
             symbol,

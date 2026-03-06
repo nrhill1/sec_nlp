@@ -3,6 +3,7 @@
 
 use std::collections::{HashMap, HashSet};
 
+use futures::stream::{self, StreamExt};
 use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
 use yahoo_finance_api::time::{Date, Month, OffsetDateTime};
@@ -13,6 +14,7 @@ use crate::runtime::run_async;
 use crate::types::{to_py_err, MarketQuote};
 
 const QUOTE_RANGE: &str = "1d";
+const MAX_BATCH_CONCURRENCY: usize = 8;
 type RangeFetchResult = (String, Result<Vec<MarketQuote>, String>);
 
 /// Parse a date string (YYYY-MM-DD) to OffsetDateTime.
@@ -149,18 +151,30 @@ fn fetch_missing_ranges(
 ) -> PyResult<Vec<RangeFetchResult>> {
     run_async(async move {
         let provider = YahooConnector::new().map_err(to_py_err)?;
-        let mut out = Vec::with_capacity(to_fetch.len());
-        for ticker in to_fetch {
-            let result = match provider.get_quote_history(&ticker, start, end).await {
-                Ok(response) => match response.quotes() {
-                    Ok(raw_quotes) => Ok(filter_quotes_by_range(raw_quotes, start_ts, end_ts)),
-                    Err(err) => Err(err.to_string()),
-                },
-                Err(err) => Err(err.to_string()),
-            };
-            out.push((ticker, result));
-        }
-        Ok(out)
+        let mut indexed_results = stream::iter(to_fetch.into_iter().enumerate())
+            .map(|(index, ticker)| {
+                let provider = &provider;
+                async move {
+                    let result = match provider.get_quote_history(&ticker, start, end).await {
+                        Ok(response) => match response.quotes() {
+                            Ok(raw_quotes) => {
+                                Ok(filter_quotes_by_range(raw_quotes, start_ts, end_ts))
+                            }
+                            Err(err) => Err(err.to_string()),
+                        },
+                        Err(err) => Err(err.to_string()),
+                    };
+                    (index, ticker, result)
+                }
+            })
+            .buffer_unordered(MAX_BATCH_CONCURRENCY)
+            .collect::<Vec<_>>()
+            .await;
+        indexed_results.sort_by_key(|(index, _, _)| *index);
+        Ok(indexed_results
+            .into_iter()
+            .map(|(_, ticker, result)| (ticker, result))
+            .collect())
     })
 }
 
@@ -204,18 +218,30 @@ pub fn get_prices(tickers: Vec<String>) -> PyResult<Vec<(String, f64)>> {
 
     // Fetch missing from API
     if !to_fetch.is_empty() {
-        let fetched = run_async(async move {
+        let fetched: Vec<(String, f64)> = run_async(async move {
             let provider = YahooConnector::new().map_err(to_py_err)?;
-            let mut out = Vec::with_capacity(to_fetch.len());
-            for ticker in to_fetch {
-                let response = provider
-                    .get_latest_quotes(&ticker, QUOTE_RANGE)
-                    .await
-                    .map_err(to_py_err)?;
-                let quote = response.last_quote().map_err(to_py_err)?;
-                out.push((ticker, quote.close));
-            }
-            Ok(out)
+            let mut indexed_results = stream::iter(to_fetch.into_iter().enumerate())
+                .map(|(index, ticker)| {
+                    let provider = &provider;
+                    async move {
+                        let response = provider
+                            .get_latest_quotes(&ticker, QUOTE_RANGE)
+                            .await
+                            .map_err(to_py_err)?;
+                        let quote = response.last_quote().map_err(to_py_err)?;
+                        Ok::<(usize, String, f64), PyErr>((index, ticker, quote.close))
+                    }
+                })
+                .buffer_unordered(MAX_BATCH_CONCURRENCY)
+                .collect::<Vec<_>>()
+                .await
+                .into_iter()
+                .collect::<PyResult<Vec<_>>>()?;
+            indexed_results.sort_by_key(|(index, _, _)| *index);
+            Ok(indexed_results
+                .into_iter()
+                .map(|(_, ticker, price)| (ticker, price))
+                .collect())
         })?;
 
         // Cache and add to results

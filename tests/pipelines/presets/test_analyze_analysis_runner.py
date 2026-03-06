@@ -1,6 +1,7 @@
 # tests/pipelines/presets/test_analyze_analysis_runner.py
 """Tests for analyze analysis runner helpers."""
 
+import json
 from pathlib import Path
 
 from langchain_core.documents import Document
@@ -131,8 +132,37 @@ def _make_docs() -> list[Document]:
     ]
 
 
+def _make_cache_inputs(
+    runner: AnalyzerRunnable,
+    *,
+    symbol: str,
+    docs: list[Document],
+) -> list[AnalysisInput]:
+    inputs: list[AnalysisInput] = []
+    for doc in docs:
+        metadata = doc.metadata or {}
+        matched_queries = runner._extract_matched_queries(metadata)
+        inputs.append(
+            AnalysisInput(
+                symbol=symbol,
+                chunk=doc.page_content,
+                matched_query=runner._select_primary_query(
+                    matched_queries, doc.page_content
+                ),
+                matched_queries=runner._build_matched_query_list(
+                    matched_queries
+                ),
+                context=runner._build_context(doc),
+                topic_hits=metadata.get("topic_hits"),
+                analysis_instructions=runner.analysis_instructions,
+            )
+        )
+    return inputs
+
+
 def test_analyzer_runnable_llm_cache_reuses_results(tmp_path: Path) -> None:
     cache_path = tmp_path / "analyze_cache.json"
+    cache_db = cache_path.with_suffix(".sqlite3")
     graph = _CacheGraph()
     runner = AnalyzerRunnable(
         graph=graph,
@@ -150,7 +180,45 @@ def test_analyzer_runnable_llm_cache_reuses_results(tmp_path: Path) -> None:
     assert len(first) == 2
     assert len(second) == 2
     assert graph.batch_calls == 1
-    assert cache_path.exists()
+    assert cache_db.exists()
+
+
+def test_analyzer_runnable_llm_cache_migrates_legacy_json(
+    tmp_path: Path,
+) -> None:
+    cache_path = tmp_path / "analyze_cache.json"
+    cache_db = cache_path.with_suffix(".sqlite3")
+    graph = _CacheGraph()
+    runner = AnalyzerRunnable(
+        graph=graph,
+        symbols=["AAPL"],
+        llm_cache_enabled=True,
+        llm_cache_file=cache_path,
+        llm_cache_namespace="test-model",
+        llm_cache_max_entries=100,
+    )
+
+    docs = _make_docs()
+    inputs = _make_cache_inputs(runner, symbol="AAPL", docs=docs)
+    legacy_payload = {
+        "version": 1,
+        "entries": {
+            runner._cache_key(item): AnalysisResult(
+                is_relevant=True,
+                confidence_score=0.95,
+                summary=f"legacy-{idx}",
+            ).model_dump(mode="json", exclude_none=True)
+            for idx, item in enumerate(inputs)
+        },
+    }
+    cache_path.write_text(json.dumps(legacy_payload), encoding="utf-8")
+
+    results = runner.analyze_chunks("AAPL", docs)
+
+    assert len(results) == 2
+    assert graph.batch_calls == 0
+    assert cache_db.exists()
+    assert results[0].get("summary") == "legacy-0"
 
 
 def test_analyzer_runnable_ensemble_majority_vote() -> None:

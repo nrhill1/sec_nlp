@@ -1,4 +1,7 @@
 # tests/pipelines/presets/test_analyze_pipeline.py
+"""Tests for analyze pipeline configuration, retries, and prefetch flow."""
+
+from collections.abc import Callable
 from pathlib import Path
 from typing import ClassVar, Literal
 from unittest.mock import Mock
@@ -21,6 +24,11 @@ from sec_nlp.pipelines.presets.analyze.builders import (
     build_output_formatter,
     build_preprocessor,
 )
+from sec_nlp.pipelines.presets.analyze.run_stages import (
+    AnalyzeRunState,
+    EnrichAndIndexStage,
+    WriteOutputsStage,
+)
 from sec_nlp.pipelines.presets.analyze.runnables.search import (
     SearchQueryResults,
     SearchRunnable,
@@ -29,7 +37,12 @@ from sec_nlp.pipelines.presets.analyze.types import (
     ChunkStats,
     PrefetchedSymbolData,
 )
-from sec_nlp.pipelines.types import AnalysisResultDict, MetadataValue
+from sec_nlp.pipelines.state.store import ProcessingState
+from sec_nlp.pipelines.types import (
+    AnalysisResultDict,
+    MetadataRecord,
+    MetadataValue,
+)
 
 
 class _TestAnalyzePipeline(AnalyzePipeline):
@@ -126,6 +139,44 @@ class _FakeGraph(Runnable[AnalysisInput, AnalysisResult]):
             summary="summary-0",
             key_points=["k0"],
         )
+
+
+class _CompletedFuture:
+    """Completed future stub used to test prefetch scheduling deterministically."""
+
+    def __init__(self, value: PrefetchedSymbolData) -> None:
+        self._value = value
+
+    def result(self) -> PrefetchedSymbolData:
+        """Return the precomputed prefetch payload."""
+        return self._value
+
+    def cancel(self) -> bool:
+        """Report a no-op cancellation result."""
+        return False
+
+
+class _ImmediatePrefetchExecutor:
+    """Synchronous executor stub that records prefetch submissions."""
+
+    def __init__(self, *, max_workers: int, thread_name_prefix: str) -> None:
+        self.max_workers = max_workers
+        self.thread_name_prefix = thread_name_prefix
+        self.submitted_symbols: list[str] = []
+        self.shutdown_wait: bool | None = None
+
+    def submit(
+        self,
+        fn: Callable[[str], PrefetchedSymbolData],
+        symbol: str,
+    ) -> _CompletedFuture:
+        """Execute the prefetch callable immediately and wrap the result."""
+        self.submitted_symbols.append(symbol)
+        return _CompletedFuture(fn(symbol))
+
+    def shutdown(self, wait: bool = False) -> None:
+        """Record executor shutdown requests."""
+        self.shutdown_wait = wait
 
 
 def _make_config(
@@ -234,15 +285,16 @@ def test_output_includes_relationship_timeline() -> None:
         topics=["a"],
         include_raw_chunks=False,
     )
-    filing_meta = {
+    related_filings: list[dict[str, str | int | float | bool | None]] = [
+        {
+            "accession_number": "0000000000-24-000002",
+            "relation_type": "amendment",
+            "filed_date": "2024-01-01",
+        }
+    ]
+    filing_meta: MetadataRecord = {
         "accession_number": "0000000000-24-000001",
-        "related_filings": [
-            {
-                "accession_number": "0000000000-24-000002",
-                "relation_type": "amendment",
-                "filed_date": "2024-01-01",
-            }
-        ],
+        "related_filings": related_filings,
     }
 
     output = formatter.build_output(
@@ -293,6 +345,270 @@ def test_run_uses_cached_search_results(tmp_path: Path) -> None:
     call = runner.export_results.call_args
     assert call.kwargs.get("cached") is True
     assert call.kwargs.get("queries") == ["cached-query"]
+
+
+def test_run_prefetches_symbols_up_to_configured_window(
+    tmp_path: Path, monkeypatch
+) -> None:
+    from sec_nlp.pipelines.presets.analyze import pipeline as pipeline_module
+
+    config = AnalyzeConfig(
+        symbols=["AAPL", "MSFT", "TSLA", "NVDA"],
+        out_path=tmp_path,
+        dl_path=tmp_path,
+        vector_mode="read",
+        export_format="json",
+        search=SearchConfig(queries=["cached-query"]),
+        symbol_prefetch_window=2,
+        collect_metrics=False,
+    )
+    pipeline = _CachedSearchPipeline(config=config)
+    runner = pipeline._search_runner
+    assert isinstance(runner, Mock)
+    runner.export_results.return_value = []
+    prefetched_symbols: list[str] = []
+    processed_symbols: list[tuple[str, bool]] = []
+    executors: list[_ImmediatePrefetchExecutor] = []
+
+    def _fake_prefetch(symbol: str) -> PrefetchedSymbolData:
+        prefetched_symbols.append(symbol)
+        return {
+            "docs": [],
+            "efts_ok": False,
+            "efts_results": [],
+            "relationships": {},
+            "timings": {"load": 1.0},
+            "preprocessed": True,
+        }
+
+    def _fake_process(
+        symbol: str,
+        *,
+        progress: Progress | None = None,
+        phase_task: TaskID | None = None,
+        prefetched: PrefetchedSymbolData | None = None,
+    ) -> tuple[list[Path], ChunkStats]:
+        _ = progress
+        _ = phase_task
+        pipeline._search_results_by_query = {
+            "cached-query": SearchQueryResults(filtered=[], total=0)
+        }
+        processed_symbols.append((symbol, prefetched is not None))
+        return [], {}
+
+    def _executor_factory(
+        *, max_workers: int, thread_name_prefix: str
+    ) -> _ImmediatePrefetchExecutor:
+        executor = _ImmediatePrefetchExecutor(
+            max_workers=max_workers,
+            thread_name_prefix=thread_name_prefix,
+        )
+        executors.append(executor)
+        return executor
+
+    monkeypatch.setattr(pipeline, "_prefetch_symbol", _fake_prefetch)
+    monkeypatch.setattr(pipeline, "_process_symbol", _fake_process)
+    monkeypatch.setattr(
+        pipeline_module,
+        "ThreadPoolExecutor",
+        _executor_factory,
+    )
+
+    result = pipeline.run()
+
+    assert result.success is True
+    assert len(executors) == 1
+    assert executors[0].max_workers == 2
+    assert executors[0].submitted_symbols == ["MSFT", "TSLA", "NVDA"]
+    assert prefetched_symbols == ["MSFT", "TSLA", "NVDA"]
+    assert processed_symbols == [
+        ("AAPL", False),
+        ("MSFT", True),
+        ("TSLA", True),
+        ("NVDA", True),
+    ]
+
+
+def test_run_skips_prefetch_executor_when_window_disabled(
+    tmp_path: Path, monkeypatch
+) -> None:
+    from sec_nlp.pipelines.presets.analyze import pipeline as pipeline_module
+
+    config = AnalyzeConfig(
+        symbols=["AAPL", "MSFT"],
+        out_path=tmp_path,
+        dl_path=tmp_path,
+        vector_mode="read",
+        export_format="json",
+        search=SearchConfig(queries=["cached-query"]),
+        symbol_prefetch_window=0,
+        collect_metrics=False,
+    )
+    pipeline = _CachedSearchPipeline(config=config)
+    runner = pipeline._search_runner
+    assert isinstance(runner, Mock)
+    runner.export_results.return_value = []
+    processed_symbols: list[tuple[str, bool]] = []
+
+    def _fake_process(
+        symbol: str,
+        *,
+        progress: Progress | None = None,
+        phase_task: TaskID | None = None,
+        prefetched: PrefetchedSymbolData | None = None,
+    ) -> tuple[list[Path], ChunkStats]:
+        _ = progress
+        _ = phase_task
+        pipeline._search_results_by_query = {
+            "cached-query": SearchQueryResults(filtered=[], total=0)
+        }
+        processed_symbols.append((symbol, prefetched is not None))
+        return [], {}
+
+    def _raise_if_called(*args, **kwargs) -> None:
+        _ = args
+        _ = kwargs
+        raise AssertionError("prefetch executor should not be created")
+
+    monkeypatch.setattr(pipeline, "_process_symbol", _fake_process)
+    monkeypatch.setattr(
+        pipeline_module,
+        "ThreadPoolExecutor",
+        _raise_if_called,
+    )
+
+    result = pipeline.run()
+
+    assert result.success is True
+    assert processed_symbols == [("AAPL", False), ("MSFT", False)]
+
+
+def test_enrich_and_index_stage_releases_docs_after_summarizing(
+    tmp_path: Path, monkeypatch
+) -> None:
+    pipeline = _make_pipeline(tmp_path)
+    docs = [
+        Document(
+            page_content="first chunk",
+            metadata={
+                "accession_number": "0000000000-24-000001",
+                "filing_date": "2024-01-15",
+            },
+        ),
+        Document(
+            page_content="second chunk",
+            metadata={"accession_number": "0000000000-24-000001"},
+        ),
+        Document(
+            page_content="third chunk",
+            metadata={"accession_number": "0000000000-24-000002"},
+        ),
+    ]
+
+    monkeypatch.setattr(
+        pipeline,
+        "_update_phase",
+        lambda progress, phase_task, symbol, phase, total=None: None,
+    )
+    monkeypatch.setattr(
+        pipeline,
+        "_enrich_and_index",
+        lambda symbol, docs, timings: (
+            {
+                "count": float(len(docs)),
+                "analyzed_count": 0,
+                "timings": timings,
+            },
+            None,
+            None,
+        ),
+    )
+
+    state = AnalyzeRunState(
+        runtime=pipeline,
+        symbol="AAPL",
+        progress=None,
+        phase_task=None,
+        docs=docs,
+    )
+
+    final_state = EnrichAndIndexStage()._run(state)
+
+    assert final_state.docs == []
+    assert final_state.filing_meta["accession_number"] == "0000000000-24-000001"
+    assert final_state.chunk_counts_by_accession == {
+        "0000000000-24-000001": 2,
+        "0000000000-24-000002": 1,
+    }
+    assert set(final_state.processed_accessions) == {
+        "0000000000-24-000001",
+        "0000000000-24-000002",
+    }
+
+
+def test_write_outputs_stage_clears_large_symbol_state(
+    tmp_path: Path, monkeypatch
+) -> None:
+    pipeline = _make_pipeline(tmp_path)
+    written_filing_meta: dict[str, str] | None = None
+    processing_state = ProcessingState(
+        state_dir=tmp_path / ".state",
+        pipeline_type="analyze",
+        auto_save=False,
+    )
+
+    monkeypatch.setattr(
+        pipeline,
+        "_update_phase",
+        lambda progress, phase_task, symbol, phase, total=None: None,
+    )
+
+    def _write_symbol_outputs(**kwargs) -> list[Path]:
+        nonlocal written_filing_meta
+        written_filing_meta = kwargs["filing_meta"]
+        return [tmp_path / "analysis.json"]
+
+    monkeypatch.setattr(
+        pipeline, "_write_symbol_outputs", _write_symbol_outputs
+    )
+    pipeline._processing_state = processing_state
+
+    state = AnalyzeRunState(
+        runtime=pipeline,
+        symbol="AAPL",
+        progress=None,
+        phase_task=None,
+        search_queries=["supply chain"],
+        analysis_results=[{"summary": "all", "confidence_score": 0.4}],
+        relevant_results=[{"summary": "kept", "confidence_score": 0.9}],
+        filing_meta={
+            "accession_number": "0000000000-24-000001",
+            "filing_date": "2024-01-15",
+        },
+        processed_accessions=["0000000000-24-000001"],
+        chunk_counts_by_accession={"0000000000-24-000001": 3},
+        market_correlation={"signal": 1.0},
+    )
+
+    final_state = WriteOutputsStage()._run(state)
+
+    assert written_filing_meta == {
+        "accession_number": "0000000000-24-000001",
+        "filing_date": "2024-01-15",
+    }
+    assert final_state.output_files == [tmp_path / "analysis.json"]
+    assert final_state.analysis_results == []
+    assert final_state.relevant_results == []
+    assert final_state.search_queries is None
+    assert final_state.filing_meta == {}
+    assert final_state.chunk_counts_by_accession == {}
+    assert final_state.processed_accessions == []
+    assert final_state.market_correlation is None
+    records = processing_state.data.accessions["AAPL"]
+    assert len(records) == 1
+    assert records[0].accession_number == "0000000000-24-000001"
+    assert records[0].chunk_count == 3
+    assert records[0].run_id == pipeline.config.run_id
 
 
 def test_build_macro_context_when_enabled(tmp_path: Path, monkeypatch) -> None:

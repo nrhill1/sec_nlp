@@ -1,5 +1,9 @@
 # src/sec_nlp/pipelines/presets/analyze/runnables/search.py
-"""Vector search utilities for the analyze pipeline."""
+"""Vector search utilities for the analyze pipeline.
+
+This module runs per-query vector retrieval, applies lexical gating, and
+deduplicates multi-query hits into one analysis-ready chunk list.
+"""
 
 from __future__ import annotations
 
@@ -134,18 +138,9 @@ class SearchRunnable(
         distance_prefers_lower = distance_metric in ("Cosine", "Euclid")
         threshold = self.score_threshold
         metadata_filter = build_metadata_filter(self.metadata_filters)
-        try:
-            collection = self.vector_store.collection_name
-            client = self.vector_store.client
-            if collection and client:
-                count = client.count(collection, exact=True).count
-                logger.info(
-                    "Vector search using collection=%s (points=%d)",
-                    collection,
-                    count,
-                )
-        except Exception:
-            logger.debug("Could not fetch Qdrant count before search")
+        collection = getattr(self.vector_store, "collection_name", None)
+        if isinstance(collection, str) and collection:
+            logger.info("Vector search using collection=%s", collection)
 
         results_by_query: SearchResultsByQuery = {}
 
@@ -730,8 +725,12 @@ class SearchRunnable(
     def _build_metadata_filters_payload(filters: MetadataFilters) -> JsonDict:
         """Build metadata filters payload."""
         payload: JsonDict = {}
-        for key, values in filters.items():
+        for key, raw_values in filters.items():
             cleaned: list[JsonValue] = []
+            if isinstance(raw_values, (str, bool, int)):
+                values = [raw_values]
+            else:
+                values = list(raw_values)
             for value in values:
                 if value != "":
                     cleaned.append(value)

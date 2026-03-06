@@ -4,7 +4,7 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Callable, Coroutine
+from collections.abc import Awaitable, Callable, Coroutine, Sequence
 from typing import Literal
 
 from sec_nlp.core.infra.logger import logger
@@ -76,7 +76,7 @@ class AsyncPipelineRunner:
     @staticmethod
     async def gather_with_semaphore[T](
         semaphore: asyncio.Semaphore,
-        coros: list[Coroutine[None, None, T]],
+        coros: Sequence[Awaitable[T]],
         *,
         return_exceptions: bool = True,
     ) -> list[T | BaseException]:
@@ -92,7 +92,7 @@ class AsyncPipelineRunner:
         """
 
         async def limited_coro(
-            index: int, coro: Coroutine[None, None, T]
+            index: int, coro: Awaitable[T]
         ) -> tuple[int, T | None, BaseException | None]:
             async with semaphore:
                 try:
@@ -107,7 +107,9 @@ class AsyncPipelineRunner:
             asyncio.create_task(limited_coro(index, coro))
             for index, coro in enumerate(coros)
         ]
-        ordered: list[T | BaseException | None] = [None] * len(coros)
+        ordered: dict[int, T | BaseException | None] = dict.fromkeys(
+            range(len(coros))
+        )
 
         try:
             for task in asyncio.as_completed(tasks):
@@ -126,12 +128,14 @@ class AsyncPipelineRunner:
         finally:
             await asyncio.gather(*tasks, return_exceptions=True)
 
-        return [
-            result
-            if result is not None
-            else RuntimeError("task did not complete")
-            for result in ordered
-        ]
+        results: list[T | BaseException] = []
+        for index in range(len(coros)):
+            value = ordered[index]
+            if value is None:
+                results.append(RuntimeError("task did not complete"))
+                continue
+            results.append(value)
+        return results
 
     @staticmethod
     def run_async_in_new_loop[T](coro: Coroutine[None, None, T]) -> T:

@@ -23,11 +23,7 @@ fn volume_spike_impl(values: &[f64]) -> CorrResult<Option<f64>> {
     Ok(Some(peak / avg))
 }
 
-fn average_true_range_impl(
-    high: &[f64],
-    low: &[f64],
-    close: &[f64],
-) -> CorrResult<f64> {
+fn average_true_range_impl(high: &[f64], low: &[f64], close: &[f64]) -> CorrResult<f64> {
     if high.len() != low.len() || high.len() != close.len() {
         return Err(CorrError::LengthMismatch {
             left: high.len(),
@@ -57,12 +53,7 @@ fn average_true_range_impl(
     Ok(total / high.len() as f64)
 }
 
-fn garman_klass_impl(
-    high: &[f64],
-    low: &[f64],
-    open: &[f64],
-    close: &[f64],
-) -> CorrResult<f64> {
+fn garman_klass_impl(high: &[f64], low: &[f64], open: &[f64], close: &[f64]) -> CorrResult<f64> {
     if high.len() != low.len() || high.len() != open.len() || high.len() != close.len() {
         return Err(CorrError::LengthMismatch {
             left: high.len(),
@@ -105,11 +96,7 @@ pub fn volume_spike(values: Vec<f64>) -> PyResult<Option<f64>> {
 }
 
 #[pyfunction]
-pub fn average_true_range(
-    high: Vec<f64>,
-    low: Vec<f64>,
-    close: Vec<f64>,
-) -> PyResult<f64> {
+pub fn average_true_range(high: Vec<f64>, low: Vec<f64>, close: Vec<f64>) -> PyResult<f64> {
     average_true_range_impl(&high, &low, &close).map_err(|err| err.to_py_err())
 }
 
@@ -120,8 +107,7 @@ pub fn garman_klass(
     open: Vec<f64>,
     close: Vec<f64>,
 ) -> PyResult<f64> {
-    garman_klass_impl(&high, &low, &open, &close)
-        .map_err(|err| err.to_py_err())
+    garman_klass_impl(&high, &low, &open, &close).map_err(|err| err.to_py_err())
 }
 
 #[cfg(test)]

@@ -212,9 +212,9 @@ class TestKeywordOptimization:
         )
 
         # Generate large element list
-        elements = [
-            Text(f"Text containing risk factor {i}") for i in range(1000)
-        ]
+        elements = _elements(
+            [f"Text containing risk factor {i}" for i in range(1000)]
+        )
 
         result = benchmark(
             loader._filter_elements_by_keywords,

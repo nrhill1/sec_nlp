@@ -33,7 +33,7 @@ pub struct Span {
 }
 
 #[derive(Debug, Clone, Serialize)]
-#[pyclass]
+#[pyclass(from_py_object)]
 pub struct Entity {
     #[pyo3(get)]
     pub entity_type: String,
@@ -97,7 +97,7 @@ impl Entity {
 }
 
 #[derive(Debug, Clone, Serialize)]
-#[pyclass]
+#[pyclass(from_py_object)]
 pub struct EventMention {
     #[pyo3(get)]
     pub event_type: String,

@@ -11,6 +11,7 @@ from sec_nlp.app.flows.runner import FlowRunner
 from sec_nlp.core.types import as_json_dict, coerce_result_json_dict
 from sec_nlp.pipelines.presets.retrieve import RetrieveSettings
 from sec_nlp.pipelines.presets.retrieve.models import RetrieveResult
+from sec_nlp.types import ResultDict
 
 
 def test_compile_stage_applies_email_default() -> None:
@@ -29,7 +30,7 @@ def test_compile_stage_applies_email_default() -> None:
 
 
 def test_coerce_result_json_dict_converts_paths() -> None:
-    metadata = {
+    metadata: ResultDict = {
         "output": Path("/tmp/result.json"),
         "nested": {"path": Path("/tmp/a.txt"), "count": 2},
         "items": [Path("/tmp/x"), "ok"],

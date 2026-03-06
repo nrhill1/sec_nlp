@@ -3,7 +3,7 @@ use pyo3::prelude::*;
 use crate::models::XbrlFact;
 use crate::parser;
 
-#[pyclass(name = "XbrlFact", frozen, module = "xbrl")]
+#[pyclass(from_py_object, name = "XbrlFact", frozen, module = "xbrl")]
 #[derive(Debug, Clone)]
 pub struct PyXbrlFact {
     #[pyo3(get)]
