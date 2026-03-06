@@ -246,12 +246,17 @@ class FilingRelationshipGraph(BaseModel):
         return results
 
     def get_amendments(self, accession: str) -> list[FilingIdentifier]:
-        """Get all amendments to a given filing."""
-        related = self.get_related(
-            accession,
-            relation_types=[FilingRelationType.amendment],
-        )
-        return [filing for filing, _ in related]
+        """Get all amendment filings that target a given filing accession."""
+        amendments: list[FilingIdentifier] = []
+        for relation in self.relations:
+            if relation.relation_type != FilingRelationType.amendment:
+                continue
+            if relation.target.accession_number != accession:
+                continue
+            amendment = self.filings.get(relation.source.accession_number)
+            if amendment is not None:
+                amendments.append(amendment)
+        return amendments
 
     def get_same_period_filings(self, accession: str) -> list[FilingIdentifier]:
         """Get all filings from the same period."""

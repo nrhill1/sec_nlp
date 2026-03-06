@@ -305,3 +305,35 @@ def test_build_related_filings_map(tmp_path: Path) -> None:
         and entry.get("accession_number") == tenk_acc
         for entry in related_entries
     )
+
+
+def test_get_amendments_returns_amending_filings(tmp_path: Path) -> None:
+    symbol = "ACME"
+    original_acc = "0000000000-24-000051"
+    amendment_acc = "0000000000-24-000052"
+
+    _create_filing(
+        tmp_path,
+        symbol=symbol,
+        form_dir="10-K",
+        accession=original_acc,
+        form_type="10-K",
+        filed_date=date(2024, 2, 1),
+        period_end=date(2023, 12, 31),
+    )
+    _create_filing(
+        tmp_path,
+        symbol=symbol,
+        form_dir="10-K",
+        accession=amendment_acc,
+        form_type="10-K/A",
+        filed_date=date(2024, 2, 20),
+        period_end=date(2023, 12, 31),
+    )
+
+    resolver = RelationshipResolver(downloads_folder=tmp_path)
+    graph = resolver.resolve_symbol(symbol)
+
+    amendments = graph.get_amendments(original_acc)
+
+    assert [filing.accession_number for filing in amendments] == [amendment_acc]
