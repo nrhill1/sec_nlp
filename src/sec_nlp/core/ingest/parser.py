@@ -376,14 +376,19 @@ class HtmlProcessor:
     def _should_fallback_to_plain_text(exc: BaseException) -> bool:
         """Return whether a parser failure should use local plain-text fallback."""
         message = str(exc).lower()
+        exception_name = exc.__class__.__name__.lower()
         fallback_markers = (
             "spacy",
             "en_core_web_sm",
             "failed to download",
             "can't find model",
             "cannot find model",
+            "socket.socket",
+            "socketblockederror",
         )
-        return any(marker in message for marker in fallback_markers)
+        return any(marker in message for marker in fallback_markers) or any(
+            marker in exception_name for marker in fallback_markers
+        )
 
     @staticmethod
     def _extract_text_segments(html: str) -> list[str]:

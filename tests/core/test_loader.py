@@ -409,6 +409,44 @@ class TestTransformHtml:
         assert len(docs) > 0
         assert all("warranty" in doc.page_content.lower() for doc in docs)
 
+    def test_transform_html_falls_back_when_socket_is_blocked(
+        self,
+        mock_filing_structure: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Test file parsing fallback when parser network access is blocked."""
+
+        def _raise_socket_blocked(
+            self: parser_module.UnstructuredHTMLLoader,
+        ) -> list[Document]:
+            _ = self
+            raise RuntimeError("A test tried to use socket.socket.")
+
+        monkeypatch.setattr(
+            parser_module.UnstructuredHTMLLoader,
+            "load",
+            _raise_socket_blocked,
+        )
+
+        loader = Loader(
+            email="test@example.com",
+            downloads_folder=mock_filing_structure,
+            fetch_mode="download",
+        )
+        html_path = (
+            mock_filing_structure
+            / "sec-edgar-filings"
+            / "AAPL"
+            / "10-K"
+            / "0001234567"
+            / "filing.html"
+        )
+
+        docs = loader.transform_html(html_path, keywords=["Apple"])
+
+        assert len(docs) > 0
+        assert all("apple" in doc.page_content.lower() for doc in docs)
+
 
 class TestLoaderRepr:
     """Test string representations."""
