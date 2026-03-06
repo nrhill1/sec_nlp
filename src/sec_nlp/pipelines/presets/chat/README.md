@@ -16,15 +16,16 @@ If `--question` is omitted and `--interactive` is enabled (default), it starts a
 2. Apply optional symbol/form/date filters and reranking (`score` or `mmr`).
 3. Build citations and optional external market/news context.
 4. Market context is derived once per request via `build_market_context(...)` and rendered using a profile (`compact` or `standard`).
-5. Generate answer with the configured LLM.
+5. Generate an analyst-style answer with the configured LLM. The prompt requires a bottom-line judgment, supporting evidence, counterpoints or limits, and a confidence call.
 6. Optionally autosave transcript outputs.
 
 ## Key Configuration
 
 - Env prefix: `SEC_NLP_CHAT_`
-- `collections` (default `retrieve`, `analyze`)
+- `collections` (default `retrieve_bge_m3`, `analyze`)
 - `top_k`, `max_context_chunks`, `rerank_mode`
 - `prefetch_retrieve` to auto-run retrieve indexing when collections are missing/sparse
+- `llm.model_name` defaults to `llama3.2:3b` for stronger evidence synthesis
 - `include_market_context`, `market_context_profile`, `include_news_context`
 - `strict_citations` and `transcript_autosave`
 

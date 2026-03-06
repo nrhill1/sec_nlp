@@ -12,9 +12,21 @@ from pydantic_settings import SettingsConfigDict
 from sec_nlp.core.edgar.filing_mode import FilingMode
 from sec_nlp.pipelines.base.config import BasePipelineSettings
 from sec_nlp.pipelines.llm.config import LLMConfig
+from sec_nlp.pipelines.presets.retrieve.defaults import (
+    DEFAULT_RETRIEVE_COLLECTION_NAME,
+    DEFAULT_RETRIEVE_EMBEDDING_MODEL,
+    DEFAULT_RETRIEVE_VECTOR_SIZE,
+)
 from sec_nlp.pipelines.vector.config import VectorConfig
 
 from .bridge import ChatRetrievedChunk, ChatSeedBundle
+
+type ChatCollectionList = list[str]
+
+_DEFAULT_CHAT_COLLECTIONS: ChatCollectionList = [
+    DEFAULT_RETRIEVE_COLLECTION_NAME,
+    "analyze",
+]
 
 
 class ChatHistoryTurn(BaseModel):
@@ -72,7 +84,7 @@ class ChatSettings(BasePipelineSettings):
         description="Enable interactive terminal chat when --question is omitted.",
     )
     collections: list[str] = Field(
-        default_factory=lambda: ["retrieve", "analyze"],
+        default_factory=lambda: list(_DEFAULT_CHAT_COLLECTIONS),
         description="Qdrant collections searched for context chunks.",
         json_schema_extra={
             "cli_args": {
@@ -260,18 +272,19 @@ class ChatSettings(BasePipelineSettings):
     )
     llm: LLMConfig = Field(
         default_factory=lambda: LLMConfig(
-            model_name="llama3.2:1b",
+            model_name="llama3.2:3b",
             require_json=False,
             temperature=0.1,
-            max_new_tokens=384,
+            max_new_tokens=512,
         ),
         description="LLM settings for response generation.",
     )
     vdb: VectorConfig = Field(
         default_factory=lambda: VectorConfig(
-            collection_name="retrieve",
+            collection_name=DEFAULT_RETRIEVE_COLLECTION_NAME,
+            embedding_model=DEFAULT_RETRIEVE_EMBEDDING_MODEL,
             search_type="similarity",
-            vector_size=1024,
+            vector_size=DEFAULT_RETRIEVE_VECTOR_SIZE,
         ),
         description="Vector store settings used for retrieval.",
     )
@@ -323,7 +336,7 @@ class ChatSettings(BasePipelineSettings):
     def _normalize_collections(cls, value: list[str] | str | None) -> list[str]:
         """Normalize collections."""
         if value is None:
-            return ["retrieve", "analyze"]
+            return list(_DEFAULT_CHAT_COLLECTIONS)
         if isinstance(value, str):
             value = [part for part in value.replace(",", " ").split() if part]
 
@@ -338,7 +351,7 @@ class ChatSettings(BasePipelineSettings):
                 continue
             seen.add(key)
             normalized.append(cleaned)
-        return normalized or ["retrieve", "analyze"]
+        return normalized or list(_DEFAULT_CHAT_COLLECTIONS)
 
     @field_validator("chat_history", mode="before")
     @classmethod

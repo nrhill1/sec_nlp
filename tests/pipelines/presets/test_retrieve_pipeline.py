@@ -16,6 +16,7 @@ from langchain_core.documents import Document
 from sec_nlp.core.edgar.efts_models import EFTSBatchResult, EFTSHit
 from sec_nlp.core.edgar.filing_mode import FilingMode
 from sec_nlp.pipelines.presets.retrieve import (
+    DEFAULT_RETRIEVE_COLLECTION_NAME,
     RetrieveChatSeedBundle,
     RetrievePipeline,
     RetrieveSettings,
@@ -959,7 +960,7 @@ def test_retrieve_pipeline_run_for_flow_returns_seed_bundle(
     assert bundle.symbols == ["ABC"]
     assert bundle.queries == ["supply chain"]
     assert len(bundle.chunks) == 1
-    assert bundle.chunks[0].collection == "retrieve"
+    assert bundle.chunks[0].collection == DEFAULT_RETRIEVE_COLLECTION_NAME
     assert bundle.chunks[0].snippet
 
 
@@ -1000,7 +1001,7 @@ def test_retrieve_pipeline_run_for_flow_with_chunks(
     assert isinstance(bundle, RetrieveChatSeedBundle)
     assert len(bundle.chunks) == 0
     assert len(chunks) == 1
-    assert chunks[0].collection == "retrieve"
+    assert chunks[0].collection == DEFAULT_RETRIEVE_COLLECTION_NAME
     assert chunks[0].snippet
 
 

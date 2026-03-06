@@ -11,7 +11,12 @@ from sec_nlp.pipelines.presets.financials import FinancialsSettings
 from sec_nlp.pipelines.presets.holdings import HoldingsSettings
 from sec_nlp.pipelines.presets.insider import InsiderSettings
 from sec_nlp.pipelines.presets.news import NewsSettings
-from sec_nlp.pipelines.presets.retrieve import RetrieveSettings
+from sec_nlp.pipelines.presets.retrieve import (
+    DEFAULT_RETRIEVE_COLLECTION_NAME,
+    DEFAULT_RETRIEVE_EMBEDDING_MODEL,
+    DEFAULT_RETRIEVE_VECTOR_SIZE,
+    RetrieveSettings,
+)
 from sec_nlp.pipelines.presets.warranty import WarrantyConfig
 
 
@@ -32,6 +37,11 @@ def test_chat_partial_llm_override_preserves_pipeline_defaults(
     assert config.llm.model_name == "ministral-3:3b"
     assert config.llm.require_json is False
     assert config.llm.temperature == 0.1
+    assert config.llm.max_new_tokens == 512
+    assert config.collections == [DEFAULT_RETRIEVE_COLLECTION_NAME, "analyze"]
+    assert config.vdb.collection_name == DEFAULT_RETRIEVE_COLLECTION_NAME
+    assert config.vdb.embedding_model == DEFAULT_RETRIEVE_EMBEDDING_MODEL
+    assert config.vdb.vector_size == DEFAULT_RETRIEVE_VECTOR_SIZE
 
 
 def test_retrieve_partial_vdb_override_preserves_pipeline_defaults(
@@ -48,9 +58,10 @@ def test_retrieve_partial_vdb_override_preserves_pipeline_defaults(
         }
     )
 
-    assert config.vdb.collection_name == "retrieve"
+    assert config.vdb.collection_name == DEFAULT_RETRIEVE_COLLECTION_NAME
+    assert config.vdb.embedding_model == DEFAULT_RETRIEVE_EMBEDDING_MODEL
     assert config.vdb.search_type == "similarity"
-    assert config.vdb.vector_size == 1024
+    assert config.vdb.vector_size == DEFAULT_RETRIEVE_VECTOR_SIZE
     assert config.vdb.qdrant_location == ".qdrant/rems"
 
 

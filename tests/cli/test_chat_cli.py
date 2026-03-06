@@ -13,6 +13,10 @@ import pytest
 
 from sec_nlp.cli.commands.chat import Chat
 from sec_nlp.pipelines.presets.chat import ChatResult, ChatSettings
+from sec_nlp.pipelines.presets.retrieve import (
+    DEFAULT_RETRIEVE_COLLECTION_NAME,
+    DEFAULT_RETRIEVE_EMBEDDING_MODEL,
+)
 
 
 def test_chat_inherits_from_chat_settings() -> None:
@@ -40,6 +44,28 @@ def test_chat_basic_configuration(tmp_path: Path) -> None:
     assert cmd.question == "What changed in liquidity?"
     assert cmd.collections == ["retrieve", "analyze"]
     assert cmd.top_k == 12
+
+
+def test_chat_defaults_target_versioned_retrieve_collection(
+    tmp_path: Path,
+) -> None:
+    dl_path = tmp_path / "downloads"
+    out_path = tmp_path / "outputs"
+    dl_path.mkdir()
+    out_path.mkdir()
+
+    cmd = Chat(
+        email="test@example.com",
+        dl_path=dl_path,
+        out_path=out_path,
+        question="What changed in liquidity?",
+    )
+
+    assert cmd.collections == [DEFAULT_RETRIEVE_COLLECTION_NAME, "analyze"]
+    assert cmd.vdb.collection_name == DEFAULT_RETRIEVE_COLLECTION_NAME
+    assert cmd.vdb.embedding_model == DEFAULT_RETRIEVE_EMBEDDING_MODEL
+    assert cmd.llm.model_name == "llama3.2:3b"
+    assert cmd.llm.max_new_tokens == 512
 
 
 @patch("sec_nlp.cli.command.BasePipelineCommand._run_pipeline")

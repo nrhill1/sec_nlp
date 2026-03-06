@@ -14,6 +14,7 @@ from sec_nlp.core.infra.logger import logger
 from sec_nlp.types import JsonValue
 
 from ..config import RetrieveSettings
+from ..defaults import DEFAULT_RETRIEVE_COLLECTION_NAME
 from ..models import RetrievalHit
 from .embed import embed_texts_with_cache
 
@@ -23,7 +24,7 @@ def _resolve_collection_name(settings: RetrieveSettings) -> str:
     configured = settings.vdb.collection_name
     if isinstance(configured, str) and configured.strip():
         return configured.strip()
-    return "retrieve"
+    return DEFAULT_RETRIEVE_COLLECTION_NAME
 
 
 def _point_id(symbol: str, hit: RetrievalHit) -> str:

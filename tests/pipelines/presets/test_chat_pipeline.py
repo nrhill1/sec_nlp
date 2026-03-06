@@ -931,6 +931,12 @@ def test_build_prompt_adds_ticker_disambiguation_rules(tmp_path: Path) -> None:
     assert "Ticker scope:\nAEM, AREC" in prompt
     assert "Symbols with retrieved filing evidence:\nAEM, AREC" in prompt
     assert "Symbols without retrieved filing evidence:\n(none)" in prompt
+    assert "Your job is to answer like an analyst, not a summarizer." in prompt
+    assert "Bottom line: 1-2 sentences" in prompt
+    assert "Why: 2-4 bullets" in prompt
+    assert "Counterpoints or limits:" in prompt
+    assert "Confidence: One line with High, Medium, or Low" in prompt
+    assert "Do not just list facts." in prompt
 
 
 def test_symbol_coverage_metadata_tracks_missing_symbols(
@@ -1108,10 +1114,10 @@ def test_effective_max_new_tokens_respects_cap(tmp_path: Path) -> None:
     )
     pipeline = ChatPipeline(config=config)
 
-    assert pipeline._effective_max_new_tokens(1) == 128
+    assert pipeline._effective_max_new_tokens(1) == 208
     assert pipeline._effective_max_new_tokens(8) == 256
     assert pipeline._effective_max_new_tokens(20) == 256
-    assert pipeline._effective_context_token_budget(1) == 512
+    assert pipeline._effective_context_token_budget(1) == 832
     assert pipeline._effective_context_token_budget(8) == 1024
 
 

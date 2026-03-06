@@ -46,6 +46,7 @@ from sec_nlp.types import JsonValue, ResultDict
 from ..chat.bridge import ChatRetrievedChunk
 from .bridge import RetrieveChatSeedBundle, RetrieveChatSeedChunk
 from .config import RetrieveSettings
+from .defaults import DEFAULT_RETRIEVE_COLLECTION_NAME
 from .io import (
     RankedResultsPayload,
     write_ranked_results_csv,
@@ -610,7 +611,9 @@ class RetrievePipeline(BasePipeline):
         Empty snippets are dropped here so both seed and chat chunk builders
         operate on identical, citation-eligible source values.
         """
-        collection_name = self.config.vdb.collection_name or "retrieve"
+        collection_name = (
+            self.config.vdb.collection_name or DEFAULT_RETRIEVE_COLLECTION_NAME
+        )
         chunks: list[_FlowChunkValues] = []
         for hit in hits:
             snippet = (hit.snippet or "").strip()

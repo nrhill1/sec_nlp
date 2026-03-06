@@ -53,6 +53,7 @@ from sec_nlp.pipelines.output_io import build_run_output_context
 from sec_nlp.types import JsonValue, ResultDict
 
 from ..retrieve import RetrievePipeline, RetrieveSettings
+from ..retrieve.defaults import DEFAULT_RETRIEVE_COLLECTION_NAME
 from .bridge import ChatRetrievedChunk, ChatSeedBundle
 from .config import ChatSettings
 from .io import (
@@ -617,7 +618,10 @@ class ChatPipeline(BasePipeline):
                     else None
                 )
                 chunk = _RetrievedChunk(
-                    collection=item.collection.strip() or "retrieve",
+                    collection=(
+                        item.collection.strip()
+                        or DEFAULT_RETRIEVE_COLLECTION_NAME
+                    ),
                     score=float(item.score),
                     symbol=symbol,
                     accession_number=item.accession_number,
@@ -1628,8 +1632,8 @@ class ChatPipeline(BasePipeline):
             1,
             min(citation_count, self.config.max_context_chunks),
         )
-        adaptive_target = 96 + (32 * context_chunks)
-        return max(96, min(configured, cap, adaptive_target))
+        adaptive_target = 160 + (48 * context_chunks)
+        return max(160, min(configured, cap, adaptive_target))
 
     def _effective_context_token_budget(self, citation_count: int) -> int:
         """Resolve the effective context token budget for the current run."""
@@ -1734,7 +1738,9 @@ class ChatPipeline(BasePipeline):
         return (
             "You are a financial filings assistant.\n"
             "Use only the provided context.\n"
-            "If context is insufficient, say so directly.\n"
+            "Your job is to answer like an analyst, not a summarizer.\n"
+            "Make a concrete judgment that directly answers the question based on the strongest cited evidence.\n"
+            "If the evidence is mixed, weak, or insufficient, say that explicitly.\n"
             "Treat each ticker symbol as a distinct issuer.\n"
             "Never claim two different tickers are the same entity unless a cited chunk explicitly states a ticker change, rename, or merger.\n"
             "Every factual claim must include citation IDs in [C#] form.\n\n"
@@ -1749,7 +1755,12 @@ class ChatPipeline(BasePipeline):
             f"{external_block}\n\n"
             "Use supplemental context only for macro framing. "
             "Company-specific factual claims must still cite filing chunks.\n\n"
-            "Answer succinctly with grounded evidence and citations."
+            "Write the answer using this exact structure:\n"
+            "Bottom line: 1-2 sentences that directly answer the question, state the judgment, and cite the strongest evidence.\n"
+            "Why: 2-4 bullets that weigh the most relevant supporting evidence. Each bullet must cite at least one [C#].\n"
+            "Counterpoints or limits: 1-2 bullets covering contradictory evidence, missing evidence, or scope limits. If none, say 'No material counterpoints in the retrieved filings.' with citations when possible.\n"
+            "Confidence: One line with High, Medium, or Low plus a short reason tied to evidence quality, recency, specificity, or gaps.\n\n"
+            "Do not just list facts. Explain what the evidence means and which evidence matters most."
         )
 
     @staticmethod

@@ -15,6 +15,12 @@ from sec_nlp.pipelines.base.config import BasePipelineSettings
 from sec_nlp.pipelines.vector.config import VectorConfig
 from sec_nlp.types import ConfigValue
 
+from .defaults import (
+    DEFAULT_RETRIEVE_COLLECTION_NAME,
+    DEFAULT_RETRIEVE_EMBEDDING_MODEL,
+    DEFAULT_RETRIEVE_VECTOR_SIZE,
+)
+
 
 class RetrieveSettings(BasePipelineSettings):
     """Configuration for EFTS-first retrieval pipeline."""
@@ -166,9 +172,10 @@ class RetrieveSettings(BasePipelineSettings):
     )
     vdb: VectorConfig = Field(
         default_factory=lambda: VectorConfig(
-            collection_name="retrieve",
+            collection_name=DEFAULT_RETRIEVE_COLLECTION_NAME,
+            embedding_model=DEFAULT_RETRIEVE_EMBEDDING_MODEL,
             search_type="similarity",
-            vector_size=1024,
+            vector_size=DEFAULT_RETRIEVE_VECTOR_SIZE,
         ),
         description="Vector store configuration used for optional rerank/index.",
     )

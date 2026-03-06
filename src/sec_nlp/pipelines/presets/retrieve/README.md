@@ -40,7 +40,8 @@ You must provide at least one query.
 - `sections` (enables section-targeted chunk extraction)
 - `download_missing`, `max_chunks_per_accession`, `hydrate_missing_snippets`
 - `rerank_with_embeddings`, `embedding_weight`
-- `index_results` (persist snippets to Qdrant)
+- `index_results` (persist snippets to Qdrant; default collection `retrieve_bge_m3`)
+- default retrieve embedding model: `bge-m3`
 - `output_format` (default `json`)
 
 ## Shared Semantic Chunking
