@@ -100,7 +100,7 @@ types:
 	@echo ""
 	@cd $(REPO_ROOT) && \
 		set -o pipefail; \
-		uvx ty check src tests --output-format github --no-progress --color=never 2>&1 | \
+		uv run ty check src tests --output-format github --no-progress --color=never 2>&1 | \
 		{ grep -E '^::(error|warning|notice|info)' || true; } | \
 		uv run python $(PY_SCRIPTS_DIR)/format_ty_output.py
 
