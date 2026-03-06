@@ -143,7 +143,7 @@ def test_chat_pipeline_multi_symbol_outputs_use_multi_directory(
 
     assert result.success is True
     json_path = next(path for path in result.outputs if path.suffix == ".json")
-    assert "/chat/(multi)/" in str(json_path)
+    assert "/chat/(MULTI)/" in str(json_path)
     payload = json.loads(json_path.read_text())
     assert payload["symbol"] == "(multi)"
     assert payload["metadata"]["output_scope_symbol"] == "(multi)"
