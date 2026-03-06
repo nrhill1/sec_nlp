@@ -6,6 +6,7 @@ from __future__ import annotations
 import asyncio
 import re
 from collections.abc import Sequence
+from html.parser import HTMLParser
 from pathlib import Path
 
 from langchain_community.document_loaders import UnstructuredHTMLLoader
@@ -29,6 +30,51 @@ from sec_nlp.core.text.semantic_chunking import (
 )
 from sec_nlp.core.text.semantic_settings import SemanticChunkingSettings
 from sec_nlp.types import JsonDict
+
+
+class _HTMLTextExtractor(HTMLParser):
+    """Collect visible text segments from HTML for offline fallback parsing.
+
+    This extractor intentionally keeps the behavior simple and dependency-free
+    so loader code can still operate when `unstructured` cannot initialize its
+    NLP stack in offline or sandboxed environments.
+
+    Attributes:
+        _segments: Visible text snippets collected from the HTML input.
+        _skip_depth: Nesting depth for tags whose contents should be ignored.
+    """
+
+    def __init__(self) -> None:
+        """Initialize the extractor with empty state."""
+        super().__init__(convert_charrefs=True)
+        self._segments: list[str] = []
+        self._skip_depth = 0
+
+    def handle_starttag(
+        self, tag: str, attrs: Sequence[tuple[str, str | None]]
+    ) -> None:
+        """Track tags whose text content should be skipped."""
+        _ = attrs
+        if tag.lower() in {"script", "style"}:
+            self._skip_depth += 1
+
+    def handle_endtag(self, tag: str) -> None:
+        """Stop skipping text after closing ignored tags."""
+        if tag.lower() in {"script", "style"} and self._skip_depth > 0:
+            self._skip_depth -= 1
+
+    def handle_data(self, data: str) -> None:
+        """Collect normalized text from visible HTML nodes."""
+        if self._skip_depth > 0:
+            return
+        normalized = " ".join(data.split())
+        if normalized:
+            self._segments.append(normalized)
+
+    @property
+    def segments(self) -> list[str]:
+        """Return the collected visible text segments."""
+        return list(self._segments)
 
 
 class HtmlProcessor:
@@ -326,6 +372,77 @@ class HtmlProcessor:
 
         return filtered
 
+    @staticmethod
+    def _should_fallback_to_plain_text(exc: BaseException) -> bool:
+        """Return whether a parser failure should use local plain-text fallback."""
+        message = str(exc).lower()
+        fallback_markers = (
+            "spacy",
+            "en_core_web_sm",
+            "failed to download",
+            "can't find model",
+            "cannot find model",
+        )
+        return any(marker in message for marker in fallback_markers)
+
+    @staticmethod
+    def _extract_text_segments(html: str) -> list[str]:
+        """Extract visible text segments from raw HTML with stdlib parsing."""
+        extractor = _HTMLTextExtractor()
+        extractor.feed(html)
+        extractor.close()
+        return extractor.segments
+
+    def _filter_text_segments_by_keywords(
+        self,
+        segments: list[str],
+        keywords: list[str],
+    ) -> list[str]:
+        """Filter plain-text segments by keyword relevance."""
+        if not keywords:
+            return segments
+        specs = [
+            KeywordSpec(pattern=kw, priority=1, weight=1.0) for kw in keywords
+        ]
+
+        filtered: list[str] = []
+        for segment in segments:
+            score = KeywordMatcher.score_keywords(
+                segment,
+                specs,
+                case_insensitive=True,
+            )
+            if (
+                self.keyword_mode == "any"
+                and score.hits
+                or self.keyword_mode == "all"
+                and len(score.hits) == len(specs)
+            ):
+                filtered.append(segment)
+
+        return filtered
+
+    def _fallback_transform_html(
+        self,
+        html: str,
+        *,
+        metadata: JsonDict,
+        keywords: list[str] | None,
+        section_filter: SectionFilter | None,
+    ) -> list[Document]:
+        """Transform HTML using dependency-free plain-text extraction."""
+        text_segments = self._extract_text_segments(html)
+        if keywords:
+            text_segments = self._filter_text_segments_by_keywords(
+                text_segments,
+                keywords,
+            )
+            if not text_segments:
+                return []
+
+        text_content = " ".join(text_segments)
+        return self._chunk_text(text_content, metadata, section_filter)
+
     def transform_html(
         self,
         html_path: Path,
@@ -337,7 +454,25 @@ class HtmlProcessor:
         loader = UnstructuredHTMLLoader(
             file_path=str(html_path), mode="elements"
         )
-        docs = loader.load()
+        try:
+            docs = loader.load()
+        except RuntimeError as exc:
+            if not self._should_fallback_to_plain_text(exc):
+                raise
+            logger.warning(
+                "HTML parsing fell back to plain-text extraction for %s: %s",
+                html_path.name,
+                exc,
+            )
+            return self._fallback_transform_html(
+                html_path.read_text(encoding="utf-8", errors="ignore"),
+                metadata={
+                    "source": str(html_path),
+                    "file_path": str(html_path),
+                },
+                keywords=keywords,
+                section_filter=section_filter,
+            )
 
         if keywords:
             docs = self._filter_documents_by_keywords(docs, keywords)
@@ -364,7 +499,21 @@ class HtmlProcessor:
         keywords: list[str] | None = None,
         section_filter: SectionFilter | None = None,
     ) -> Sequence[Document]:
-        elements = partition_html(text=html)
+        try:
+            elements = partition_html(text=html)
+        except RuntimeError as exc:
+            if not self._should_fallback_to_plain_text(exc):
+                raise
+            logger.warning(
+                "HTML string parsing fell back to plain-text extraction: %s",
+                exc,
+            )
+            return self._fallback_transform_html(
+                html,
+                metadata=dict(metadata) if metadata else {},
+                keywords=keywords,
+                section_filter=section_filter,
+            )
 
         if keywords:
             elements = self._filter_elements_by_keywords(elements, keywords)

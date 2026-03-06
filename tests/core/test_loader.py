@@ -7,6 +7,7 @@ import pytest
 from langchain_core.documents import Document
 
 from sec_nlp.core.edgar.filing_mode import FilingMode
+from sec_nlp.core.ingest import parser as parser_module
 from sec_nlp.core.ingest.loader import Loader, LoaderRunMetadata
 
 
@@ -331,6 +332,82 @@ class TestTransformHtml:
         docs = loader.transform_html_string(html, keywords=["nonexistent"])
 
         assert len(docs) == 0
+
+    def test_transform_html_falls_back_when_spacy_download_fails(
+        self,
+        mock_filing_structure: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Test file parsing fallback when unstructured cannot fetch spaCy."""
+
+        def _raise_spacy_download_error(
+            self: parser_module.UnstructuredHTMLLoader,
+        ) -> list[Document]:
+            _ = self
+            raise RuntimeError(
+                "Failed to download spaCy model from https://github.com/explosion/..."
+            )
+
+        monkeypatch.setattr(
+            parser_module.UnstructuredHTMLLoader,
+            "load",
+            _raise_spacy_download_error,
+        )
+
+        loader = Loader(
+            email="test@example.com",
+            downloads_folder=mock_filing_structure,
+            fetch_mode="download",
+        )
+        html_path = (
+            mock_filing_structure
+            / "sec-edgar-filings"
+            / "AAPL"
+            / "10-K"
+            / "0001234567"
+            / "filing.html"
+        )
+
+        docs = loader.transform_html(html_path, keywords=["Apple"])
+
+        assert len(docs) > 0
+        assert all("apple" in doc.page_content.lower() for doc in docs)
+        assert all(doc.metadata.get("source") == str(html_path) for doc in docs)
+
+    def test_transform_html_string_falls_back_when_spacy_download_fails(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Test string parsing fallback when partition_html cannot fetch spaCy."""
+
+        def _raise_spacy_download_error(*args, **kwargs) -> None:
+            _ = args
+            _ = kwargs
+            raise RuntimeError(
+                "Failed to download spaCy model from https://github.com/explosion/..."
+            )
+
+        monkeypatch.setattr(
+            parser_module,
+            "partition_html",
+            _raise_spacy_download_error,
+        )
+
+        loader = Loader(email="test@example.com")
+        html = """
+        <html>
+            <body>
+                <p>Product warranty information</p>
+                <p>Company overview</p>
+                <p>Warranty coverage details</p>
+            </body>
+        </html>
+        """
+
+        docs = loader.transform_html_string(html, keywords=["warranty"])
+
+        assert len(docs) > 0
+        assert all("warranty" in doc.page_content.lower() for doc in docs)
 
 
 class TestLoaderRepr:
