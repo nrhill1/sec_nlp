@@ -197,6 +197,60 @@ def test_chat_cli_integration_without_symbol(
 
 
 @patch("sec_nlp.cli.command.BasePipelineCommand._run_pipeline", autospec=True)
+def test_chat_cli_integration_without_symbol_accepts_explicit_false_booleans(
+    mock_run_pipeline: Mock, tmp_path: Path
+) -> None:
+    from pydantic_settings import CliApp
+
+    from sec_nlp.cli.__main__ import _normalize_cli_args
+    from sec_nlp.cli.commands import Root
+
+    dl_path = tmp_path / "downloads"
+    out_path = tmp_path / "outputs"
+    dl_path.mkdir()
+    out_path.mkdir()
+
+    argv = [
+        "chat",
+        "--email",
+        "test@example.com",
+        "--dl-path",
+        str(dl_path),
+        "--out-path",
+        str(out_path),
+        "--question",
+        "What common themes emerge across the indexed filings?",
+        "--collections",
+        "retrieve_qwen3_embed_4b_targeted",
+        "--include-market-context",
+        "false",
+        "--include-news-context",
+        "false",
+        "--interactive",
+        "false",
+        "--strict-citations",
+        "false",
+        "--prefetch-retrieve",
+        "false",
+        "--llm.require-json",
+        "false",
+    ]
+    sys.argv = ["cli", *_normalize_cli_args(argv)]
+
+    CliApp.run(Root)
+    assert mock_run_pipeline.called
+    config = mock_run_pipeline.call_args[0][0]
+    assert config.symbols == []
+    assert config.collections == ["retrieve_qwen3_embed_4b_targeted"]
+    assert config.include_market_context is False
+    assert config.include_news_context is False
+    assert config.interactive is False
+    assert config.strict_citations is False
+    assert config.prefetch_retrieve is False
+    assert config.llm.require_json is False
+
+
+@patch("sec_nlp.cli.command.BasePipelineCommand._run_pipeline", autospec=True)
 def test_chat_cli_llm_override_preserves_pipeline_defaults(
     mock_run_pipeline: Mock, tmp_path: Path
 ) -> None:

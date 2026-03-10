@@ -261,11 +261,31 @@ class BasePipelineSettings(BaseSettings, ABC):
 
     @field_validator("symbols", mode="before")
     @classmethod
-    def normalize_symbols(cls, v: list[str] | str) -> list[str]:
+    def normalize_symbols(
+        cls,
+        v: list[str | int | float | bool | None]
+        | str
+        | int
+        | float
+        | bool
+        | None,
+    ) -> list[str]:
         """Split comma/space-separated input and uppercase each ticker symbol."""
+        if v is None or isinstance(v, bool):
+            return []
         if isinstance(v, str):
-            v = [part for part in v.replace(",", " ").split() if part]
-        return [s.strip().upper() for s in v]
+            raw_symbols = [part for part in v.replace(",", " ").split() if part]
+        elif isinstance(v, (int, float)):
+            raw_symbols = [str(v)]
+        else:
+            raw_symbols = []
+            for raw_symbol in v:
+                if raw_symbol is None or isinstance(raw_symbol, bool):
+                    continue
+                cleaned = str(raw_symbol).strip()
+                if cleaned:
+                    raw_symbols.append(cleaned)
+        return [symbol.strip().upper() for symbol in raw_symbols]
 
     @field_validator("forms", mode="before")
     @classmethod
