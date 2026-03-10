@@ -193,15 +193,41 @@ def _build_section_filter(settings: RetrieveSettings):
     return create_item_filter(settings.sections)
 
 
+def _hydration_keywords(
+    *,
+    hits: list[RetrievalHit],
+    remove_stopwords: bool,
+) -> list[str] | None:
+    """Build query-derived keywords for pre-chunk hydration filtering."""
+    ordered_terms: list[str] = []
+    seen: set[str] = set()
+    stopwords = DEFAULT_QUERY_STOPWORDS if remove_stopwords else None
+    for hit in hits:
+        for term in sorted(extract_query_terms(hit.query, stopwords=stopwords)):
+            if term in seen:
+                continue
+            seen.add(term)
+            ordered_terms.append(term)
+    if not ordered_terms:
+        return None
+    return ordered_terms
+
+
 def _load_chunk_candidates(
     *,
     html_path: Path,
     loader: Loader,
     settings: RetrieveSettings,
+    hits: list[RetrievalHit],
 ) -> list[_ChunkCandidate]:
     """Load chunk candidates."""
+    keywords = _hydration_keywords(
+        hits=hits,
+        remove_stopwords=settings.stopword_aware_lexical,
+    )
     docs = loader.transform_html(
         html_path,
+        keywords=keywords,
         section_filter=_build_section_filter(settings),
     )
     candidates: list[_ChunkCandidate] = []
@@ -405,10 +431,14 @@ def download_and_chunk_hits(
     chunk_candidates: dict[str, list[_ChunkCandidate]] = {}
     for accession, path in html_paths.items():
         try:
+            accession_hits = [
+                hit for hit in hits if hit.accession_number == accession
+            ]
             candidates = _load_chunk_candidates(
                 html_path=path,
                 loader=loader,
                 settings=settings,
+                hits=accession_hits,
             )
             if candidates:
                 chunk_candidates[accession] = candidates

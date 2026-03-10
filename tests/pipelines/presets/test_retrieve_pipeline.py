@@ -1278,6 +1278,167 @@ def test_download_and_chunk_hits_enriches_snippet_and_chunk_metadata(
     assert captured_section_filter["seen"] is True
 
 
+def test_download_and_chunk_hits_filters_before_chunking_with_query_terms(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    settings = RetrieveSettings(
+        email="test@example.com",
+        symbols=["ABC"],
+        queries=["debt maturity"],
+        dl_path=tmp_path / "downloads",
+        out_path=tmp_path / "outputs",
+        download_missing=False,
+        hydrate_missing_snippets=True,
+    )
+    html_path = (
+        settings.dl_path
+        / "sec-edgar-filings"
+        / "ABC"
+        / "10-K"
+        / "0000123456-26-000111"
+        / "doc.html"
+    )
+    html_path.parent.mkdir(parents=True, exist_ok=True)
+    html_path.write_text("<html><body>placeholder</body></html>")
+
+    hit = RetrievalHit(
+        symbol="ABC",
+        query="debt maturity",
+        accession_number="0000123456-26-000111",
+        form_type="10-K",
+        filed_date="2026-02-12",
+        company_name="ABC Corp",
+        cik="0000123456",
+        score=0.82,
+        edgar_url="https://example.com",
+        snippet=None,
+    )
+
+    monkeypatch.setattr(
+        "sec_nlp.pipelines.presets.retrieve.steps.download_chunk._find_html_for_accession",
+        lambda **kwargs: html_path,
+    )
+
+    captured_keywords: list[str] | None = None
+
+    def _fake_transform_html(
+        self,
+        html_path: Path,
+        *,
+        keywords=None,
+        section_filter=None,
+        **kwargs,
+    ) -> list[Document]:
+        nonlocal captured_keywords
+        _ = html_path
+        _ = section_filter
+        _ = kwargs
+        if isinstance(keywords, list):
+            captured_keywords = list(keywords)
+        return [
+            Document(
+                page_content="Debt maturity schedule and note disclosure.",
+                metadata={"section_number": "7", "chunk_index": 0},
+            )
+        ]
+
+    monkeypatch.setattr(
+        "sec_nlp.pipelines.presets.retrieve.steps.download_chunk.Loader.transform_html",
+        _fake_transform_html,
+    )
+
+    enriched = download_and_chunk_hits(
+        symbol="ABC",
+        hits=[hit],
+        settings=settings,
+    )
+
+    assert captured_keywords == ["debt", "maturity"]
+    assert enriched[0].snippet is not None
+
+
+def test_download_and_chunk_hits_uses_stopword_aware_keywords_for_prefilter(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    settings = RetrieveSettings(
+        email="test@example.com",
+        symbols=["ABC"],
+        queries=["neodymium"],
+        dl_path=tmp_path / "downloads",
+        out_path=tmp_path / "outputs",
+        download_missing=False,
+        hydrate_missing_snippets=True,
+        stopword_aware_lexical=True,
+    )
+    html_path = (
+        settings.dl_path
+        / "sec-edgar-filings"
+        / "ABC"
+        / "10-K"
+        / "0000123456-26-000112"
+        / "doc.html"
+    )
+    html_path.parent.mkdir(parents=True, exist_ok=True)
+    html_path.write_text("<html><body>placeholder</body></html>")
+
+    hit = RetrievalHit(
+        symbol="ABC",
+        query="the and of neodymium",
+        accession_number="0000123456-26-000112",
+        form_type="10-K",
+        filed_date="2026-02-12",
+        company_name="ABC Corp",
+        cik="0000123456",
+        score=0.82,
+        edgar_url="https://example.com",
+        snippet=None,
+    )
+
+    monkeypatch.setattr(
+        "sec_nlp.pipelines.presets.retrieve.steps.download_chunk._find_html_for_accession",
+        lambda **kwargs: html_path,
+    )
+
+    captured_keywords: list[str] | None = None
+
+    def _fake_transform_html(
+        self,
+        html_path: Path,
+        *,
+        keywords=None,
+        section_filter=None,
+        **kwargs,
+    ) -> list[Document]:
+        nonlocal captured_keywords
+        _ = html_path
+        _ = section_filter
+        _ = kwargs
+        if isinstance(keywords, list):
+            captured_keywords = list(keywords)
+        return [
+            Document(
+                page_content="Neodymium supply agreement and throughput updates.",
+                metadata={"section_number": "1A", "chunk_index": 0},
+            )
+        ]
+
+    monkeypatch.setattr(
+        "sec_nlp.pipelines.presets.retrieve.steps.download_chunk.Loader.transform_html",
+        _fake_transform_html,
+    )
+
+    enriched = download_and_chunk_hits(
+        symbol="ABC",
+        hits=[hit],
+        settings=settings,
+    )
+
+    assert captured_keywords == ["neodymium"]
+    assert enriched[0].snippet is not None
+
+
 def test_download_and_chunk_hits_preserves_efts_snippet_when_no_html(
     tmp_path: Path,
     monkeypatch,

@@ -23,6 +23,7 @@ You must provide at least one query.
 
 - Primary source: EFTS snippet text from candidate hits.
 - Hydration source: chunk extracted from filing HTML via `Loader.transform_html(...)`.
+- During hydration, retrieve now pushes query-term keyword filtering into the loader before chunking so parser-level filtering happens before semantic chunking when semantic chunking is enabled.
 - Default behavior: hydration does **not** run for generic retrieval (`sections=[]` and `hydrate_missing_snippets=false`).
 - Hydration runs when:
   - `sections` is set (section-targeted extraction), or
