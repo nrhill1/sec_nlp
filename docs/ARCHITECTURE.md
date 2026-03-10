@@ -53,7 +53,7 @@ References:
 ## Analyze Flow
 
 1. Load filings (optionally with EFTS expansion).
-2. Chunk/filter/dedupe content (semantic mode uses LangChain Experimental `SemanticChunker`).
+2. Chunk/filter/dedupe content (semantic mode uses LangChain Experimental `SemanticChunker` plus local sentence/token caps).
 3. Optional vector indexing/search retrieval.
 4. LLM analysis for retrieved chunks.
 5. Aggregate, enrich (market correlation optional), and export.

@@ -27,6 +27,7 @@ type ChunkMetadata = dict[str, JsonValue]
 type CreateDocumentsFn = Callable[
     [list[str], list[ChunkMetadata] | None], list[Document]
 ]
+_TOKEN_PATTERN = re.compile(r"\w+|[^\w\s]")
 
 
 @dataclass(frozen=True)
@@ -68,6 +69,9 @@ class SemanticChunkerConfig:
     add_start_index: bool = False
     """When true, include start offsets in splitter metadata."""
 
+    max_chunk_tokens: int | None = 384
+    """Optional approximate maximum tokens per chunk after post-processing."""
+
     embedding_batch_size: int = 32
     """Unused compatibility field retained for stable config shape."""
 
@@ -87,6 +91,7 @@ class SemanticChunkerConfig:
             sentence_split_regex=settings.sentence_split_regex,
             min_chunk_size=settings.min_chunk_size,
             add_start_index=settings.add_start_index,
+            max_chunk_tokens=settings.max_chunk_tokens,
         )
 
 
@@ -102,6 +107,14 @@ def _tokenize_sentences(text: str, sentence_split_regex: str) -> list[str]:
     if regex_sentences:
         return regex_sentences
     return _fallback_sent_tokenize(text)
+
+
+def _estimate_token_count(text: str) -> int:
+    """Return a tokenizer-free approximate token count for one chunk."""
+    stripped = text.strip()
+    if not stripped:
+        return 0
+    return len(_TOKEN_PATTERN.findall(stripped))
 
 
 def _load_experimental_chunker() -> type:
@@ -238,25 +251,57 @@ class SemanticChunker:
 
         max_sentences = max(1, self._config.max_chunk_sentences)
         min_sentences = max(1, self._config.min_chunk_sentences)
+        max_tokens = self._config.max_chunk_tokens
 
         split_groups: list[list[str]] = []
         for group in groups:
-            start_idx = 0
-            while start_idx < len(group):
-                end_idx = min(start_idx + max_sentences, len(group))
-                split_groups.append(group[start_idx:end_idx])
-                start_idx = end_idx
+            current_group: list[str] = []
+            current_tokens = 0
+            for sentence in group:
+                sentence_tokens = _estimate_token_count(sentence)
+                reached_sentence_limit = len(current_group) >= max_sentences
+                reached_token_limit = (
+                    max_tokens is not None
+                    and current_group
+                    and current_tokens + sentence_tokens > max_tokens
+                )
+                if reached_sentence_limit or reached_token_limit:
+                    split_groups.append(current_group)
+                    current_group = [sentence]
+                    current_tokens = sentence_tokens
+                    continue
+                current_group.append(sentence)
+                current_tokens += sentence_tokens
+            if current_group:
+                split_groups.append(current_group)
 
         merged_groups: list[list[str]] = []
         for group in split_groups:
-            if merged_groups and len(group) < min_sentences:
+            if (
+                merged_groups
+                and len(group) < min_sentences
+                and (len(merged_groups[-1]) + len(group) <= max_sentences)
+            ):
+                merged_tokens = _estimate_token_count(
+                    " ".join(merged_groups[-1])
+                ) + _estimate_token_count(" ".join(group))
+                if max_tokens is not None and merged_tokens > max_tokens:
+                    merged_groups.append(list(group))
+                    continue
                 merged_groups[-1].extend(group)
                 continue
             merged_groups.append(list(group))
 
         if len(merged_groups) >= 2 and len(merged_groups[-1]) < min_sentences:
-            trailing = merged_groups.pop()
-            merged_groups[-1].extend(trailing)
+            trailing = merged_groups[-1]
+            prior_group = merged_groups[-2]
+            if len(prior_group) + len(trailing) <= max_sentences:
+                merged_tokens = _estimate_token_count(
+                    " ".join(prior_group)
+                ) + _estimate_token_count(" ".join(trailing))
+                if max_tokens is None or merged_tokens <= max_tokens:
+                    merged_groups.pop()
+                    prior_group.extend(trailing)
 
         return [group for group in merged_groups if group]
 
@@ -308,6 +353,7 @@ class SemanticChunker:
             ):
                 metadata = dict(base_metadata)
                 metadata["sentence_count"] = sentence_count
+                metadata["token_count"] = _estimate_token_count(chunk_text)
                 metadata["chunk_index"] = chunk_index
                 metadata["chunking_mode"] = "semantic"
                 result.append(
@@ -330,5 +376,6 @@ class SemanticChunker:
             "SemanticChunker("
             f"threshold={self._config.similarity_threshold}, "
             f"min={self._config.min_chunk_sentences}, "
-            f"max={self._config.max_chunk_sentences})"
+            f"max={self._config.max_chunk_sentences}, "
+            f"max_tokens={self._config.max_chunk_tokens})"
         )
