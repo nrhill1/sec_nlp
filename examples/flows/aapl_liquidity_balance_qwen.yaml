@@ -1,0 +1,160 @@
+# Retrieve targeted AAPL filing evidence into the shared qwen embedding collection,
+# then answer several balance-sheet and capital-allocation questions with qwen3:8b.
+#
+# Usage:
+#   sec-nlp flow run --spec examples/flows/aapl_liquidity_balance_qwen.yaml
+
+name: aapl_liquidity_balance_qwen
+defaults:
+  email: your.email@example.com
+
+stages:
+  - id: retrieve_evidence
+    pipeline: retrieve
+    overrides:
+      symbols: [AAPL]
+      queries:
+        - liquidity
+        - capital resources
+        - debt maturities
+        - long-term debt
+        - credit facility
+        - capital expenditures
+        - share repurchases
+        - dividends
+      forms:
+        - 10-K
+        - 10-Q
+      sections:
+        - 2
+        - 7
+        - 8
+      top_k: 40
+      efts_candidates: 160
+      hydrate_top_n: 40
+      query_term_min_hits: 1
+      query_term_min_ratio: 0.25
+      stopword_aware_lexical: true
+      hydrate_missing_snippets: true
+      rerank_with_embeddings: true
+      embedding_weight: 0.4
+      index_results: true
+      chunk_size: 12
+      chunk_overlap: 1
+      max_chunks_per_accession: 24
+      start_date: "2024-01-01"
+      output_format: json
+      dry_run: false
+      semantic_chunking:
+        enabled: false
+      vdb:
+        collection_name: retrieve_qwen3_embed_4b_targeted
+        embedding_model: qwen3-embedding:4b
+        vector_size: 2560
+
+  - id: chat_liquidity
+    pipeline: chat
+    condition: previous_success
+    inputs:
+      - from_stage: retrieve_evidence
+        artifact: retrieve_seed
+        target_field: seed_context
+    overrides:
+      symbols: [AAPL]
+      question: "What changed in liquidity and debt maturity for Apple?"
+      interactive: false
+      forms:
+        - 10-K
+        - 10-Q
+      collections:
+        - retrieve_qwen3_embed_4b_targeted
+      top_k: 8
+      max_context_chunks: 8
+      context_token_budget: 8000
+      rerank_mode: mmr
+      include_market_context: false
+      generation_token_cap: 768
+      output_format: json
+      dry_run: false
+      llm:
+        model_name: qwen3:8b
+        require_json: false
+        temperature: 0.05
+        max_new_tokens: 768
+        num_ctx: 32768
+      vdb:
+        collection_name: retrieve_qwen3_embed_4b_targeted
+        embedding_model: qwen3-embedding:4b
+        vector_size: 2560
+
+  - id: chat_capalloc
+    pipeline: chat
+    condition: previous_success
+    inputs:
+      - from_stage: retrieve_evidence
+        artifact: retrieve_seed
+        target_field: seed_context
+    overrides:
+      symbols: [AAPL]
+      question: "How is Apple funding buybacks, dividends, and capital expenditures in recent filings?"
+      interactive: false
+      forms:
+        - 10-K
+        - 10-Q
+      collections:
+        - retrieve_qwen3_embed_4b_targeted
+      top_k: 8
+      max_context_chunks: 8
+      context_token_budget: 8000
+      rerank_mode: mmr
+      include_market_context: false
+      generation_token_cap: 768
+      output_format: json
+      dry_run: false
+      llm:
+        model_name: qwen3:8b
+        require_json: false
+        temperature: 0.05
+        max_new_tokens: 768
+        num_ctx: 32768
+      vdb:
+        collection_name: retrieve_qwen3_embed_4b_targeted
+        embedding_model: qwen3-embedding:4b
+        vector_size: 2560
+
+  - id: chat_constraints
+    pipeline: chat
+    condition: previous_success
+    inputs:
+      - from_stage: retrieve_evidence
+        artifact: retrieve_seed
+        target_field: seed_context
+    overrides:
+      symbols: [AAPL]
+      question: "What balance-sheet or financing constraints stand out despite Apple's large cash position?"
+      interactive: false
+      forms:
+        - 10-K
+        - 10-Q
+      collections:
+        - retrieve_qwen3_embed_4b_targeted
+      top_k: 8
+      max_context_chunks: 8
+      context_token_budget: 8000
+      rerank_mode: mmr
+      include_market_context: false
+      generation_token_cap: 768
+      output_format: json
+      dry_run: false
+      llm:
+        model_name: qwen3:8b
+        require_json: false
+        temperature: 0.05
+        max_new_tokens: 768
+        num_ctx: 32768
+      vdb:
+        collection_name: retrieve_qwen3_embed_4b_targeted
+        embedding_model: qwen3-embedding:4b
+        vector_size: 2560
+
+on_failure: stop

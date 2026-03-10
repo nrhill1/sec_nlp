@@ -1,4 +1,4 @@
-# Retrieve hydrated FCX filing evidence into a fresh qwen embedding collection,
+# Retrieve targeted FCX filing evidence into a fresh qwen embedding collection,
 # then answer a liquidity/debt-maturity question with qwen3:8b.
 #
 # Usage:
@@ -14,31 +14,39 @@ stages:
     overrides:
       symbols: [FCX]
       queries:
-        - liquidity risk
-        - debt maturity
+        - liquidity
+        - capital resources
+        - debt maturities
+        - long-term debt
+        - senior notes
+        - current maturities of debt
       forms:
         - 10-K
         - 10-Q
       sections:
-        - 1A
+        - 2
         - 7
-        - 7A
-      top_k: 48
-      efts_candidates: 240
-      hydrate_top_n: 96
-      query_term_min_hits: 0
-      query_term_min_ratio: 0.0
+        - 8
+      top_k: 40
+      efts_candidates: 160
+      hydrate_top_n: 40
+      query_term_min_hits: 1
+      query_term_min_ratio: 0.25
       stopword_aware_lexical: true
       hydrate_missing_snippets: true
       rerank_with_embeddings: true
       embedding_weight: 0.4
       index_results: true
-      max_chunks_per_accession: 80
+      chunk_size: 12
+      chunk_overlap: 1
+      max_chunks_per_accession: 24
       start_date: "2024-01-01"
       output_format: json
       dry_run: false
+      semantic_chunking:
+        enabled: false
       vdb:
-        collection_name: retrieve_qwen3_embed_4b_hydrated
+        collection_name: retrieve_qwen3_embed_4b_targeted
         embedding_model: qwen3-embedding:4b
         vector_size: 2560
 
@@ -57,24 +65,24 @@ stages:
         - 10-K
         - 10-Q
       collections:
-        - retrieve_qwen3_embed_4b_hydrated
-      top_k: 10
-      max_context_chunks: 10
-      context_token_budget: 12000
+        - retrieve_qwen3_embed_4b_targeted
+      top_k: 8
+      max_context_chunks: 8
+      context_token_budget: 8000
       rerank_mode: mmr
-      include_market_context: true
+      include_market_context: false
       market_context_profile: compact
-      generation_token_cap: 1024
+      generation_token_cap: 768
       output_format: json
       dry_run: false
       llm:
         model_name: qwen3:8b
         require_json: false
         temperature: 0.05
-        max_new_tokens: 1024
+        max_new_tokens: 768
         num_ctx: 32768
       vdb:
-        collection_name: retrieve_qwen3_embed_4b_hydrated
+        collection_name: retrieve_qwen3_embed_4b_targeted
         embedding_model: qwen3-embedding:4b
         vector_size: 2560
 
