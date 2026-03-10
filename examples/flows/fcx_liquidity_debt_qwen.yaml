@@ -1,0 +1,81 @@
+# Retrieve hydrated FCX filing evidence into a fresh qwen embedding collection,
+# then answer a liquidity/debt-maturity question with qwen3:8b.
+#
+# Usage:
+#   sec-nlp flow run --spec examples/flows/fcx_liquidity_debt_qwen.yaml
+
+name: fcx_liquidity_debt_qwen
+defaults:
+  email: your.email@example.com
+
+stages:
+  - id: retrieve_evidence
+    pipeline: retrieve
+    overrides:
+      symbols: [FCX]
+      queries:
+        - liquidity risk
+        - debt maturity
+      forms:
+        - 10-K
+        - 10-Q
+      sections:
+        - 1A
+        - 7
+        - 7A
+      top_k: 48
+      efts_candidates: 240
+      hydrate_top_n: 96
+      query_term_min_hits: 0
+      query_term_min_ratio: 0.0
+      stopword_aware_lexical: true
+      hydrate_missing_snippets: true
+      rerank_with_embeddings: true
+      embedding_weight: 0.4
+      index_results: true
+      max_chunks_per_accession: 80
+      start_date: "2024-01-01"
+      output_format: json
+      dry_run: false
+      vdb:
+        collection_name: retrieve_qwen3_embed_4b_hydrated
+        embedding_model: qwen3-embedding:4b
+        vector_size: 2560
+
+  - id: chat_answer
+    pipeline: chat
+    condition: previous_success
+    inputs:
+      - from_stage: retrieve_evidence
+        artifact: retrieve_seed
+        target_field: seed_context
+    overrides:
+      symbols: [FCX]
+      question: "What changed in liquidity risk and debt maturity?"
+      interactive: false
+      forms:
+        - 10-K
+        - 10-Q
+      collections:
+        - retrieve_qwen3_embed_4b_hydrated
+      top_k: 10
+      max_context_chunks: 10
+      context_token_budget: 12000
+      rerank_mode: mmr
+      include_market_context: true
+      market_context_profile: compact
+      generation_token_cap: 1024
+      output_format: json
+      dry_run: false
+      llm:
+        model_name: qwen3:8b
+        require_json: false
+        temperature: 0.05
+        max_new_tokens: 1024
+        num_ctx: 32768
+      vdb:
+        collection_name: retrieve_qwen3_embed_4b_hydrated
+        embedding_model: qwen3-embedding:4b
+        vector_size: 2560
+
+on_failure: stop
