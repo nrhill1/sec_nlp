@@ -23,6 +23,7 @@ You must provide at least one query.
 
 - Primary source: EFTS snippet text from candidate hits.
 - Hydration source: chunk extracted from filing HTML via `Loader.transform_html(...)`.
+- During hydration, retrieve now pushes query-term keyword filtering into the loader before chunking so parser-level filtering happens before semantic chunking when semantic chunking is enabled.
 - Default behavior: hydration does **not** run for generic retrieval (`sections=[]` and `hydrate_missing_snippets=false`).
 - Hydration runs when:
   - `sections` is set (section-targeted extraction), or
@@ -52,6 +53,7 @@ Common CLI overrides:
 - `--semantic-chunking.enabled true`
 - `--semantic-chunking.embedding-model qwen3-embedding:4b`
 - `--semantic-chunking.breakpoint-threshold-type gradient`
+- `--semantic-chunking.max-chunk-tokens 384`
 
 Pipelines that chunk filing text directly (`retrieve`, `exb`, `warranty`, and loader-backed `analyze`) apply these settings during chunk generation. Other presets keep the same config surface for CLI/flow consistency.
 

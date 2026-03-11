@@ -9,6 +9,8 @@ from langchain_core.documents import Document
 from sec_nlp.core.edgar.filing_mode import FilingMode
 from sec_nlp.core.ingest import parser as parser_module
 from sec_nlp.core.ingest.loader import Loader, LoaderRunMetadata
+from sec_nlp.core.text.filters import create_item_filter
+from sec_nlp.core.text.semantic_settings import SemanticChunkingSettings
 
 
 @pytest.fixture
@@ -320,6 +322,39 @@ class TestTransformHtml:
         assert len(docs) > 0
         for doc in docs:
             assert "warranty" in doc.page_content.lower()
+
+    def test_transform_html_string_preserves_section_headers_for_keyword_filter(
+        self,
+    ) -> None:
+        """Test section extraction before keyword filtering when section filter is active."""
+        loader = Loader(
+            email="test@example.com",
+            semantic_chunking=SemanticChunkingSettings(enabled=False),
+        )
+
+        html = """
+        <html>
+            <body>
+                <p>Item 7. Management's Discussion and Analysis of Financial Condition and Results of Operations</p>
+                <p>Government contracts expanded during the quarter and supported new bookings.</p>
+                <p>Cash runway also improved as operating losses narrowed.</p>
+                <p>Item 8. Financial Statements and Supplementary Data</p>
+                <p>Balance sheet tables follow.</p>
+            </body>
+        </html>
+        """
+
+        docs = loader.transform_html_string(
+            html,
+            keywords=["government contracts"],
+            section_filter=create_item_filter(["7"]),
+        )
+
+        assert len(docs) > 0
+        assert all(doc.metadata.get("section_number") == "7" for doc in docs)
+        assert any(
+            "government contracts" in doc.page_content.lower() for doc in docs
+        )
 
     def test_transform_html_string_returns_empty_on_no_match(self) -> None:
         """Test that transform_html_string returns empty list when no keywords match."""

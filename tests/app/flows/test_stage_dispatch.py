@@ -169,6 +169,9 @@ def test_run_stage_dispatches_supported_chat(
     assert any(
         path.endswith("pipeline_settings.json") for path in result.outputs
     )
+    assert result.metadata.get("answer_output_paths") == [
+        "/tmp/chat_summary.json"
+    ]
 
 
 def test_run_stage_dispatches_supported_exhibit(monkeypatch) -> None:

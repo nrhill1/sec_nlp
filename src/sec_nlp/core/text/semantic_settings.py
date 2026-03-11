@@ -26,6 +26,7 @@ class SemanticChunkingSettings(BaseModel):
         sentence_split_regex: Regex used for sentence segmentation.
         min_chunk_size: Optional minimum chunk size in characters.
         add_start_index: Include source start offsets in chunk metadata.
+        max_chunk_tokens: Optional approximate maximum tokens per chunk.
         min_chunk_sentences: Minimum sentence count for post-processing.
         max_chunk_sentences: Maximum sentence count for post-processing.
     """
@@ -91,6 +92,14 @@ class SemanticChunkingSettings(BaseModel):
     add_start_index: bool = Field(
         default=False,
         description="Include start index metadata when supported.",
+    )
+    max_chunk_tokens: int | None = Field(
+        default=384,
+        ge=1,
+        description=(
+            "Optional approximate maximum tokens per semantic chunk after "
+            "local post-processing."
+        ),
     )
     min_chunk_sentences: int = Field(
         default=3,

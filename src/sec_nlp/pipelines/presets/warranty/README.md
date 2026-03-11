@@ -32,6 +32,7 @@ Common CLI overrides:
 - `--semantic-chunking.enabled true`
 - `--semantic-chunking.embedding-model qwen3-embedding:4b`
 - `--semantic-chunking.breakpoint-threshold-type gradient`
+- `--semantic-chunking.max-chunk-tokens 384`
 
 Pipelines that chunk filing text directly (`retrieve`, `exb`, `warranty`, and loader-backed `analyze`) apply these settings during chunk generation. Other presets keep the same config surface for CLI/flow consistency.
 

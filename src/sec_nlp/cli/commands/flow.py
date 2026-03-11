@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 
 from pydantic import BaseModel, Field
@@ -16,7 +17,30 @@ from sec_nlp.cli.formatting import (
     format_status,
 )
 from sec_nlp.core.infra.logger import logger
-from sec_nlp.core.infra.rich_console import get_rich_console
+from sec_nlp.core.infra.rich_console import (
+    create_rich_console,
+    get_rich_console,
+)
+from sec_nlp.types import JsonValue
+
+
+def _answer_output_paths(metadata: Mapping[str, JsonValue]) -> list[str]:
+    """Return flow-level chat answer output paths from result metadata."""
+    answer_paths = metadata.get("answer_output_paths")
+    if not isinstance(answer_paths, list):
+        return []
+    normalized_paths: list[str] = []
+    for answer_path in answer_paths:
+        if isinstance(answer_path, str):
+            normalized_paths.append(answer_path)
+    return normalized_paths
+
+
+def _emit_answer_output_paths(answer_paths: Sequence[str]) -> None:
+    """Write machine-readable answer output paths to stdout."""
+    stdout_console = create_rich_console(stderr=False, no_color=True)
+    for answer_path in answer_paths:
+        stdout_console.print(answer_path, markup=False, highlight=False)
 
 
 class FlowRun(BaseModel):
@@ -77,8 +101,24 @@ class FlowRun(BaseModel):
                     logger.info(
                         format_key_value("Answer Snippet", answer_preview)
                     )
+                answer_paths = stage_result.metadata.get("answer_output_paths")
+                if isinstance(answer_paths, list):
+                    for answer_path in answer_paths:
+                        if not isinstance(answer_path, str):
+                            continue
+                        logger.info(
+                            format_key_value("Answer File", answer_path)
+                        )
             if stage_result.error:
                 logger.info(format_key_value("Reason", stage_result.error))
+        answer_output_paths = _answer_output_paths(result.metadata)
+        if answer_output_paths:
+            logger.info(
+                format_key_value("Answer Files", str(len(answer_output_paths)))
+            )
+            for answer_path in answer_output_paths:
+                logger.info(format_key_value("  →", answer_path))
+            _emit_answer_output_paths(answer_output_paths)
 
 
 class FlowValidate(BaseModel):

@@ -237,6 +237,31 @@ class TestNormalizeCliArgs:
         assert "--no-search.export-results" in normalized
         assert "--no-verbose" in normalized
 
+    def test_coerces_falsey_chat_booleans(self) -> None:
+        """Convert explicit false values for chat boolean flags into no-flags."""
+        from sec_nlp.cli.__main__ import _normalize_cli_args
+
+        argv = [
+            "chat",
+            "--include-market-context",
+            "false",
+            "--include-news-context",
+            "no",
+            "--interactive",
+            "0",
+            "--prefetch-retrieve",
+            "off",
+            "--strict-citations",
+            "false",
+        ]
+        normalized = _normalize_cli_args(argv)
+
+        assert "--no-include-market-context" in normalized
+        assert "--no-include-news-context" in normalized
+        assert "--no-interactive" in normalized
+        assert "--no-prefetch-retrieve" in normalized
+        assert "--no-strict-citations" in normalized
+
     def test_quotes_numeric_symbol_positionals_for_symbol_commands(
         self,
     ) -> None:

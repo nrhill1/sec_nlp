@@ -121,6 +121,21 @@ class FlowRunner:
             success = all(
                 result.success or result.skipped for result in stage_results
             )
+            answer_output_paths: list[str] = []
+            seen_answer_paths: set[str] = set()
+            for stage_result in stage_results:
+                answer_paths_value = stage_result.metadata.get(
+                    "answer_output_paths"
+                )
+                if not isinstance(answer_paths_value, list):
+                    continue
+                for answer_path in answer_paths_value:
+                    if not isinstance(answer_path, str):
+                        continue
+                    if answer_path in seen_answer_paths:
+                        continue
+                    seen_answer_paths.add(answer_path)
+                    answer_output_paths.append(answer_path)
             metadata: dict[str, JsonValue] = {
                 "on_failure": self.spec.on_failure,
                 "stages_total": len(self.spec.stages),
@@ -137,6 +152,8 @@ class FlowRunner:
                 ),
                 "duration_seconds": perf_counter() - flow_started,
             }
+            if answer_output_paths:
+                metadata["answer_output_paths"] = answer_output_paths
             if flow_settings_snapshot is not None:
                 metadata["flow_settings_snapshot"] = flow_settings_snapshot
             return FlowRunResult(
@@ -309,6 +326,24 @@ class FlowRunner:
             return normalized
         return f"{normalized[: max_chars - 1].rstrip()}…"
 
+    @staticmethod
+    def _answer_output_paths(
+        *,
+        output_paths: list[str],
+        settings_snapshot: str | None,
+    ) -> list[str]:
+        """Return chat-stage outputs that contain answer content."""
+        answer_paths: list[str] = []
+        seen: set[str] = set()
+        for output_path in output_paths:
+            if output_path == settings_snapshot:
+                continue
+            if output_path in seen:
+                continue
+            seen.add(output_path)
+            answer_paths.append(output_path)
+        return answer_paths
+
     @classmethod
     def _run_analyze_stage(
         cls,
@@ -386,18 +421,24 @@ class FlowRunner:
         answer_preview: str | None = None
         if result.success and isinstance(result.answer, str) and result.answer:
             answer_preview = cls._answer_preview(result.answer)
+        settings_snapshot = cls._resolve_stage_settings_snapshot(stage)
+        answer_output_paths = cls._answer_output_paths(
+            output_paths=[str(path) for path in result.outputs],
+            settings_snapshot=settings_snapshot,
+        )
+        extra_metadata: dict[str, JsonValue] = {}
+        if answer_preview is not None:
+            extra_metadata["answer_preview"] = answer_preview
+        if answer_output_paths:
+            extra_metadata["answer_output_paths"] = answer_output_paths
         return cls._build_stage_result(
             stage=stage.stage,
             pipeline_result=result,
             duration_seconds=elapsed,
             run_id=stage.run_id,
             run_short_id=stage.run_short_id,
-            settings_snapshot=cls._resolve_stage_settings_snapshot(stage),
-            extra_metadata={
-                "answer_preview": answer_preview,
-            }
-            if answer_preview is not None
-            else None,
+            settings_snapshot=settings_snapshot,
+            extra_metadata=extra_metadata or None,
         )
 
     @classmethod

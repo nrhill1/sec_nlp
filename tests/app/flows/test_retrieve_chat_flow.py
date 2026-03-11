@@ -167,9 +167,14 @@ def test_flow_runner_passes_retrieve_seed_into_chat(monkeypatch) -> None:
         "Liquidity risk increased due to debt costs."
     )
     assert "\n" not in answer_preview
+    answer_output_paths = chat_stage.metadata.get("answer_output_paths")
+    assert answer_output_paths == ["/tmp/chat_summary.json"]
     duration_value = result.metadata.get("duration_seconds")
     assert isinstance(duration_value, int | float)
     assert float(duration_value) >= 0.0
+    assert result.metadata.get("answer_output_paths") == [
+        "/tmp/chat_summary.json"
+    ]
     assert (
         observed["seed_upstream_run_id"]
         == "00000000-0000-0000-0000-000000000001"

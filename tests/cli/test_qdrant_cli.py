@@ -1,12 +1,68 @@
 # tests/cli/test_qdrant_cli.py
-"""Tests for Qdrant CLI defaults and startup diagnostics."""
+"""Tests for Qdrant CLI defaults, collection reporting, and startup diagnostics."""
 
 import logging
+import subprocess
+from dataclasses import dataclass
 
 import pytest
+from qdrant_client.models import Distance, VectorParams
 
-from sec_nlp.cli.commands.qdrant import QdrantList, QdrantUp
+from sec_nlp.cli.commands.qdrant import QdrantInfo, QdrantList, QdrantUp
 from sec_nlp.types import JsonValue
+
+
+@dataclass(slots=True, frozen=True)
+class _FakeOptimizerConfig:
+    """Minimal optimizer config for Qdrant CLI tests."""
+
+    deleted_threshold: float
+    indexing_threshold: int
+
+
+@dataclass(slots=True, frozen=True)
+class _FakeCollectionParams:
+    """Minimal params container for Qdrant CLI tests."""
+
+    vectors: VectorParams
+    on_disk_payload: bool
+
+
+@dataclass(slots=True, frozen=True)
+class _FakeCollectionConfig:
+    """Minimal config container for Qdrant CLI tests."""
+
+    params: _FakeCollectionParams
+    optimizer_config: _FakeOptimizerConfig | None = None
+
+
+@dataclass(slots=True, frozen=True)
+class _FakeCollectionInfo:
+    """Minimal collection info model for Qdrant CLI tests."""
+
+    status: str
+    vectors_count: int | None
+    points_count: int | None
+    indexed_vectors_count: int | None
+    config: _FakeCollectionConfig
+
+
+class _FakeQdrantClient:
+    """Minimal Qdrant client stub for collection-info CLI tests."""
+
+    def __init__(self, info: _FakeCollectionInfo) -> None:
+        """Store the fake collection info."""
+        self._info = info
+
+    def collection_exists(self, collection_name: str) -> bool:
+        """Return whether the requested collection exists."""
+        _ = collection_name
+        return True
+
+    def get_collection(self, collection_name: str) -> _FakeCollectionInfo:
+        """Return the fake collection info for the requested collection."""
+        _ = collection_name
+        return self._info
 
 
 def test_qdrant_base_defaults_use_localhost_endpoint() -> None:
@@ -107,6 +163,83 @@ def test_qdrant_up_unreachable_raises_runtime_error(
     assert calls["diagnostics"] == 1
 
 
+def test_qdrant_up_tries_rootless_container_first(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Container creation should prefer current-user execution by default."""
+    cmd = QdrantUp(rootless=True)
+    docker_calls: list[list[str]] = []
+
+    monkeypatch.setattr(cmd, "_rootless_user_spec", lambda: "501:20")
+
+    def _run_docker(
+        args: list[str], *, check: bool, capture_output: bool
+    ) -> subprocess.CompletedProcess[str]:
+        _ = (check, capture_output)
+        docker_calls.append(args)
+        return subprocess.CompletedProcess(args=args, returncode=0)
+
+    monkeypatch.setattr(cmd, "_run_docker", _run_docker)
+
+    cmd._create_container()
+
+    assert len(docker_calls) == 1
+    assert "--user" in docker_calls[0]
+    assert "501:20" in docker_calls[0]
+    assert "no-new-privileges:true" in docker_calls[0]
+
+
+def test_qdrant_up_falls_back_when_rootless_container_start_fails(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Container creation should retry without rootless mode on failure."""
+    cmd = QdrantUp(rootless=True)
+    docker_calls: list[list[str]] = []
+
+    monkeypatch.setattr(cmd, "_rootless_user_spec", lambda: "501:20")
+
+    def _run_docker(
+        args: list[str], *, check: bool, capture_output: bool
+    ) -> subprocess.CompletedProcess[str]:
+        _ = (check, capture_output)
+        docker_calls.append(args)
+        if len(docker_calls) == 1:
+            raise subprocess.CalledProcessError(returncode=125, cmd=args)
+        return subprocess.CompletedProcess(args=args, returncode=0)
+
+    monkeypatch.setattr(cmd, "_run_docker", _run_docker)
+    caplog.set_level(logging.WARNING, logger="sec_nlp")
+
+    cmd._create_container()
+
+    assert len(docker_calls) == 2
+    assert "--user" in docker_calls[0]
+    assert "--user" not in docker_calls[1]
+    assert "Rootless Qdrant container start failed" in caplog.text
+
+
+def test_qdrant_up_skips_rootless_when_disabled(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Container creation should use the default mode when rootless is disabled."""
+    cmd = QdrantUp(rootless=False)
+    docker_calls: list[list[str]] = []
+
+    def _run_docker(
+        args: list[str], *, check: bool, capture_output: bool
+    ) -> subprocess.CompletedProcess[str]:
+        _ = (check, capture_output)
+        docker_calls.append(args)
+        return subprocess.CompletedProcess(args=args, returncode=0)
+
+    monkeypatch.setattr(cmd, "_run_docker", _run_docker)
+
+    cmd._create_container()
+
+    assert len(docker_calls) == 1
+    assert "--user" not in docker_calls[0]
+
+
 def test_unreachable_diagnostics_explain_missing_network(
     monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
 ) -> None:
@@ -135,3 +268,38 @@ def test_unreachable_diagnostics_explain_missing_network(
     assert "localhost:6333 is still unreachable" in message_text
     assert "Attached networks" in message_text
     assert "runtime network endpoint is missing" in message_text
+
+
+def test_qdrant_info_reports_stored_vectors_when_index_is_empty(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Collection info should show stored vectors even below indexing threshold."""
+    cmd = QdrantInfo(collection_name="test_collection")
+    info = _FakeCollectionInfo(
+        status="green",
+        vectors_count=None,
+        points_count=294,
+        indexed_vectors_count=0,
+        config=_FakeCollectionConfig(
+            params=_FakeCollectionParams(
+                vectors=VectorParams(size=2560, distance=Distance.COSINE),
+                on_disk_payload=False,
+            ),
+            optimizer_config=_FakeOptimizerConfig(
+                deleted_threshold=0.2,
+                indexing_threshold=10000,
+            ),
+        ),
+    )
+
+    monkeypatch.setattr(
+        cmd, "_setup_qdrant_client", lambda: _FakeQdrantClient(info)
+    )
+
+    caplog.set_level(logging.INFO, logger="sec_nlp")
+
+    cmd.cli_cmd()
+
+    assert "Stored vectors: 294" in caplog.text
+    assert "Points: 294" in caplog.text
+    assert "Indexed vectors: 0" in caplog.text

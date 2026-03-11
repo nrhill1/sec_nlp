@@ -98,11 +98,17 @@ _BOOLEAN_FLAGS: set[str] = {
     "--enable-tracing",
     "--filter-indices",
     "--fresh",
+    "--include-history",
+    "--include-market-context",
+    "--include-news-context",
     "--include-raw-chunks",
     "--include-full-diff",
     "--include-unchanged",
+    "--incremental",
+    "--interactive",
     "--loader-use-async",
     "--llm.require-json",
+    "--prefetch-retrieve",
     "--prioritize-topics",
     "--vdb.qdrant-on-disk-payload",
     "--vdb.qdrant-prefer-grpc",
@@ -116,6 +122,8 @@ _BOOLEAN_FLAGS: set[str] = {
     "--vector-store-relevant",
     "--verbose",
     "--force",
+    "--strict-citations",
+    "--transcript-autosave",
 }
 
 

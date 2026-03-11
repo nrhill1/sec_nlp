@@ -16,6 +16,10 @@ from qdrant_client.models import Distance
 from tqdm import tqdm
 
 from sec_nlp.core.infra.logger import logger
+from sec_nlp.core.infra.qdrant_runtime import (
+    ensure_local_docker_qdrant,
+    is_local_docker_qdrant_target,
+)
 from sec_nlp.core.llm.ollama import resolve_ollama_base_url
 from sec_nlp.pipelines.vector.client import (
     create_qdrant_client,
@@ -140,6 +144,22 @@ class VectorConfig(BaseModel):
         ge=1,
         description="Qdrant request timeout in seconds",
     )
+    qdrant_auto_start: bool = Field(
+        default=True,
+        description=(
+            "Attempt `colima start` followed by `sec-nlp qdrant up` when "
+            "the default localhost Docker endpoint is unreachable."
+        ),
+    )
+    qdrant_startup_timeout: int = Field(
+        default=8,
+        ge=1,
+        le=120,
+        description=(
+            "Seconds to wait for localhost:6333 after automatic Docker "
+            "Qdrant startup is triggered."
+        ),
+    )
 
     # Qdrant collection configuration
     qdrant_distance: Literal["Cosine", "Euclid", "Dot"] = Field(
@@ -224,6 +244,23 @@ class VectorConfig(BaseModel):
             (":memory:", None, ":memory:", True),
         ]
 
+    def _should_attempt_local_docker_bootstrap(
+        self,
+        *,
+        location: str | None,
+        url: str | None,
+    ) -> bool:
+        """Return whether localhost Docker Qdrant bootstrap is eligible."""
+        if not self.qdrant_auto_start:
+            return False
+        return is_local_docker_qdrant_target(
+            location=location,
+            url=url,
+            host=self.qdrant_host,
+            port=self.qdrant_port,
+            https=self.qdrant_https,
+        )
+
     def setup_qdrant_client_with_target(self) -> QdrantClientTarget:
         """Initialize Qdrant client and return the resolved target string."""
         cache_key: QdrantClientCacheKey = (
@@ -250,11 +287,48 @@ class VectorConfig(BaseModel):
         attempts = self._connection_attempts()
         configured_target = attempts[0][2]
         errors: list[str] = []
+        bootstrap_attempted = False
         for location, url, target, is_fallback in attempts:
             try:
                 qdrant = self._connect_qdrant(location=location, url=url)
             except Exception as exc:
                 errors.append(f"{target}: {type(exc).__name__}: {exc}")
+                if (
+                    not is_fallback
+                    and not bootstrap_attempted
+                    and self._should_attempt_local_docker_bootstrap(
+                        location=location,
+                        url=url,
+                    )
+                ):
+                    bootstrap_attempted = True
+                    logger.warning(
+                        "Qdrant endpoint %s unavailable; attempting local Docker startup before fallback",
+                        configured_target,
+                    )
+                    if ensure_local_docker_qdrant(
+                        readiness_timeout=self.qdrant_startup_timeout
+                    ):
+                        try:
+                            qdrant = self._connect_qdrant(
+                                location=location,
+                                url=url,
+                            )
+                        except Exception as retry_exc:
+                            errors.append(
+                                f"{target} after startup: {type(retry_exc).__name__}: {retry_exc}"
+                            )
+                        else:
+                            if not disable_cache:
+                                with _QDRANT_CACHE_LOCK:
+                                    _QDRANT_CLIENT_CACHE[cache_key] = qdrant
+                                    _QDRANT_ENDPOINT_CACHE[cache_key] = target
+
+                            logger.info(
+                                "Connected to Qdrant at %s after local Docker startup",
+                                target,
+                            )
+                            return qdrant, target
                 continue
 
             if is_fallback:

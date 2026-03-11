@@ -2,6 +2,7 @@
 """Qdrant collections management CLI commands."""
 
 import json
+import os
 import socket
 import subprocess
 import time
@@ -118,17 +119,23 @@ class QdrantBaseConfig(BaseModel):
         )
 
     @staticmethod
-    def _vector_count_from_info(info: CollectionInfo) -> int:
-        """Return the best available vector-count value for a collection."""
-        indexed = getattr(info, "indexed_vectors_count", None)
-        if isinstance(indexed, int):
-            return indexed
+    def _stored_vector_count_from_info(info: CollectionInfo) -> int:
+        """Return the best available stored-vector count for a collection.
+
+        Qdrant's ``indexed_vectors_count`` reflects optimizer/HNSW state rather
+        than whether vectors are present at all. For the single-vector
+        collections used in this project, ``points_count`` is the safest
+        fallback when ``vectors_count`` is unset.
+        """
         vectors = getattr(info, "vectors_count", None)
-        if isinstance(vectors, int):
+        if isinstance(vectors, int) and vectors > 0:
             return vectors
         points = getattr(info, "points_count", None)
         if isinstance(points, int):
             return points
+        indexed = getattr(info, "indexed_vectors_count", None)
+        if isinstance(indexed, int):
+            return indexed
         return 0
 
 
@@ -162,9 +169,9 @@ class QdrantList(QdrantBaseConfig):
                     logger.info(
                         f"\n  {color_text(collection.name, color='green')}"
                     )
-                    vectors_count = self._vector_count_from_info(info)
+                    vectors_count = self._stored_vector_count_from_info(info)
                     points_count = info.points_count or 0
-                    logger.info(f"    Vectors: {vectors_count:,}")
+                    logger.info(f"    Stored vectors: {vectors_count:,}")
                     logger.info(f"    Points: {points_count:,}")
                     if info.config.params:
                         vector_params = info.config.params.vectors
@@ -221,10 +228,10 @@ class QdrantInfo(QdrantBaseConfig):
                 f"  Name: {color_text(self.collection_name, color='green')}"
             )
             logger.info(f"  Status: {info.status}")
-            vectors_count = self._vector_count_from_info(info)
+            vectors_count = self._stored_vector_count_from_info(info)
             points_count = info.points_count or 0
             indexed_count = info.indexed_vectors_count or 0
-            logger.info(f"  Vectors: {vectors_count:,}")
+            logger.info(f"  Stored vectors: {vectors_count:,}")
             logger.info(f"  Points: {points_count:,}")
             logger.info(f"  Indexed vectors: {indexed_count:,}")
 
@@ -559,6 +566,14 @@ class QdrantUp(BaseModel):
         le=300,
         description="Seconds to wait for localhost:6333 to become reachable",
     )
+    rootless: bool = Field(
+        default=True,
+        description=(
+            "Attempt to run the Qdrant container as the current host user "
+            "with no-new-privileges before falling back to the default "
+            "container mode."
+        ),
+    )
 
     def _run_docker(
         self, args: list[str], *, check: bool, capture_output: bool
@@ -609,6 +624,45 @@ class QdrantUp(BaseModel):
 
     def _create_container(self) -> None:
         """Create and start a new Qdrant container."""
+        rootful_command = self._build_rootful_create_command()
+        if not self.rootless:
+            self._run_docker(rootful_command, capture_output=False, check=True)
+            return
+
+        rootless_command = self._build_rootless_create_command()
+        if rootless_command is None:
+            logger.info(
+                bullet_line(
+                    "Container mode",
+                    "default (rootless mode unsupported on this platform)",
+                )
+            )
+            self._run_docker(rootful_command, capture_output=False, check=True)
+            return
+
+        try:
+            self._run_docker(rootless_command, capture_output=False, check=True)
+            logger.info(
+                bullet_line(
+                    "Container mode",
+                    f"rootless ({self._rootless_user_spec()})",
+                )
+            )
+        except subprocess.CalledProcessError as exc:
+            logger.warning(
+                "Rootless Qdrant container start failed; retrying with default container user: %s",
+                exc,
+            )
+            self._run_docker(rootful_command, capture_output=False, check=True)
+
+    def _rootless_user_spec(self) -> str | None:
+        """Return the current UID:GID string when supported."""
+        if os.name == "nt":
+            return None
+        return f"{os.getuid()}:{os.getgid()}"
+
+    def _build_rootful_create_command(self) -> list[str]:
+        """Build the default `docker run` command for Qdrant startup."""
         cmd = [
             "docker",
             "run",
@@ -624,7 +678,21 @@ class QdrantUp(BaseModel):
         if self.detach:
             cmd.append("-d")
         cmd.append("qdrant/qdrant")
-        self._run_docker(cmd, capture_output=False, check=True)
+        return cmd
+
+    def _build_rootless_create_command(self) -> list[str] | None:
+        """Build the current-user `docker run` command when supported."""
+        user_spec = self._rootless_user_spec()
+        if user_spec is None:
+            return None
+        cmd = self._build_rootful_create_command()
+        cmd[2:2] = [
+            "--user",
+            user_spec,
+            "--security-opt",
+            "no-new-privileges:true",
+        ]
+        return cmd
 
     def _wait_for_localhost_http(self) -> bool:
         """Poll localhost until Qdrant HTTP port is reachable."""

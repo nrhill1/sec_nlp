@@ -248,6 +248,7 @@ class HtmlProcessor:
         text_content: str,
         metadata: JsonDict | None,
         section_filter: SectionFilter | None,
+        keywords: list[str] | None = None,
     ) -> list[Document]:
         """Chunk long text into bounded segments for downstream processing."""
         if not text_content or not text_content.strip():
@@ -267,6 +268,17 @@ class HtmlProcessor:
                 logger.warning("Section chunking failed: %s", exc)
                 section_chunks = []
             if section_chunks:
+                if keywords:
+                    section_chunks = self._filter_documents_by_keywords(
+                        section_chunks,
+                        keywords,
+                    )
+                    if not section_chunks:
+                        logger.debug(
+                            "No section chunks matched keywords: %s",
+                            keywords,
+                        )
+                        return []
                 self._log_section_chunk_summary(section_chunks)
                 if self._semantic_chunker is not None:
                     return self._semantic_chunk_documents(section_chunks)
@@ -437,7 +449,12 @@ class HtmlProcessor:
     ) -> list[Document]:
         """Transform HTML using dependency-free plain-text extraction."""
         text_segments = self._extract_text_segments(html)
-        if keywords:
+        defer_keyword_filter = (
+            keywords is not None
+            and section_filter is not None
+            and self.section_chunking
+        )
+        if keywords and not defer_keyword_filter:
             text_segments = self._filter_text_segments_by_keywords(
                 text_segments,
                 keywords,
@@ -446,7 +463,12 @@ class HtmlProcessor:
                 return []
 
         text_content = " ".join(text_segments)
-        return self._chunk_text(text_content, metadata, section_filter)
+        return self._chunk_text(
+            text_content,
+            metadata,
+            section_filter,
+            keywords if defer_keyword_filter else None,
+        )
 
     def transform_html(
         self,
@@ -479,7 +501,12 @@ class HtmlProcessor:
                 section_filter=section_filter,
             )
 
-        if keywords:
+        defer_keyword_filter = (
+            keywords is not None
+            and section_filter is not None
+            and self.section_chunking
+        )
+        if keywords and not defer_keyword_filter:
             docs = self._filter_documents_by_keywords(docs, keywords)
             if not docs:
                 return []
@@ -495,7 +522,12 @@ class HtmlProcessor:
         base_meta = dict(docs[0].metadata) if docs else {}
         base_meta.setdefault("source", str(html_path))
         base_meta.setdefault("file_path", str(html_path))
-        return self._chunk_text(text_content, base_meta, section_filter)
+        return self._chunk_text(
+            text_content,
+            base_meta,
+            section_filter,
+            keywords if defer_keyword_filter else None,
+        )
 
     def transform_html_string(
         self,
@@ -520,7 +552,12 @@ class HtmlProcessor:
                 section_filter=section_filter,
             )
 
-        if keywords:
+        defer_keyword_filter = (
+            keywords is not None
+            and section_filter is not None
+            and self.section_chunking
+        )
+        if keywords and not defer_keyword_filter:
             elements = self._filter_elements_by_keywords(elements, keywords)
             if not elements:
                 logger.debug("No elements matched keywords: %s", keywords)
@@ -529,7 +566,10 @@ class HtmlProcessor:
         text_content = " ".join([str(el) for el in elements])
 
         return self._chunk_text(
-            text_content, dict(metadata) if metadata else {}, section_filter
+            text_content,
+            dict(metadata) if metadata else {},
+            section_filter,
+            keywords if defer_keyword_filter else None,
         )
 
     async def transform_html_async(
