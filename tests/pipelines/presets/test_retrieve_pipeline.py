@@ -15,6 +15,7 @@ from langchain_core.documents import Document
 
 from sec_nlp.core.edgar.efts_models import EFTSBatchResult, EFTSHit
 from sec_nlp.core.edgar.filing_mode import FilingMode
+from sec_nlp.core.text.semantic_settings import SemanticChunkingSettings
 from sec_nlp.pipelines.presets.retrieve import (
     DEFAULT_RETRIEVE_COLLECTION_NAME,
     RetrieveChatSeedBundle,
@@ -1356,6 +1357,78 @@ def test_download_and_chunk_hits_filters_before_chunking_with_query_terms(
 
     assert captured_keywords == ["debt", "maturity"]
     assert enriched[0].snippet is not None
+
+
+def test_download_and_chunk_hits_preserves_section_heading_for_keyword_hydration(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    """Section-filtered hydration should keep section headers for keyword matches."""
+    settings = RetrieveSettings(
+        email="test@example.com",
+        symbols=["ABC"],
+        queries=["government contracts"],
+        dl_path=tmp_path / "downloads",
+        out_path=tmp_path / "outputs",
+        download_missing=False,
+        hydrate_missing_snippets=True,
+        sections=["7"],
+        chunk_size=20,
+        chunk_overlap=1,
+        semantic_chunking=SemanticChunkingSettings(enabled=False),
+    )
+    html_path = (
+        settings.dl_path
+        / "sec-edgar-filings"
+        / "ABC"
+        / "10-K"
+        / "0000123456-26-000113"
+        / "doc.html"
+    )
+    html_path.parent.mkdir(parents=True, exist_ok=True)
+    html_path.write_text(
+        """
+        <html>
+            <body>
+                <p>Item 7. Management's Discussion and Analysis of Financial Condition and Results of Operations</p>
+                <p>Government contracts expanded during the quarter and supported new bookings.</p>
+                <p>Cash runway also improved as operating losses narrowed.</p>
+                <p>Item 8. Financial Statements and Supplementary Data</p>
+                <p>Balance sheet tables follow.</p>
+            </body>
+        </html>
+        """,
+        encoding="utf-8",
+    )
+
+    hit = RetrievalHit(
+        symbol="ABC",
+        query="government contracts",
+        accession_number="0000123456-26-000113",
+        form_type="10-K",
+        filed_date="2026-02-12",
+        company_name="ABC Corp",
+        cik="0000123456",
+        score=0.82,
+        edgar_url="https://example.com",
+        snippet=None,
+    )
+
+    monkeypatch.setattr(
+        "sec_nlp.pipelines.presets.retrieve.steps.download_chunk._find_html_for_accession",
+        lambda **kwargs: html_path,
+    )
+
+    enriched = download_and_chunk_hits(
+        symbol="ABC",
+        hits=[hit],
+        settings=settings,
+    )
+
+    assert enriched[0].snippet is not None
+    assert "government contracts" in enriched[0].snippet.lower()
+    assert enriched[0].section_number == "7"
+    assert enriched[0].chunk_index == 0
 
 
 def test_download_and_chunk_hits_uses_stopword_aware_keywords_for_prefilter(

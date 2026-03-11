@@ -637,12 +637,14 @@ class Loader(BaseModel):
         text_content: str,
         metadata: JsonDict | None,
         section_filter: SectionFilter | None,
+        keywords: list[str] | None = None,
     ) -> list[Document]:
         """Split text into sections and chunks for downstream indexing."""
         return self._parser._chunk_text(
             text_content,
             metadata,
             section_filter,
+            keywords,
         )
 
     def transform_html(
