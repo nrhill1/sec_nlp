@@ -118,17 +118,23 @@ class QdrantBaseConfig(BaseModel):
         )
 
     @staticmethod
-    def _vector_count_from_info(info: CollectionInfo) -> int:
-        """Return the best available vector-count value for a collection."""
-        indexed = getattr(info, "indexed_vectors_count", None)
-        if isinstance(indexed, int):
-            return indexed
+    def _stored_vector_count_from_info(info: CollectionInfo) -> int:
+        """Return the best available stored-vector count for a collection.
+
+        Qdrant's ``indexed_vectors_count`` reflects optimizer/HNSW state rather
+        than whether vectors are present at all. For the single-vector
+        collections used in this project, ``points_count`` is the safest
+        fallback when ``vectors_count`` is unset.
+        """
         vectors = getattr(info, "vectors_count", None)
-        if isinstance(vectors, int):
+        if isinstance(vectors, int) and vectors > 0:
             return vectors
         points = getattr(info, "points_count", None)
         if isinstance(points, int):
             return points
+        indexed = getattr(info, "indexed_vectors_count", None)
+        if isinstance(indexed, int):
+            return indexed
         return 0
 
 
@@ -162,9 +168,9 @@ class QdrantList(QdrantBaseConfig):
                     logger.info(
                         f"\n  {color_text(collection.name, color='green')}"
                     )
-                    vectors_count = self._vector_count_from_info(info)
+                    vectors_count = self._stored_vector_count_from_info(info)
                     points_count = info.points_count or 0
-                    logger.info(f"    Vectors: {vectors_count:,}")
+                    logger.info(f"    Stored vectors: {vectors_count:,}")
                     logger.info(f"    Points: {points_count:,}")
                     if info.config.params:
                         vector_params = info.config.params.vectors
@@ -221,10 +227,10 @@ class QdrantInfo(QdrantBaseConfig):
                 f"  Name: {color_text(self.collection_name, color='green')}"
             )
             logger.info(f"  Status: {info.status}")
-            vectors_count = self._vector_count_from_info(info)
+            vectors_count = self._stored_vector_count_from_info(info)
             points_count = info.points_count or 0
             indexed_count = info.indexed_vectors_count or 0
-            logger.info(f"  Vectors: {vectors_count:,}")
+            logger.info(f"  Stored vectors: {vectors_count:,}")
             logger.info(f"  Points: {points_count:,}")
             logger.info(f"  Indexed vectors: {indexed_count:,}")
 
