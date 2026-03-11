@@ -2,6 +2,7 @@
 """Qdrant collections management CLI commands."""
 
 import json
+import os
 import socket
 import subprocess
 import time
@@ -565,6 +566,14 @@ class QdrantUp(BaseModel):
         le=300,
         description="Seconds to wait for localhost:6333 to become reachable",
     )
+    rootless: bool = Field(
+        default=True,
+        description=(
+            "Attempt to run the Qdrant container as the current host user "
+            "with no-new-privileges before falling back to the default "
+            "container mode."
+        ),
+    )
 
     def _run_docker(
         self, args: list[str], *, check: bool, capture_output: bool
@@ -615,6 +624,45 @@ class QdrantUp(BaseModel):
 
     def _create_container(self) -> None:
         """Create and start a new Qdrant container."""
+        rootful_command = self._build_rootful_create_command()
+        if not self.rootless:
+            self._run_docker(rootful_command, capture_output=False, check=True)
+            return
+
+        rootless_command = self._build_rootless_create_command()
+        if rootless_command is None:
+            logger.info(
+                bullet_line(
+                    "Container mode",
+                    "default (rootless mode unsupported on this platform)",
+                )
+            )
+            self._run_docker(rootful_command, capture_output=False, check=True)
+            return
+
+        try:
+            self._run_docker(rootless_command, capture_output=False, check=True)
+            logger.info(
+                bullet_line(
+                    "Container mode",
+                    f"rootless ({self._rootless_user_spec()})",
+                )
+            )
+        except subprocess.CalledProcessError as exc:
+            logger.warning(
+                "Rootless Qdrant container start failed; retrying with default container user: %s",
+                exc,
+            )
+            self._run_docker(rootful_command, capture_output=False, check=True)
+
+    def _rootless_user_spec(self) -> str | None:
+        """Return the current UID:GID string when supported."""
+        if os.name == "nt":
+            return None
+        return f"{os.getuid()}:{os.getgid()}"
+
+    def _build_rootful_create_command(self) -> list[str]:
+        """Build the default `docker run` command for Qdrant startup."""
         cmd = [
             "docker",
             "run",
@@ -630,7 +678,21 @@ class QdrantUp(BaseModel):
         if self.detach:
             cmd.append("-d")
         cmd.append("qdrant/qdrant")
-        self._run_docker(cmd, capture_output=False, check=True)
+        return cmd
+
+    def _build_rootless_create_command(self) -> list[str] | None:
+        """Build the current-user `docker run` command when supported."""
+        user_spec = self._rootless_user_spec()
+        if user_spec is None:
+            return None
+        cmd = self._build_rootful_create_command()
+        cmd[2:2] = [
+            "--user",
+            user_spec,
+            "--security-opt",
+            "no-new-privileges:true",
+        ]
+        return cmd
 
     def _wait_for_localhost_http(self) -> bool:
         """Poll localhost until Qdrant HTTP port is reachable."""

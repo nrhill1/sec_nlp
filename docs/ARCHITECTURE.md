@@ -98,7 +98,7 @@ outputs/<run_timestamp>/analyze/<SYMBOL>/search/summary.yaml
 - Clear separation between config, execution, and serialization.
 - Fast-path native integrations through Rust extensions.
 - Optional infrastructure dependencies (Qdrant, Docker) instead of mandatory services.
-- Vector connectivity fallback for pipelines: configured endpoint → local `.qdrant` path → embedded `:memory:` when remote Docker/Qdrant is unavailable.
+- Vector connectivity fallback for pipelines: configured endpoint → best-effort `colima start` + `sec-nlp qdrant up` for localhost Docker → local `.qdrant` path → embedded `:memory:` when Docker/Qdrant remains unavailable.
 
 ## Tool Wrappers (LangChain)
 

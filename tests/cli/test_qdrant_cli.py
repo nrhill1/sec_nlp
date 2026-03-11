@@ -2,6 +2,7 @@
 """Tests for Qdrant CLI defaults, collection reporting, and startup diagnostics."""
 
 import logging
+import subprocess
 from dataclasses import dataclass
 
 import pytest
@@ -160,6 +161,83 @@ def test_qdrant_up_unreachable_raises_runtime_error(
         cmd.cli_cmd()
 
     assert calls["diagnostics"] == 1
+
+
+def test_qdrant_up_tries_rootless_container_first(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Container creation should prefer current-user execution by default."""
+    cmd = QdrantUp(rootless=True)
+    docker_calls: list[list[str]] = []
+
+    monkeypatch.setattr(cmd, "_rootless_user_spec", lambda: "501:20")
+
+    def _run_docker(
+        args: list[str], *, check: bool, capture_output: bool
+    ) -> subprocess.CompletedProcess[str]:
+        _ = (check, capture_output)
+        docker_calls.append(args)
+        return subprocess.CompletedProcess(args=args, returncode=0)
+
+    monkeypatch.setattr(cmd, "_run_docker", _run_docker)
+
+    cmd._create_container()
+
+    assert len(docker_calls) == 1
+    assert "--user" in docker_calls[0]
+    assert "501:20" in docker_calls[0]
+    assert "no-new-privileges:true" in docker_calls[0]
+
+
+def test_qdrant_up_falls_back_when_rootless_container_start_fails(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Container creation should retry without rootless mode on failure."""
+    cmd = QdrantUp(rootless=True)
+    docker_calls: list[list[str]] = []
+
+    monkeypatch.setattr(cmd, "_rootless_user_spec", lambda: "501:20")
+
+    def _run_docker(
+        args: list[str], *, check: bool, capture_output: bool
+    ) -> subprocess.CompletedProcess[str]:
+        _ = (check, capture_output)
+        docker_calls.append(args)
+        if len(docker_calls) == 1:
+            raise subprocess.CalledProcessError(returncode=125, cmd=args)
+        return subprocess.CompletedProcess(args=args, returncode=0)
+
+    monkeypatch.setattr(cmd, "_run_docker", _run_docker)
+    caplog.set_level(logging.WARNING, logger="sec_nlp")
+
+    cmd._create_container()
+
+    assert len(docker_calls) == 2
+    assert "--user" in docker_calls[0]
+    assert "--user" not in docker_calls[1]
+    assert "Rootless Qdrant container start failed" in caplog.text
+
+
+def test_qdrant_up_skips_rootless_when_disabled(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Container creation should use the default mode when rootless is disabled."""
+    cmd = QdrantUp(rootless=False)
+    docker_calls: list[list[str]] = []
+
+    def _run_docker(
+        args: list[str], *, check: bool, capture_output: bool
+    ) -> subprocess.CompletedProcess[str]:
+        _ = (check, capture_output)
+        docker_calls.append(args)
+        return subprocess.CompletedProcess(args=args, returncode=0)
+
+    monkeypatch.setattr(cmd, "_run_docker", _run_docker)
+
+    cmd._create_container()
+
+    assert len(docker_calls) == 1
+    assert "--user" not in docker_calls[0]
 
 
 def test_unreachable_diagnostics_explain_missing_network(
