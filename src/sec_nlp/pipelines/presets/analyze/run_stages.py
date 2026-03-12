@@ -14,7 +14,7 @@ from rich.progress import Progress, TaskID
 
 from sec_nlp.core.infra.logger import logger
 from sec_nlp.pipelines.base.stages import PipelineStageRunnable
-from sec_nlp.pipelines.metadata.accession import get_accession_from_metadata
+from sec_nlp.pipelines.runtime import get_accession_from_metadata
 from sec_nlp.pipelines.types import AnalysisResultDict, MetadataRecord
 from sec_nlp.types import JsonDict
 

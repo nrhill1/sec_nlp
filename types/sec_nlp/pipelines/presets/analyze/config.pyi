@@ -12,7 +12,7 @@ from sec_nlp.pipelines.base.config import (
     BasePipelineSettings as BasePipelineSettings,
 )
 from sec_nlp.pipelines.llm.config import LLMConfig as LLMConfig
-from sec_nlp.pipelines.metadata.filters import (
+from sec_nlp.pipelines.runtime import (
     MetadataFilters as MetadataFilters,
 )
 from sec_nlp.pipelines.vector.config import VectorConfig as VectorConfig

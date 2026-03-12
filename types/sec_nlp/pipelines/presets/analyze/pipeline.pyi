@@ -29,11 +29,11 @@ from sec_nlp.core.text.section_extractor import (
     SectionExtractor as SectionExtractor,
 )
 from sec_nlp.pipelines import BasePipeline as BasePipeline
-from sec_nlp.pipelines.metadata.accession import (
-    get_accession_from_metadata as get_accession_from_metadata,
-)
 from sec_nlp.pipelines.observability.telemetry import (
     log_chunk_length_stats as log_chunk_length_stats,
+)
+from sec_nlp.pipelines.runtime import (
+    get_accession_from_metadata as get_accession_from_metadata,
 )
 from sec_nlp.pipelines.types import (
     AnalysisResultDict as AnalysisResultDict,

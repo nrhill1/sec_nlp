@@ -37,7 +37,7 @@ from sec_nlp.pipelines.presets.analyze.types import (
     ChunkStats,
     PrefetchedSymbolData,
 )
-from sec_nlp.pipelines.state.store import ProcessingState
+from sec_nlp.pipelines.runtime import ProcessingState
 from sec_nlp.pipelines.types import (
     AnalysisResultDict,
     MetadataRecord,

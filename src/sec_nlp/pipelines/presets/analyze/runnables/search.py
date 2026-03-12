@@ -19,12 +19,12 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from sec_nlp.core.infra.logger import log_divider, logger
 from sec_nlp.core.types import coerce_bool, coerce_float
-from sec_nlp.pipelines.metadata.filters import (
+from sec_nlp.pipelines.output_io import write_yaml
+from sec_nlp.pipelines.runtime import (
     MetadataFilters,
     build_metadata_filter,
+    normalize_metadata_for_output,
 )
-from sec_nlp.pipelines.metadata.normalize import normalize_metadata_for_output
-from sec_nlp.pipelines.output_io import write_yaml
 from sec_nlp.pipelines.serialization import round_score
 from sec_nlp.types import JsonDict, JsonValue
 

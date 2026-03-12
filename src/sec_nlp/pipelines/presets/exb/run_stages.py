@@ -14,8 +14,8 @@ from pydantic import Field
 from sec_nlp.core.infra.logger import log_divider, logger
 from sec_nlp.core.text.keyword import KeywordMatcher
 from sec_nlp.pipelines.base.stages import PipelineStageRunnable
-from sec_nlp.pipelines.metadata.exhibit import prepare_vector_docs
 from sec_nlp.pipelines.observability.telemetry import log_chunk_length_stats
+from sec_nlp.pipelines.runtime import prepare_vector_docs
 from sec_nlp.pipelines.vector import upload_documents
 
 from .io.exhibit_summary import write_exhibit_summary

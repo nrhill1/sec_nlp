@@ -13,7 +13,6 @@ from sec_nlp.core.infra.logger import logger
 from sec_nlp.core.ingest.downloader import download_accessions
 from sec_nlp.core.ingest.filings import get_filing_date_from_dir
 from sec_nlp.core.text.ranking import KeywordExtractor, RankingAlgorithm
-from sec_nlp.pipelines.metadata.accession import get_accession_from_metadata
 from sec_nlp.pipelines.presets.analyze.config import AnalyzeConfig
 from sec_nlp.pipelines.presets.analyze.runnables.efts import (
     EFTSSearchInput,
@@ -26,6 +25,7 @@ from sec_nlp.pipelines.presets.analyze.runnables.search import (
 from sec_nlp.pipelines.presets.analyze.steps.search.efts_search import (
     EFTSSearchResult,
 )
+from sec_nlp.pipelines.runtime import get_accession_from_metadata
 from sec_nlp.pipelines.types import MetadataScalar, MetadataValue
 
 

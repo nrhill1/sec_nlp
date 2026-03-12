@@ -15,11 +15,11 @@ from sec_nlp.core.infra.logger import (
     log_divider as log_divider,
     logger as logger,
 )
-from sec_nlp.pipelines.metadata.filters import (
+from sec_nlp.pipelines.output_io import write_yaml as write_yaml
+from sec_nlp.pipelines.runtime import (
     MetadataFilters as MetadataFilters,
     build_metadata_filter as build_metadata_filter,
 )
-from sec_nlp.pipelines.output_io import write_yaml as write_yaml
 from sec_nlp.pipelines.types import (
     MetadataMap as MetadataMap,
     MetadataValue as MetadataValue,

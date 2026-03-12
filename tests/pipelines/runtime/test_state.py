@@ -1,5 +1,5 @@
-# tests/pipelines/state/test_store.py
-"""Tests for pipeline state tracking."""
+# tests/pipelines/runtime/test_state.py
+"""Tests for runtime state models and persistence helpers."""
 
 import json
 from pathlib import Path
@@ -8,7 +8,7 @@ from uuid import uuid4
 import pytest
 from pydantic import ValidationError
 
-from sec_nlp.pipelines.state import (
+from sec_nlp.pipelines.runtime import (
     ProcessedAccession,
     ProcessingState,
     ProcessingStateData,

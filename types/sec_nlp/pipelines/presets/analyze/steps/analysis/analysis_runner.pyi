@@ -13,7 +13,7 @@ from langchain_core.runnables import (
 from pydantic import BaseModel
 
 from sec_nlp.core.infra.logger import logger as logger
-from sec_nlp.pipelines.metadata.accession import (
+from sec_nlp.pipelines.runtime import (
     get_accession_from_metadata as get_accession_from_metadata,
 )
 from sec_nlp.pipelines.types import (

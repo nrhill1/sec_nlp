@@ -13,7 +13,6 @@ from langchain_core.documents import Document
 from langchain_qdrant import QdrantVectorStore
 from qdrant_client.models import FieldCondition, Filter, MatchAny, MatchValue
 
-from sec_nlp.pipelines.metadata.filters import MetadataFilters
 from sec_nlp.pipelines.presets.analyze import (
     AnalyzeConfig,
     AnalyzePipeline,
@@ -25,6 +24,7 @@ from sec_nlp.pipelines.presets.analyze.runnables.search import (
     SearchQueryResults,
     SearchRunnable,
 )
+from sec_nlp.pipelines.runtime import MetadataFilters
 from sec_nlp.pipelines.types import AnalysisResultDict
 
 
