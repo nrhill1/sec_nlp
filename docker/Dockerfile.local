@@ -1,0 +1,38 @@
+ARG SEC_NLP_GIT_COMMIT=unknown
+
+FROM ghcr.io/astral-sh/uv:python3.13-bookworm-slim
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    RUSTUP_HOME=/usr/local/rustup \
+    CARGO_HOME=/usr/local/cargo \
+    PATH=/usr/local/cargo/bin:/workspace/.venv/bin:${PATH} \
+    UV_LINK_MODE=copy \
+    SEC_NLP_CONTAINER_GIT_COMMIT=${SEC_NLP_GIT_COMMIT} \
+    SEC_NLP_CONTAINER_ROLE=benchmark-runner
+
+LABEL org.opencontainers.image.title="sec-nlp benchmark runner" \
+      org.opencontainers.image.revision="${SEC_NLP_GIT_COMMIT}" \
+      io.sec_nlp.role="benchmark-runner"
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    bash \
+    build-essential \
+    ca-certificates \
+    clang \
+    cmake \
+    curl \
+    git \
+    libssl-dev \
+    make \
+    pkg-config \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN curl https://sh.rustup.rs -sSf | bash -s -- -y --profile minimal --default-toolchain stable
+
+WORKDIR /workspace
+
+COPY docker/dev-entrypoint.sh /usr/local/bin/sec-nlp-dev-entrypoint
+
+RUN chmod +x /usr/local/bin/sec-nlp-dev-entrypoint
+
+CMD ["sleep", "infinity"]

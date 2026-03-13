@@ -104,6 +104,59 @@ Optional persistent Qdrant:
 sec-nlp qdrant up
 ```
 
+### 4b) Run the local Docker stack
+
+This repo now includes a background-friendly Docker Compose stack with:
+
+- `benchmark-runner`: repo-mounted app container that idles after syncing
+  dependencies and building Rust extensions when needed
+- `qdrant`: local Qdrant sidecar exposed on `localhost:6335` by default
+
+Start it with one command:
+
+```bash
+docker compose up -d --build
+```
+
+Or via make:
+
+```bash
+make docker-up
+```
+
+Then exec into the app container:
+
+```bash
+docker compose exec benchmark-runner bash
+```
+
+Inside the container, run the usual commands:
+
+```bash
+uv run sec-nlp --help
+uv run pytest tests/benchmarks -q
+```
+
+Notes:
+
+- The app container defaults `SEC_NLP_OLLAMA_BASE_URL` to
+  `http://host.docker.internal:11434`, so Ollama can stay on the host.
+- The runner image and startup metadata carry the current git commit hash when
+  you start the stack with `make docker-up`. The entrypoint also writes
+  `logs/container/benchmark-runner/metadata.json` and
+  `logs/container/benchmark-runner/bootstrap.log` inside the Docker-backed log
+  volume.
+- The Compose-managed Qdrant sidecar uses `localhost:6335` and `localhost:6336`
+  by default so it does not collide with an existing `sec-nlp qdrant up`
+  container on `6333/6334`. Override with
+  `SEC_NLP_DOCKER_QDRANT_HTTP_PORT` and `SEC_NLP_DOCKER_QDRANT_GRPC_PORT`
+  if you want different host bindings.
+- Runtime state (`.venv`, `.cache`, `outputs`, `downloads`, `logs`, `.qdrant`,
+  and `target`) is kept in Docker volumes so the background container can run
+  without churning host-owned files in the repo checkout, and the bootstrap
+  logs stay isolated under `logs/container/benchmark-runner/`.
+- Stop the stack with `docker compose down` or `make docker-down`.
+
 ### 5) Run examples
 
 ```bash

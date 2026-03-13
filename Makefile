@@ -68,6 +68,10 @@ help:
 	@echo ""
 	@echo "Quick Commands:"
 	@echo "  dev                    Setup dev environment"
+	@echo "  docker-up              Build and start the local Docker stack"
+	@echo "  docker-shell           Open a shell in the background app container"
+	@echo "  docker-down            Stop the local Docker stack"
+	@echo "  docker-logs            Follow app container logs"
 	@echo "  stubs                  Generate type stubs (Python)"
 	@echo "  test                   Run all tests"
 	@echo "  lint                   Run all linters"
@@ -243,6 +247,22 @@ build-ext: ready
 dev: setup sync
 	@echo "✓ Development environment ready!"
 	@echo ""
+
+.PHONY: docker-up
+docker-up:
+	@SEC_NLP_GIT_COMMIT=$$(git rev-parse --short=12 HEAD) docker compose up -d --build
+
+.PHONY: docker-shell
+docker-shell:
+	@docker compose exec benchmark-runner bash
+
+.PHONY: docker-down
+docker-down:
+	@docker compose down
+
+.PHONY: docker-logs
+docker-logs:
+	@docker compose logs -f benchmark-runner
 
 .PHONY: test
 test: ready

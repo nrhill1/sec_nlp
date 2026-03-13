@@ -1,0 +1,70 @@
+name: sec-benchmark-local
+
+services:
+  benchmark-runner:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.local
+      args:
+        SEC_NLP_GIT_COMMIT: ${SEC_NLP_GIT_COMMIT:-unknown}
+    working_dir: /workspace
+    entrypoint:
+      - /usr/local/bin/sec-nlp-dev-entrypoint
+    command:
+      - sleep
+      - infinity
+    environment:
+      SEC_NLP_OLLAMA_BASE_URL: ${SEC_NLP_OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+      SEC_NLP_VDB_QDRANT_URL: ${SEC_NLP_VDB_QDRANT_URL:-http://qdrant:6333}
+      SEC_NLP_VDB_QDRANT_LOCATION: ${SEC_NLP_VDB_QDRANT_LOCATION:-/workspace/.qdrant/local}
+      SEC_NLP_CONTAINER_LOG_DIR: /workspace/logs/container/benchmark-runner
+      UV_LINK_MODE: copy
+      PIP_DISABLE_PIP_VERSION_CHECK: "1"
+    extra_hosts:
+      - host.docker.internal:host-gateway
+    init: true
+    restart: unless-stopped
+    stdin_open: true
+    tty: true
+    volumes:
+      - .:/workspace
+      - sec_nlp_venv:/workspace/.venv
+      - sec_nlp_cache:/workspace/.cache
+      - sec_nlp_outputs:/workspace/outputs
+      - sec_nlp_downloads:/workspace/downloads
+      - sec_nlp_logs:/workspace/logs
+      - sec_nlp_qdrant_local:/workspace/.qdrant
+      - sec_nlp_target:/workspace/target
+      - sec_nlp_uv_cache:/root/.cache/uv
+      - sec_nlp_cargo:/root/.cargo
+    depends_on:
+      - qdrant
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - test -f /workspace/.cache/docker/container-ready
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+
+  qdrant:
+    image: qdrant/qdrant:v1.13.6
+    ports:
+      - "${SEC_NLP_DOCKER_QDRANT_HTTP_PORT:-6335}:6333"
+      - "${SEC_NLP_DOCKER_QDRANT_GRPC_PORT:-6336}:6334"
+    restart: unless-stopped
+    volumes:
+      - sec_nlp_qdrant_service:/qdrant/storage
+
+volumes:
+  sec_nlp_cache:
+  sec_nlp_cargo:
+  sec_nlp_downloads:
+  sec_nlp_logs:
+  sec_nlp_outputs:
+  sec_nlp_qdrant_local:
+  sec_nlp_qdrant_service:
+  sec_nlp_target:
+  sec_nlp_uv_cache:
+  sec_nlp_venv:
