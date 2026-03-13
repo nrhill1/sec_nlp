@@ -2,8 +2,6 @@ ARG SEC_NLP_GIT_COMMIT=unknown
 
 FROM ghcr.io/astral-sh/uv:python3.13-bookworm-slim AS rust-base
 
-ARG SEC_NLP_GIT_COMMIT=unknown
-
 ENV DEBIAN_FRONTEND=noninteractive \
     RUSTUP_HOME=/usr/local/rustup \
     CARGO_HOME=/usr/local/cargo \
@@ -25,8 +23,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN curl https://sh.rustup.rs -sSf | bash -s -- -y --profile minimal --default-toolchain stable
 
 FROM rust-base AS rust-ext-builder
-
-ARG SEC_NLP_GIT_COMMIT=unknown
 
 RUN python3 -m pip install --no-cache-dir maturin
 
