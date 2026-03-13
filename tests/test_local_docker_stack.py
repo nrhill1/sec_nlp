@@ -58,4 +58,5 @@ def test_dockerfile_uses_prebuilt_rust_extension_stage() -> None:
     )
     assert "SEC_NLP_PREBUILT_WHEEL_DIR=/opt/sec-nlp/wheels" in dockerfile_text
     assert "installing prebuilt Rust extensions" in entrypoint_text
+    assert 'if [[ "${needs_sync}" -eq 1 ]]; then' in entrypoint_text
     assert "src/scripts/build/check_imports.py" in entrypoint_text

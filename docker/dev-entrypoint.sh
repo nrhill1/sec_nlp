@@ -68,6 +68,10 @@ if [[ ! -f "${WHEEL_INSTALL_STAMP}" ]]; then
   needs_rust_wheels=1
 fi
 
+if [[ "${needs_sync}" -eq 1 ]]; then
+  needs_rust_wheels=1
+fi
+
 if [[ ! -f "${PREBUILT_WHEEL_MANIFEST}" ]]; then
   echo "[sec-nlp-container] (${GIT_COMMIT}) missing prebuilt Rust wheel manifest at ${PREBUILT_WHEEL_MANIFEST}"
   exit 1
