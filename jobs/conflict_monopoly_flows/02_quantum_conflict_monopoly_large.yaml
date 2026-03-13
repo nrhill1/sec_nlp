@@ -1,0 +1,173 @@
+name: quantum_conflict_monopoly_large_flow
+defaults:
+  email: you@example.com
+on_failure: stop
+stages:
+- id: retrieve_simple_terms
+  pipeline: retrieve
+  overrides:
+    queries:
+    - quantum export controls
+    - quantum monopoly risk
+    - hyperscaler exclusivity
+    - quantum government concentration
+    - quantum IP concentration
+    - quantum cloud gatekeepers
+    - sovereign compute restrictions
+    - quantum defense contracts
+    output_format: json
+    top_k: 150
+    efts_candidates: 900
+    hydrate_top_n: 260
+    query_term_min_hits: 0
+    query_term_min_ratio: 0.0
+    stopword_aware_lexical: true
+    rerank_with_embeddings: true
+    index_results: true
+    vdb: &quantum_vdb
+      collection_name: thematic_quantum_conflict_monopoly_large
+      embedding_model: qwen3-embedding:4b
+      vector_size: 2560
+      qdrant_url: http://localhost:6333
+      qdrant_location: null
+    symbols: &quantum_symbols
+    - IONQ
+    - RGTI
+    - QBTS
+    - QUBT
+    - IBM
+    - HON
+    forms: &quantum_forms
+    - 10-K
+    - 10-Q
+    - 8-K
+    - 6-K
+    - 20-F
+    start_date: '2023-03-12'
+    dry_run: false
+- id: retrieve_conflict_terms
+  pipeline: retrieve
+  overrides:
+    queries:
+    - export controls sanctions entity-list exposure and national-security restrictions
+      affecting quantum hardware cloud access or advanced component sourcing
+    - government budget cycles defense procurement and geopolitical competition
+      shaping quantum contract concentration renewal timing or revenue durability
+    - cross-border talent restrictions visa friction and research collaboration limits
+      weakening product roadmaps or commercialization speed
+    - semiconductor photonics cryogenics or fabrication bottlenecks tied to geopolitical
+      conflict allied export regimes or supply-denial scenarios
+    - sovereign-compute requirements trusted-vendor mandates and restricted-country
+      customer screening affecting quantum go-to-market strategy
+    - cybersecurity national-lab and intelligence-related obligations increasing
+      dependence on a narrow set of governments strategic partners or regulated
+      buyers
+    output_format: json
+    top_k: 165
+    efts_candidates: 950
+    hydrate_top_n: 300
+    query_term_min_hits: 0
+    query_term_min_ratio: 0.0
+    stopword_aware_lexical: true
+    rerank_with_embeddings: true
+    index_results: true
+    vdb: *quantum_vdb
+    symbols: *quantum_symbols
+    forms: *quantum_forms
+    start_date: '2023-03-12'
+    dry_run: false
+- id: retrieve_monopoly_terms
+  pipeline: retrieve
+  overrides:
+    queries:
+    - platform lock-in exclusive cloud distribution and gatekeeper control over
+      enterprise access to quantum workloads
+    - sole-source government awards preferred-vendor status and concentrated backlog
+      as signals of monopoly or oligopoly formation
+    - IP moat standards capture patent concentration and exclusive licensing restricting
+      competitor entry in quantum hardware or software stacks
+    - strategic partnership exclusivity manufacturing concentration and limited
+      foundry or component access creating barriers to scale
+    - customer concentration reseller dependence and hyperscaler bargaining power
+      shaping pricing leverage and channel control
+    - acquisition consolidation and ecosystem control expanding end-to-end quantum
+      market power from hardware through managed services
+    output_format: json
+    top_k: 170
+    efts_candidates: 950
+    hydrate_top_n: 320
+    query_term_min_hits: 0
+    query_term_min_ratio: 0.0
+    stopword_aware_lexical: true
+    rerank_with_embeddings: true
+    index_results: true
+    vdb: *quantum_vdb
+    symbols: *quantum_symbols
+    forms: *quantum_forms
+    start_date: '2023-03-12'
+    dry_run: false
+- id: retrieve_complex_terms
+  pipeline: retrieve
+  overrides:
+    queries:
+    - explain how geopolitical rivalry export controls defense prioritization and
+      restricted component supply could accelerate monopoly or oligopoly formation
+      in quantum computing while changing pricing power backlog quality and funding
+      durability
+    - identify filing disclosures that connect sovereign-compute mandates hyperscaler
+      partnerships and exclusive government programs with channel lock-in barriers
+      to entry or dependence on a small number of strategic customers
+    - compare management commentary on whether quantum commercialization is likely
+      to consolidate around a few hardware architectures cloud platforms or intellectual-property
+      owners and note quantified impacts where disclosed
+    - surface language linking national-security conflict semiconductor scarcity
+      talent controls and standards-setting influence to competitive moats or platform
+      dominance across the quantum basket
+    - discuss whether issuers describe monopoly-like outcomes through exclusive
+      access to fabrication cryogenic infrastructure algorithm stacks or long-term
+      procurement frameworks and how those outcomes affect revenue concentration
+      and execution risk
+    output_format: json
+    top_k: 180
+    efts_candidates: 1000
+    hydrate_top_n: 340
+    query_term_min_hits: 0
+    query_term_min_ratio: 0.0
+    stopword_aware_lexical: true
+    rerank_with_embeddings: true
+    index_results: true
+    vdb: *quantum_vdb
+    symbols: *quantum_symbols
+    forms: *quantum_forms
+    start_date: '2023-03-12'
+    dry_run: false
+- id: chat_answer
+  pipeline: chat
+  overrides:
+    question: Compare the quantum basket on geopolitical-conflict exposure, emerging
+      monopoly or gatekeeper dynamics, and concentration risk. Distinguish simple-term
+      evidence from complex-term evidence, identify which issuers are building
+      durable control points versus depending on governments or hyperscalers, and
+      call out who is most exposed if procurement or export regimes tighten.
+    interactive: false
+    output_format: yaml
+    collections:
+    - thematic_quantum_conflict_monopoly_large
+    top_k: 24
+    max_context_chunks: 32
+    context_token_budget: 32000
+    include_market_context: true
+    include_news_context: true
+    rerank_mode: mmr
+    generation_token_cap: 0
+    llm:
+      model_name: qwen3:8b
+      require_json: false
+      temperature: 0.03
+      max_new_tokens: 8192
+      num_ctx: 32768
+    vdb: *quantum_vdb
+    symbols: *quantum_symbols
+    forms: *quantum_forms
+    start_date: '2023-03-12'
+    dry_run: false

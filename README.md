@@ -161,6 +161,11 @@ Prebuilt flow packs:
 - `/Users/nicolashill/Projects/sec/jobs/industry_tier_jobs`:
   mixed retrieve/chat/flow presets with standardized industry collections split
   by low/medium/high model tiers.
+- `/Users/nicolashill/Projects/sec/jobs/conflict_monopoly_flows`:
+  two multi-stage large flows for REMs and quantum, each spanning simple terms,
+  geopolitical-conflict retrieval, monopoly/concentration retrieval, and
+  complex synthesis queries over filings from March 12, 2023 through the run
+  date.
 
 ## Analyze Presets
 

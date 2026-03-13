@@ -1,0 +1,172 @@
+name: rems_conflict_monopoly_large_flow
+defaults:
+  email: you@example.com
+on_failure: stop
+stages:
+- id: retrieve_simple_terms
+  pipeline: retrieve
+  overrides:
+    queries:
+    - rare earth export controls
+    - NdPr pricing power
+    - magnet supply chain concentration
+    - China rare earth dependency
+    - rare earth offtake exclusivity
+    - rare earth monopoly risk
+    - critical minerals sanctions exposure
+    - rare earth defense demand
+    output_format: json
+    top_k: 150
+    efts_candidates: 900
+    hydrate_top_n: 260
+    query_term_min_hits: 0
+    query_term_min_ratio: 0.0
+    stopword_aware_lexical: true
+    rerank_with_embeddings: true
+    index_results: true
+    vdb: &rems_vdb
+      collection_name: thematic_rems_conflict_monopoly_large
+      embedding_model: qwen3-embedding:4b
+      vector_size: 2560
+      qdrant_url: http://localhost:6333
+      qdrant_location: null
+    symbols: &rems_symbols
+    - MP
+    - LAC
+    - UUUU
+    - TMRC
+    - AREC
+    - USAR
+    forms: &rems_forms
+    - 10-K
+    - 10-Q
+    - 8-K
+    - 6-K
+    - 20-F
+    start_date: '2023-03-12'
+    dry_run: false
+- id: retrieve_conflict_terms
+  pipeline: retrieve
+  overrides:
+    queries:
+    - China export controls sanctions tariff retaliation and conflict spillover
+      risks affecting rare earth feedstock refining or magnet supply
+    - geopolitical conflict military procurement and allied stockpile policies
+      changing demand visibility for rare earth oxide and metal producers
+    - shipping-route disruption border restrictions and customs enforcement slowing
+      concentrate separation or downstream magnet deliveries
+    - reliance on Chinese refiners processors or tolling partners as a sanctions
+      and national-security vulnerability
+    - domestic policy support defense grants and strategic reserve programs
+      reshaping rare earth project economics and execution risk
+    - permitting indigenous land disputes and foreign policy friction delaying
+      mine-to-magnet buildouts or offtake certainty
+    output_format: json
+    top_k: 165
+    efts_candidates: 950
+    hydrate_top_n: 300
+    query_term_min_hits: 0
+    query_term_min_ratio: 0.0
+    stopword_aware_lexical: true
+    rerank_with_embeddings: true
+    index_results: true
+    vdb: *rems_vdb
+    symbols: *rems_symbols
+    forms: *rems_forms
+    start_date: '2023-03-12'
+    dry_run: false
+- id: retrieve_monopoly_terms
+  pipeline: retrieve
+  overrides:
+    queries:
+    - monopoly monopsony dominant-share processing bottleneck and pricing leverage
+      in rare earth separation metals or magnets
+    - exclusive offtake contracts take-or-pay structures and customer lock-in
+      creating concentrated control over strategic rare earth output
+    - vertical integration from mine to separation to magnet manufacturing as a
+      barrier to entry and margin-capture strategy
+    - near-monopoly refining ownership sole-source qualification and concentration
+      risk for defense and EV supply chains
+    - consolidation acquisition joint-venture control and long-term capacity
+      reservation expanding market power in rare earth value chains
+    - pricing-reset clauses benchmark opacity and dominant-buyer dynamics
+      influencing realized rare earth margins or revenue concentration
+    output_format: json
+    top_k: 170
+    efts_candidates: 950
+    hydrate_top_n: 320
+    query_term_min_hits: 0
+    query_term_min_ratio: 0.0
+    stopword_aware_lexical: true
+    rerank_with_embeddings: true
+    index_results: true
+    vdb: *rems_vdb
+    symbols: *rems_symbols
+    forms: *rems_forms
+    start_date: '2023-03-12'
+    dry_run: false
+- id: retrieve_complex_terms
+  pipeline: retrieve
+  overrides:
+    queries:
+    - explain how geopolitical conflict export licensing sanctions and concentrated
+      refining ownership could create monopoly-like pricing power supply insecurity
+      or forced vertical integration with quantified revenue margin capex or working-capital
+      effects where disclosed
+    - discuss whether management describes rare earth or magnet markets as structurally
+      concentrated and how conflict with China trade controls or defense procurement
+      requirements could strengthen or weaken competitive moats over the next three
+      years
+    - identify disclosures connecting armed conflict tariff escalation shipping
+      disruption or strategic stockpiling with customer concentration offtake exclusivity
+      and barriers to entry across the rare earth basket
+    - compare company commentary on mine-to-magnet integration domestic processing
+      buildout and monopolistic bottlenecks in separation or metal conversion including
+      references to timing budget overruns and qualification delays
+    - surface filing language that links geopolitical fragmentation antitrust exposure
+      exclusive supply arrangements and long-duration capacity reservations to pricing
+      leverage or procurement lockout risk
+    output_format: json
+    top_k: 180
+    efts_candidates: 1000
+    hydrate_top_n: 340
+    query_term_min_hits: 0
+    query_term_min_ratio: 0.0
+    stopword_aware_lexical: true
+    rerank_with_embeddings: true
+    index_results: true
+    vdb: *rems_vdb
+    symbols: *rems_symbols
+    forms: *rems_forms
+    start_date: '2023-03-12'
+    dry_run: false
+- id: chat_answer
+  pipeline: chat
+  overrides:
+    question: Compare the rare earth basket on exposure to geopolitical conflict,
+      monopoly formation, and supply-chain concentration. Separate evidence tied
+      to simple-term hits versus complex-term hits, identify who gains pricing
+      power or procurement leverage, and call out which issuers remain most exposed
+      to lockout risk or concentrated processing chokepoints.
+    interactive: false
+    output_format: yaml
+    collections:
+    - thematic_rems_conflict_monopoly_large
+    top_k: 24
+    max_context_chunks: 32
+    context_token_budget: 32000
+    include_market_context: true
+    include_news_context: true
+    rerank_mode: mmr
+    generation_token_cap: 0
+    llm:
+      model_name: qwen3:8b
+      require_json: false
+      temperature: 0.03
+      max_new_tokens: 8192
+      num_ctx: 32768
+    vdb: *rems_vdb
+    symbols: *rems_symbols
+    forms: *rems_forms
+    start_date: '2023-03-12'
+    dry_run: false
