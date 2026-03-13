@@ -222,6 +222,7 @@ maturin-sdist:
 
 .PHONY: build-ext
 build-ext: ready
+	@set -euo pipefail
 	@echo "==> Building Rust extensions..."
 	@mkdir -p $(MATURIN_WHEEL_OUT)
 	@RUSTFLAGS="$(RUSTFLAGS_DEV)" maturin build -m $(MARKET_MANIFEST) --interpreter $(PYTHON_BIN) --out $(MATURIN_WHEEL_OUT)

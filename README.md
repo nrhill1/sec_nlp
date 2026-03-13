@@ -146,6 +146,9 @@ Notes:
   `logs/container/benchmark-runner/metadata.json` and
   `logs/container/benchmark-runner/bootstrap.log` inside the Docker-backed log
   volume.
+- Rust extensions are now prebuilt into the image in a dedicated Docker build
+  stage and installed into the container venv during startup, so readiness only
+  goes green after the extension import check passes.
 - The Compose-managed Qdrant sidecar uses `localhost:6335` and `localhost:6336`
   by default so it does not collide with an existing `sec-nlp qdrant up`
   container on `6333/6334`. Override with

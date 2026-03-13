@@ -1,18 +1,13 @@
 ARG SEC_NLP_GIT_COMMIT=unknown
 
-FROM ghcr.io/astral-sh/uv:python3.13-bookworm-slim
+FROM ghcr.io/astral-sh/uv:python3.13-bookworm-slim AS rust-base
+
+ARG SEC_NLP_GIT_COMMIT=unknown
 
 ENV DEBIAN_FRONTEND=noninteractive \
     RUSTUP_HOME=/usr/local/rustup \
     CARGO_HOME=/usr/local/cargo \
-    PATH=/usr/local/cargo/bin:/workspace/.venv/bin:${PATH} \
-    UV_LINK_MODE=copy \
-    SEC_NLP_CONTAINER_GIT_COMMIT=${SEC_NLP_GIT_COMMIT} \
-    SEC_NLP_CONTAINER_ROLE=benchmark-runner
-
-LABEL org.opencontainers.image.title="sec-nlp benchmark runner" \
-      org.opencontainers.image.revision="${SEC_NLP_GIT_COMMIT}" \
-      io.sec_nlp.role="benchmark-runner"
+    PATH=/usr/local/cargo/bin:${PATH}
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     bash \
@@ -29,7 +24,53 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 RUN curl https://sh.rustup.rs -sSf | bash -s -- -y --profile minimal --default-toolchain stable
 
+FROM rust-base AS rust-ext-builder
+
+ARG SEC_NLP_GIT_COMMIT=unknown
+
+RUN python3 -m pip install --no-cache-dir maturin
+
+WORKDIR /build
+
+COPY crates /build/crates
+
+RUN mkdir -p /opt/sec-nlp/wheels
+RUN maturin build -m /build/crates/market/Cargo.toml --release --interpreter python3 --out /opt/sec-nlp/wheels --auditwheel skip
+RUN maturin build -m /build/crates/efts/Cargo.toml --release --interpreter python3 --out /opt/sec-nlp/wheels --auditwheel skip
+RUN maturin build -m /build/crates/corr/Cargo.toml --release --interpreter python3 --out /opt/sec-nlp/wheels --auditwheel skip
+RUN maturin build -m /build/crates/xbrl/Cargo.toml --release --interpreter python3 --out /opt/sec-nlp/wheels --auditwheel skip
+RUN maturin build -m /build/crates/entity/Cargo.toml --release --interpreter python3 --out /opt/sec-nlp/wheels --auditwheel skip
+RUN maturin build -m /build/crates/newswatch/Cargo.toml --release --interpreter python3 --out /opt/sec-nlp/wheels --auditwheel skip
+RUN python3 - <<'PY'
+from pathlib import Path
+
+wheel_dir = Path("/opt/sec-nlp/wheels")
+wheel_names = sorted(path.name for path in wheel_dir.glob("*.whl"))
+if not wheel_names:
+    raise SystemExit("No Rust extension wheels were built")
+(wheel_dir / "manifest.txt").write_text("".join(f"{wheel_name}\n" for wheel_name in wheel_names), encoding="utf-8")
+PY
+
+FROM rust-base
+
+ARG SEC_NLP_GIT_COMMIT=unknown
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    RUSTUP_HOME=/usr/local/rustup \
+    CARGO_HOME=/usr/local/cargo \
+    PATH=/usr/local/cargo/bin:/workspace/.venv/bin:${PATH} \
+    UV_LINK_MODE=copy \
+    SEC_NLP_CONTAINER_GIT_COMMIT=${SEC_NLP_GIT_COMMIT} \
+    SEC_NLP_CONTAINER_ROLE=benchmark-runner \
+    SEC_NLP_PREBUILT_WHEEL_DIR=/opt/sec-nlp/wheels
+
+LABEL org.opencontainers.image.title="sec-nlp benchmark runner" \
+      org.opencontainers.image.revision="${SEC_NLP_GIT_COMMIT}" \
+      io.sec_nlp.role="benchmark-runner"
+
 WORKDIR /workspace
+
+COPY --from=rust-ext-builder /opt/sec-nlp/wheels /opt/sec-nlp/wheels
 
 COPY docker/dev-entrypoint.sh /usr/local/bin/sec-nlp-dev-entrypoint
 
