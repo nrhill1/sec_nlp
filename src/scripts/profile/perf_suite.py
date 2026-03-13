@@ -43,6 +43,8 @@ from sec_nlp.types import (  # noqa: E402
     JsonValue,  # noqa: E402
 )
 
+type StableSummaryPayload = dict[str, JsonValue]
+
 
 @dataclass(frozen=True)
 class PerfCase:
@@ -70,6 +72,37 @@ class PerfIteration:
     stage_timings: dict[str, float]
     output_counts: dict[str, int]
     stderr_tail: str | None
+
+
+def _case_has_tags(case: PerfCase, include_tags: list[str]) -> bool:
+    """Return whether a case contains every requested tag."""
+    if not include_tags:
+        return True
+    case_tags = {tag.strip().lower() for tag in case.tags if tag.strip()}
+    required_tags = {tag.strip().lower() for tag in include_tags if tag.strip()}
+    return required_tags.issubset(case_tags)
+
+
+def _select_cases(
+    cases: list[PerfCase],
+    *,
+    include_cases: list[str],
+    include_tags: list[str],
+) -> list[PerfCase]:
+    """Filter cases by optional case-name allowlist and required tags."""
+    selected = cases
+    if include_cases:
+        allowed_case_names = {
+            name.strip() for name in include_cases if name.strip()
+        }
+        selected = [
+            case for case in selected if case.name in allowed_case_names
+        ]
+    if include_tags:
+        selected = [
+            case for case in selected if _case_has_tags(case, include_tags)
+        ]
+    return selected
 
 
 def _percentile(values: list[float], pct: float) -> float:
@@ -338,12 +371,14 @@ def _default_cases(
         ),
         (
             "flow_rems_high_qwen",
-            Path("jobs/model_variety_flows/03_rems_high_qwen.yaml"),
+            Path("jobs/benchmark_matrix_flows/02_rems_high_qwen_aligned.yaml"),
             ["flow", "rems", "benchmark", "baseline", "model-variety"],
         ),
         (
             "flow_rems_large_merged",
-            Path("jobs/merged_basket_high_models/05_rems_large.yaml"),
+            Path(
+                "jobs/benchmark_matrix_flows/01_rems_large_merged_aligned.yaml"
+            ),
             ["flow", "rems", "benchmark", "baseline", "merged"],
         ),
         (
@@ -356,13 +391,15 @@ def _default_cases(
         (
             "flow_quantum_high_qwen_ministral",
             Path(
-                "jobs/model_variety_flows/05_quantum_high_qwen_ministral.yaml"
+                "jobs/benchmark_matrix_flows/04_quantum_high_qwen_ministral_aligned.yaml"
             ),
             ["flow", "quantum", "benchmark", "baseline", "model-variety"],
         ),
         (
             "flow_quantum_large_merged",
-            Path("jobs/merged_basket_high_models/11_quantum_large.yaml"),
+            Path(
+                "jobs/benchmark_matrix_flows/03_quantum_large_merged_aligned.yaml"
+            ),
             ["flow", "quantum", "benchmark", "baseline", "merged"],
         ),
     ]
@@ -706,15 +743,24 @@ def _build_summary(iterations: list[PerfIteration]) -> dict[str, JsonValue]:
         elif pipeline == "retrieve":
             slo_target_seconds = 25.0
         stage_totals: dict[str, float] = {}
+        output_totals: dict[str, float] = {}
         for run in case_runs:
             for stage_name, stage_value in run.stage_timings.items():
                 stage_totals[stage_name] = (
                     stage_totals.get(stage_name, 0.0) + stage_value
                 )
+            for output_name, output_value in run.output_counts.items():
+                output_totals[output_name] = (
+                    output_totals.get(output_name, 0.0) + output_value
+                )
 
         stage_means = {
             stage_name: round(total / len(case_runs), 6)
             for stage_name, total in stage_totals.items()
+        }
+        output_means = {
+            output_name: round(total / len(case_runs), 6)
+            for output_name, total in output_totals.items()
         }
         p95_seconds = round(_percentile(elapsed, 95), 6)
 
@@ -727,12 +773,27 @@ def _build_summary(iterations: list[PerfIteration]) -> dict[str, JsonValue]:
             "max_seconds": round(max(elapsed), 6),
             "min_seconds": round(min(elapsed), 6),
             "stage_mean_seconds": stage_means,
+            "output_mean_counts": output_means,
         }
         if slo_target_seconds is not None:
             case_summary["slo_p95_seconds"] = slo_target_seconds
             case_summary["slo_pass"] = p95_seconds <= slo_target_seconds
         summary[case_name] = case_summary
     return summary
+
+
+def _build_artifact_payload(
+    iterations: list[PerfIteration],
+    *,
+    repeats: int,
+) -> StableSummaryPayload:
+    """Build one raw perf artifact payload from completed iterations."""
+    return {
+        "generated_at": datetime.now(UTC).isoformat(),
+        "repeats": repeats,
+        "cases": [asdict(iteration) for iteration in iterations],
+        "summary": _build_summary(iterations),
+    }
 
 
 def _artifact_path(output_dir: Path) -> Path:
@@ -782,6 +843,53 @@ def _build_json_dict(mapping: object) -> dict[str, JsonValue]:
     return result
 
 
+def _stable_summary_from_artifact(
+    artifact: dict[str, JsonValue],
+    *,
+    suite_name: str,
+    summary_label: str | None,
+    source_ref: str | None,
+    source_commit: str | None,
+    source_artifact: Path | None,
+) -> StableSummaryPayload:
+    """Build a deterministic summary export from one raw perf artifact."""
+    raw_summary = artifact.get("summary")
+    raw_repeats = artifact.get("repeats")
+    raw_generated_at = artifact.get("generated_at")
+    summary = _build_json_dict(raw_summary)
+    ordered_summary = {
+        case_name: summary[case_name] for case_name in sorted(summary)
+    }
+    payload: StableSummaryPayload = {
+        "schema_version": 1,
+        "suite_name": suite_name,
+        "exported_at": datetime.now(UTC).isoformat(),
+        "summary": ordered_summary,
+    }
+    if summary_label is not None:
+        payload["summary_label"] = summary_label
+    if isinstance(raw_repeats, int):
+        payload["repeats"] = raw_repeats
+    if isinstance(raw_generated_at, str):
+        payload["source_generated_at"] = raw_generated_at
+    if source_ref is not None:
+        payload["source_ref"] = source_ref
+    if source_commit is not None:
+        payload["source_commit"] = source_commit
+    if source_artifact is not None:
+        payload["source_artifact"] = str(source_artifact)
+    return payload
+
+
+def _write_json_payload(path: Path, payload: StableSummaryPayload) -> None:
+    """Write one JSON payload with stable formatting."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps(payload, indent=2, sort_keys=True),
+        encoding="utf-8",
+    )
+
+
 def _latest_artifacts(output_dir: Path, count: int = 2) -> list[Path]:
     """Return the most recent perf suite artifacts."""
     return sorted(output_dir.glob("perf_suite_*.json"))[-count:]
@@ -799,7 +907,7 @@ class PerfSuiteConfig(BaseSettings):
 
     mode: str = Field(
         default="run",
-        description="Mode: run or compare",
+        description="Mode: run, compare, or export.",
     )
     repeats: int = Field(
         default=3,
@@ -837,6 +945,34 @@ class PerfSuiteConfig(BaseSettings):
         default_factory=list,
         description="Optional case-name allowlist.",
     )
+    include_tags: list[str] = Field(
+        default_factory=list,
+        description="Optional required-tag allowlist.",
+    )
+    input_artifact: Path | None = Field(
+        default=None,
+        description="Raw perf artifact used in export mode.",
+    )
+    output_path: Path | None = Field(
+        default=None,
+        description="Stable output path for export mode.",
+    )
+    suite_name: str | None = Field(
+        default=None,
+        description="Stable suite name used in export mode.",
+    )
+    summary_label: str | None = Field(
+        default=None,
+        description="Optional label attached to exported summaries.",
+    )
+    source_ref: str | None = Field(
+        default=None,
+        description="Optional git ref label attached to exported summaries.",
+    )
+    source_commit: str | None = Field(
+        default=None,
+        description="Optional git commit attached to exported summaries.",
+    )
     log_level: str = Field(
         default="INFO",
         description="Logging level.",
@@ -858,7 +994,10 @@ class PerfSuiteConfig(BaseSettings):
         if mode == "compare":
             self._compare_latest()
             return
-        raise ValueError("mode must be 'run' or 'compare'")
+        if mode == "export":
+            self._export_summary()
+            return
+        raise ValueError("mode must be 'run', 'compare', or 'export'")
 
     def _run_suite(self) -> None:
         """Run the selected perf matrix and write the artifact summary."""
@@ -871,11 +1010,11 @@ class PerfSuiteConfig(BaseSettings):
             chat_model_name=self.chat_model_name,
             chat_max_new_tokens=self.chat_max_new_tokens,
         )
-        if self.include_cases:
-            allow = {
-                name.strip() for name in self.include_cases if name.strip()
-            }
-            cases = [case for case in cases if case.name in allow]
+        cases = _select_cases(
+            cases,
+            include_cases=self.include_cases,
+            include_tags=self.include_tags,
+        )
         if not cases:
             raise ValueError("No perf cases selected")
 
@@ -895,17 +1034,9 @@ class PerfSuiteConfig(BaseSettings):
                     )
                 )
 
-        payload: dict[str, JsonValue] = {
-            "generated_at": datetime.now(UTC).isoformat(),
-            "repeats": self.repeats,
-            "cases": [asdict(iteration) for iteration in iterations],
-            "summary": _build_summary(iterations),
-        }
+        payload = _build_artifact_payload(iterations, repeats=self.repeats)
         artifact = _artifact_path(output_dir)
-        artifact.write_text(
-            json.dumps(payload, indent=2, sort_keys=True),
-            encoding="utf-8",
-        )
+        _write_json_payload(artifact, payload)
         logger.info("Perf suite artifact written to %s", artifact)
 
         summary = payload.get("summary")
@@ -934,6 +1065,48 @@ class PerfSuiteConfig(BaseSettings):
                         "Perf SLO check failed for cases: "
                         + ", ".join(failed_slo_cases)
                     )
+
+    def _export_summary(self) -> None:
+        """Export one raw perf artifact into a stable summary JSON."""
+        source_artifact = self.input_artifact
+        if source_artifact is None:
+            artifacts = _latest_artifacts(self.output_dir.resolve(), count=1)
+            if not artifacts:
+                raise ValueError(
+                    f"No perf artifacts found in {self.output_dir.resolve()}"
+                )
+            source_artifact = artifacts[0]
+        artifact = _load_artifact(source_artifact.resolve())
+
+        suite_name = self.suite_name
+        if suite_name is None or not suite_name.strip():
+            raise ValueError("suite_name is required in export mode")
+        output_path = self.output_path
+        if output_path is None:
+            output_path = self.output_dir.resolve() / f"{suite_name}.json"
+
+        stable_summary = _stable_summary_from_artifact(
+            artifact,
+            suite_name=suite_name.strip(),
+            summary_label=(
+                self.summary_label.strip()
+                if self.summary_label is not None and self.summary_label.strip()
+                else None
+            ),
+            source_ref=(
+                self.source_ref.strip()
+                if self.source_ref is not None and self.source_ref.strip()
+                else None
+            ),
+            source_commit=(
+                self.source_commit.strip()
+                if self.source_commit is not None and self.source_commit.strip()
+                else None
+            ),
+            source_artifact=source_artifact.resolve(),
+        )
+        _write_json_payload(output_path.resolve(), stable_summary)
+        logger.info("Stable perf summary written to %s", output_path.resolve())
 
     def _subprocess_env(self) -> dict[str, str]:
         """Build subprocess environment overrides for stable perf runs."""

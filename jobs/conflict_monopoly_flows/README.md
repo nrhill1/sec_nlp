@@ -56,10 +56,10 @@ Notes:
 
 Useful comparison flows for retrieval-quality and latency checks:
 
-- `jobs/model_variety_flows/03_rems_high_qwen.yaml`
-- `jobs/model_variety_flows/05_quantum_high_qwen_ministral.yaml`
-- `jobs/merged_basket_high_models/05_rems_large.yaml`
-- `jobs/merged_basket_high_models/11_quantum_large.yaml`
+- `jobs/benchmark_matrix_flows/02_rems_high_qwen_aligned.yaml`
+- `jobs/benchmark_matrix_flows/04_quantum_high_qwen_ministral_aligned.yaml`
+- `jobs/benchmark_matrix_flows/01_rems_large_merged_aligned.yaml`
+- `jobs/benchmark_matrix_flows/03_quantum_large_merged_aligned.yaml`
 
 Useful perf-suite cases after the updates in `src/scripts/profile/perf_suite.py`:
 
@@ -75,12 +75,8 @@ Useful end-to-end flow benchmark cases:
 
 ```bash
 uv run python src/scripts/profile/perf_suite.py \
-  --include-cases flow_rems_conflict_monopoly_large \
-  --include-cases flow_rems_high_qwen \
-  --include-cases flow_rems_large_merged \
-  --include-cases flow_quantum_conflict_monopoly_large \
-  --include-cases flow_quantum_high_qwen_ministral \
-  --include-cases flow_quantum_large_merged
+  --include_tags flow \
+  --include_tags benchmark
 ```
 
 Benchmark interpretation note:
@@ -91,7 +87,27 @@ Benchmark interpretation note:
   that happens outside stage `invoke()` calls, such as pipeline construction and
   model warmup.
 - The baseline candidate flows differ in date window, symbol basket, and prompt
-  shape, so treat those runs as directional latency and retrieval baselines.
-- If you want strict apples-to-apples comparisons, clone the baseline specs and
-  align symbols, forms, and `start_date` to the `2023-03-12` to run-date window
-  used by these conflict and monopoly flows.
+  shape, so the source candidate jobs remain directional references while the
+  aligned benchmark specs under `jobs/benchmark_matrix_flows/` are the fair
+  comparison inputs.
+
+## Branch Report
+
+Committed report outputs live under:
+
+- `docs/benchmarks/conflict_monopoly/report.md`
+- `docs/benchmarks/conflict_monopoly/feature_summary.json`
+- `docs/benchmarks/conflict_monopoly/main_summary.json`
+- `docs/benchmarks/conflict_monopoly/comparison_summary.json`
+
+Refresh the full local branch-vs-main benchmark report:
+
+```bash
+make -C src benchmark-report BENCHMARK_EMAIL=you@example.com
+```
+
+Refresh only the stable JSON summaries from existing raw artifacts:
+
+```bash
+make -C src benchmark-summaries BENCHMARK_EMAIL=you@example.com
+```

@@ -3,11 +3,14 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from scripts.profile.perf_suite import (
     PerfIteration,
     _apply_flow_benchmark_overrides,
+    _build_artifact_payload,
     _build_summary,
     _default_cases,
     _flow_output_counts,
@@ -16,6 +19,8 @@ from scripts.profile.perf_suite import (
     _percentile,
     _safe_output_counts,
     _safe_stage_timings,
+    _select_cases,
+    _stable_summary_from_artifact,
 )
 from sec_nlp.app.flows.models import (
     FlowDefaults,
@@ -79,6 +84,12 @@ def test_build_summary_aggregates_case_iterations() -> None:
     assert stage_mean is not None
     assert stage_mean.get("vector_search") == 1.25
     assert stage_mean.get("llm_generate") == 6.0
+    output_means_raw = case_summary.get("output_mean_counts")
+    assert output_means_raw is not None
+    output_means = as_json_dict(output_means_raw)
+    assert output_means is not None
+    assert output_means.get("hits_retrieved") == 8.5
+    assert output_means.get("citations_returned") == 4.5
 
 
 def test_safe_stage_timings_filters_non_numeric_values() -> None:
@@ -257,5 +268,95 @@ def test_default_cases_include_flow_benchmark_comparisons() -> None:
         "jobs/conflict_monopoly_flows/01_rems_conflict_monopoly_large.yaml"
     )
     assert str(quantum_merged_case.flow_spec).endswith(
-        "jobs/merged_basket_high_models/11_quantum_large.yaml"
+        "jobs/benchmark_matrix_flows/03_quantum_large_merged_aligned.yaml"
     )
+
+
+def test_select_cases_filters_by_tags_and_case_names() -> None:
+    """Filter default cases by case-name and tag allowlists."""
+    cases = _default_cases(
+        "bench@example.com",
+        collection_name="perf_retrieve",
+        qdrant_location=".qdrant/perf-suite",
+        chat_model_name="llama3.2:1b",
+        chat_max_new_tokens=192,
+    )
+
+    thematic_cases = _select_cases(
+        cases,
+        include_cases=[],
+        include_tags=["thematic", "benchmark"],
+    )
+    thematic_case_names = {case.name for case in thematic_cases}
+    assert thematic_case_names == {
+        "retrieve_rems_thematic",
+        "chat_rems_thematic",
+        "retrieve_quantum_thematic",
+        "chat_quantum_thematic",
+    }
+
+    selected_cases = _select_cases(
+        cases,
+        include_cases=["flow_rems_large_merged", "chat_rems_thematic"],
+        include_tags=["rems"],
+    )
+    assert [case.name for case in selected_cases] == [
+        "chat_rems_thematic",
+        "flow_rems_large_merged",
+    ]
+
+
+def test_stable_summary_from_artifact_exports_deterministic_payload() -> None:
+    """Build a stable summary export from one raw artifact payload."""
+    artifact = _build_artifact_payload(
+        [
+            PerfIteration(
+                case="flow_case",
+                pipeline="flow",
+                iteration=1,
+                run_id="flow-1",
+                success=True,
+                return_code=0,
+                elapsed_seconds=42.0,
+                started_at="2026-03-13T00:00:00+00:00",
+                stage_timings={"retrieve_seed": 10.0, "flow_overhead": 5.0},
+                output_counts={"stages_total": 2, "answer_files": 1},
+                stderr_tail=None,
+            )
+        ],
+        repeats=1,
+    )
+
+    summary = _stable_summary_from_artifact(
+        artifact,
+        suite_name="flow_rems_candidates",
+        summary_label="feature",
+        source_ref="HEAD",
+        source_commit="abc123",
+        source_artifact=Path("/tmp/perf_suite_raw.json"),
+    )
+
+    assert summary["schema_version"] == 1
+    assert summary["suite_name"] == "flow_rems_candidates"
+    assert summary["summary_label"] == "feature"
+    assert summary["source_ref"] == "HEAD"
+    assert summary["source_commit"] == "abc123"
+    assert summary["source_artifact"] == "/tmp/perf_suite_raw.json"
+    suite_summary_raw = summary.get("summary")
+    assert suite_summary_raw is not None
+    suite_summary = as_json_dict(suite_summary_raw)
+    assert suite_summary is not None
+    flow_case_raw = suite_summary.get("flow_case")
+    assert flow_case_raw is not None
+    flow_case = as_json_dict(flow_case_raw)
+    assert flow_case is not None
+    stage_means_raw = flow_case.get("stage_mean_seconds")
+    assert stage_means_raw is not None
+    stage_means = as_json_dict(stage_means_raw)
+    assert stage_means is not None
+    assert stage_means.get("flow_overhead") == 5.0
+    output_means_raw = flow_case.get("output_mean_counts")
+    assert output_means_raw is not None
+    output_means = as_json_dict(output_means_raw)
+    assert output_means is not None
+    assert output_means.get("answer_files") == 1.0

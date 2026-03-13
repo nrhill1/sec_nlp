@@ -1,0 +1,242 @@
+{
+  "branch": "benchmarks-runtime-offline",
+  "commit": "b3358b8dd89f38ff4756026961022c4820985edf",
+  "generated_at": "2026-03-13T20:13:40.098696+00:00",
+  "label": "feature",
+  "schema_version": 1,
+  "source_ref": "HEAD",
+  "suite_repeats": {
+    "flow_quantum_candidates": 1,
+    "flow_rems_candidates": 1,
+    "thematic_retrieve_chat": 2
+  },
+  "suites": {
+    "flow_quantum_candidates": {
+      "exported_at": "2026-03-13T20:08:48.716096+00:00",
+      "repeats": 1,
+      "schema_version": 1,
+      "source_artifact": "/Users/nicolashill/Projects/sec/logs/perf/branch_report/feature/flow_quantum_candidates.json",
+      "source_commit": "b3358b8dd89f38ff4756026961022c4820985edf",
+      "source_generated_at": "2026-03-13T20:08:48.714794+00:00",
+      "source_ref": "HEAD",
+      "suite_name": "flow_quantum_candidates",
+      "summary": {
+        "flow_quantum_conflict_monopoly_large": {
+          "iterations": 1,
+          "max_seconds": 986.968316,
+          "mean_seconds": 986.968316,
+          "min_seconds": 986.968316,
+          "output_mean_counts": {
+            "answer_files": 1.0,
+            "stages_failed": 0.0,
+            "stages_skipped": 0.0,
+            "stages_successful": 5.0,
+            "stages_total": 5.0
+          },
+          "p95_seconds": 986.968316,
+          "pipeline": "flow",
+          "stage_mean_seconds": {
+            "chat_answer": 255.619503,
+            "flow_overhead": 3.358999,
+            "retrieve_complex_terms": 43.828132,
+            "retrieve_conflict_terms": 86.535846,
+            "retrieve_monopoly_terms": 109.211537,
+            "retrieve_simple_terms": 61.03785
+          },
+          "success_count": 1
+        },
+        "flow_quantum_high_qwen_ministral": {
+          "iterations": 1,
+          "max_seconds": 119.454062,
+          "mean_seconds": 119.454062,
+          "min_seconds": 119.454062,
+          "output_mean_counts": {
+            "answer_files": 1.0,
+            "stages_failed": 0.0,
+            "stages_skipped": 0.0,
+            "stages_successful": 2.0,
+            "stages_total": 2.0
+          },
+          "p95_seconds": 119.454062,
+          "pipeline": "flow",
+          "stage_mean_seconds": {
+            "chat_answer": 104.393738,
+            "flow_overhead": 3.644014,
+            "retrieve_seed": 4.459966
+          },
+          "success_count": 1
+        },
+        "flow_quantum_large_merged": {
+          "iterations": 1,
+          "max_seconds": 153.848326,
+          "mean_seconds": 153.848326,
+          "min_seconds": 153.848326,
+          "output_mean_counts": {
+            "answer_files": 1.0,
+            "stages_failed": 0.0,
+            "stages_skipped": 0.0,
+            "stages_successful": 2.0,
+            "stages_total": 2.0
+          },
+          "p95_seconds": 153.848326,
+          "pipeline": "flow",
+          "stage_mean_seconds": {
+            "chat_answer": 123.912693,
+            "flow_overhead": 5.109416,
+            "retrieve_seed": 12.927824
+          },
+          "success_count": 1
+        }
+      },
+      "summary_label": "feature"
+    },
+    "flow_rems_candidates": {
+      "exported_at": "2026-03-13T19:47:48.384197+00:00",
+      "repeats": 1,
+      "schema_version": 1,
+      "source_artifact": "/Users/nicolashill/Projects/sec/logs/perf/branch_report/feature/flow_rems_candidates.json",
+      "source_commit": "b3358b8dd89f38ff4756026961022c4820985edf",
+      "source_generated_at": "2026-03-13T19:47:48.381535+00:00",
+      "source_ref": "HEAD",
+      "suite_name": "flow_rems_candidates",
+      "summary": {
+        "flow_rems_conflict_monopoly_large": {
+          "iterations": 1,
+          "max_seconds": 279.488937,
+          "mean_seconds": 279.488937,
+          "min_seconds": 279.488937,
+          "output_mean_counts": {
+            "answer_files": 1.0,
+            "stages_failed": 0.0,
+            "stages_skipped": 0.0,
+            "stages_successful": 5.0,
+            "stages_total": 5.0
+          },
+          "p95_seconds": 279.488937,
+          "pipeline": "flow",
+          "stage_mean_seconds": {
+            "chat_answer": 206.393945,
+            "flow_overhead": 6.327371,
+            "retrieve_complex_terms": 10.245184,
+            "retrieve_conflict_terms": 17.152793,
+            "retrieve_monopoly_terms": 17.628154,
+            "retrieve_simple_terms": 14.505066
+          },
+          "success_count": 1
+        },
+        "flow_rems_high_qwen": {
+          "iterations": 1,
+          "max_seconds": 109.8009,
+          "mean_seconds": 109.8009,
+          "min_seconds": 109.8009,
+          "output_mean_counts": {
+            "answer_files": 1.0,
+            "stages_failed": 0.0,
+            "stages_skipped": 0.0,
+            "stages_successful": 2.0,
+            "stages_total": 2.0
+          },
+          "p95_seconds": 109.8009,
+          "pipeline": "flow",
+          "stage_mean_seconds": {
+            "chat_answer": 92.5989,
+            "flow_overhead": 4.126969,
+            "retrieve_seed": 3.915116
+          },
+          "success_count": 1
+        },
+        "flow_rems_large_merged": {
+          "iterations": 1,
+          "max_seconds": 155.9578,
+          "mean_seconds": 155.9578,
+          "min_seconds": 155.9578,
+          "output_mean_counts": {
+            "answer_files": 1.0,
+            "stages_failed": 0.0,
+            "stages_skipped": 0.0,
+            "stages_successful": 2.0,
+            "stages_total": 2.0
+          },
+          "p95_seconds": 155.9578,
+          "pipeline": "flow",
+          "stage_mean_seconds": {
+            "chat_answer": 133.006215,
+            "flow_overhead": 3.461638,
+            "retrieve_seed": 11.480532
+          },
+          "success_count": 1
+        }
+      },
+      "summary_label": "feature"
+    },
+    "thematic_retrieve_chat": {
+      "exported_at": "2026-03-13T19:38:43.091547+00:00",
+      "repeats": 2,
+      "schema_version": 1,
+      "source_artifact": "/Users/nicolashill/Projects/sec/logs/perf/branch_report/feature/thematic_retrieve_chat.json",
+      "source_commit": "b3358b8dd89f38ff4756026961022c4820985edf",
+      "source_generated_at": "2026-03-13T19:38:43.089335+00:00",
+      "source_ref": "HEAD",
+      "suite_name": "thematic_retrieve_chat",
+      "summary": {
+        "chat_quantum_thematic": {
+          "iterations": 2,
+          "max_seconds": 7.381185,
+          "mean_seconds": 7.239628,
+          "min_seconds": 7.09807,
+          "output_mean_counts": {},
+          "p95_seconds": 7.367029,
+          "pipeline": "chat",
+          "slo_p95_seconds": 20.0,
+          "slo_pass": true,
+          "stage_mean_seconds": {},
+          "success_count": 0
+        },
+        "chat_rems_thematic": {
+          "iterations": 2,
+          "max_seconds": 7.822838,
+          "mean_seconds": 7.684723,
+          "min_seconds": 7.546608,
+          "output_mean_counts": {},
+          "p95_seconds": 7.809026,
+          "pipeline": "chat",
+          "slo_p95_seconds": 20.0,
+          "slo_pass": true,
+          "stage_mean_seconds": {},
+          "success_count": 0
+        },
+        "retrieve_quantum_thematic": {
+          "iterations": 2,
+          "max_seconds": 7.51905,
+          "mean_seconds": 7.253464,
+          "min_seconds": 6.987877,
+          "output_mean_counts": {
+            "ranked_hits": 0.0
+          },
+          "p95_seconds": 7.492491,
+          "pipeline": "retrieve",
+          "slo_p95_seconds": 25.0,
+          "slo_pass": true,
+          "stage_mean_seconds": {},
+          "success_count": 0
+        },
+        "retrieve_rems_thematic": {
+          "iterations": 2,
+          "max_seconds": 7.548095,
+          "mean_seconds": 7.419258,
+          "min_seconds": 7.290421,
+          "output_mean_counts": {
+            "ranked_hits": 0.0
+          },
+          "p95_seconds": 7.535211,
+          "pipeline": "retrieve",
+          "slo_p95_seconds": 25.0,
+          "slo_pass": true,
+          "stage_mean_seconds": {},
+          "success_count": 0
+        }
+      },
+      "summary_label": "feature"
+    }
+  }
+}

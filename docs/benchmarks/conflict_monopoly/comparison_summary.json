@@ -1,0 +1,352 @@
+{
+  "baseline_branch": "main",
+  "baseline_commit": "5dadf05a96dfc94456e142e962d111b93c6fb81a",
+  "baseline_label": "main",
+  "baseline_ref": "main",
+  "feature_branch": "benchmarks-runtime-offline",
+  "feature_commit": "b3358b8dd89f38ff4756026961022c4820985edf",
+  "feature_label": "feature",
+  "feature_ref": "HEAD",
+  "generated_at": "2026-03-13T20:13:40.101772+00:00",
+  "schema_version": 1,
+  "suites": {
+    "flow_quantum_candidates": {
+      "cases": {
+        "flow_quantum_conflict_monopoly_large": {
+          "baseline_iterations": 1,
+          "baseline_mean_seconds": 11.624687,
+          "baseline_output_mean_counts": {
+            "answer_files": 1.0,
+            "stages_failed": 0.0,
+            "stages_skipped": 0.0,
+            "stages_successful": 5.0,
+            "stages_total": 5.0
+          },
+          "baseline_p95_seconds": 11.624687,
+          "baseline_pipeline": "flow",
+          "baseline_stage_mean_seconds": {
+            "chat_answer": 0.488102,
+            "flow_overhead": 1.598407,
+            "retrieve_complex_terms": 0.011088,
+            "retrieve_conflict_terms": 0.011016,
+            "retrieve_monopoly_terms": 0.010743,
+            "retrieve_simple_terms": 0.020176
+          },
+          "baseline_success_count": 1,
+          "delta_p95_pct": 8390.278629,
+          "delta_p95_seconds": 975.343629,
+          "feature_iterations": 1,
+          "feature_mean_seconds": 986.968316,
+          "feature_output_mean_counts": {
+            "answer_files": 1.0,
+            "stages_failed": 0.0,
+            "stages_skipped": 0.0,
+            "stages_successful": 5.0,
+            "stages_total": 5.0
+          },
+          "feature_p95_seconds": 986.968316,
+          "feature_pipeline": "flow",
+          "feature_stage_mean_seconds": {
+            "chat_answer": 255.619503,
+            "flow_overhead": 3.358999,
+            "retrieve_complex_terms": 43.828132,
+            "retrieve_conflict_terms": 86.535846,
+            "retrieve_monopoly_terms": 109.211537,
+            "retrieve_simple_terms": 61.03785
+          },
+          "feature_success_count": 1
+        },
+        "flow_quantum_high_qwen_ministral": {
+          "baseline_iterations": 1,
+          "baseline_mean_seconds": 11.357459,
+          "baseline_output_mean_counts": {
+            "answer_files": 1.0,
+            "stages_failed": 0.0,
+            "stages_skipped": 0.0,
+            "stages_successful": 2.0,
+            "stages_total": 2.0
+          },
+          "baseline_p95_seconds": 11.357459,
+          "baseline_pipeline": "flow",
+          "baseline_stage_mean_seconds": {
+            "chat_answer": 0.30371,
+            "flow_overhead": 1.548167,
+            "retrieve_seed": 0.020869
+          },
+          "baseline_success_count": 1,
+          "delta_p95_pct": 951.767495,
+          "delta_p95_seconds": 108.096603,
+          "feature_iterations": 1,
+          "feature_mean_seconds": 119.454062,
+          "feature_output_mean_counts": {
+            "answer_files": 1.0,
+            "stages_failed": 0.0,
+            "stages_skipped": 0.0,
+            "stages_successful": 2.0,
+            "stages_total": 2.0
+          },
+          "feature_p95_seconds": 119.454062,
+          "feature_pipeline": "flow",
+          "feature_stage_mean_seconds": {
+            "chat_answer": 104.393738,
+            "flow_overhead": 3.644014,
+            "retrieve_seed": 4.459966
+          },
+          "feature_success_count": 1
+        },
+        "flow_quantum_large_merged": {
+          "baseline_iterations": 1,
+          "baseline_mean_seconds": 11.357359,
+          "baseline_output_mean_counts": {
+            "answer_files": 1.0,
+            "stages_failed": 0.0,
+            "stages_skipped": 0.0,
+            "stages_successful": 2.0,
+            "stages_total": 2.0
+          },
+          "baseline_p95_seconds": 11.357359,
+          "baseline_pipeline": "flow",
+          "baseline_stage_mean_seconds": {
+            "chat_answer": 0.304225,
+            "flow_overhead": 1.541376,
+            "retrieve_seed": 0.019671
+          },
+          "baseline_success_count": 1,
+          "delta_p95_pct": 1254.613568,
+          "delta_p95_seconds": 142.490967,
+          "feature_iterations": 1,
+          "feature_mean_seconds": 153.848326,
+          "feature_output_mean_counts": {
+            "answer_files": 1.0,
+            "stages_failed": 0.0,
+            "stages_skipped": 0.0,
+            "stages_successful": 2.0,
+            "stages_total": 2.0
+          },
+          "feature_p95_seconds": 153.848326,
+          "feature_pipeline": "flow",
+          "feature_stage_mean_seconds": {
+            "chat_answer": 123.912693,
+            "flow_overhead": 5.109416,
+            "retrieve_seed": 12.927824
+          },
+          "feature_success_count": 1
+        }
+      },
+      "description": "Aligned quantum flow comparisons across conflict, merged, and model-variety candidates.",
+      "repeats": 1
+    },
+    "flow_rems_candidates": {
+      "cases": {
+        "flow_rems_conflict_monopoly_large": {
+          "baseline_iterations": 1,
+          "baseline_mean_seconds": 10.872464,
+          "baseline_output_mean_counts": {
+            "answer_files": 1.0,
+            "stages_failed": 0.0,
+            "stages_skipped": 0.0,
+            "stages_successful": 5.0,
+            "stages_total": 5.0
+          },
+          "baseline_p95_seconds": 10.872464,
+          "baseline_pipeline": "flow",
+          "baseline_stage_mean_seconds": {
+            "chat_answer": 0.501216,
+            "flow_overhead": 5.624155,
+            "retrieve_complex_terms": 0.01123,
+            "retrieve_conflict_terms": 0.010249,
+            "retrieve_monopoly_terms": 0.010245,
+            "retrieve_simple_terms": 0.042469
+          },
+          "baseline_success_count": 1,
+          "delta_p95_pct": 2470.612669,
+          "delta_p95_seconds": 268.616473,
+          "feature_iterations": 1,
+          "feature_mean_seconds": 279.488937,
+          "feature_output_mean_counts": {
+            "answer_files": 1.0,
+            "stages_failed": 0.0,
+            "stages_skipped": 0.0,
+            "stages_successful": 5.0,
+            "stages_total": 5.0
+          },
+          "feature_p95_seconds": 279.488937,
+          "feature_pipeline": "flow",
+          "feature_stage_mean_seconds": {
+            "chat_answer": 206.393945,
+            "flow_overhead": 6.327371,
+            "retrieve_complex_terms": 10.245184,
+            "retrieve_conflict_terms": 17.152793,
+            "retrieve_monopoly_terms": 17.628154,
+            "retrieve_simple_terms": 14.505066
+          },
+          "feature_success_count": 1
+        },
+        "flow_rems_high_qwen": {
+          "baseline_iterations": 1,
+          "baseline_mean_seconds": 11.548779,
+          "baseline_output_mean_counts": {
+            "answer_files": 1.0,
+            "stages_failed": 0.0,
+            "stages_skipped": 0.0,
+            "stages_successful": 2.0,
+            "stages_total": 2.0
+          },
+          "baseline_p95_seconds": 11.548779,
+          "baseline_pipeline": "flow",
+          "baseline_stage_mean_seconds": {
+            "chat_answer": 0.454764,
+            "flow_overhead": 1.434023,
+            "retrieve_seed": 0.021395
+          },
+          "baseline_success_count": 1,
+          "delta_p95_pct": 850.757652,
+          "delta_p95_seconds": 98.252121,
+          "feature_iterations": 1,
+          "feature_mean_seconds": 109.8009,
+          "feature_output_mean_counts": {
+            "answer_files": 1.0,
+            "stages_failed": 0.0,
+            "stages_skipped": 0.0,
+            "stages_successful": 2.0,
+            "stages_total": 2.0
+          },
+          "feature_p95_seconds": 109.8009,
+          "feature_pipeline": "flow",
+          "feature_stage_mean_seconds": {
+            "chat_answer": 92.5989,
+            "flow_overhead": 4.126969,
+            "retrieve_seed": 3.915116
+          },
+          "feature_success_count": 1
+        },
+        "flow_rems_large_merged": {
+          "baseline_iterations": 1,
+          "baseline_mean_seconds": 7.920634,
+          "baseline_output_mean_counts": {
+            "answer_files": 1.0,
+            "stages_failed": 0.0,
+            "stages_skipped": 0.0,
+            "stages_successful": 2.0,
+            "stages_total": 2.0
+          },
+          "baseline_p95_seconds": 7.920634,
+          "baseline_pipeline": "flow",
+          "baseline_stage_mean_seconds": {
+            "chat_answer": 0.304457,
+            "flow_overhead": 1.909981,
+            "retrieve_seed": 0.019476
+          },
+          "baseline_success_count": 1,
+          "delta_p95_pct": 1869.006521,
+          "delta_p95_seconds": 148.037166,
+          "feature_iterations": 1,
+          "feature_mean_seconds": 155.9578,
+          "feature_output_mean_counts": {
+            "answer_files": 1.0,
+            "stages_failed": 0.0,
+            "stages_skipped": 0.0,
+            "stages_successful": 2.0,
+            "stages_total": 2.0
+          },
+          "feature_p95_seconds": 155.9578,
+          "feature_pipeline": "flow",
+          "feature_stage_mean_seconds": {
+            "chat_answer": 133.006215,
+            "flow_overhead": 3.461638,
+            "retrieve_seed": 11.480532
+          },
+          "feature_success_count": 1
+        }
+      },
+      "description": "Aligned REM flow comparisons across conflict, merged, and model-variety candidates.",
+      "repeats": 1
+    },
+    "thematic_retrieve_chat": {
+      "cases": {
+        "chat_quantum_thematic": {
+          "baseline_iterations": 2,
+          "baseline_mean_seconds": 3.52026,
+          "baseline_output_mean_counts": {},
+          "baseline_p95_seconds": 3.528833,
+          "baseline_pipeline": "chat",
+          "baseline_stage_mean_seconds": {},
+          "baseline_success_count": 0,
+          "delta_p95_pct": 108.766723,
+          "delta_p95_seconds": 3.838196,
+          "feature_iterations": 2,
+          "feature_mean_seconds": 7.239628,
+          "feature_output_mean_counts": {},
+          "feature_p95_seconds": 7.367029,
+          "feature_pipeline": "chat",
+          "feature_stage_mean_seconds": {},
+          "feature_success_count": 0
+        },
+        "chat_rems_thematic": {
+          "baseline_iterations": 2,
+          "baseline_mean_seconds": 11.860245,
+          "baseline_output_mean_counts": {},
+          "baseline_p95_seconds": 19.301317,
+          "baseline_pipeline": "chat",
+          "baseline_stage_mean_seconds": {},
+          "baseline_success_count": 0,
+          "delta_p95_pct": -59.541486,
+          "delta_p95_seconds": -11.492291,
+          "feature_iterations": 2,
+          "feature_mean_seconds": 7.684723,
+          "feature_output_mean_counts": {},
+          "feature_p95_seconds": 7.809026,
+          "feature_pipeline": "chat",
+          "feature_stage_mean_seconds": {},
+          "feature_success_count": 0
+        },
+        "retrieve_quantum_thematic": {
+          "baseline_iterations": 2,
+          "baseline_mean_seconds": 3.542054,
+          "baseline_output_mean_counts": {
+            "ranked_hits": 0.0
+          },
+          "baseline_p95_seconds": 3.56423,
+          "baseline_pipeline": "retrieve",
+          "baseline_stage_mean_seconds": {},
+          "baseline_success_count": 0,
+          "delta_p95_pct": 110.213454,
+          "delta_p95_seconds": 3.928261,
+          "feature_iterations": 2,
+          "feature_mean_seconds": 7.253464,
+          "feature_output_mean_counts": {
+            "ranked_hits": 0.0
+          },
+          "feature_p95_seconds": 7.492491,
+          "feature_pipeline": "retrieve",
+          "feature_stage_mean_seconds": {},
+          "feature_success_count": 0
+        },
+        "retrieve_rems_thematic": {
+          "baseline_iterations": 2,
+          "baseline_mean_seconds": 91.267633,
+          "baseline_output_mean_counts": {
+            "ranked_hits": 0.0
+          },
+          "baseline_p95_seconds": 170.251047,
+          "baseline_pipeline": "retrieve",
+          "baseline_stage_mean_seconds": {},
+          "baseline_success_count": 0,
+          "delta_p95_pct": -95.574059,
+          "delta_p95_seconds": -162.715836,
+          "feature_iterations": 2,
+          "feature_mean_seconds": 7.419258,
+          "feature_output_mean_counts": {
+            "ranked_hits": 0.0
+          },
+          "feature_p95_seconds": 7.535211,
+          "feature_pipeline": "retrieve",
+          "feature_stage_mean_seconds": {},
+          "feature_success_count": 0
+        }
+      },
+      "description": "Directional retrieve/chat cases for REM and quantum baskets.",
+      "repeats": 2
+    }
+  }
+}
