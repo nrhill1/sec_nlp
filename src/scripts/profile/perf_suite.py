@@ -26,6 +26,12 @@ from scripts.utils import setup_import_path
 
 setup_import_path()
 
+from sec_nlp.app.flows.models import (  # noqa: E402
+    FlowDefaults,  # noqa: E402
+    FlowRunResult,  # noqa: E402
+)
+from sec_nlp.app.flows.runner import FlowRunner  # noqa: E402
+from sec_nlp.app.flows.spec import load_flow_spec  # noqa: E402
 from sec_nlp.core.infra.logger import logger, setup_logging  # noqa: E402
 from sec_nlp.pipelines.observability.run_registry import (  # noqa: E402
     RunRegistry,
@@ -44,6 +50,7 @@ class PerfCase:
     pipeline: str
     args: list[str]
     tags: list[str]
+    flow_spec: Path | None = None
 
 
 @dataclass(frozen=True)
@@ -123,7 +130,65 @@ def _safe_output_counts(
         counts["ranked_hits"] = total_ranked
         return counts
 
+    if pipeline == "flow":
+        for key in (
+            "stages_total",
+            "stages_successful",
+            "stages_skipped",
+            "stages_failed",
+            "answer_files",
+        ):
+            value = metadata.get(key)
+            if isinstance(value, int):
+                counts[key] = value
+        return counts
+
     return counts
+
+
+def _flow_stage_timings(result: FlowRunResult) -> dict[str, float]:
+    """Build per-stage duration metrics from one flow result."""
+    stage_timings: dict[str, float] = {}
+    for stage_result in result.stage_results:
+        if stage_result.skipped:
+            continue
+        stage_timings[stage_result.stage_id] = round(
+            stage_result.duration_seconds, 6
+        )
+    return stage_timings
+
+
+def _flow_output_counts(result: FlowRunResult) -> dict[str, int]:
+    """Build normalized count metrics from one flow result."""
+    metadata: dict[str, JsonValue] = {
+        "stages_total": len(result.stage_results),
+        "stages_successful": sum(
+            1 for stage_result in result.stage_results if stage_result.success
+        ),
+        "stages_skipped": sum(
+            1 for stage_result in result.stage_results if stage_result.skipped
+        ),
+        "stages_failed": sum(
+            1
+            for stage_result in result.stage_results
+            if not stage_result.success and not stage_result.skipped
+        ),
+        "answer_files": 0,
+    }
+    answer_paths = result.metadata.get("answer_output_paths")
+    if isinstance(answer_paths, list):
+        metadata["answer_files"] = sum(
+            1 for answer_path in answer_paths if isinstance(answer_path, str)
+        )
+    return _safe_output_counts("flow", metadata)
+
+
+def _flow_error_tail(result: FlowRunResult) -> str | None:
+    """Return one concise failure summary for a flow result."""
+    for stage_result in result.stage_results:
+        if stage_result.error:
+            return f"{stage_result.stage_id}: {stage_result.error}"
+    return None
 
 
 def _default_cases(
@@ -139,6 +204,46 @@ def _default_cases(
     start_date = "2023-01-01"
     tech_symbols = ["NVDA", "AMD", "AVGO", "QCOM", "INTC"]
     mining_symbols = ["MP", "LAC", "UUUU", "AREC", "USAR"]
+    rems_symbols = ["MP", "LAC", "UUUU", "AREC", "USAR"]
+    quantum_symbols = ["IONQ", "RGTI", "QBTS", "QUBT", "IBM"]
+    flow_cases = [
+        (
+            "flow_rems_conflict_monopoly_large",
+            Path(
+                "jobs/conflict_monopoly_flows/01_rems_conflict_monopoly_large.yaml"
+            ),
+            ["flow", "rems", "benchmark", "conflict-monopoly"],
+        ),
+        (
+            "flow_rems_high_qwen",
+            Path("jobs/model_variety_flows/03_rems_high_qwen.yaml"),
+            ["flow", "rems", "benchmark", "baseline", "model-variety"],
+        ),
+        (
+            "flow_rems_large_merged",
+            Path("jobs/merged_basket_high_models/05_rems_large.yaml"),
+            ["flow", "rems", "benchmark", "baseline", "merged"],
+        ),
+        (
+            "flow_quantum_conflict_monopoly_large",
+            Path(
+                "jobs/conflict_monopoly_flows/02_quantum_conflict_monopoly_large.yaml"
+            ),
+            ["flow", "quantum", "benchmark", "conflict-monopoly"],
+        ),
+        (
+            "flow_quantum_high_qwen_ministral",
+            Path(
+                "jobs/model_variety_flows/05_quantum_high_qwen_ministral.yaml"
+            ),
+            ["flow", "quantum", "benchmark", "baseline", "model-variety"],
+        ),
+        (
+            "flow_quantum_large_merged",
+            Path("jobs/merged_basket_high_models/11_quantum_large.yaml"),
+            ["flow", "quantum", "benchmark", "baseline", "merged"],
+        ),
+    ]
 
     retrieve_queries_tech = (
         "AI accelerator demand and lead-time normalization||"
@@ -150,6 +255,20 @@ def _default_cases(
         "NdPr pricing sensitivity and offtake visibility||"
         "permitting, geopolitics, and supply chain concentration risk"
     )
+    retrieve_queries_rems_thematic = (
+        "rare earth export controls||"
+        "rare earth defense demand||"
+        "magnet supply chain concentration||"
+        "rare earth consolidation||"
+        "mine to magnet integration"
+    )
+    retrieve_queries_quantum_thematic = (
+        "quantum export controls||"
+        "quantum defense contracts||"
+        "sovereign compute requirements||"
+        "exclusive cloud partnership||"
+        "quantum commercialization concentration"
+    )
     chat_question_tech = (
         "Compare demand durability, margin risk, and execution risk across "
         "the selected issuers using filing evidence."
@@ -157,6 +276,14 @@ def _default_cases(
     chat_question_mining = (
         "Compare rare-earth supply chain risk, pricing power, and execution "
         "risk across the selected issuers using filing evidence."
+    )
+    chat_question_rems_thematic = (
+        "Compare export-control exposure, supply-chain concentration, and "
+        "pricing leverage across the rare-earth issuers using filing evidence."
+    )
+    chat_question_quantum_thematic = (
+        "Compare export-control exposure, gatekeeper dynamics, and customer "
+        "concentration across the quantum issuers using filing evidence."
     )
     vdb_args = [
         "--vdb.collection-name",
@@ -296,6 +423,145 @@ def _default_cases(
                     "--output-format",
                     "json",
                 ],
+            )
+        )
+    cases.extend(
+        [
+            PerfCase(
+                name="retrieve_rems_thematic",
+                pipeline="retrieve",
+                tags=["retrieve", "rems", "thematic", "benchmark"],
+                args=[
+                    "retrieve",
+                    *rems_symbols,
+                    "--email",
+                    email,
+                    "--no-dry-run",
+                    "--no-incremental",
+                    *vdb_args,
+                    "--no-download-missing",
+                    "--index-results",
+                    "--forms",
+                    forms,
+                    "--start-date",
+                    start_date,
+                    "--queries",
+                    retrieve_queries_rems_thematic,
+                    "--efts-candidates",
+                    "260",
+                    "--top-k",
+                    "60",
+                    "--output-format",
+                    "json",
+                ],
+            ),
+            PerfCase(
+                name="chat_rems_thematic",
+                pipeline="chat",
+                tags=["chat", "rems", "thematic", "benchmark"],
+                args=[
+                    "chat",
+                    *rems_symbols,
+                    "--email",
+                    email,
+                    "--no-dry-run",
+                    *vdb_args,
+                    "--collections",
+                    collection_name,
+                    "--forms",
+                    forms,
+                    "--start-date",
+                    start_date,
+                    "--question",
+                    chat_question_rems_thematic,
+                    *chat_llm_args,
+                    "--rerank-mode",
+                    "mmr",
+                    "--top-k",
+                    "12",
+                    "--max-context-chunks",
+                    "10",
+                    "--context-token-budget",
+                    "10000",
+                    "--output-format",
+                    "json",
+                ],
+            ),
+            PerfCase(
+                name="retrieve_quantum_thematic",
+                pipeline="retrieve",
+                tags=["retrieve", "quantum", "thematic", "benchmark"],
+                args=[
+                    "retrieve",
+                    *quantum_symbols,
+                    "--email",
+                    email,
+                    "--no-dry-run",
+                    "--no-incremental",
+                    *vdb_args,
+                    "--no-download-missing",
+                    "--index-results",
+                    "--forms",
+                    forms,
+                    "--start-date",
+                    start_date,
+                    "--queries",
+                    retrieve_queries_quantum_thematic,
+                    "--efts-candidates",
+                    "260",
+                    "--top-k",
+                    "60",
+                    "--output-format",
+                    "json",
+                ],
+            ),
+            PerfCase(
+                name="chat_quantum_thematic",
+                pipeline="chat",
+                tags=["chat", "quantum", "thematic", "benchmark"],
+                args=[
+                    "chat",
+                    *quantum_symbols,
+                    "--email",
+                    email,
+                    "--no-dry-run",
+                    *vdb_args,
+                    "--collections",
+                    collection_name,
+                    "--forms",
+                    forms,
+                    "--start-date",
+                    start_date,
+                    "--question",
+                    chat_question_quantum_thematic,
+                    *chat_llm_args,
+                    "--rerank-mode",
+                    "mmr",
+                    "--top-k",
+                    "12",
+                    "--max-context-chunks",
+                    "10",
+                    "--context-token-budget",
+                    "10000",
+                    "--output-format",
+                    "json",
+                ],
+            ),
+        ]
+    )
+    for case_name, flow_spec, tags in flow_cases:
+        cases.append(
+            PerfCase(
+                name=case_name,
+                pipeline="flow",
+                args=[
+                    "flow",
+                    "run",
+                    "--spec",
+                    str(flow_spec),
+                ],
+                tags=tags,
+                flow_spec=flow_spec,
             )
         )
     return cases
@@ -495,54 +761,15 @@ class PerfSuiteConfig(BaseSettings):
         iterations: list[PerfIteration] = []
         for case in cases:
             for idx in range(1, self.repeats + 1):
-                run_id = str(uuid4())
-                started = datetime.now(UTC).isoformat()
-                cmd = ["uv", "run", "sec-nlp", *case.args, "--run-id", run_id]
-                logger.info(
-                    "Running perf case %s (%d/%d)",
-                    case.name,
-                    idx,
-                    self.repeats,
-                )
-                start = datetime.now(UTC)
-                completed = subprocess.run(
-                    cmd,
-                    cwd=str(Path.cwd()),
-                    env=self._subprocess_env(),
-                    text=True,
-                    capture_output=True,
-                    check=False,
-                )
-                elapsed_seconds = (datetime.now(UTC) - start).total_seconds()
-                run_record = registry.get_run(run_id)
-                metadata: dict[str, JsonValue] = {}
-                if run_record and run_record.metadata:
-                    parsed = json.loads(run_record.metadata)
-                    if isinstance(parsed, dict):
-                        metadata = parsed
-
-                stderr_tail = None
-                if completed.stderr:
-                    stderr_lines = completed.stderr.strip().splitlines()
-                    if stderr_lines:
-                        stderr_tail = stderr_lines[-1]
+                if case.pipeline == "flow":
+                    iterations.append(self._run_flow_case(case, iteration=idx))
+                    continue
 
                 iterations.append(
-                    PerfIteration(
-                        case=case.name,
-                        pipeline=case.pipeline,
+                    self._run_cli_case(
+                        case=case,
                         iteration=idx,
-                        run_id=run_id,
-                        success=completed.returncode == 0,
-                        return_code=completed.returncode,
-                        elapsed_seconds=round(elapsed_seconds, 6),
-                        started_at=started,
-                        stage_timings=_safe_stage_timings(metadata),
-                        output_counts=_safe_output_counts(
-                            case.pipeline,
-                            metadata,
-                        ),
-                        stderr_tail=stderr_tail,
+                        registry=registry,
                     )
                 )
 
@@ -601,6 +828,114 @@ class PerfSuiteConfig(BaseSettings):
         ):
             env.pop(key, None)
         return env
+
+    def _run_cli_case(
+        self,
+        *,
+        case: PerfCase,
+        iteration: int,
+        registry: RunRegistry,
+    ) -> PerfIteration:
+        """Run one retrieve/chat case through the CLI entrypoint."""
+        run_id = str(uuid4())
+        started = datetime.now(UTC).isoformat()
+        cmd = ["uv", "run", "sec-nlp", *case.args, "--run-id", run_id]
+        logger.info(
+            "Running perf case %s (%d/%d)",
+            case.name,
+            iteration,
+            self.repeats,
+        )
+        start = datetime.now(UTC)
+        completed = subprocess.run(
+            cmd,
+            cwd=str(Path.cwd()),
+            env=self._subprocess_env(),
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        elapsed_seconds = (datetime.now(UTC) - start).total_seconds()
+        run_record = registry.get_run(run_id)
+        metadata: dict[str, JsonValue] = {}
+        if run_record and run_record.metadata:
+            parsed = json.loads(run_record.metadata)
+            if isinstance(parsed, dict):
+                metadata = parsed
+
+        stderr_tail = None
+        if completed.stderr:
+            stderr_lines = completed.stderr.strip().splitlines()
+            if stderr_lines:
+                stderr_tail = stderr_lines[-1]
+
+        return PerfIteration(
+            case=case.name,
+            pipeline=case.pipeline,
+            iteration=iteration,
+            run_id=run_id,
+            success=completed.returncode == 0,
+            return_code=completed.returncode,
+            elapsed_seconds=round(elapsed_seconds, 6),
+            started_at=started,
+            stage_timings=_safe_stage_timings(metadata),
+            output_counts=_safe_output_counts(case.pipeline, metadata),
+            stderr_tail=stderr_tail,
+        )
+
+    def _run_flow_case(
+        self,
+        case: PerfCase,
+        *,
+        iteration: int,
+    ) -> PerfIteration:
+        """Run one authored flow spec directly through ``FlowRunner``."""
+        if case.flow_spec is None:
+            raise ValueError(f"flow case {case.name} is missing flow_spec")
+
+        started = datetime.now(UTC).isoformat()
+        logger.info(
+            "Running perf case %s (%d/%d)",
+            case.name,
+            iteration,
+            self.repeats,
+        )
+        start = datetime.now(UTC)
+        try:
+            spec = load_flow_spec(case.flow_spec)
+            spec = spec.model_copy(
+                update={"defaults": FlowDefaults(email=self.email)}
+            )
+            result = FlowRunner(spec=spec).run()
+            elapsed_seconds = (datetime.now(UTC) - start).total_seconds()
+            return PerfIteration(
+                case=case.name,
+                pipeline=case.pipeline,
+                iteration=iteration,
+                run_id=result.flow_run_id,
+                success=result.success,
+                return_code=0 if result.success else 1,
+                elapsed_seconds=round(elapsed_seconds, 6),
+                started_at=started,
+                stage_timings=_flow_stage_timings(result),
+                output_counts=_flow_output_counts(result),
+                stderr_tail=_flow_error_tail(result),
+            )
+        except Exception as exc:
+            elapsed_seconds = (datetime.now(UTC) - start).total_seconds()
+            return PerfIteration(
+                case=case.name,
+                pipeline=case.pipeline,
+                iteration=iteration,
+                run_id="",
+                success=False,
+                return_code=1,
+                elapsed_seconds=round(elapsed_seconds, 6),
+                started_at=started,
+                stage_timings={},
+                output_counts={},
+                stderr_tail=f"{type(exc).__name__}: {exc}",
+            )
 
     def _compare_latest(self) -> None:
         """Compare p95 metrics between the two latest perf artifacts."""

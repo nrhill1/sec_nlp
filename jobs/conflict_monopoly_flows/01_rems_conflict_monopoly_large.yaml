@@ -49,18 +49,14 @@ stages:
   pipeline: retrieve
   overrides:
     queries:
-    - China export controls sanctions tariff retaliation and conflict spillover
-      risks affecting rare earth feedstock refining or magnet supply
-    - geopolitical conflict military procurement and allied stockpile policies
-      changing demand visibility for rare earth oxide and metal producers
-    - shipping-route disruption border restrictions and customs enforcement slowing
-      concentrate separation or downstream magnet deliveries
-    - reliance on Chinese refiners processors or tolling partners as a sanctions
-      and national-security vulnerability
-    - domestic policy support defense grants and strategic reserve programs
-      reshaping rare earth project economics and execution risk
-    - permitting indigenous land disputes and foreign policy friction delaying
-      mine-to-magnet buildouts or offtake certainty
+    - rare earth export controls China
+    - critical minerals sanctions
+    - rare earth defense stockpile
+    - rare earth tariff retaliation
+    - China processing dependence
+    - rare earth customs restrictions
+    - magnet supply disruption
+    - domestic rare earth grants
     output_format: json
     top_k: 165
     efts_candidates: 950
@@ -79,18 +75,14 @@ stages:
   pipeline: retrieve
   overrides:
     queries:
-    - monopoly monopsony dominant-share processing bottleneck and pricing leverage
-      in rare earth separation metals or magnets
-    - exclusive offtake contracts take-or-pay structures and customer lock-in
-      creating concentrated control over strategic rare earth output
-    - vertical integration from mine to separation to magnet manufacturing as a
-      barrier to entry and margin-capture strategy
-    - near-monopoly refining ownership sole-source qualification and concentration
-      risk for defense and EV supply chains
-    - consolidation acquisition joint-venture control and long-term capacity
-      reservation expanding market power in rare earth value chains
-    - pricing-reset clauses benchmark opacity and dominant-buyer dynamics
-      influencing realized rare earth margins or revenue concentration
+    - rare earth consolidation
+    - joint venture rare earth
+    - mine to magnet integration
+    - rare earth offtake agreements
+    - customer concentration rare earth
+    - processing bottleneck rare earth
+    - rare earth pricing leverage
+    - capacity reservation rare earth
     output_format: json
     top_k: 170
     efts_candidates: 950
@@ -109,23 +101,12 @@ stages:
   pipeline: retrieve
   overrides:
     queries:
-    - explain how geopolitical conflict export licensing sanctions and concentrated
-      refining ownership could create monopoly-like pricing power supply insecurity
-      or forced vertical integration with quantified revenue margin capex or working-capital
-      effects where disclosed
-    - discuss whether management describes rare earth or magnet markets as structurally
-      concentrated and how conflict with China trade controls or defense procurement
-      requirements could strengthen or weaken competitive moats over the next three
-      years
-    - identify disclosures connecting armed conflict tariff escalation shipping
-      disruption or strategic stockpiling with customer concentration offtake exclusivity
-      and barriers to entry across the rare earth basket
-    - compare company commentary on mine-to-magnet integration domestic processing
-      buildout and monopolistic bottlenecks in separation or metal conversion including
-      references to timing budget overruns and qualification delays
-    - surface filing language that links geopolitical fragmentation antitrust exposure
-      exclusive supply arrangements and long-duration capacity reservations to pricing
-      leverage or procurement lockout risk
+    - rare earth pricing leverage barriers to entry
+    - rare earth procurement lockout risk
+    - domestic processing buildout delays
+    - rare earth stockpiling customer concentration
+    - rare earth separation capacity reservation
+    - magnet supply chain monopoly
     output_format: json
     top_k: 180
     efts_candidates: 1000
@@ -159,6 +140,7 @@ stages:
     include_news_context: true
     rerank_mode: mmr
     generation_token_cap: 0
+    llm_timeout_seconds: 360
     llm:
       model_name: qwen3:8b
       require_json: false

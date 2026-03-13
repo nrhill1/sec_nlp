@@ -8,11 +8,11 @@ stages:
   overrides:
     queries:
     - quantum export controls
-    - quantum monopoly risk
-    - hyperscaler exclusivity
+    - quantum commercialization concentration
+    - quantum cloud partnerships
     - quantum government concentration
     - quantum IP concentration
-    - quantum cloud gatekeepers
+    - quantum foundry dependence
     - sovereign compute restrictions
     - quantum defense contracts
     output_format: json
@@ -49,19 +49,14 @@ stages:
   pipeline: retrieve
   overrides:
     queries:
-    - export controls sanctions entity-list exposure and national-security restrictions
-      affecting quantum hardware cloud access or advanced component sourcing
-    - government budget cycles defense procurement and geopolitical competition
-      shaping quantum contract concentration renewal timing or revenue durability
-    - cross-border talent restrictions visa friction and research collaboration limits
-      weakening product roadmaps or commercialization speed
-    - semiconductor photonics cryogenics or fabrication bottlenecks tied to geopolitical
-      conflict allied export regimes or supply-denial scenarios
-    - sovereign-compute requirements trusted-vendor mandates and restricted-country
-      customer screening affecting quantum go-to-market strategy
-    - cybersecurity national-lab and intelligence-related obligations increasing
-      dependence on a narrow set of governments strategic partners or regulated
-      buyers
+    - quantum export controls entity list
+    - quantum defense procurement
+    - sovereign compute requirements
+    - trusted vendor mandates
+    - restricted country screening
+    - quantum semiconductor bottlenecks
+    - quantum talent restrictions
+    - national lab contracts
     output_format: json
     top_k: 165
     efts_candidates: 950
@@ -80,18 +75,14 @@ stages:
   pipeline: retrieve
   overrides:
     queries:
-    - platform lock-in exclusive cloud distribution and gatekeeper control over
-      enterprise access to quantum workloads
-    - sole-source government awards preferred-vendor status and concentrated backlog
-      as signals of monopoly or oligopoly formation
-    - IP moat standards capture patent concentration and exclusive licensing restricting
-      competitor entry in quantum hardware or software stacks
-    - strategic partnership exclusivity manufacturing concentration and limited
-      foundry or component access creating barriers to scale
-    - customer concentration reseller dependence and hyperscaler bargaining power
-      shaping pricing leverage and channel control
-    - acquisition consolidation and ecosystem control expanding end-to-end quantum
-      market power from hardware through managed services
+    - quantum platform lock in
+    - exclusive cloud partnership
+    - sole source awards
+    - patent concentration quantum
+    - exclusive licensing quantum
+    - hyperscaler bargaining power
+    - foundry concentration quantum
+    - quantum acquisitions
     output_format: json
     top_k: 170
     efts_candidates: 950
@@ -110,23 +101,12 @@ stages:
   pipeline: retrieve
   overrides:
     queries:
-    - explain how geopolitical rivalry export controls defense prioritization and
-      restricted component supply could accelerate monopoly or oligopoly formation
-      in quantum computing while changing pricing power backlog quality and funding
-      durability
-    - identify filing disclosures that connect sovereign-compute mandates hyperscaler
-      partnerships and exclusive government programs with channel lock-in barriers
-      to entry or dependence on a small number of strategic customers
-    - compare management commentary on whether quantum commercialization is likely
-      to consolidate around a few hardware architectures cloud platforms or intellectual-property
-      owners and note quantified impacts where disclosed
-    - surface language linking national-security conflict semiconductor scarcity
-      talent controls and standards-setting influence to competitive moats or platform
-      dominance across the quantum basket
-    - discuss whether issuers describe monopoly-like outcomes through exclusive
-      access to fabrication cryogenic infrastructure algorithm stacks or long-term
-      procurement frameworks and how those outcomes affect revenue concentration
-      and execution risk
+    - quantum commercialization concentration
+    - quantum hardware architecture concentration
+    - quantum government program exclusivity
+    - quantum fabrication access barriers
+    - quantum long-term procurement frameworks
+    - quantum channel lock in
     output_format: json
     top_k: 180
     efts_candidates: 1000
@@ -160,6 +140,7 @@ stages:
     include_news_context: true
     rerank_mode: mmr
     generation_token_cap: 0
+    llm_timeout_seconds: 360
     llm:
       model_name: qwen3:8b
       require_json: false

@@ -8,10 +8,14 @@ import pytest
 from scripts.profile.perf_suite import (
     PerfIteration,
     _build_summary,
+    _default_cases,
+    _flow_output_counts,
+    _flow_stage_timings,
     _percentile,
     _safe_output_counts,
     _safe_stage_timings,
 )
+from sec_nlp.app.flows.models import FlowRunResult, FlowStageResult
 from sec_nlp.core.types import as_json_dict
 from sec_nlp.types import JsonValue
 
@@ -98,3 +102,101 @@ def test_safe_output_counts_handles_chat_and_retrieve() -> None:
         },
     )
     assert retrieve_counts == {"ranked_hits": 10}
+
+
+def test_flow_helpers_collect_stage_metrics_and_counts() -> None:
+    """Build flow metrics from one synthetic flow result."""
+    result = FlowRunResult(
+        flow_run_id="flow-1",
+        flow_name="synthetic_flow",
+        success=False,
+        stage_results=[
+            FlowStageResult(
+                stage_id="retrieve_terms",
+                pipeline="retrieve",
+                success=True,
+                duration_seconds=12.5,
+            ),
+            FlowStageResult(
+                stage_id="chat_answer",
+                pipeline="chat",
+                success=False,
+                duration_seconds=31.75,
+                error="timeout",
+            ),
+        ],
+        metadata={
+            "answer_output_paths": [
+                "/tmp/answer.yaml",
+                "/tmp/answer.json",
+            ]
+        },
+    )
+
+    assert _flow_stage_timings(result) == {
+        "retrieve_terms": 12.5,
+        "chat_answer": 31.75,
+    }
+    assert _flow_output_counts(result) == {
+        "stages_total": 2,
+        "stages_successful": 1,
+        "stages_skipped": 0,
+        "stages_failed": 1,
+        "answer_files": 2,
+    }
+
+
+def test_default_cases_include_thematic_rems_and_quantum_cases() -> None:
+    """Build default perf cases and include thematic REM and quantum runs."""
+    cases = _default_cases(
+        "bench@example.com",
+        collection_name="perf_retrieve",
+        qdrant_location=".qdrant/perf-suite",
+        chat_model_name="llama3.2:1b",
+        chat_max_new_tokens=192,
+    )
+
+    case_names = {case.name for case in cases}
+    assert "retrieve_rems_thematic" in case_names
+    assert "chat_rems_thematic" in case_names
+    assert "retrieve_quantum_thematic" in case_names
+    assert "chat_quantum_thematic" in case_names
+
+    rems_case = next(
+        case for case in cases if case.name == "retrieve_rems_thematic"
+    )
+    quantum_case = next(
+        case for case in cases if case.name == "retrieve_quantum_thematic"
+    )
+    assert "rare earth export controls" in " ".join(rems_case.args)
+    assert "quantum defense contracts" in " ".join(quantum_case.args)
+
+
+def test_default_cases_include_flow_benchmark_comparisons() -> None:
+    """Build default perf cases and include flow benchmark candidates."""
+    cases = _default_cases(
+        "bench@example.com",
+        collection_name="perf_retrieve",
+        qdrant_location=".qdrant/perf-suite",
+        chat_model_name="llama3.2:1b",
+        chat_max_new_tokens=192,
+    )
+
+    flow_cases = {case.name: case for case in cases if case.pipeline == "flow"}
+    assert "flow_rems_conflict_monopoly_large" in flow_cases
+    assert "flow_rems_high_qwen" in flow_cases
+    assert "flow_rems_large_merged" in flow_cases
+    assert "flow_quantum_conflict_monopoly_large" in flow_cases
+    assert "flow_quantum_high_qwen_ministral" in flow_cases
+    assert "flow_quantum_large_merged" in flow_cases
+
+    rems_conflict_case = flow_cases["flow_rems_conflict_monopoly_large"]
+    quantum_merged_case = flow_cases["flow_quantum_large_merged"]
+    assert rems_conflict_case.flow_spec is not None
+    assert quantum_merged_case.flow_spec is not None
+    assert str(rems_conflict_case.flow_spec).endswith(
+        "jobs/conflict_monopoly_flows/01_rems_conflict_monopoly_large.yaml"
+    )
+    assert str(quantum_merged_case.flow_spec).endswith(
+        "jobs/merged_basket_high_models/11_quantum_large.yaml"
+    )
