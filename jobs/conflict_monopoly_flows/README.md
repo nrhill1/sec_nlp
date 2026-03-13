@@ -85,6 +85,11 @@ uv run python src/scripts/profile/perf_suite.py \
 
 Benchmark interpretation note:
 
+- The perf-suite flow cases rewrite collection names per case/iteration so each
+  flow benchmark runs cold instead of reusing a warmed Qdrant collection.
+- Flow benchmark summaries also emit a `flow_overhead` timing bucket for work
+  that happens outside stage `invoke()` calls, such as pipeline construction and
+  model warmup.
 - The baseline candidate flows differ in date window, symbol basket, and prompt
   shape, so treat those runs as directional latency and retrieval baselines.
 - If you want strict apples-to-apples comparisons, clone the baseline specs and

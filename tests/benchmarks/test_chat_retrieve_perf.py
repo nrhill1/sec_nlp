@@ -7,15 +7,23 @@ import pytest
 
 from scripts.profile.perf_suite import (
     PerfIteration,
+    _apply_flow_benchmark_overrides,
     _build_summary,
     _default_cases,
     _flow_output_counts,
     _flow_stage_timings,
+    _flow_stage_timings_for_iteration,
     _percentile,
     _safe_output_counts,
     _safe_stage_timings,
 )
-from sec_nlp.app.flows.models import FlowRunResult, FlowStageResult
+from sec_nlp.app.flows.models import (
+    FlowDefaults,
+    FlowRunResult,
+    FlowSpec,
+    FlowStageResult,
+    FlowStageSpec,
+)
 from sec_nlp.core.types import as_json_dict
 from sec_nlp.types import JsonValue
 
@@ -137,6 +145,14 @@ def test_flow_helpers_collect_stage_metrics_and_counts() -> None:
         "retrieve_terms": 12.5,
         "chat_answer": 31.75,
     }
+    assert _flow_stage_timings_for_iteration(
+        result,
+        elapsed_seconds=60.0,
+    ) == {
+        "retrieve_terms": 12.5,
+        "chat_answer": 31.75,
+        "flow_overhead": 15.75,
+    }
     assert _flow_output_counts(result) == {
         "stages_total": 2,
         "stages_successful": 1,
@@ -144,6 +160,49 @@ def test_flow_helpers_collect_stage_metrics_and_counts() -> None:
         "stages_failed": 1,
         "answer_files": 2,
     }
+
+
+def test_apply_flow_benchmark_overrides_uses_unique_collections() -> None:
+    """Clone one flow spec with unique collection names for the run."""
+    spec = FlowSpec(
+        name="bench_flow",
+        defaults=FlowDefaults(email="original@example.com"),
+        stages=[
+            FlowStageSpec(
+                id="retrieve_seed",
+                pipeline="retrieve",
+                overrides={
+                    "vdb": {"collection_name": "industry_rems_high"},
+                },
+            ),
+            FlowStageSpec(
+                id="chat_answer",
+                pipeline="chat",
+                overrides={
+                    "collections": ["industry_rems_high"],
+                    "vdb": {"collection_name": "industry_rems_high"},
+                },
+            ),
+        ],
+    )
+
+    updated = _apply_flow_benchmark_overrides(
+        spec,
+        email="bench@example.com",
+        case_name="flow_rems_large_merged",
+        iteration=2,
+    )
+
+    assert updated.defaults.email == "bench@example.com"
+    retrieve_vdb = as_json_dict(updated.stages[0].overrides.get("vdb"))
+    assert retrieve_vdb is not None
+    retrieve_collection = retrieve_vdb.get("collection_name")
+    assert isinstance(retrieve_collection, str)
+    assert retrieve_collection.endswith("_flow_rems_large_merged_r2")
+
+    chat_collections = updated.stages[1].overrides.get("collections")
+    assert isinstance(chat_collections, list)
+    assert chat_collections == [retrieve_collection]
 
 
 def test_default_cases_include_thematic_rems_and_quantum_cases() -> None:

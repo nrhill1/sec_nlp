@@ -29,10 +29,12 @@ setup_import_path()
 from sec_nlp.app.flows.models import (  # noqa: E402
     FlowDefaults,  # noqa: E402
     FlowRunResult,  # noqa: E402
+    FlowSpec,  # noqa: E402
 )
 from sec_nlp.app.flows.runner import FlowRunner  # noqa: E402
 from sec_nlp.app.flows.spec import load_flow_spec  # noqa: E402
 from sec_nlp.core.infra.logger import logger, setup_logging  # noqa: E402
+from sec_nlp.core.types import as_json_dict  # noqa: E402
 from sec_nlp.pipelines.observability.run_registry import (  # noqa: E402
     RunRegistry,
 )
@@ -189,6 +191,126 @@ def _flow_error_tail(result: FlowRunResult) -> str | None:
         if stage_result.error:
             return f"{stage_result.stage_id}: {stage_result.error}"
     return None
+
+
+def _flow_stage_timings_for_iteration(
+    result: FlowRunResult,
+    *,
+    elapsed_seconds: float,
+) -> dict[str, float]:
+    """Build flow stage timings plus explicit setup and warmup overhead."""
+    stage_timings = _flow_stage_timings(result)
+    measured_seconds = sum(stage_timings.values())
+    overhead_seconds = round(
+        max(0.0, elapsed_seconds - measured_seconds),
+        6,
+    )
+    if overhead_seconds > 0.0:
+        stage_timings["flow_overhead"] = overhead_seconds
+    return stage_timings
+
+
+def _case_slug(value: str) -> str:
+    """Build a filesystem- and collection-safe case slug."""
+    slug_parts = [
+        character.lower() if character.isalnum() else "_" for character in value
+    ]
+    slug = "".join(slug_parts).strip("_")
+    return slug or "perf_case"
+
+
+def _benchmark_collection_name(
+    original_name: str,
+    *,
+    case_name: str,
+    iteration: int,
+) -> str:
+    """Return one unique collection name for a flow benchmark case."""
+    return f"{original_name}_{_case_slug(case_name)}_r{iteration}"
+
+
+def _collection_overrides_for_flow_case(
+    spec: FlowSpec,
+    *,
+    case_name: str,
+    iteration: int,
+) -> dict[str, str]:
+    """Build per-flow collection overrides to avoid warmed-index bias."""
+    overrides: dict[str, str] = {}
+    for stage in spec.stages:
+        stage_overrides = stage.overrides
+        vdb_raw = stage_overrides.get("vdb")
+        vdb = as_json_dict(vdb_raw)
+        if vdb is not None:
+            collection_name = vdb.get("collection_name")
+            if (
+                isinstance(collection_name, str)
+                and collection_name not in overrides
+            ):
+                overrides[collection_name] = _benchmark_collection_name(
+                    collection_name,
+                    case_name=case_name,
+                    iteration=iteration,
+                )
+        collections_raw = stage_overrides.get("collections")
+        if not isinstance(collections_raw, list):
+            continue
+        for collection_name in collections_raw:
+            if (
+                isinstance(collection_name, str)
+                and collection_name not in overrides
+            ):
+                overrides[collection_name] = _benchmark_collection_name(
+                    collection_name,
+                    case_name=case_name,
+                    iteration=iteration,
+                )
+    return overrides
+
+
+def _apply_flow_benchmark_overrides(
+    spec: FlowSpec,
+    *,
+    email: str,
+    case_name: str,
+    iteration: int,
+) -> FlowSpec:
+    """Clone a flow spec with benchmark-safe email and collection overrides."""
+    collection_overrides = _collection_overrides_for_flow_case(
+        spec,
+        case_name=case_name,
+        iteration=iteration,
+    )
+    stage_updates = []
+    for stage in spec.stages:
+        stage_overrides = dict(stage.overrides)
+        vdb_raw = stage_overrides.get("vdb")
+        vdb = as_json_dict(vdb_raw)
+        if vdb is not None:
+            collection_name = vdb.get("collection_name")
+            if isinstance(collection_name, str):
+                vdb["collection_name"] = collection_overrides.get(
+                    collection_name,
+                    collection_name,
+                )
+            stage_overrides["vdb"] = vdb
+        collections_raw = stage_overrides.get("collections")
+        if isinstance(collections_raw, list):
+            stage_overrides["collections"] = [
+                collection_overrides.get(collection_name, collection_name)
+                if isinstance(collection_name, str)
+                else collection_name
+                for collection_name in collections_raw
+            ]
+        stage_updates.append(
+            stage.model_copy(update={"overrides": stage_overrides})
+        )
+    return spec.model_copy(
+        update={
+            "defaults": FlowDefaults(email=email),
+            "stages": stage_updates,
+        }
+    )
 
 
 def _default_cases(
@@ -903,8 +1025,11 @@ class PerfSuiteConfig(BaseSettings):
         start = datetime.now(UTC)
         try:
             spec = load_flow_spec(case.flow_spec)
-            spec = spec.model_copy(
-                update={"defaults": FlowDefaults(email=self.email)}
+            spec = _apply_flow_benchmark_overrides(
+                spec,
+                email=self.email,
+                case_name=case.name,
+                iteration=iteration,
             )
             result = FlowRunner(spec=spec).run()
             elapsed_seconds = (datetime.now(UTC) - start).total_seconds()
@@ -917,7 +1042,10 @@ class PerfSuiteConfig(BaseSettings):
                 return_code=0 if result.success else 1,
                 elapsed_seconds=round(elapsed_seconds, 6),
                 started_at=started,
-                stage_timings=_flow_stage_timings(result),
+                stage_timings=_flow_stage_timings_for_iteration(
+                    result,
+                    elapsed_seconds=elapsed_seconds,
+                ),
                 output_counts=_flow_output_counts(result),
                 stderr_tail=_flow_error_tail(result),
             )
