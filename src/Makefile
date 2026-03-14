@@ -15,6 +15,7 @@ STUBS_DIR := $(REPO_ROOT)/types
 PROFILE_DIR := $(REPO_ROOT)/profiling
 PY_SCRIPTS_DIR := $(REPO_ROOT)/src/scripts
 BENCHMARK_EMAIL ?= you@example.com
+BENCHMARK_BASELINE_REF ?= main
 
 PYTEST_FLAGS := -q --color=yes --basetemp $(REPO_ROOT)/.pytest_tmp
 STUBGEN_FLAGS := \
@@ -45,7 +46,7 @@ help:
 	@echo "  test               Run Python tests"
 	@echo "  test-comparison    Run downloader comparison tests"
 	@echo "  test-benchmarks    Run benchmark test package"
-	@echo "  benchmark-report   Refresh feature-vs-main benchmark report"
+	@echo "  benchmark-report   Refresh feature-vs-baseline benchmark report"
 	@echo "  benchmark-summaries Refresh stable benchmark summaries only"
 	@echo ""
 	@echo "Coverage:"
@@ -137,13 +138,13 @@ test-benchmarks:
 
 .PHONY: benchmark-report
 benchmark-report:
-	@echo "==> Refreshing feature-vs-main benchmark report..."
-	@cd $(REPO_ROOT) && uv run python3 src/scripts/profile/branch_report.py --email $(BENCHMARK_EMAIL)
+	@echo "==> Refreshing feature-vs-baseline benchmark report..."
+	@cd $(REPO_ROOT) && uv run python3 src/scripts/profile/branch_report.py --baseline_ref $(BENCHMARK_BASELINE_REF) --email $(BENCHMARK_EMAIL)
 
 .PHONY: benchmark-summaries
 benchmark-summaries:
 	@echo "==> Refreshing stable benchmark summaries from existing raw artifacts..."
-	@cd $(REPO_ROOT) && uv run python3 src/scripts/profile/branch_report.py --mode render --no-write_markdown --email $(BENCHMARK_EMAIL)
+	@cd $(REPO_ROOT) && uv run python3 src/scripts/profile/branch_report.py --mode render --no-write_markdown --baseline_ref $(BENCHMARK_BASELINE_REF) --email $(BENCHMARK_EMAIL)
 
 # =========================================================================
 # Coverage

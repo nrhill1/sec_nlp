@@ -160,6 +160,18 @@ Notes:
   logs stay isolated under `logs/container/benchmark-runner/`.
 - Stop the stack with `docker compose down` or `make docker-down`.
 
+### 4c) Refresh the benchmark branch report
+
+Use a pinned baseline commit for reproducible performance comparisons:
+
+```bash
+make -C src benchmark-report \
+  BENCHMARK_EMAIL=you@example.com \
+  BENCHMARK_BASELINE_REF=5dadf05a96dfc94456e142e962d111b93c6fb81a
+```
+
+The stable report artifacts are written under `docs/benchmarks/conflict_monopoly/`.
+
 ### 5) Run examples
 
 ```bash
