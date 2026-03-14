@@ -15,7 +15,7 @@ STUBS_DIR := $(REPO_ROOT)/types
 PROFILE_DIR := $(REPO_ROOT)/profiling
 PY_SCRIPTS_DIR := $(REPO_ROOT)/src/scripts
 BENCHMARK_EMAIL ?= you@example.com
-BENCHMARK_BASELINE_REF ?= main
+BENCHMARK_BASELINE_REF ?= 8afab23645034ff66ec809b74fabe574e25f03e6
 
 PYTEST_FLAGS := -q --color=yes --basetemp $(REPO_ROOT)/.pytest_tmp
 STUBGEN_FLAGS := \

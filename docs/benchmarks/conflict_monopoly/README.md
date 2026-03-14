@@ -33,7 +33,7 @@ Run the full `HEAD` vs baseline report workflow:
 ```bash
 make -C src benchmark-report \
   BENCHMARK_EMAIL=you@example.com \
-  BENCHMARK_BASELINE_REF=5dadf05a96dfc94456e142e962d111b93c6fb81a
+  BENCHMARK_BASELINE_REF=8afab23645034ff66ec809b74fabe574e25f03e6
 ```
 
 Rebuild the stable summaries from existing raw artifacts:
@@ -41,7 +41,7 @@ Rebuild the stable summaries from existing raw artifacts:
 ```bash
 make -C src benchmark-summaries \
   BENCHMARK_EMAIL=you@example.com \
-  BENCHMARK_BASELINE_REF=5dadf05a96dfc94456e142e962d111b93c6fb81a
+  BENCHMARK_BASELINE_REF=8afab23645034ff66ec809b74fabe574e25f03e6
 ```
 
 Run the raw perf suite directly by tags:

@@ -1,8 +1,8 @@
 # Conflict/Monopoly Benchmark Report
 
-- Generated at: `2026-03-14T01:33:38.780503+00:00`
-- Feature branch: `benchmarks-runtime-offline` at `a1fc437d942acf902e8dcf6391e2e3ec5f4df262`
-- Baseline ref: `5dadf05a96dfc94456e142e962d111b93c6fb81a` at `5dadf05a96dfc94456e142e962d111b93c6fb81a`
+- Generated at: `2026-03-14T05:01:30.695119+00:00`
+- Feature branch: `benchmarks-runtime-offline` at `8afab23645034ff66ec809b74fabe574e25f03e6`
+- Baseline ref: `8afab23645034ff66ec809b74fabe574e25f03e6` at `8afab23645034ff66ec809b74fabe574e25f03e6`
 - Stable JSON summaries: [feature_summary.json](feature_summary.json), [baseline_summary.json](baseline_summary.json), [comparison_summary.json](comparison_summary.json)
 
 ## Environment assumptions
@@ -30,10 +30,10 @@ Directional retrieve/chat cases for REM and quantum baskets.
 
 | Case | Status | Feature ok/iters | Baseline ok/iters | Feature p95 (s) | Baseline p95 (s) | Delta (s) | Delta (%) |
 | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| chat_quantum_thematic | baseline_invalid | 2/2 | 0/2 | 25.983322 | n/a | n/a | n/a |
-| chat_rems_thematic | baseline_invalid | 2/2 | 0/2 | 30.365689 | n/a | n/a | n/a |
-| retrieve_quantum_thematic | baseline_invalid | 2/2 | 0/2 | 56.588244 | n/a | n/a | n/a |
-| retrieve_rems_thematic | baseline_invalid | 2/2 | 0/2 | 66.934532 | n/a | n/a | n/a |
+| chat_quantum_thematic | baseline_invalid | 2/2 | 0/2 | 22.2961 | n/a | n/a | n/a |
+| chat_rems_thematic | baseline_invalid | 2/2 | 0/2 | 23.693952 | n/a | n/a | n/a |
+| retrieve_quantum_thematic | baseline_invalid | 2/2 | 0/2 | 34.81081 | n/a | n/a | n/a |
+| retrieve_rems_thematic | baseline_invalid | 2/2 | 0/2 | 41.731579 | n/a | n/a | n/a |
 
 ## flow_rems_candidates
 
@@ -41,9 +41,9 @@ Aligned REM flow comparisons across conflict, merged, and model-variety candidat
 
 | Case | Status | Feature ok/iters | Baseline ok/iters | Feature p95 (s) | Baseline p95 (s) | Delta (s) | Delta (%) |
 | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| flow_rems_conflict_monopoly_large | baseline_invalid | 1/1 | 0/1 | 425.626728 | n/a | n/a | n/a |
-| flow_rems_high_qwen | baseline_invalid | 1/1 | 0/1 | 108.009011 | n/a | n/a | n/a |
-| flow_rems_large_merged | baseline_invalid | 1/1 | 0/1 | 157.797702 | n/a | n/a | n/a |
+| flow_rems_conflict_monopoly_large | baseline_invalid | 1/1 | 0/1 | 232.875207 | n/a | n/a | n/a |
+| flow_rems_high_qwen | baseline_invalid | 1/1 | 0/1 | 117.892434 | n/a | n/a | n/a |
+| flow_rems_large_merged | both_invalid | 0/1 | 0/1 | n/a | n/a | n/a | n/a |
 
 ## flow_quantum_candidates
 
@@ -51,6 +51,6 @@ Aligned quantum flow comparisons across conflict, merged, and model-variety cand
 
 | Case | Status | Feature ok/iters | Baseline ok/iters | Feature p95 (s) | Baseline p95 (s) | Delta (s) | Delta (%) |
 | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| flow_quantum_conflict_monopoly_large | baseline_invalid | 1/1 | 0/1 | 1781.837273 | n/a | n/a | n/a |
-| flow_quantum_high_qwen_ministral | baseline_invalid | 1/1 | 0/1 | 116.957354 | n/a | n/a | n/a |
-| flow_quantum_large_merged | baseline_invalid | 1/1 | 0/1 | 150.070006 | n/a | n/a | n/a |
+| flow_quantum_conflict_monopoly_large | baseline_invalid | 1/1 | 0/1 | 260.184593 | n/a | n/a | n/a |
+| flow_quantum_high_qwen_ministral | baseline_invalid | 1/1 | 0/1 | 108.350808 | n/a | n/a | n/a |
+| flow_quantum_large_merged | baseline_invalid | 1/1 | 0/1 | 149.750865 | n/a | n/a | n/a |

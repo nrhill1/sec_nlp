@@ -167,7 +167,7 @@ Use a pinned baseline commit for reproducible performance comparisons:
 ```bash
 make -C src benchmark-report \
   BENCHMARK_EMAIL=you@example.com \
-  BENCHMARK_BASELINE_REF=5dadf05a96dfc94456e142e962d111b93c6fb81a
+  BENCHMARK_BASELINE_REF=8afab23645034ff66ec809b74fabe574e25f03e6
 ```
 
 The stable report artifacts are written under `docs/benchmarks/conflict_monopoly/`.
