@@ -31,7 +31,7 @@ report should normally be refreshed against a fixed commit.
 Run the full `HEAD` vs baseline report workflow:
 
 ```bash
-make -C src benchmark-report \
+make benchmark-report-docker \
   BENCHMARK_EMAIL=you@example.com \
   BENCHMARK_BASELINE_REF=8afab23645034ff66ec809b74fabe574e25f03e6
 ```
@@ -39,9 +39,16 @@ make -C src benchmark-report \
 Rebuild the stable summaries from existing raw artifacts:
 
 ```bash
-make -C src benchmark-summaries \
+make benchmark-summaries-docker \
   BENCHMARK_EMAIL=you@example.com \
   BENCHMARK_BASELINE_REF=8afab23645034ff66ec809b74fabe574e25f03e6
+```
+
+Inspect the running benchmark container:
+
+```bash
+make benchmark-shell
+make benchmark-logs
 ```
 
 Run the raw perf suite directly by tags:

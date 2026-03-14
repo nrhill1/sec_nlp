@@ -8,6 +8,8 @@ BRANCH := $(shell git rev-parse --abbrev-ref HEAD)
 # =========================================================================
 
 ROOT_DIR := $(shell dirname $(realpath $(firstword $(MAKEFILE_LIST))))
+BENCHMARK_EMAIL ?= you@example.com
+BENCHMARK_BASELINE_REF ?= 8afab23645034ff66ec809b74fabe574e25f03e6
 
 # Caching
 # Default: no rustc wrapper. Opt in with:
@@ -72,6 +74,10 @@ help:
 	@echo "  docker-shell           Open a shell in the background app container"
 	@echo "  docker-down            Stop the local Docker stack"
 	@echo "  docker-logs            Follow app container logs"
+	@echo "  benchmark-shell        Open a shell in the benchmark runner container"
+	@echo "  benchmark-logs         Follow benchmark runner container logs"
+	@echo "  benchmark-report-docker Refresh the benchmark report inside Docker"
+	@echo "  benchmark-summaries-docker Refresh benchmark summaries inside Docker"
 	@echo "  stubs                  Generate type stubs (Python)"
 	@echo "  test                   Run all tests"
 	@echo "  lint                   Run all linters"
@@ -264,6 +270,22 @@ docker-down:
 .PHONY: docker-logs
 docker-logs:
 	@docker compose logs -f benchmark-runner
+
+.PHONY: benchmark-shell
+benchmark-shell: docker-shell
+
+.PHONY: benchmark-logs
+benchmark-logs: docker-logs
+
+.PHONY: benchmark-report-docker
+benchmark-report-docker: docker-up
+	@docker compose exec benchmark-runner bash -lc \
+		"cd /workspace && make -C src benchmark-report BENCHMARK_EMAIL=$(BENCHMARK_EMAIL) BENCHMARK_BASELINE_REF=$(BENCHMARK_BASELINE_REF)"
+
+.PHONY: benchmark-summaries-docker
+benchmark-summaries-docker: docker-up
+	@docker compose exec benchmark-runner bash -lc \
+		"cd /workspace && make -C src benchmark-summaries BENCHMARK_EMAIL=$(BENCHMARK_EMAIL) BENCHMARK_BASELINE_REF=$(BENCHMARK_BASELINE_REF)"
 
 .PHONY: test
 test: ready

@@ -130,6 +130,13 @@ Then exec into the app container:
 docker compose exec benchmark-runner bash
 ```
 
+Or via the benchmark-specific aliases:
+
+```bash
+make benchmark-shell
+make benchmark-logs
+```
+
 Inside the container, run the usual commands:
 
 ```bash
@@ -165,7 +172,15 @@ Notes:
 Use a pinned baseline commit for reproducible performance comparisons:
 
 ```bash
-make -C src benchmark-report \
+make benchmark-report-docker \
+  BENCHMARK_EMAIL=you@example.com \
+  BENCHMARK_BASELINE_REF=8afab23645034ff66ec809b74fabe574e25f03e6
+```
+
+To rebuild only the committed summaries from existing raw artifacts:
+
+```bash
+make benchmark-summaries-docker \
   BENCHMARK_EMAIL=you@example.com \
   BENCHMARK_BASELINE_REF=8afab23645034ff66ec809b74fabe574e25f03e6
 ```

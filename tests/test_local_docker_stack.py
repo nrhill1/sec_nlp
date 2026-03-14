@@ -60,3 +60,19 @@ def test_dockerfile_uses_prebuilt_rust_extension_stage() -> None:
     assert "installing prebuilt Rust extensions" in entrypoint_text
     assert 'if [[ "${needs_sync}" -eq 1 ]]; then' in entrypoint_text
     assert "src/scripts/build/check_imports.py" in entrypoint_text
+
+
+def test_makefile_exposes_docker_benchmark_entrypoints() -> None:
+    """Ensure the top-level Makefile exposes Docker benchmark helper targets."""
+    makefile_text = (_repo_root() / "Makefile").read_text(encoding="utf-8")
+
+    assert ".PHONY: benchmark-shell" in makefile_text
+    assert "benchmark-shell: docker-shell" in makefile_text
+    assert ".PHONY: benchmark-logs" in makefile_text
+    assert "benchmark-logs: docker-logs" in makefile_text
+    assert ".PHONY: benchmark-report-docker" in makefile_text
+    assert "benchmark-report-docker: docker-up" in makefile_text
+    assert "make -C src benchmark-report" in makefile_text
+    assert ".PHONY: benchmark-summaries-docker" in makefile_text
+    assert "benchmark-summaries-docker: docker-up" in makefile_text
+    assert "make -C src benchmark-summaries" in makefile_text
