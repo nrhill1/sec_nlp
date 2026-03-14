@@ -1,9 +1,9 @@
 # Conflict/Monopoly Benchmark Report
 
-- Generated at: `2026-03-13T20:13:40.101772+00:00`
-- Feature branch: `benchmarks-runtime-offline` at `b3358b8dd89f38ff4756026961022c4820985edf`
-- Baseline branch: `main` at `5dadf05a96dfc94456e142e962d111b93c6fb81a`
-- Stable JSON summaries: [feature_summary.json](feature_summary.json), [main_summary.json](main_summary.json), [comparison_summary.json](comparison_summary.json)
+- Generated at: `2026-03-14T01:33:38.780503+00:00`
+- Feature branch: `benchmarks-runtime-offline` at `a1fc437d942acf902e8dcf6391e2e3ec5f4df262`
+- Baseline ref: `5dadf05a96dfc94456e142e962d111b93c6fb81a` at `5dadf05a96dfc94456e142e962d111b93c6fb81a`
+- Stable JSON summaries: [feature_summary.json](feature_summary.json), [baseline_summary.json](baseline_summary.json), [comparison_summary.json](comparison_summary.json)
 
 ## Environment assumptions
 
@@ -21,35 +21,36 @@
 
 - Thematic retrieve/chat suites are directional latency and retrieval checks rather than full flow comparisons.
 - Flow baseline shadow specs align date windows, baskets, timeout policy, and dedicated collection names with the conflict/monopoly flows.
+- Cases without fully successful iterations are marked invalid and render timing deltas as `n/a` instead of treating empty-context runs as real wins.
 - `flow_overhead` captures setup and warmup work outside stage `invoke()` timings and is preserved in the JSON summaries.
 
 ## thematic_retrieve_chat
 
 Directional retrieve/chat cases for REM and quantum baskets.
 
-| Case | Feature p95 (s) | Main p95 (s) | Delta (s) | Delta (%) |
-| --- | ---: | ---: | ---: | ---: |
-| chat_quantum_thematic | 7.367029 | 3.528833 | 3.838196 | 108.766723 |
-| chat_rems_thematic | 7.809026 | 19.301317 | -11.492291 | -59.541486 |
-| retrieve_quantum_thematic | 7.492491 | 3.56423 | 3.928261 | 110.213454 |
-| retrieve_rems_thematic | 7.535211 | 170.251047 | -162.715836 | -95.574059 |
+| Case | Status | Feature ok/iters | Baseline ok/iters | Feature p95 (s) | Baseline p95 (s) | Delta (s) | Delta (%) |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| chat_quantum_thematic | baseline_invalid | 2/2 | 0/2 | 25.983322 | n/a | n/a | n/a |
+| chat_rems_thematic | baseline_invalid | 2/2 | 0/2 | 30.365689 | n/a | n/a | n/a |
+| retrieve_quantum_thematic | baseline_invalid | 2/2 | 0/2 | 56.588244 | n/a | n/a | n/a |
+| retrieve_rems_thematic | baseline_invalid | 2/2 | 0/2 | 66.934532 | n/a | n/a | n/a |
 
 ## flow_rems_candidates
 
 Aligned REM flow comparisons across conflict, merged, and model-variety candidates.
 
-| Case | Feature p95 (s) | Main p95 (s) | Delta (s) | Delta (%) |
-| --- | ---: | ---: | ---: | ---: |
-| flow_rems_conflict_monopoly_large | 279.488937 | 10.872464 | 268.616473 | 2470.612669 |
-| flow_rems_high_qwen | 109.8009 | 11.548779 | 98.252121 | 850.757652 |
-| flow_rems_large_merged | 155.9578 | 7.920634 | 148.037166 | 1869.006521 |
+| Case | Status | Feature ok/iters | Baseline ok/iters | Feature p95 (s) | Baseline p95 (s) | Delta (s) | Delta (%) |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| flow_rems_conflict_monopoly_large | baseline_invalid | 1/1 | 0/1 | 425.626728 | n/a | n/a | n/a |
+| flow_rems_high_qwen | baseline_invalid | 1/1 | 0/1 | 108.009011 | n/a | n/a | n/a |
+| flow_rems_large_merged | baseline_invalid | 1/1 | 0/1 | 157.797702 | n/a | n/a | n/a |
 
 ## flow_quantum_candidates
 
 Aligned quantum flow comparisons across conflict, merged, and model-variety candidates.
 
-| Case | Feature p95 (s) | Main p95 (s) | Delta (s) | Delta (%) |
-| --- | ---: | ---: | ---: | ---: |
-| flow_quantum_conflict_monopoly_large | 986.968316 | 11.624687 | 975.343629 | 8390.278629 |
-| flow_quantum_high_qwen_ministral | 119.454062 | 11.357459 | 108.096603 | 951.767495 |
-| flow_quantum_large_merged | 153.848326 | 11.357359 | 142.490967 | 1254.613568 |
+| Case | Status | Feature ok/iters | Baseline ok/iters | Feature p95 (s) | Baseline p95 (s) | Delta (s) | Delta (%) |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| flow_quantum_conflict_monopoly_large | baseline_invalid | 1/1 | 0/1 | 1781.837273 | n/a | n/a | n/a |
+| flow_quantum_high_qwen_ministral | baseline_invalid | 1/1 | 0/1 | 116.957354 | n/a | n/a | n/a |
+| flow_quantum_large_merged | baseline_invalid | 1/1 | 0/1 | 150.070006 | n/a | n/a | n/a |
