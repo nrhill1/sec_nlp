@@ -1,10 +1,10 @@
 {
-  "branch": "5dadf05a96dfc94456e142e962d111b93c6fb81a",
-  "commit": "5dadf05a96dfc94456e142e962d111b93c6fb81a",
-  "generated_at": "2026-03-14T01:33:38.780195+00:00",
+  "branch": "8afab23645034ff66ec809b74fabe574e25f03e6",
+  "commit": "8afab23645034ff66ec809b74fabe574e25f03e6",
+  "generated_at": "2026-03-14T05:01:30.692975+00:00",
   "label": "baseline",
   "schema_version": 1,
-  "source_ref": "5dadf05a96dfc94456e142e962d111b93c6fb81a",
+  "source_ref": "8afab23645034ff66ec809b74fabe574e25f03e6",
   "suite_repeats": {
     "flow_quantum_candidates": 1,
     "flow_rems_candidates": 1,
@@ -12,20 +12,20 @@
   },
   "suites": {
     "flow_quantum_candidates": {
-      "exported_at": "2026-03-14T01:33:38.780183+00:00",
+      "exported_at": "2026-03-14T05:01:29.836688+00:00",
       "repeats": 1,
       "schema_version": 1,
-      "source_artifact": "/workspace/logs/perf/branch_report/main/flow_quantum_candidates.json",
-      "source_commit": "5dadf05a96dfc94456e142e962d111b93c6fb81a",
-      "source_generated_at": "2026-03-14T00:34:34.568064+00:00",
-      "source_ref": "5dadf05a96dfc94456e142e962d111b93c6fb81a",
+      "source_artifact": "/workspace/logs/perf/branch_report/baseline/flow_quantum_candidates.json",
+      "source_commit": "8afab23645034ff66ec809b74fabe574e25f03e6",
+      "source_generated_at": "2026-03-14T05:01:29.834443+00:00",
+      "source_ref": "8afab23645034ff66ec809b74fabe574e25f03e6",
       "suite_name": "flow_quantum_candidates",
       "summary": {
         "flow_quantum_conflict_monopoly_large": {
           "iterations": 1,
-          "max_seconds": 17.436848,
-          "mean_seconds": 17.436848,
-          "min_seconds": 17.436848,
+          "max_seconds": 19.878599,
+          "mean_seconds": 19.878599,
+          "min_seconds": 19.878599,
           "output_mean_counts": {
             "answer_files": 1.0,
             "stages_failed": 0.0,
@@ -33,23 +33,23 @@
             "stages_successful": 5.0,
             "stages_total": 5.0
           },
-          "p95_seconds": 17.436848,
+          "p95_seconds": 19.878599,
           "pipeline": "flow",
           "stage_mean_seconds": {
-            "chat_answer": 0.578638,
-            "flow_overhead": 13.644685,
-            "retrieve_complex_terms": 0.01082,
-            "retrieve_conflict_terms": 0.010982,
-            "retrieve_monopoly_terms": 0.009824,
-            "retrieve_simple_terms": 0.020575
+            "chat_answer": 0.681286,
+            "flow_overhead": 14.535856,
+            "retrieve_complex_terms": 0.016368,
+            "retrieve_conflict_terms": 0.018679,
+            "retrieve_monopoly_terms": 0.013363,
+            "retrieve_simple_terms": 0.028438
           },
           "success_count": 0
         },
         "flow_quantum_high_qwen_ministral": {
           "iterations": 1,
-          "max_seconds": 18.297892,
-          "mean_seconds": 18.297892,
-          "min_seconds": 18.297892,
+          "max_seconds": 18.894233,
+          "mean_seconds": 18.894233,
+          "min_seconds": 18.894233,
           "output_mean_counts": {
             "answer_files": 1.0,
             "stages_failed": 0.0,
@@ -57,20 +57,20 @@
             "stages_successful": 2.0,
             "stages_total": 2.0
           },
-          "p95_seconds": 18.297892,
+          "p95_seconds": 18.894233,
           "pipeline": "flow",
           "stage_mean_seconds": {
-            "chat_answer": 0.525397,
-            "flow_overhead": 13.937462,
-            "retrieve_seed": 0.028655
+            "chat_answer": 0.522186,
+            "flow_overhead": 14.222698,
+            "retrieve_seed": 0.026113
           },
           "success_count": 0
         },
         "flow_quantum_large_merged": {
           "iterations": 1,
-          "max_seconds": 17.563637,
-          "mean_seconds": 17.563637,
-          "min_seconds": 17.563637,
+          "max_seconds": 19.986088,
+          "mean_seconds": 19.986088,
+          "min_seconds": 19.986088,
           "output_mean_counts": {
             "answer_files": 1.0,
             "stages_failed": 0.0,
@@ -78,12 +78,12 @@
             "stages_successful": 2.0,
             "stages_total": 2.0
           },
-          "p95_seconds": 17.563637,
+          "p95_seconds": 19.986088,
           "pipeline": "flow",
           "stage_mean_seconds": {
-            "chat_answer": 0.463233,
-            "flow_overhead": 13.344431,
-            "retrieve_seed": 0.023246
+            "chat_answer": 0.7051,
+            "flow_overhead": 14.966966,
+            "retrieve_seed": 0.034028
           },
           "success_count": 0
         }
@@ -91,20 +91,20 @@
       "summary_label": "baseline"
     },
     "flow_rems_candidates": {
-      "exported_at": "2026-03-14T01:33:38.780118+00:00",
+      "exported_at": "2026-03-14T05:00:31.040842+00:00",
       "repeats": 1,
       "schema_version": 1,
-      "source_artifact": "/workspace/logs/perf/branch_report/main/flow_rems_candidates.json",
-      "source_commit": "5dadf05a96dfc94456e142e962d111b93c6fb81a",
-      "source_generated_at": "2026-03-14T00:33:41.241992+00:00",
-      "source_ref": "5dadf05a96dfc94456e142e962d111b93c6fb81a",
+      "source_artifact": "/workspace/logs/perf/branch_report/baseline/flow_rems_candidates.json",
+      "source_commit": "8afab23645034ff66ec809b74fabe574e25f03e6",
+      "source_generated_at": "2026-03-14T05:00:31.038689+00:00",
+      "source_ref": "8afab23645034ff66ec809b74fabe574e25f03e6",
       "suite_name": "flow_rems_candidates",
       "summary": {
         "flow_rems_conflict_monopoly_large": {
           "iterations": 1,
-          "max_seconds": 20.402785,
-          "mean_seconds": 20.402785,
-          "min_seconds": 20.402785,
+          "max_seconds": 22.624296,
+          "mean_seconds": 22.624296,
+          "min_seconds": 22.624296,
           "output_mean_counts": {
             "answer_files": 1.0,
             "stages_failed": 0.0,
@@ -112,23 +112,23 @@
             "stages_successful": 5.0,
             "stages_total": 5.0
           },
-          "p95_seconds": 20.402785,
+          "p95_seconds": 22.624296,
           "pipeline": "flow",
           "stage_mean_seconds": {
-            "chat_answer": 0.599934,
-            "flow_overhead": 16.381739,
-            "retrieve_complex_terms": 0.01352,
-            "retrieve_conflict_terms": 0.019609,
-            "retrieve_monopoly_terms": 0.01263,
-            "retrieve_simple_terms": 0.038812
+            "chat_answer": 0.763259,
+            "flow_overhead": 17.250577,
+            "retrieve_complex_terms": 0.021011,
+            "retrieve_conflict_terms": 0.01683,
+            "retrieve_monopoly_terms": 0.025639,
+            "retrieve_simple_terms": 0.051237
           },
           "success_count": 0
         },
         "flow_rems_high_qwen": {
           "iterations": 1,
-          "max_seconds": 17.720767,
-          "mean_seconds": 17.720767,
-          "min_seconds": 17.720767,
+          "max_seconds": 20.455892,
+          "mean_seconds": 20.455892,
+          "min_seconds": 20.455892,
           "output_mean_counts": {
             "answer_files": 1.0,
             "stages_failed": 0.0,
@@ -136,20 +136,20 @@
             "stages_successful": 2.0,
             "stages_total": 2.0
           },
-          "p95_seconds": 17.720767,
+          "p95_seconds": 20.455892,
           "pipeline": "flow",
           "stage_mean_seconds": {
-            "chat_answer": 0.687514,
-            "flow_overhead": 13.368989,
-            "retrieve_seed": 0.027619
+            "chat_answer": 1.018233,
+            "flow_overhead": 14.757416,
+            "retrieve_seed": 0.031536
           },
           "success_count": 0
         },
         "flow_rems_large_merged": {
           "iterations": 1,
-          "max_seconds": 17.92722,
-          "mean_seconds": 17.92722,
-          "min_seconds": 17.92722,
+          "max_seconds": 19.093818,
+          "mean_seconds": 19.093818,
+          "min_seconds": 19.093818,
           "output_mean_counts": {
             "answer_files": 1.0,
             "stages_failed": 0.0,
@@ -157,12 +157,12 @@
             "stages_successful": 2.0,
             "stages_total": 2.0
           },
-          "p95_seconds": 17.92722,
+          "p95_seconds": 19.093818,
           "pipeline": "flow",
           "stage_mean_seconds": {
-            "chat_answer": 0.507237,
-            "flow_overhead": 13.378069,
-            "retrieve_seed": 0.021889
+            "chat_answer": 0.606347,
+            "flow_overhead": 14.28447,
+            "retrieve_seed": 0.023128
           },
           "success_count": 0
         }
@@ -170,22 +170,22 @@
       "summary_label": "baseline"
     },
     "thematic_retrieve_chat": {
-      "exported_at": "2026-03-14T01:33:38.780075+00:00",
+      "exported_at": "2026-03-14T04:59:28.825951+00:00",
       "repeats": 2,
       "schema_version": 1,
-      "source_artifact": "/workspace/logs/perf/branch_report/main/thematic_retrieve_chat.json",
-      "source_commit": "5dadf05a96dfc94456e142e962d111b93c6fb81a",
-      "source_generated_at": "2026-03-14T00:32:45.149526+00:00",
-      "source_ref": "5dadf05a96dfc94456e142e962d111b93c6fb81a",
+      "source_artifact": "/workspace/logs/perf/branch_report/baseline/thematic_retrieve_chat.json",
+      "source_commit": "8afab23645034ff66ec809b74fabe574e25f03e6",
+      "source_generated_at": "2026-03-14T04:59:28.824135+00:00",
+      "source_ref": "8afab23645034ff66ec809b74fabe574e25f03e6",
       "suite_name": "thematic_retrieve_chat",
       "summary": {
         "chat_quantum_thematic": {
           "iterations": 2,
-          "max_seconds": 7.381583,
-          "mean_seconds": 7.331517,
-          "min_seconds": 7.28145,
+          "max_seconds": 9.613657,
+          "mean_seconds": 9.167616,
+          "min_seconds": 8.721575,
           "output_mean_counts": {},
-          "p95_seconds": 7.376576,
+          "p95_seconds": 9.569053,
           "pipeline": "chat",
           "slo_p95_seconds": 20.0,
           "slo_pass": true,
@@ -194,26 +194,26 @@
         },
         "chat_rems_thematic": {
           "iterations": 2,
-          "max_seconds": 19.071013,
-          "mean_seconds": 13.126646,
-          "min_seconds": 7.18228,
+          "max_seconds": 24.165888,
+          "mean_seconds": 16.701299,
+          "min_seconds": 9.236709,
           "output_mean_counts": {},
-          "p95_seconds": 18.476576,
+          "p95_seconds": 23.419429,
           "pipeline": "chat",
           "slo_p95_seconds": 20.0,
-          "slo_pass": true,
+          "slo_pass": false,
           "stage_mean_seconds": {},
           "success_count": 0
         },
         "retrieve_quantum_thematic": {
           "iterations": 2,
-          "max_seconds": 7.225717,
-          "mean_seconds": 7.110506,
-          "min_seconds": 6.995294,
+          "max_seconds": 8.455471,
+          "mean_seconds": 8.19222,
+          "min_seconds": 7.92897,
           "output_mean_counts": {
             "ranked_hits": 0.0
           },
-          "p95_seconds": 7.214196,
+          "p95_seconds": 8.429146,
           "pipeline": "retrieve",
           "slo_p95_seconds": 25.0,
           "slo_pass": true,
@@ -222,13 +222,13 @@
         },
         "retrieve_rems_thematic": {
           "iterations": 2,
-          "max_seconds": 70.475254,
-          "mean_seconds": 38.738748,
-          "min_seconds": 7.002243,
+          "max_seconds": 90.674186,
+          "mean_seconds": 49.63523,
+          "min_seconds": 8.596274,
           "output_mean_counts": {
             "ranked_hits": 0.0
           },
-          "p95_seconds": 67.301603,
+          "p95_seconds": 86.57029,
           "pipeline": "retrieve",
           "slo_p95_seconds": 25.0,
           "slo_pass": false,
