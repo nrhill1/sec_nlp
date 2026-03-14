@@ -1,5 +1,5 @@
 # src/scripts/profile/branch_report.py
-"""Generate local benchmark reports for the current branch versus main.
+"""Generate local benchmark reports for the current branch versus a baseline ref.
 
 This script orchestrates benchmark suites against the current checkout and a
 temporary git worktree for a baseline ref, then writes stable JSON summaries
@@ -32,6 +32,7 @@ from scripts.profile.perf_suite import (
     PerfIteration,
     _apply_flow_benchmark_overrides,
     _build_artifact_payload,
+    _build_summary,
     _default_cases,
     _safe_output_counts,
     _safe_stage_timings,
@@ -50,6 +51,8 @@ from sec_nlp.pipelines.observability.run_registry import RunRegistry
 from sec_nlp.types import JsonValue
 
 type ReportPayload = dict[str, JsonValue]
+_LEGACY_BASELINE_LABEL = "main"
+_CANONICAL_BASELINE_LABEL = "baseline"
 
 _FLOW_RUN_SNIPPET = """
 import json
@@ -178,6 +181,24 @@ def _suite_definitions() -> tuple[BenchmarkSuite, ...]:
             ),
         ),
     )
+
+
+def _resolve_raw_suite_artifact_path(
+    *,
+    raw_output_dir: Path,
+    label: str,
+    suite_name: str,
+) -> Path:
+    """Resolve one raw suite artifact path with legacy baseline fallback."""
+    candidates = [raw_output_dir / label / f"{suite_name}.json"]
+    if label == _CANONICAL_BASELINE_LABEL:
+        candidates.append(
+            raw_output_dir / _LEGACY_BASELINE_LABEL / f"{suite_name}.json"
+        )
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate
+    return candidates[0]
 
 
 def _sanitize_token(value: str) -> str:
@@ -358,6 +379,206 @@ def _ref_metadata(*, label: str, ref: str, workdir: Path) -> RefMetadata:
     )
 
 
+def _prepare_baseline_worktree(
+    *,
+    repo_root: Path,
+    baseline_ref: str,
+    baseline_worktree: Path,
+) -> None:
+    """Prune stale git worktrees and add one detached baseline checkout."""
+    subprocess.run(
+        ["git", "worktree", "prune", "--expire", "now"],
+        cwd=str(repo_root),
+        check=False,
+        text=True,
+        capture_output=True,
+    )
+    subprocess.run(
+        [
+            "git",
+            "worktree",
+            "add",
+            "--quiet",
+            "--detach",
+            str(baseline_worktree),
+            baseline_ref,
+        ],
+        cwd=str(repo_root),
+        check=True,
+        text=True,
+        capture_output=True,
+    )
+
+
+def _cleanup_baseline_worktree(
+    *,
+    repo_root: Path,
+    baseline_worktree: Path,
+) -> None:
+    """Remove one temporary baseline worktree and prune stale metadata."""
+    subprocess.run(
+        [
+            "git",
+            "worktree",
+            "remove",
+            "--force",
+            str(baseline_worktree),
+        ],
+        cwd=str(repo_root),
+        check=False,
+        text=True,
+        capture_output=True,
+    )
+    subprocess.run(
+        ["git", "worktree", "prune", "--expire", "now"],
+        cwd=str(repo_root),
+        check=False,
+        text=True,
+        capture_output=True,
+    )
+
+
+def _coerce_case_output_counts(
+    case_payload: Mapping[str, JsonValue],
+) -> dict[str, int]:
+    """Return normalized output counts from one raw case payload."""
+    raw_output_counts = case_payload.get("output_counts")
+    if not isinstance(raw_output_counts, Mapping):
+        return {}
+    output_counts: dict[str, int] = {}
+    for key, value in raw_output_counts.items():
+        if isinstance(key, str) and isinstance(value, int):
+            output_counts[key] = value
+    return output_counts
+
+
+def _coerce_case_stage_timings(
+    case_payload: Mapping[str, JsonValue],
+) -> dict[str, float]:
+    """Return normalized stage timings from one raw case payload."""
+    raw_stage_timings = case_payload.get("stage_timings")
+    if not isinstance(raw_stage_timings, Mapping):
+        return {}
+    stage_timings: dict[str, float] = {}
+    for key, value in raw_stage_timings.items():
+        if isinstance(key, str) and isinstance(value, (int, float)):
+            stage_timings[key] = float(value)
+    return stage_timings
+
+
+def _is_empty_chunk_warning(stderr_tail: str | None) -> bool:
+    """Return whether stderr indicates an empty flow handoff."""
+    return (
+        isinstance(stderr_tail, str)
+        and "No retrieved filing chunks" in stderr_tail
+    )
+
+
+def _has_cli_benchmark_output(
+    *,
+    pipeline: str,
+    output_counts: Mapping[str, int],
+) -> bool:
+    """Return whether one retrieve/chat benchmark produced usable output."""
+    if pipeline == "retrieve":
+        return output_counts.get("ranked_hits", 0) > 0
+    if pipeline == "chat":
+        return (
+            output_counts.get("hits_retrieved", 0) > 0
+            or output_counts.get("citations_returned", 0) > 0
+        )
+    return True
+
+
+def _normalize_case_success(
+    *,
+    pipeline: str,
+    reported_success: bool,
+    return_code: int,
+    output_counts: Mapping[str, int],
+    stderr_tail: str | None,
+) -> bool:
+    """Return benchmark success after filtering empty-context runs."""
+    if not reported_success or return_code != 0:
+        return False
+    if pipeline == "flow":
+        return not _is_empty_chunk_warning(stderr_tail)
+    return _has_cli_benchmark_output(
+        pipeline=pipeline,
+        output_counts=output_counts,
+    )
+
+
+def _normalized_artifact_for_summary(
+    artifact: ReportPayload,
+) -> ReportPayload:
+    """Rebuild one artifact summary from raw case records."""
+    raw_cases = artifact.get("cases")
+    if not isinstance(raw_cases, list):
+        return artifact
+
+    iterations: list[PerfIteration] = []
+    for raw_case in raw_cases:
+        case_payload = as_json_dict(raw_case)
+        if case_payload is None:
+            continue
+        case_name = case_payload.get("case")
+        pipeline = case_payload.get("pipeline")
+        raw_started_at = case_payload.get("started_at")
+        if not isinstance(case_name, str) or not isinstance(pipeline, str):
+            continue
+        output_counts = _coerce_case_output_counts(case_payload)
+        raw_stderr_tail = case_payload.get("stderr_tail")
+        stderr_tail = (
+            raw_stderr_tail if isinstance(raw_stderr_tail, str) else None
+        )
+        raw_return_code = case_payload.get("return_code")
+        return_code = raw_return_code if isinstance(raw_return_code, int) else 1
+        raw_success = case_payload.get("success")
+        reported_success = (
+            raw_success if isinstance(raw_success, bool) else return_code == 0
+        )
+        raw_elapsed_seconds = case_payload.get("elapsed_seconds")
+        elapsed_seconds = (
+            float(raw_elapsed_seconds)
+            if isinstance(raw_elapsed_seconds, (int, float))
+            else 0.0
+        )
+        raw_iteration = case_payload.get("iteration")
+        iteration = raw_iteration if isinstance(raw_iteration, int) else 0
+        raw_run_id = case_payload.get("run_id")
+        run_id = raw_run_id if isinstance(raw_run_id, str) else ""
+        started_at = raw_started_at if isinstance(raw_started_at, str) else ""
+        iterations.append(
+            PerfIteration(
+                case=case_name,
+                pipeline=pipeline,
+                iteration=iteration,
+                run_id=run_id,
+                success=_normalize_case_success(
+                    pipeline=pipeline,
+                    reported_success=reported_success,
+                    return_code=return_code,
+                    output_counts=output_counts,
+                    stderr_tail=stderr_tail,
+                ),
+                return_code=return_code,
+                elapsed_seconds=elapsed_seconds,
+                started_at=started_at,
+                stage_timings=_coerce_case_stage_timings(case_payload),
+                output_counts=output_counts,
+                stderr_tail=stderr_tail,
+            )
+        )
+
+    if not iterations:
+        return artifact
+
+    normalized_artifact = dict(artifact)
+    normalized_artifact["summary"] = _build_summary(iterations)
+    return normalized_artifact
+
+
 def _run_cli_case_in_worktree(
     case: PerfCase,
     *,
@@ -397,17 +618,24 @@ def _run_cli_case_in_worktree(
         stderr_lines = completed.stderr.strip().splitlines()
         if stderr_lines:
             stderr_tail = stderr_lines[-1]
+    output_counts = _safe_output_counts(case.pipeline, metadata)
     return PerfIteration(
         case=case.name,
         pipeline=case.pipeline,
         iteration=repeat_index,
         run_id=run_id,
-        success=completed.returncode == 0,
+        success=_normalize_case_success(
+            pipeline=case.pipeline,
+            reported_success=completed.returncode == 0,
+            return_code=completed.returncode,
+            output_counts=output_counts,
+            stderr_tail=stderr_tail,
+        ),
         return_code=completed.returncode,
         elapsed_seconds=round(elapsed_seconds, 6),
         started_at=started,
         stage_timings=_safe_stage_timings(metadata),
-        output_counts=_safe_output_counts(case.pipeline, metadata),
+        output_counts=output_counts,
         stderr_tail=stderr_tail,
     )
 
@@ -466,9 +694,7 @@ def _run_flow_case_in_worktree(
         if isinstance(payload_stderr_tail, str)
         else stderr_tail
     )
-    empty_chunk_run = isinstance(
-        resolved_stderr_tail, str
-    ) and resolved_stderr_tail.startswith("No retrieved filing chunks")
+    empty_chunk_run = _is_empty_chunk_warning(resolved_stderr_tail)
     resolved_return_code = (
         return_code_raw
         if isinstance(return_code_raw, int)
@@ -641,15 +867,47 @@ def _compare_case_metrics(
         if baseline_value is not None:
             comparison[f"baseline_{key}"] = baseline_value
 
+    feature_success_count = feature_case.get("success_count")
+    feature_iterations = feature_case.get("iterations")
+    baseline_success_count = baseline_case.get("success_count")
+    baseline_iterations = baseline_case.get("iterations")
+    feature_valid = (
+        isinstance(feature_success_count, int)
+        and isinstance(feature_iterations, int)
+        and feature_iterations > 0
+        and feature_success_count == feature_iterations
+    )
+    baseline_valid = (
+        isinstance(baseline_success_count, int)
+        and isinstance(baseline_iterations, int)
+        and baseline_iterations > 0
+        and baseline_success_count == baseline_iterations
+    )
+    if feature_valid and baseline_valid:
+        comparison["status"] = "ok"
+    elif feature_valid:
+        comparison["status"] = "baseline_invalid"
+    elif baseline_valid:
+        comparison["status"] = "feature_invalid"
+    else:
+        comparison["status"] = "both_invalid"
+
     feature_p95 = feature_case.get("p95_seconds")
     baseline_p95 = baseline_case.get("p95_seconds")
-    if isinstance(feature_p95, (int, float)) and isinstance(
-        baseline_p95,
-        (int, float),
+    if feature_valid and isinstance(feature_p95, (int, float)):
+        comparison["feature_p95_seconds"] = round(float(feature_p95), 6)
+    if baseline_valid and isinstance(baseline_p95, (int, float)):
+        comparison["baseline_p95_seconds"] = round(float(baseline_p95), 6)
+    if (
+        feature_valid
+        and baseline_valid
+        and isinstance(feature_p95, (int, float))
+        and isinstance(
+            baseline_p95,
+            (int, float),
+        )
     ):
         delta_seconds = round(float(feature_p95) - float(baseline_p95), 6)
-        comparison["feature_p95_seconds"] = round(float(feature_p95), 6)
-        comparison["baseline_p95_seconds"] = round(float(baseline_p95), 6)
         comparison["delta_p95_seconds"] = delta_seconds
         comparison["delta_p95_pct"] = (
             round(
@@ -662,12 +920,23 @@ def _compare_case_metrics(
 
     feature_mean = feature_case.get("mean_seconds")
     baseline_mean = baseline_case.get("mean_seconds")
-    if isinstance(feature_mean, (int, float)) and isinstance(
-        baseline_mean,
-        (int, float),
-    ):
+    if feature_valid and isinstance(feature_mean, (int, float)):
         comparison["feature_mean_seconds"] = round(float(feature_mean), 6)
+    if baseline_valid and isinstance(baseline_mean, (int, float)):
         comparison["baseline_mean_seconds"] = round(float(baseline_mean), 6)
+    if (
+        feature_valid
+        and baseline_valid
+        and isinstance(feature_mean, (int, float))
+        and isinstance(
+            baseline_mean,
+            (int, float),
+        )
+    ):
+        comparison["delta_mean_seconds"] = round(
+            float(feature_mean) - float(baseline_mean),
+            6,
+        )
 
     stage_feature = feature_case.get("stage_mean_seconds")
     feature_stage_dict = as_json_dict(stage_feature)
@@ -763,8 +1032,8 @@ def _report_table(
 ) -> str:
     """Render one Markdown table for suite case deltas."""
     lines = [
-        "| Case | Feature ok/iters | Main ok/iters | Feature p95 (s) | Main p95 (s) | Delta (s) | Delta (%) |",
-        "| --- | ---: | ---: | ---: | ---: | ---: | ---: |",
+        "| Case | Status | Feature ok/iters | Baseline ok/iters | Feature p95 (s) | Baseline p95 (s) | Delta (s) | Delta (%) |",
+        "| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |",
     ]
     for case_name in sorted(
         case_name
@@ -783,9 +1052,11 @@ def _report_table(
         baseline_p95 = comparison.get("baseline_p95_seconds")
         delta_seconds = comparison.get("delta_p95_seconds")
         delta_pct = comparison.get("delta_p95_pct")
+        status = comparison.get("status")
         lines.append(
             "| "
             f"{case_name} | "
+            f"{status if isinstance(status, str) else 'n/a'} | "
             f"{feature_success if isinstance(feature_success, int) else 'n/a'}/"
             f"{feature_iterations if isinstance(feature_iterations, int) else 'n/a'} | "
             f"{baseline_success if isinstance(baseline_success, int) else 'n/a'}/"
@@ -808,7 +1079,7 @@ def _render_markdown_report(
     """Render the committed Markdown benchmark comparison report."""
     feature_branch = feature_summary.get("branch")
     feature_commit = feature_summary.get("commit")
-    baseline_branch = baseline_summary.get("branch")
+    baseline_ref = baseline_summary.get("source_ref")
     baseline_commit = baseline_summary.get("commit")
     generated_at = comparison_summary.get("generated_at")
 
@@ -817,10 +1088,10 @@ def _render_markdown_report(
         "",
         f"- Generated at: `{generated_at}`",
         f"- Feature branch: `{feature_branch}` at `{feature_commit}`",
-        f"- Baseline branch: `{baseline_branch}` at `{baseline_commit}`",
+        f"- Baseline ref: `{baseline_ref}` at `{baseline_commit}`",
         "- Stable JSON summaries: "
         "[feature_summary.json](feature_summary.json), "
-        "[main_summary.json](main_summary.json), "
+        "[baseline_summary.json](baseline_summary.json), "
         "[comparison_summary.json](comparison_summary.json)",
         "",
         "## Environment assumptions",
@@ -847,6 +1118,9 @@ def _render_markdown_report(
             "checks rather than full flow comparisons.",
             "- Flow baseline shadow specs align date windows, baskets, timeout policy, "
             "and dedicated collection names with the conflict/monopoly flows.",
+            "- Cases without fully successful iterations are marked invalid and "
+            "render timing deltas as `n/a` instead of treating empty-context "
+            "runs as real wins.",
             "- `flow_overhead` captures setup and warmup work outside stage "
             "`invoke()` timings and is preserved in the JSON summaries.",
         ]
@@ -887,6 +1161,10 @@ def _write_report_outputs(
     """Write stable JSON summaries and, optionally, the Markdown report."""
     output_dir.mkdir(parents=True, exist_ok=True)
     _write_json_payload(output_dir / "feature_summary.json", feature_summary)
+    _write_json_payload(
+        output_dir / "baseline_summary.json",
+        baseline_summary,
+    )
     _write_json_payload(output_dir / "main_summary.json", baseline_summary)
     _write_json_payload(
         output_dir / "comparison_summary.json",
@@ -908,10 +1186,14 @@ def _existing_suite_artifacts(
     """Load existing raw suite artifacts for one ref label."""
     artifacts: dict[str, ReportPayload] = {}
     for suite in suites:
-        suite_path = raw_output_dir / label / f"{suite.name}.json"
+        suite_path = _resolve_raw_suite_artifact_path(
+            raw_output_dir=raw_output_dir,
+            label=label,
+            suite_name=suite.name,
+        )
         payload = json.loads(suite_path.read_text(encoding="utf-8"))
         if isinstance(payload, dict):
-            artifacts[suite.name] = payload
+            artifacts[suite.name] = _normalized_artifact_for_summary(payload)
     return artifacts
 
 
@@ -981,7 +1263,7 @@ class BranchReportConfig(BaseSettings):
         raise ValueError("mode must be 'run' or 'render'")
 
     def _run(self) -> None:
-        """Run the full feature-vs-main benchmark matrix and write outputs."""
+        """Run the full feature-vs-baseline benchmark matrix and write outputs."""
         repo_root = find_project_root()
         feature_meta = _ref_metadata(
             label="feature",
@@ -994,28 +1276,24 @@ class BranchReportConfig(BaseSettings):
             raise ValueError("baseline_ref cannot be empty")
 
         with tempfile.TemporaryDirectory(
-            prefix="sec-nlp-main-worktree-"
+            prefix="sec-nlp-baseline-worktree-"
         ) as tmp_dir:
             baseline_worktree = Path(tmp_dir) / "baseline"
-            subprocess.run(
-                [
-                    "git",
-                    "worktree",
-                    "add",
-                    "--quiet",
-                    str(baseline_worktree),
-                    baseline_ref,
-                ],
-                cwd=str(repo_root),
-                check=True,
-                text=True,
-                capture_output=True,
+            _prepare_baseline_worktree(
+                repo_root=repo_root,
+                baseline_ref=baseline_ref,
+                baseline_worktree=baseline_worktree,
             )
             baseline_meta: RefMetadata | None = None
             try:
-                baseline_meta = _ref_metadata(
-                    label="main",
+                baseline_meta = RefMetadata(
+                    label=_CANONICAL_BASELINE_LABEL,
                     ref=baseline_ref,
+                    branch=baseline_ref,
+                    commit=_git_output(
+                        cwd=baseline_worktree,
+                        args=["rev-parse", "HEAD"],
+                    ),
                     workdir=baseline_worktree,
                 )
                 feature_summaries = {
@@ -1043,18 +1321,9 @@ class BranchReportConfig(BaseSettings):
                     for suite in suites
                 }
             finally:
-                subprocess.run(
-                    [
-                        "git",
-                        "worktree",
-                        "remove",
-                        "--force",
-                        str(baseline_worktree),
-                    ],
-                    cwd=str(repo_root),
-                    check=False,
-                    text=True,
-                    capture_output=True,
+                _cleanup_baseline_worktree(
+                    repo_root=repo_root,
+                    baseline_worktree=baseline_worktree,
                 )
         if baseline_meta is None:
             raise ValueError("Failed to build baseline ref metadata")
@@ -1084,7 +1353,7 @@ class BranchReportConfig(BaseSettings):
             args=["rev-parse", baseline_ref],
         )
         baseline_meta = RefMetadata(
-            label="main",
+            label=_CANONICAL_BASELINE_LABEL,
             ref=baseline_ref,
             branch=baseline_ref,
             commit=baseline_commit,
@@ -1097,7 +1366,7 @@ class BranchReportConfig(BaseSettings):
         )
         baseline_raw = _existing_suite_artifacts(
             raw_output_dir=self.raw_output_dir.resolve(),
-            label="main",
+            label=_CANONICAL_BASELINE_LABEL,
             suites=suites,
         )
         feature_summaries = {
@@ -1119,13 +1388,13 @@ class BranchReportConfig(BaseSettings):
             suite.name: _stable_summary_from_artifact(
                 baseline_raw[suite.name],
                 suite_name=suite.name,
-                summary_label="main",
+                summary_label=_CANONICAL_BASELINE_LABEL,
                 source_ref=baseline_ref,
                 source_commit=baseline_meta.commit,
-                source_artifact=(
-                    self.raw_output_dir.resolve()
-                    / "main"
-                    / f"{suite.name}.json"
+                source_artifact=_resolve_raw_suite_artifact_path(
+                    raw_output_dir=self.raw_output_dir.resolve(),
+                    label=_CANONICAL_BASELINE_LABEL,
+                    suite_name=suite.name,
                 ),
             )
             for suite in suites
