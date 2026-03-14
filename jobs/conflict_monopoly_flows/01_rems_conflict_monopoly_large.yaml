@@ -1,0 +1,154 @@
+name: rems_conflict_monopoly_large_flow
+defaults:
+  email: you@example.com
+on_failure: stop
+stages:
+- id: retrieve_simple_terms
+  pipeline: retrieve
+  overrides:
+    queries:
+    - rare earth export controls
+    - NdPr pricing power
+    - magnet supply chain concentration
+    - China rare earth dependency
+    - rare earth offtake exclusivity
+    - rare earth monopoly risk
+    - critical minerals sanctions exposure
+    - rare earth defense demand
+    output_format: json
+    top_k: 150
+    efts_candidates: 900
+    hydrate_top_n: 260
+    query_term_min_hits: 0
+    query_term_min_ratio: 0.0
+    stopword_aware_lexical: true
+    rerank_with_embeddings: true
+    index_results: true
+    vdb: &rems_vdb
+      collection_name: thematic_rems_conflict_monopoly_large
+      embedding_model: qwen3-embedding:4b
+      vector_size: 2560
+      qdrant_url: http://localhost:6333
+      qdrant_location: null
+    symbols: &rems_symbols
+    - MP
+    - LAC
+    - UUUU
+    - TMRC
+    - AREC
+    - USAR
+    forms: &rems_forms
+    - 10-K
+    - 10-Q
+    - 8-K
+    - 6-K
+    - 20-F
+    start_date: '2023-03-12'
+    dry_run: false
+- id: retrieve_conflict_terms
+  pipeline: retrieve
+  overrides:
+    queries:
+    - rare earth export controls China
+    - critical minerals sanctions
+    - rare earth defense stockpile
+    - rare earth tariff retaliation
+    - China processing dependence
+    - rare earth customs restrictions
+    - magnet supply disruption
+    - domestic rare earth grants
+    output_format: json
+    top_k: 165
+    efts_candidates: 950
+    hydrate_top_n: 300
+    query_term_min_hits: 0
+    query_term_min_ratio: 0.0
+    stopword_aware_lexical: true
+    rerank_with_embeddings: true
+    index_results: true
+    vdb: *rems_vdb
+    symbols: *rems_symbols
+    forms: *rems_forms
+    start_date: '2023-03-12'
+    dry_run: false
+- id: retrieve_monopoly_terms
+  pipeline: retrieve
+  overrides:
+    queries:
+    - rare earth consolidation
+    - joint venture rare earth
+    - mine to magnet integration
+    - rare earth offtake agreements
+    - customer concentration rare earth
+    - processing bottleneck rare earth
+    - rare earth pricing leverage
+    - capacity reservation rare earth
+    output_format: json
+    top_k: 170
+    efts_candidates: 950
+    hydrate_top_n: 320
+    query_term_min_hits: 0
+    query_term_min_ratio: 0.0
+    stopword_aware_lexical: true
+    rerank_with_embeddings: true
+    index_results: true
+    vdb: *rems_vdb
+    symbols: *rems_symbols
+    forms: *rems_forms
+    start_date: '2023-03-12'
+    dry_run: false
+- id: retrieve_complex_terms
+  pipeline: retrieve
+  overrides:
+    queries:
+    - rare earth pricing leverage barriers to entry
+    - rare earth procurement lockout risk
+    - domestic processing buildout delays
+    - rare earth stockpiling customer concentration
+    - rare earth separation capacity reservation
+    - magnet supply chain monopoly
+    output_format: json
+    top_k: 180
+    efts_candidates: 1000
+    hydrate_top_n: 340
+    query_term_min_hits: 0
+    query_term_min_ratio: 0.0
+    stopword_aware_lexical: true
+    rerank_with_embeddings: true
+    index_results: true
+    vdb: *rems_vdb
+    symbols: *rems_symbols
+    forms: *rems_forms
+    start_date: '2023-03-12'
+    dry_run: false
+- id: chat_answer
+  pipeline: chat
+  overrides:
+    question: Compare the rare earth basket on exposure to geopolitical conflict,
+      monopoly formation, and supply-chain concentration. Separate evidence tied
+      to simple-term hits versus complex-term hits, identify who gains pricing
+      power or procurement leverage, and call out which issuers remain most exposed
+      to lockout risk or concentrated processing chokepoints.
+    interactive: false
+    output_format: yaml
+    collections:
+    - thematic_rems_conflict_monopoly_large
+    top_k: 24
+    max_context_chunks: 32
+    context_token_budget: 32000
+    include_market_context: true
+    include_news_context: true
+    rerank_mode: mmr
+    generation_token_cap: 0
+    llm_timeout_seconds: 360
+    llm:
+      model_name: qwen3:8b
+      require_json: false
+      temperature: 0.03
+      max_new_tokens: 8192
+      num_ctx: 32768
+    vdb: *rems_vdb
+    symbols: *rems_symbols
+    forms: *rems_forms
+    start_date: '2023-03-12'
+    dry_run: false
