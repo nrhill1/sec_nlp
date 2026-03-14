@@ -14,10 +14,7 @@ from qdrant_client import QdrantClient
 from qdrant_client.grpc.qdrant_common_pb2 import PointId
 from qdrant_client.http.models import Record
 
-from sec_nlp.pipelines.metadata.filters import (
-    MetadataFilters,
-    build_metadata_filter,
-)
+from sec_nlp.pipelines.runtime import MetadataFilters, build_metadata_filter
 
 
 def scroll_exists(

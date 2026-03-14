@@ -57,9 +57,12 @@ from sec_nlp.core.text.deduplication import SimHashConfig, SimHashDeduplicator
 from sec_nlp.core.text.filters import SectionFilter
 from sec_nlp.core.text.section_extractor import SectionExtractor
 from sec_nlp.pipelines import BasePipeline
-from sec_nlp.pipelines.metadata.accession import get_accession_from_metadata
 from sec_nlp.pipelines.observability.telemetry import log_chunk_length_stats
-from sec_nlp.pipelines.state import ProcessingState, get_state_dir
+from sec_nlp.pipelines.runtime import (
+    ProcessingState,
+    get_accession_from_metadata,
+    get_state_dir,
+)
 from sec_nlp.pipelines.types import (
     AnalysisResultDict,
     MetadataRecord,

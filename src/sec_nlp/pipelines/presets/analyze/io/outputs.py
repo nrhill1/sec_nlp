@@ -11,15 +11,12 @@ from uuid import UUID
 
 from sec_nlp.core.infra.logger import logger
 from sec_nlp.core.types import coerce_float, coerce_json_dict
-from sec_nlp.pipelines.metadata.normalize import (
-    get_meta_str,
-    get_meta_str_any,
-)
 from sec_nlp.pipelines.output_io import (
     build_accession_dir,
     write_json,
     write_yaml,
 )
+from sec_nlp.pipelines.runtime import get_meta_str, get_meta_str_any
 from sec_nlp.pipelines.serialization import (
     is_score_key,
     round_score,

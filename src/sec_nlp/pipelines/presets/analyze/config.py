@@ -29,7 +29,7 @@ from sec_nlp.core.text.section_patterns import (
 from sec_nlp.core.types import coerce_json_dict
 from sec_nlp.pipelines.base.config import BasePipelineSettings
 from sec_nlp.pipelines.llm.config import LLMConfig
-from sec_nlp.pipelines.metadata.filters import MetadataFilters
+from sec_nlp.pipelines.runtime import MetadataFilters
 from sec_nlp.pipelines.vector.config import VectorConfig
 from sec_nlp.prompts import (
     ANALYZE_MARKET_CORRELATION_PROMPT_PATH,

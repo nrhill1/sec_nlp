@@ -26,7 +26,15 @@ from scripts.utils import setup_import_path
 
 setup_import_path()
 
+from sec_nlp.app.flows.models import (  # noqa: E402
+    FlowDefaults,  # noqa: E402
+    FlowRunResult,  # noqa: E402
+    FlowSpec,  # noqa: E402
+)
+from sec_nlp.app.flows.runner import FlowRunner  # noqa: E402
+from sec_nlp.app.flows.spec import load_flow_spec  # noqa: E402
 from sec_nlp.core.infra.logger import logger, setup_logging  # noqa: E402
+from sec_nlp.core.types import as_json_dict  # noqa: E402
 from sec_nlp.pipelines.observability.run_registry import (  # noqa: E402
     RunRegistry,
 )
@@ -34,6 +42,8 @@ from sec_nlp.types import (  # noqa: E402
     JsonDict,  # noqa: E402
     JsonValue,  # noqa: E402
 )
+
+type StableSummaryPayload = dict[str, JsonValue]
 
 
 @dataclass(frozen=True)
@@ -44,6 +54,7 @@ class PerfCase:
     pipeline: str
     args: list[str]
     tags: list[str]
+    flow_spec: Path | None = None
 
 
 @dataclass(frozen=True)
@@ -61,6 +72,37 @@ class PerfIteration:
     stage_timings: dict[str, float]
     output_counts: dict[str, int]
     stderr_tail: str | None
+
+
+def _case_has_tags(case: PerfCase, include_tags: list[str]) -> bool:
+    """Return whether a case contains every requested tag."""
+    if not include_tags:
+        return True
+    case_tags = {tag.strip().lower() for tag in case.tags if tag.strip()}
+    required_tags = {tag.strip().lower() for tag in include_tags if tag.strip()}
+    return required_tags.issubset(case_tags)
+
+
+def _select_cases(
+    cases: list[PerfCase],
+    *,
+    include_cases: list[str],
+    include_tags: list[str],
+) -> list[PerfCase]:
+    """Filter cases by optional case-name allowlist and required tags."""
+    selected = cases
+    if include_cases:
+        allowed_case_names = {
+            name.strip() for name in include_cases if name.strip()
+        }
+        selected = [
+            case for case in selected if case.name in allowed_case_names
+        ]
+    if include_tags:
+        selected = [
+            case for case in selected if _case_has_tags(case, include_tags)
+        ]
+    return selected
 
 
 def _percentile(values: list[float], pct: float) -> float:
@@ -123,7 +165,185 @@ def _safe_output_counts(
         counts["ranked_hits"] = total_ranked
         return counts
 
+    if pipeline == "flow":
+        for key in (
+            "stages_total",
+            "stages_successful",
+            "stages_skipped",
+            "stages_failed",
+            "answer_files",
+        ):
+            value = metadata.get(key)
+            if isinstance(value, int):
+                counts[key] = value
+        return counts
+
     return counts
+
+
+def _flow_stage_timings(result: FlowRunResult) -> dict[str, float]:
+    """Build per-stage duration metrics from one flow result."""
+    stage_timings: dict[str, float] = {}
+    for stage_result in result.stage_results:
+        if stage_result.skipped:
+            continue
+        stage_timings[stage_result.stage_id] = round(
+            stage_result.duration_seconds, 6
+        )
+    return stage_timings
+
+
+def _flow_output_counts(result: FlowRunResult) -> dict[str, int]:
+    """Build normalized count metrics from one flow result."""
+    metadata: dict[str, JsonValue] = {
+        "stages_total": len(result.stage_results),
+        "stages_successful": sum(
+            1 for stage_result in result.stage_results if stage_result.success
+        ),
+        "stages_skipped": sum(
+            1 for stage_result in result.stage_results if stage_result.skipped
+        ),
+        "stages_failed": sum(
+            1
+            for stage_result in result.stage_results
+            if not stage_result.success and not stage_result.skipped
+        ),
+        "answer_files": 0,
+    }
+    answer_paths = result.metadata.get("answer_output_paths")
+    if isinstance(answer_paths, list):
+        metadata["answer_files"] = sum(
+            1 for answer_path in answer_paths if isinstance(answer_path, str)
+        )
+    return _safe_output_counts("flow", metadata)
+
+
+def _flow_error_tail(result: FlowRunResult) -> str | None:
+    """Return one concise failure summary for a flow result."""
+    for stage_result in result.stage_results:
+        if stage_result.error:
+            return f"{stage_result.stage_id}: {stage_result.error}"
+    return None
+
+
+def _flow_stage_timings_for_iteration(
+    result: FlowRunResult,
+    *,
+    elapsed_seconds: float,
+) -> dict[str, float]:
+    """Build flow stage timings plus explicit setup and warmup overhead."""
+    stage_timings = _flow_stage_timings(result)
+    measured_seconds = sum(stage_timings.values())
+    overhead_seconds = round(
+        max(0.0, elapsed_seconds - measured_seconds),
+        6,
+    )
+    if overhead_seconds > 0.0:
+        stage_timings["flow_overhead"] = overhead_seconds
+    return stage_timings
+
+
+def _case_slug(value: str) -> str:
+    """Build a filesystem- and collection-safe case slug."""
+    slug_parts = [
+        character.lower() if character.isalnum() else "_" for character in value
+    ]
+    slug = "".join(slug_parts).strip("_")
+    return slug or "perf_case"
+
+
+def _benchmark_collection_name(
+    original_name: str,
+    *,
+    case_name: str,
+    iteration: int,
+) -> str:
+    """Return one unique collection name for a flow benchmark case."""
+    return f"{original_name}_{_case_slug(case_name)}_r{iteration}"
+
+
+def _collection_overrides_for_flow_case(
+    spec: FlowSpec,
+    *,
+    case_name: str,
+    iteration: int,
+) -> dict[str, str]:
+    """Build per-flow collection overrides to avoid warmed-index bias."""
+    overrides: dict[str, str] = {}
+    for stage in spec.stages:
+        stage_overrides = stage.overrides
+        vdb_raw = stage_overrides.get("vdb")
+        vdb = as_json_dict(vdb_raw)
+        if vdb is not None:
+            collection_name = vdb.get("collection_name")
+            if (
+                isinstance(collection_name, str)
+                and collection_name not in overrides
+            ):
+                overrides[collection_name] = _benchmark_collection_name(
+                    collection_name,
+                    case_name=case_name,
+                    iteration=iteration,
+                )
+        collections_raw = stage_overrides.get("collections")
+        if not isinstance(collections_raw, list):
+            continue
+        for collection_name in collections_raw:
+            if (
+                isinstance(collection_name, str)
+                and collection_name not in overrides
+            ):
+                overrides[collection_name] = _benchmark_collection_name(
+                    collection_name,
+                    case_name=case_name,
+                    iteration=iteration,
+                )
+    return overrides
+
+
+def _apply_flow_benchmark_overrides(
+    spec: FlowSpec,
+    *,
+    email: str,
+    case_name: str,
+    iteration: int,
+) -> FlowSpec:
+    """Clone a flow spec with benchmark-safe email and collection overrides."""
+    collection_overrides = _collection_overrides_for_flow_case(
+        spec,
+        case_name=case_name,
+        iteration=iteration,
+    )
+    stage_updates = []
+    for stage in spec.stages:
+        stage_overrides = dict(stage.overrides)
+        vdb_raw = stage_overrides.get("vdb")
+        vdb = as_json_dict(vdb_raw)
+        if vdb is not None:
+            collection_name = vdb.get("collection_name")
+            if isinstance(collection_name, str):
+                vdb["collection_name"] = collection_overrides.get(
+                    collection_name,
+                    collection_name,
+                )
+            stage_overrides["vdb"] = vdb
+        collections_raw = stage_overrides.get("collections")
+        if isinstance(collections_raw, list):
+            stage_overrides["collections"] = [
+                collection_overrides.get(collection_name, collection_name)
+                if isinstance(collection_name, str)
+                else collection_name
+                for collection_name in collections_raw
+            ]
+        stage_updates.append(
+            stage.model_copy(update={"overrides": stage_overrides})
+        )
+    return spec.model_copy(
+        update={
+            "defaults": FlowDefaults(email=email),
+            "stages": stage_updates,
+        }
+    )
 
 
 def _default_cases(
@@ -139,6 +359,50 @@ def _default_cases(
     start_date = "2023-01-01"
     tech_symbols = ["NVDA", "AMD", "AVGO", "QCOM", "INTC"]
     mining_symbols = ["MP", "LAC", "UUUU", "AREC", "USAR"]
+    rems_symbols = ["MP", "LAC", "UUUU", "AREC", "USAR"]
+    quantum_symbols = ["IONQ", "RGTI", "QBTS", "QUBT", "IBM"]
+    flow_cases = [
+        (
+            "flow_rems_conflict_monopoly_large",
+            Path(
+                "jobs/conflict_monopoly_flows/01_rems_conflict_monopoly_large.yaml"
+            ),
+            ["flow", "rems", "benchmark", "conflict-monopoly"],
+        ),
+        (
+            "flow_rems_high_qwen",
+            Path("jobs/benchmark_matrix_flows/02_rems_high_qwen_aligned.yaml"),
+            ["flow", "rems", "benchmark", "baseline", "model-variety"],
+        ),
+        (
+            "flow_rems_large_merged",
+            Path(
+                "jobs/benchmark_matrix_flows/01_rems_large_merged_aligned.yaml"
+            ),
+            ["flow", "rems", "benchmark", "baseline", "merged"],
+        ),
+        (
+            "flow_quantum_conflict_monopoly_large",
+            Path(
+                "jobs/conflict_monopoly_flows/02_quantum_conflict_monopoly_large.yaml"
+            ),
+            ["flow", "quantum", "benchmark", "conflict-monopoly"],
+        ),
+        (
+            "flow_quantum_high_qwen_ministral",
+            Path(
+                "jobs/benchmark_matrix_flows/04_quantum_high_qwen_ministral_aligned.yaml"
+            ),
+            ["flow", "quantum", "benchmark", "baseline", "model-variety"],
+        ),
+        (
+            "flow_quantum_large_merged",
+            Path(
+                "jobs/benchmark_matrix_flows/03_quantum_large_merged_aligned.yaml"
+            ),
+            ["flow", "quantum", "benchmark", "baseline", "merged"],
+        ),
+    ]
 
     retrieve_queries_tech = (
         "AI accelerator demand and lead-time normalization||"
@@ -150,6 +414,20 @@ def _default_cases(
         "NdPr pricing sensitivity and offtake visibility||"
         "permitting, geopolitics, and supply chain concentration risk"
     )
+    retrieve_queries_rems_thematic = (
+        "rare earth export controls||"
+        "rare earth defense demand||"
+        "magnet supply chain concentration||"
+        "rare earth consolidation||"
+        "mine to magnet integration"
+    )
+    retrieve_queries_quantum_thematic = (
+        "quantum export controls||"
+        "quantum defense contracts||"
+        "sovereign compute requirements||"
+        "exclusive cloud partnership||"
+        "quantum commercialization concentration"
+    )
     chat_question_tech = (
         "Compare demand durability, margin risk, and execution risk across "
         "the selected issuers using filing evidence."
@@ -157,6 +435,14 @@ def _default_cases(
     chat_question_mining = (
         "Compare rare-earth supply chain risk, pricing power, and execution "
         "risk across the selected issuers using filing evidence."
+    )
+    chat_question_rems_thematic = (
+        "Compare export-control exposure, supply-chain concentration, and "
+        "pricing leverage across the rare-earth issuers using filing evidence."
+    )
+    chat_question_quantum_thematic = (
+        "Compare export-control exposure, gatekeeper dynamics, and customer "
+        "concentration across the quantum issuers using filing evidence."
     )
     vdb_args = [
         "--vdb.collection-name",
@@ -298,6 +584,145 @@ def _default_cases(
                 ],
             )
         )
+    cases.extend(
+        [
+            PerfCase(
+                name="retrieve_rems_thematic",
+                pipeline="retrieve",
+                tags=["retrieve", "rems", "thematic", "benchmark"],
+                args=[
+                    "retrieve",
+                    *rems_symbols,
+                    "--email",
+                    email,
+                    "--no-dry-run",
+                    "--no-incremental",
+                    *vdb_args,
+                    "--no-download-missing",
+                    "--index-results",
+                    "--forms",
+                    forms,
+                    "--start-date",
+                    start_date,
+                    "--queries",
+                    retrieve_queries_rems_thematic,
+                    "--efts-candidates",
+                    "260",
+                    "--top-k",
+                    "60",
+                    "--output-format",
+                    "json",
+                ],
+            ),
+            PerfCase(
+                name="chat_rems_thematic",
+                pipeline="chat",
+                tags=["chat", "rems", "thematic", "benchmark"],
+                args=[
+                    "chat",
+                    *rems_symbols,
+                    "--email",
+                    email,
+                    "--no-dry-run",
+                    *vdb_args,
+                    "--collections",
+                    collection_name,
+                    "--forms",
+                    forms,
+                    "--start-date",
+                    start_date,
+                    "--question",
+                    chat_question_rems_thematic,
+                    *chat_llm_args,
+                    "--rerank-mode",
+                    "mmr",
+                    "--top-k",
+                    "12",
+                    "--max-context-chunks",
+                    "10",
+                    "--context-token-budget",
+                    "10000",
+                    "--output-format",
+                    "json",
+                ],
+            ),
+            PerfCase(
+                name="retrieve_quantum_thematic",
+                pipeline="retrieve",
+                tags=["retrieve", "quantum", "thematic", "benchmark"],
+                args=[
+                    "retrieve",
+                    *quantum_symbols,
+                    "--email",
+                    email,
+                    "--no-dry-run",
+                    "--no-incremental",
+                    *vdb_args,
+                    "--no-download-missing",
+                    "--index-results",
+                    "--forms",
+                    forms,
+                    "--start-date",
+                    start_date,
+                    "--queries",
+                    retrieve_queries_quantum_thematic,
+                    "--efts-candidates",
+                    "260",
+                    "--top-k",
+                    "60",
+                    "--output-format",
+                    "json",
+                ],
+            ),
+            PerfCase(
+                name="chat_quantum_thematic",
+                pipeline="chat",
+                tags=["chat", "quantum", "thematic", "benchmark"],
+                args=[
+                    "chat",
+                    *quantum_symbols,
+                    "--email",
+                    email,
+                    "--no-dry-run",
+                    *vdb_args,
+                    "--collections",
+                    collection_name,
+                    "--forms",
+                    forms,
+                    "--start-date",
+                    start_date,
+                    "--question",
+                    chat_question_quantum_thematic,
+                    *chat_llm_args,
+                    "--rerank-mode",
+                    "mmr",
+                    "--top-k",
+                    "12",
+                    "--max-context-chunks",
+                    "10",
+                    "--context-token-budget",
+                    "10000",
+                    "--output-format",
+                    "json",
+                ],
+            ),
+        ]
+    )
+    for case_name, flow_spec, tags in flow_cases:
+        cases.append(
+            PerfCase(
+                name=case_name,
+                pipeline="flow",
+                args=[
+                    "flow",
+                    "run",
+                    "--spec",
+                    str(flow_spec),
+                ],
+                tags=tags,
+                flow_spec=flow_spec,
+            )
+        )
     return cases
 
 
@@ -318,15 +743,24 @@ def _build_summary(iterations: list[PerfIteration]) -> dict[str, JsonValue]:
         elif pipeline == "retrieve":
             slo_target_seconds = 25.0
         stage_totals: dict[str, float] = {}
+        output_totals: dict[str, float] = {}
         for run in case_runs:
             for stage_name, stage_value in run.stage_timings.items():
                 stage_totals[stage_name] = (
                     stage_totals.get(stage_name, 0.0) + stage_value
                 )
+            for output_name, output_value in run.output_counts.items():
+                output_totals[output_name] = (
+                    output_totals.get(output_name, 0.0) + output_value
+                )
 
         stage_means = {
             stage_name: round(total / len(case_runs), 6)
             for stage_name, total in stage_totals.items()
+        }
+        output_means = {
+            output_name: round(total / len(case_runs), 6)
+            for output_name, total in output_totals.items()
         }
         p95_seconds = round(_percentile(elapsed, 95), 6)
 
@@ -339,12 +773,27 @@ def _build_summary(iterations: list[PerfIteration]) -> dict[str, JsonValue]:
             "max_seconds": round(max(elapsed), 6),
             "min_seconds": round(min(elapsed), 6),
             "stage_mean_seconds": stage_means,
+            "output_mean_counts": output_means,
         }
         if slo_target_seconds is not None:
             case_summary["slo_p95_seconds"] = slo_target_seconds
             case_summary["slo_pass"] = p95_seconds <= slo_target_seconds
         summary[case_name] = case_summary
     return summary
+
+
+def _build_artifact_payload(
+    iterations: list[PerfIteration],
+    *,
+    repeats: int,
+) -> StableSummaryPayload:
+    """Build one raw perf artifact payload from completed iterations."""
+    return {
+        "generated_at": datetime.now(UTC).isoformat(),
+        "repeats": repeats,
+        "cases": [asdict(iteration) for iteration in iterations],
+        "summary": _build_summary(iterations),
+    }
 
 
 def _artifact_path(output_dir: Path) -> Path:
@@ -394,6 +843,53 @@ def _build_json_dict(mapping: object) -> dict[str, JsonValue]:
     return result
 
 
+def _stable_summary_from_artifact(
+    artifact: dict[str, JsonValue],
+    *,
+    suite_name: str,
+    summary_label: str | None,
+    source_ref: str | None,
+    source_commit: str | None,
+    source_artifact: Path | None,
+) -> StableSummaryPayload:
+    """Build a deterministic summary export from one raw perf artifact."""
+    raw_summary = artifact.get("summary")
+    raw_repeats = artifact.get("repeats")
+    raw_generated_at = artifact.get("generated_at")
+    summary = _build_json_dict(raw_summary)
+    ordered_summary = {
+        case_name: summary[case_name] for case_name in sorted(summary)
+    }
+    payload: StableSummaryPayload = {
+        "schema_version": 1,
+        "suite_name": suite_name,
+        "exported_at": datetime.now(UTC).isoformat(),
+        "summary": ordered_summary,
+    }
+    if summary_label is not None:
+        payload["summary_label"] = summary_label
+    if isinstance(raw_repeats, int):
+        payload["repeats"] = raw_repeats
+    if isinstance(raw_generated_at, str):
+        payload["source_generated_at"] = raw_generated_at
+    if source_ref is not None:
+        payload["source_ref"] = source_ref
+    if source_commit is not None:
+        payload["source_commit"] = source_commit
+    if source_artifact is not None:
+        payload["source_artifact"] = str(source_artifact)
+    return payload
+
+
+def _write_json_payload(path: Path, payload: StableSummaryPayload) -> None:
+    """Write one JSON payload with stable formatting."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps(payload, indent=2, sort_keys=True),
+        encoding="utf-8",
+    )
+
+
 def _latest_artifacts(output_dir: Path, count: int = 2) -> list[Path]:
     """Return the most recent perf suite artifacts."""
     return sorted(output_dir.glob("perf_suite_*.json"))[-count:]
@@ -411,7 +907,7 @@ class PerfSuiteConfig(BaseSettings):
 
     mode: str = Field(
         default="run",
-        description="Mode: run or compare",
+        description="Mode: run, compare, or export.",
     )
     repeats: int = Field(
         default=3,
@@ -449,6 +945,34 @@ class PerfSuiteConfig(BaseSettings):
         default_factory=list,
         description="Optional case-name allowlist.",
     )
+    include_tags: list[str] = Field(
+        default_factory=list,
+        description="Optional required-tag allowlist.",
+    )
+    input_artifact: Path | None = Field(
+        default=None,
+        description="Raw perf artifact used in export mode.",
+    )
+    output_path: Path | None = Field(
+        default=None,
+        description="Stable output path for export mode.",
+    )
+    suite_name: str | None = Field(
+        default=None,
+        description="Stable suite name used in export mode.",
+    )
+    summary_label: str | None = Field(
+        default=None,
+        description="Optional label attached to exported summaries.",
+    )
+    source_ref: str | None = Field(
+        default=None,
+        description="Optional git ref label attached to exported summaries.",
+    )
+    source_commit: str | None = Field(
+        default=None,
+        description="Optional git commit attached to exported summaries.",
+    )
     log_level: str = Field(
         default="INFO",
         description="Logging level.",
@@ -470,7 +994,10 @@ class PerfSuiteConfig(BaseSettings):
         if mode == "compare":
             self._compare_latest()
             return
-        raise ValueError("mode must be 'run' or 'compare'")
+        if mode == "export":
+            self._export_summary()
+            return
+        raise ValueError("mode must be 'run', 'compare', or 'export'")
 
     def _run_suite(self) -> None:
         """Run the selected perf matrix and write the artifact summary."""
@@ -483,11 +1010,11 @@ class PerfSuiteConfig(BaseSettings):
             chat_model_name=self.chat_model_name,
             chat_max_new_tokens=self.chat_max_new_tokens,
         )
-        if self.include_cases:
-            allow = {
-                name.strip() for name in self.include_cases if name.strip()
-            }
-            cases = [case for case in cases if case.name in allow]
+        cases = _select_cases(
+            cases,
+            include_cases=self.include_cases,
+            include_tags=self.include_tags,
+        )
         if not cases:
             raise ValueError("No perf cases selected")
 
@@ -495,68 +1022,21 @@ class PerfSuiteConfig(BaseSettings):
         iterations: list[PerfIteration] = []
         for case in cases:
             for idx in range(1, self.repeats + 1):
-                run_id = str(uuid4())
-                started = datetime.now(UTC).isoformat()
-                cmd = ["uv", "run", "sec-nlp", *case.args, "--run-id", run_id]
-                logger.info(
-                    "Running perf case %s (%d/%d)",
-                    case.name,
-                    idx,
-                    self.repeats,
-                )
-                start = datetime.now(UTC)
-                completed = subprocess.run(
-                    cmd,
-                    cwd=str(Path.cwd()),
-                    env=self._subprocess_env(),
-                    text=True,
-                    capture_output=True,
-                    check=False,
-                )
-                elapsed_seconds = (datetime.now(UTC) - start).total_seconds()
-                run_record = registry.get_run(run_id)
-                metadata: dict[str, JsonValue] = {}
-                if run_record and run_record.metadata:
-                    parsed = json.loads(run_record.metadata)
-                    if isinstance(parsed, dict):
-                        metadata = parsed
-
-                stderr_tail = None
-                if completed.stderr:
-                    stderr_lines = completed.stderr.strip().splitlines()
-                    if stderr_lines:
-                        stderr_tail = stderr_lines[-1]
+                if case.pipeline == "flow":
+                    iterations.append(self._run_flow_case(case, iteration=idx))
+                    continue
 
                 iterations.append(
-                    PerfIteration(
-                        case=case.name,
-                        pipeline=case.pipeline,
+                    self._run_cli_case(
+                        case=case,
                         iteration=idx,
-                        run_id=run_id,
-                        success=completed.returncode == 0,
-                        return_code=completed.returncode,
-                        elapsed_seconds=round(elapsed_seconds, 6),
-                        started_at=started,
-                        stage_timings=_safe_stage_timings(metadata),
-                        output_counts=_safe_output_counts(
-                            case.pipeline,
-                            metadata,
-                        ),
-                        stderr_tail=stderr_tail,
+                        registry=registry,
                     )
                 )
 
-        payload: dict[str, JsonValue] = {
-            "generated_at": datetime.now(UTC).isoformat(),
-            "repeats": self.repeats,
-            "cases": [asdict(iteration) for iteration in iterations],
-            "summary": _build_summary(iterations),
-        }
+        payload = _build_artifact_payload(iterations, repeats=self.repeats)
         artifact = _artifact_path(output_dir)
-        artifact.write_text(
-            json.dumps(payload, indent=2, sort_keys=True),
-            encoding="utf-8",
-        )
+        _write_json_payload(artifact, payload)
         logger.info("Perf suite artifact written to %s", artifact)
 
         summary = payload.get("summary")
@@ -586,6 +1066,48 @@ class PerfSuiteConfig(BaseSettings):
                         + ", ".join(failed_slo_cases)
                     )
 
+    def _export_summary(self) -> None:
+        """Export one raw perf artifact into a stable summary JSON."""
+        source_artifact = self.input_artifact
+        if source_artifact is None:
+            artifacts = _latest_artifacts(self.output_dir.resolve(), count=1)
+            if not artifacts:
+                raise ValueError(
+                    f"No perf artifacts found in {self.output_dir.resolve()}"
+                )
+            source_artifact = artifacts[0]
+        artifact = _load_artifact(source_artifact.resolve())
+
+        suite_name = self.suite_name
+        if suite_name is None or not suite_name.strip():
+            raise ValueError("suite_name is required in export mode")
+        output_path = self.output_path
+        if output_path is None:
+            output_path = self.output_dir.resolve() / f"{suite_name}.json"
+
+        stable_summary = _stable_summary_from_artifact(
+            artifact,
+            suite_name=suite_name.strip(),
+            summary_label=(
+                self.summary_label.strip()
+                if self.summary_label is not None and self.summary_label.strip()
+                else None
+            ),
+            source_ref=(
+                self.source_ref.strip()
+                if self.source_ref is not None and self.source_ref.strip()
+                else None
+            ),
+            source_commit=(
+                self.source_commit.strip()
+                if self.source_commit is not None and self.source_commit.strip()
+                else None
+            ),
+            source_artifact=source_artifact.resolve(),
+        )
+        _write_json_payload(output_path.resolve(), stable_summary)
+        logger.info("Stable perf summary written to %s", output_path.resolve())
+
     def _subprocess_env(self) -> dict[str, str]:
         """Build subprocess environment overrides for stable perf runs."""
         env = dict(os.environ)
@@ -601,6 +1123,120 @@ class PerfSuiteConfig(BaseSettings):
         ):
             env.pop(key, None)
         return env
+
+    def _run_cli_case(
+        self,
+        *,
+        case: PerfCase,
+        iteration: int,
+        registry: RunRegistry,
+    ) -> PerfIteration:
+        """Run one retrieve/chat case through the CLI entrypoint."""
+        run_id = str(uuid4())
+        started = datetime.now(UTC).isoformat()
+        cmd = ["uv", "run", "sec-nlp", *case.args, "--run-id", run_id]
+        logger.info(
+            "Running perf case %s (%d/%d)",
+            case.name,
+            iteration,
+            self.repeats,
+        )
+        start = datetime.now(UTC)
+        completed = subprocess.run(
+            cmd,
+            cwd=str(Path.cwd()),
+            env=self._subprocess_env(),
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        elapsed_seconds = (datetime.now(UTC) - start).total_seconds()
+        run_record = registry.get_run(run_id)
+        metadata: dict[str, JsonValue] = {}
+        if run_record and run_record.metadata:
+            parsed = json.loads(run_record.metadata)
+            if isinstance(parsed, dict):
+                metadata = parsed
+
+        stderr_tail = None
+        if completed.stderr:
+            stderr_lines = completed.stderr.strip().splitlines()
+            if stderr_lines:
+                stderr_tail = stderr_lines[-1]
+
+        return PerfIteration(
+            case=case.name,
+            pipeline=case.pipeline,
+            iteration=iteration,
+            run_id=run_id,
+            success=completed.returncode == 0,
+            return_code=completed.returncode,
+            elapsed_seconds=round(elapsed_seconds, 6),
+            started_at=started,
+            stage_timings=_safe_stage_timings(metadata),
+            output_counts=_safe_output_counts(case.pipeline, metadata),
+            stderr_tail=stderr_tail,
+        )
+
+    def _run_flow_case(
+        self,
+        case: PerfCase,
+        *,
+        iteration: int,
+    ) -> PerfIteration:
+        """Run one authored flow spec directly through ``FlowRunner``."""
+        if case.flow_spec is None:
+            raise ValueError(f"flow case {case.name} is missing flow_spec")
+
+        started = datetime.now(UTC).isoformat()
+        logger.info(
+            "Running perf case %s (%d/%d)",
+            case.name,
+            iteration,
+            self.repeats,
+        )
+        start = datetime.now(UTC)
+        try:
+            spec = load_flow_spec(case.flow_spec)
+            spec = _apply_flow_benchmark_overrides(
+                spec,
+                email=self.email,
+                case_name=case.name,
+                iteration=iteration,
+            )
+            result = FlowRunner(spec=spec).run()
+            elapsed_seconds = (datetime.now(UTC) - start).total_seconds()
+            return PerfIteration(
+                case=case.name,
+                pipeline=case.pipeline,
+                iteration=iteration,
+                run_id=result.flow_run_id,
+                success=result.success,
+                return_code=0 if result.success else 1,
+                elapsed_seconds=round(elapsed_seconds, 6),
+                started_at=started,
+                stage_timings=_flow_stage_timings_for_iteration(
+                    result,
+                    elapsed_seconds=elapsed_seconds,
+                ),
+                output_counts=_flow_output_counts(result),
+                stderr_tail=_flow_error_tail(result),
+            )
+        except Exception as exc:
+            elapsed_seconds = (datetime.now(UTC) - start).total_seconds()
+            return PerfIteration(
+                case=case.name,
+                pipeline=case.pipeline,
+                iteration=iteration,
+                run_id="",
+                success=False,
+                return_code=1,
+                elapsed_seconds=round(elapsed_seconds, 6),
+                started_at=started,
+                stage_timings={},
+                output_counts={},
+                stderr_tail=f"{type(exc).__name__}: {exc}",
+            )
 
     def _compare_latest(self) -> None:
         """Compare p95 metrics between the two latest perf artifacts."""

@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from langchain_core.documents import Document
 
-from sec_nlp.pipelines.metadata.accession import get_accession_from_metadata
+from sec_nlp.pipelines.runtime import get_accession_from_metadata
 
 type AccessionCounts = dict[str, int]
 

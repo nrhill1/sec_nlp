@@ -6,11 +6,11 @@ from __future__ import annotations
 from pathlib import Path
 
 from sec_nlp.core.infra.logger import logger
-from sec_nlp.pipelines.metadata.accession import (
+from sec_nlp.pipelines.presets.analyze.market import MarketEnrichment
+from sec_nlp.pipelines.runtime import (
     get_accession_from_metadata,
     group_results_by_accession,
 )
-from sec_nlp.pipelines.presets.analyze.market import MarketEnrichment
 from sec_nlp.pipelines.types import AnalysisResultDict, MetadataRecord
 from sec_nlp.types import JsonDict
 

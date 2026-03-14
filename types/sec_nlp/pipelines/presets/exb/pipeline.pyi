@@ -15,14 +15,14 @@ from sec_nlp.pipelines import BasePipeline as BasePipeline
 from sec_nlp.pipelines.chunk_filters import (
     limit_docs_per_accession as limit_docs_per_accession,
 )
-from sec_nlp.pipelines.metadata.exhibit import (
-    prepare_vector_docs as prepare_vector_docs,
-)
 from sec_nlp.pipelines.observability.telemetry import (
     log_chunk_length_stats as log_chunk_length_stats,
     log_filter_stats as log_filter_stats,
 )
 from sec_nlp.pipelines.output_io import write_json as write_json
+from sec_nlp.pipelines.runtime import (
+    prepare_vector_docs as prepare_vector_docs,
+)
 from sec_nlp.pipelines.utils import slugify as slugify
 from sec_nlp.pipelines.vector import upload_documents as upload_documents
 from sec_nlp.pipelines.vector.query import scroll_exists as scroll_exists

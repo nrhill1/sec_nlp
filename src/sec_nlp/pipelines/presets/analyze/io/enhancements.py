@@ -11,9 +11,9 @@ from pathlib import Path
 
 from sec_nlp.core.infra.logger import logger
 from sec_nlp.core.types import coerce_json_dict
-from sec_nlp.pipelines.metadata.accession import group_results_by_accession
 from sec_nlp.pipelines.output_io import write_yaml
 from sec_nlp.pipelines.presets.analyze.market import _parse_date_value
+from sec_nlp.pipelines.runtime import group_results_by_accession
 from sec_nlp.pipelines.types import AnalysisResultDict, MetadataRecord
 from sec_nlp.types import JsonDict, JsonValue
 

@@ -1,0 +1,356 @@
+{
+  "baseline_branch": "5dadf05a96dfc94456e142e962d111b93c6fb81a",
+  "baseline_commit": "5dadf05a96dfc94456e142e962d111b93c6fb81a",
+  "baseline_label": "baseline",
+  "baseline_ref": "5dadf05a96dfc94456e142e962d111b93c6fb81a",
+  "feature_branch": "benchmarks-runtime-offline",
+  "feature_commit": "a1fc437d942acf902e8dcf6391e2e3ec5f4df262",
+  "feature_label": "feature",
+  "feature_ref": "HEAD",
+  "generated_at": "2026-03-14T01:33:38.780503+00:00",
+  "schema_version": 1,
+  "suites": {
+    "flow_quantum_candidates": {
+      "cases": {
+        "flow_quantum_conflict_monopoly_large": {
+          "baseline_iterations": 1,
+          "baseline_output_mean_counts": {
+            "answer_files": 1.0,
+            "stages_failed": 0.0,
+            "stages_skipped": 0.0,
+            "stages_successful": 5.0,
+            "stages_total": 5.0
+          },
+          "baseline_pipeline": "flow",
+          "baseline_stage_mean_seconds": {
+            "chat_answer": 0.578638,
+            "flow_overhead": 13.644685,
+            "retrieve_complex_terms": 0.01082,
+            "retrieve_conflict_terms": 0.010982,
+            "retrieve_monopoly_terms": 0.009824,
+            "retrieve_simple_terms": 0.020575
+          },
+          "baseline_success_count": 0,
+          "feature_iterations": 1,
+          "feature_mean_seconds": 1781.837273,
+          "feature_output_mean_counts": {
+            "answer_files": 1.0,
+            "stages_failed": 0.0,
+            "stages_skipped": 0.0,
+            "stages_successful": 5.0,
+            "stages_total": 5.0
+          },
+          "feature_p95_seconds": 1781.837273,
+          "feature_pipeline": "flow",
+          "feature_stage_mean_seconds": {
+            "chat_answer": 163.707031,
+            "flow_overhead": 20.154245,
+            "retrieve_complex_terms": 35.378507,
+            "retrieve_conflict_terms": 60.470581,
+            "retrieve_monopoly_terms": 82.394433,
+            "retrieve_simple_terms": 95.308718
+          },
+          "feature_success_count": 1,
+          "status": "baseline_invalid"
+        },
+        "flow_quantum_high_qwen_ministral": {
+          "baseline_iterations": 1,
+          "baseline_output_mean_counts": {
+            "answer_files": 1.0,
+            "stages_failed": 0.0,
+            "stages_skipped": 0.0,
+            "stages_successful": 2.0,
+            "stages_total": 2.0
+          },
+          "baseline_pipeline": "flow",
+          "baseline_stage_mean_seconds": {
+            "chat_answer": 0.525397,
+            "flow_overhead": 13.937462,
+            "retrieve_seed": 0.028655
+          },
+          "baseline_success_count": 0,
+          "feature_iterations": 1,
+          "feature_mean_seconds": 116.957354,
+          "feature_output_mean_counts": {
+            "answer_files": 1.0,
+            "stages_failed": 0.0,
+            "stages_skipped": 0.0,
+            "stages_successful": 2.0,
+            "stages_total": 2.0
+          },
+          "feature_p95_seconds": 116.957354,
+          "feature_pipeline": "flow",
+          "feature_stage_mean_seconds": {
+            "chat_answer": 82.544012,
+            "flow_overhead": 20.185033,
+            "retrieve_seed": 6.756629
+          },
+          "feature_success_count": 1,
+          "status": "baseline_invalid"
+        },
+        "flow_quantum_large_merged": {
+          "baseline_iterations": 1,
+          "baseline_output_mean_counts": {
+            "answer_files": 1.0,
+            "stages_failed": 0.0,
+            "stages_skipped": 0.0,
+            "stages_successful": 2.0,
+            "stages_total": 2.0
+          },
+          "baseline_pipeline": "flow",
+          "baseline_stage_mean_seconds": {
+            "chat_answer": 0.463233,
+            "flow_overhead": 13.344431,
+            "retrieve_seed": 0.023246
+          },
+          "baseline_success_count": 0,
+          "feature_iterations": 1,
+          "feature_mean_seconds": 150.070006,
+          "feature_output_mean_counts": {
+            "answer_files": 1.0,
+            "stages_failed": 0.0,
+            "stages_skipped": 0.0,
+            "stages_successful": 2.0,
+            "stages_total": 2.0
+          },
+          "feature_p95_seconds": 150.070006,
+          "feature_pipeline": "flow",
+          "feature_stage_mean_seconds": {
+            "chat_answer": 100.612597,
+            "flow_overhead": 21.509325,
+            "retrieve_seed": 19.947888
+          },
+          "feature_success_count": 1,
+          "status": "baseline_invalid"
+        }
+      },
+      "description": "Aligned quantum flow comparisons across conflict, merged, and model-variety candidates.",
+      "repeats": 1
+    },
+    "flow_rems_candidates": {
+      "cases": {
+        "flow_rems_conflict_monopoly_large": {
+          "baseline_iterations": 1,
+          "baseline_output_mean_counts": {
+            "answer_files": 1.0,
+            "stages_failed": 0.0,
+            "stages_skipped": 0.0,
+            "stages_successful": 5.0,
+            "stages_total": 5.0
+          },
+          "baseline_pipeline": "flow",
+          "baseline_stage_mean_seconds": {
+            "chat_answer": 0.599934,
+            "flow_overhead": 16.381739,
+            "retrieve_complex_terms": 0.01352,
+            "retrieve_conflict_terms": 0.019609,
+            "retrieve_monopoly_terms": 0.01263,
+            "retrieve_simple_terms": 0.038812
+          },
+          "baseline_success_count": 0,
+          "feature_iterations": 1,
+          "feature_mean_seconds": 425.626728,
+          "feature_output_mean_counts": {
+            "answer_files": 1.0,
+            "stages_failed": 0.0,
+            "stages_skipped": 0.0,
+            "stages_successful": 5.0,
+            "stages_total": 5.0
+          },
+          "feature_p95_seconds": 425.626728,
+          "feature_pipeline": "flow",
+          "feature_stage_mean_seconds": {
+            "chat_answer": 156.557829,
+            "flow_overhead": 24.8758,
+            "retrieve_complex_terms": 15.424107,
+            "retrieve_conflict_terms": 68.968711,
+            "retrieve_monopoly_terms": 83.56874,
+            "retrieve_simple_terms": 69.105516
+          },
+          "feature_success_count": 1,
+          "status": "baseline_invalid"
+        },
+        "flow_rems_high_qwen": {
+          "baseline_iterations": 1,
+          "baseline_output_mean_counts": {
+            "answer_files": 1.0,
+            "stages_failed": 0.0,
+            "stages_skipped": 0.0,
+            "stages_successful": 2.0,
+            "stages_total": 2.0
+          },
+          "baseline_pipeline": "flow",
+          "baseline_stage_mean_seconds": {
+            "chat_answer": 0.687514,
+            "flow_overhead": 13.368989,
+            "retrieve_seed": 0.027619
+          },
+          "baseline_success_count": 0,
+          "feature_iterations": 1,
+          "feature_mean_seconds": 108.009011,
+          "feature_output_mean_counts": {
+            "answer_files": 1.0,
+            "stages_failed": 0.0,
+            "stages_skipped": 0.0,
+            "stages_successful": 2.0,
+            "stages_total": 2.0
+          },
+          "feature_p95_seconds": 108.009011,
+          "feature_pipeline": "flow",
+          "feature_stage_mean_seconds": {
+            "chat_answer": 73.220424,
+            "flow_overhead": 21.435229,
+            "retrieve_seed": 5.088859
+          },
+          "feature_success_count": 1,
+          "status": "baseline_invalid"
+        },
+        "flow_rems_large_merged": {
+          "baseline_iterations": 1,
+          "baseline_output_mean_counts": {
+            "answer_files": 1.0,
+            "stages_failed": 0.0,
+            "stages_skipped": 0.0,
+            "stages_successful": 2.0,
+            "stages_total": 2.0
+          },
+          "baseline_pipeline": "flow",
+          "baseline_stage_mean_seconds": {
+            "chat_answer": 0.507237,
+            "flow_overhead": 13.378069,
+            "retrieve_seed": 0.021889
+          },
+          "baseline_success_count": 0,
+          "feature_iterations": 1,
+          "feature_mean_seconds": 157.797702,
+          "feature_output_mean_counts": {
+            "answer_files": 1.0,
+            "stages_failed": 0.0,
+            "stages_skipped": 0.0,
+            "stages_successful": 2.0,
+            "stages_total": 2.0
+          },
+          "feature_p95_seconds": 157.797702,
+          "feature_pipeline": "flow",
+          "feature_stage_mean_seconds": {
+            "chat_answer": 100.163189,
+            "flow_overhead": 20.643377,
+            "retrieve_seed": 29.356639
+          },
+          "feature_success_count": 1,
+          "status": "baseline_invalid"
+        }
+      },
+      "description": "Aligned REM flow comparisons across conflict, merged, and model-variety candidates.",
+      "repeats": 1
+    },
+    "thematic_retrieve_chat": {
+      "cases": {
+        "chat_quantum_thematic": {
+          "baseline_iterations": 2,
+          "baseline_output_mean_counts": {},
+          "baseline_pipeline": "chat",
+          "baseline_stage_mean_seconds": {},
+          "baseline_success_count": 0,
+          "feature_iterations": 2,
+          "feature_mean_seconds": 23.470445,
+          "feature_output_mean_counts": {
+            "citations_returned": 3.0,
+            "hits_retrieved": 12.0
+          },
+          "feature_p95_seconds": 25.983322,
+          "feature_pipeline": "chat",
+          "feature_stage_mean_seconds": {
+            "external_context": 0.000139,
+            "llm_generate": 6.100039,
+            "prompt_build": 0.004974,
+            "rerank": 0.126886,
+            "vector_search": 4.463171,
+            "write": 0.052502
+          },
+          "feature_success_count": 2,
+          "status": "baseline_invalid"
+        },
+        "chat_rems_thematic": {
+          "baseline_iterations": 2,
+          "baseline_output_mean_counts": {},
+          "baseline_pipeline": "chat",
+          "baseline_stage_mean_seconds": {},
+          "baseline_success_count": 0,
+          "feature_iterations": 2,
+          "feature_mean_seconds": 27.203563,
+          "feature_output_mean_counts": {
+            "citations_returned": 3.0,
+            "hits_retrieved": 12.0
+          },
+          "feature_p95_seconds": 30.365689,
+          "feature_pipeline": "chat",
+          "feature_stage_mean_seconds": {
+            "external_context": 0.000139,
+            "llm_generate": 10.221852,
+            "prompt_build": 0.004613,
+            "rerank": 0.120134,
+            "vector_search": 3.187841,
+            "write": 0.06954
+          },
+          "feature_success_count": 2,
+          "status": "baseline_invalid"
+        },
+        "retrieve_quantum_thematic": {
+          "baseline_iterations": 2,
+          "baseline_output_mean_counts": {
+            "ranked_hits": 0.0
+          },
+          "baseline_pipeline": "retrieve",
+          "baseline_stage_mean_seconds": {},
+          "baseline_success_count": 0,
+          "feature_iterations": 2,
+          "feature_mean_seconds": 47.616202,
+          "feature_output_mean_counts": {
+            "ranked_hits": 160.0
+          },
+          "feature_p95_seconds": 56.588244,
+          "feature_pipeline": "retrieve",
+          "feature_stage_mean_seconds": {
+            "candidate_search": 6.334857,
+            "embedding_rerank": 0.000615,
+            "hydrate": 0.003372,
+            "index": 26.841429,
+            "ranking": 0.038405,
+            "write": 0.620558
+          },
+          "feature_success_count": 2,
+          "status": "baseline_invalid"
+        },
+        "retrieve_rems_thematic": {
+          "baseline_iterations": 2,
+          "baseline_output_mean_counts": {
+            "ranked_hits": 0.0
+          },
+          "baseline_pipeline": "retrieve",
+          "baseline_stage_mean_seconds": {},
+          "baseline_success_count": 0,
+          "feature_iterations": 2,
+          "feature_mean_seconds": 53.990955,
+          "feature_output_mean_counts": {
+            "ranked_hits": 218.0
+          },
+          "feature_p95_seconds": 66.934532,
+          "feature_pipeline": "retrieve",
+          "feature_stage_mean_seconds": {
+            "candidate_search": 7.058939,
+            "embedding_rerank": 0.000478,
+            "hydrate": 0.002752,
+            "index": 31.771204,
+            "ranking": 0.047525,
+            "write": 0.828666
+          },
+          "feature_success_count": 2,
+          "status": "baseline_invalid"
+        }
+      },
+      "description": "Directional retrieve/chat cases for REM and quantum baskets.",
+      "repeats": 2
+    }
+  }
+}

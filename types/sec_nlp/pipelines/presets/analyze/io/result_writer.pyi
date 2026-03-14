@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from sec_nlp.pipelines.metadata.accession import (
+from sec_nlp.pipelines.runtime import (
     get_accession_from_metadata as get_accession_from_metadata,
     group_results_by_accession as group_results_by_accession,
 )

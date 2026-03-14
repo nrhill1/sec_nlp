@@ -1,6 +1,6 @@
 from langchain_core.documents import Document as Document
 
-from sec_nlp.pipelines.metadata.accession import (
+from sec_nlp.pipelines.runtime import (
     get_accession_from_metadata as get_accession_from_metadata,
 )
 
