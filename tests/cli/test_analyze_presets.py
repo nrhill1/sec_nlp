@@ -1,7 +1,10 @@
 # tests/cli/test_analyze_presets.py
 """Tests for analyze preset definitions."""
 
-from sec_nlp.cli.presets import AnalyzePreset, get_preset_config
+from sec_nlp.pipelines.presets.analyze.profiles import (
+    AnalyzePreset,
+    get_preset_config,
+)
 
 
 def test_sentiment_preset_is_registered() -> None:

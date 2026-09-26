@@ -3,18 +3,23 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from unstructured.documents.elements import Element
+
+    from sec_nlp.core.text.semantic_chunking import (
+        SemanticChunker,
+    )
+
+
 import asyncio
 import re
 from collections.abc import Sequence
 from html.parser import HTMLParser
 from pathlib import Path
 
-from langchain_community.document_loaders import UnstructuredHTMLLoader
-from langchain_core.documents import Document
-from langchain_ollama.embeddings import OllamaEmbeddings
-from unstructured.documents.elements import Element
-from unstructured.partition.html import partition_html
-
+from sec_nlp.core.documents import DocumentRecord as Document
 from sec_nlp.core.infra.logger import color_text, logger
 from sec_nlp.core.llm.ollama import resolve_ollama_base_url
 from sec_nlp.core.text.chunking import SentenceSplitter
@@ -24,11 +29,8 @@ from sec_nlp.core.text.filters import (
 )
 from sec_nlp.core.text.keyword import KeywordMatcher, KeywordSpec
 from sec_nlp.core.text.section_extractor import SectionExtractor
-from sec_nlp.core.text.semantic_chunking import (
-    SemanticChunker,
-    SemanticChunkerConfig,
-)
 from sec_nlp.core.text.semantic_settings import SemanticChunkingSettings
+from sec_nlp.core.types import as_json_dict
 from sec_nlp.types import JsonDict
 
 
@@ -122,13 +124,24 @@ class HtmlProcessor:
             if embedding_base_url is None:
                 embedding_base_url = resolve_ollama_base_url()
 
+            from langchain_ollama.embeddings import OllamaEmbeddings
+
             embedder = OllamaEmbeddings(
                 model=self.semantic_chunking.embedding_model,
                 base_url=embedding_base_url,
             )
+            from sec_nlp.core.text.semantic_chunking import (
+                SemanticChunker,
+                SemanticChunkerConfig,
+            )
+
             semantic_config = SemanticChunkerConfig.from_settings(
                 self.semantic_chunking
             )
+            from sec_nlp.core.text.semantic_chunking import (
+                SemanticChunkerConfig,
+            )
+
             return SemanticChunker(embedder=embedder, config=semantic_config)
         except Exception as exc:
             logger.warning(
@@ -478,11 +491,21 @@ class HtmlProcessor:
     ) -> Sequence[Document]:
         if not html_path.exists():
             raise FileNotFoundError(str(html_path))
-        loader = UnstructuredHTMLLoader(
-            file_path=str(html_path), mode="elements"
-        )
+        from unstructured.partition.html import partition_html
+
         try:
-            docs = loader.load()
+            elements = partition_html(filename=str(html_path))
+            docs = [
+                Document(
+                    page_content=str(element),
+                    metadata={
+                        **(as_json_dict(element.metadata.to_dict()) or {}),
+                        "category": element.category,
+                        "element_id": element.id,
+                    },
+                )
+                for element in elements
+            ]
         except RuntimeError as exc:
             if not self._should_fallback_to_plain_text(exc):
                 raise
@@ -520,8 +543,8 @@ class HtmlProcessor:
             doc.page_content for doc in docs if doc.page_content
         )
         base_meta = dict(docs[0].metadata) if docs else {}
-        base_meta.setdefault("source", str(html_path))
-        base_meta.setdefault("file_path", str(html_path))
+        base_meta["source"] = str(html_path)
+        base_meta["file_path"] = str(html_path)
         return self._chunk_text(
             text_content,
             base_meta,
@@ -537,6 +560,8 @@ class HtmlProcessor:
         section_filter: SectionFilter | None = None,
     ) -> Sequence[Document]:
         try:
+            from unstructured.partition.html import partition_html
+
             elements = partition_html(text=html)
         except RuntimeError as exc:
             if not self._should_fallback_to_plain_text(exc):

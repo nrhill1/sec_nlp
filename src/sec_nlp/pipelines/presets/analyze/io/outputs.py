@@ -10,13 +10,18 @@ from typing import Literal
 from uuid import UUID
 
 from sec_nlp.core.infra.logger import logger
-from sec_nlp.core.types import coerce_float, coerce_json_dict
+from sec_nlp.core.types import (
+    coerce_float,
+    coerce_json_dict,
+    is_json_array,
+    is_json_object,
+)
 from sec_nlp.pipelines.output_io import (
     build_accession_dir,
     write_json,
     write_yaml,
 )
-from sec_nlp.pipelines.runtime import get_meta_str, get_meta_str_any
+from sec_nlp.pipelines.runtime.metadata import get_meta_str, get_meta_str_any
 from sec_nlp.pipelines.serialization import (
     is_score_key,
     round_score,
@@ -188,14 +193,13 @@ class OutputFormatter:
             return round_score(value)
         if isinstance(value, (str, bool)) or value is None:
             return value
-        if isinstance(value, dict):
-            if cls._is_dict_list_map(value):
-                return cls._round_metadata_dict_list(
-                    cls._as_dict_list_map(value)
-                )
-            return cls._round_metadata_dict(cls._as_dict_scalar_map(value))
-        if isinstance(value, list):
-            return cls._round_metadata_list(key, value)
+        if is_json_object(value):
+            return {
+                nested_key: cls._round_metadata_value(nested_key, nested_value)
+                for nested_key, nested_value in value.items()
+            }
+        if is_json_array(value):
+            return [cls._round_metadata_value(key, item) for item in value]
         return value
 
     @classmethod

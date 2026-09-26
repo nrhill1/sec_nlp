@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from sec_nlp.pipelines.presets.analyze import AnalyzeConfig
+from sec_nlp.pipelines.presets.analyze.config import AnalyzeConfig
 
 
 def test_analyze_config_rejects_malicious_run_id() -> None:

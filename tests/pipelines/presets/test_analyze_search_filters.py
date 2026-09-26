@@ -9,22 +9,19 @@ from typing import ClassVar, Literal
 from unittest.mock import Mock
 
 import yaml
-from langchain_core.documents import Document
 from langchain_qdrant import QdrantVectorStore
 from qdrant_client.models import FieldCondition, Filter, MatchAny, MatchValue
 
-from sec_nlp.pipelines.presets.analyze import (
-    AnalyzeConfig,
-    AnalyzePipeline,
-    OutputFormatter,
-    SearchConfig,
-)
+from sec_nlp.core.documents import DocumentRecord as Document
 from sec_nlp.pipelines.presets.analyze.builders import build_search_runner
+from sec_nlp.pipelines.presets.analyze.config import AnalyzeConfig, SearchConfig
+from sec_nlp.pipelines.presets.analyze.io.outputs import OutputFormatter
+from sec_nlp.pipelines.presets.analyze.pipeline import AnalyzePipeline
 from sec_nlp.pipelines.presets.analyze.runnables.search import (
     SearchQueryResults,
     SearchRunnable,
 )
-from sec_nlp.pipelines.runtime import MetadataFilters
+from sec_nlp.pipelines.runtime.metadata import MetadataFilters
 from sec_nlp.pipelines.types import AnalysisResultDict
 
 

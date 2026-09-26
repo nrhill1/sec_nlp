@@ -137,7 +137,7 @@ class TestExhibitSearch:
         self, mock_vector_store: Mock
     ) -> None:
         """Test that search results are sorted by score descending."""
-        from langchain_core.documents import Document
+        from sec_nlp.core.documents import DocumentRecord as Document
 
         # Create mock Documents with scores (similarity_search_with_score returns tuples)
         doc1 = Document(
@@ -164,7 +164,7 @@ class TestExhibitSearch:
 
     def test_search_respects_limit(self, mock_vector_store: Mock) -> None:
         """Test that search respects the limit parameter."""
-        from langchain_core.documents import Document
+        from sec_nlp.core.documents import DocumentRecord as Document
 
         # Create 10 mock results as (Document, score) tuples
         mock_results = []
@@ -253,7 +253,7 @@ class TestExhibitSearchIntegration:
         self, tmp_path: Path
     ) -> None:
         """Test that SearchConfig integrates properly with ExhibitConfig."""
-        from sec_nlp.pipelines.presets.exb import ExhibitConfig
+        from sec_nlp.pipelines.presets.exb.config import ExhibitConfig
 
         dl_path = tmp_path / "downloads"
         out_path = tmp_path / "outputs"
@@ -277,8 +277,8 @@ class TestExhibitSearchIntegration:
 
     def test_search_config_with_custom_queries(self, tmp_path: Path) -> None:
         """Test configuring search with custom queries."""
-        from sec_nlp.pipelines.presets.exb import (
-            ExhibitConfig,
+        from sec_nlp.pipelines.presets.exb.config import ExhibitConfig
+        from sec_nlp.pipelines.presets.exb.steps.search.search_config import (
             SearchConfig,
         )
 

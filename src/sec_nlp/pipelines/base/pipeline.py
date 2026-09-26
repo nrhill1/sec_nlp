@@ -2,8 +2,7 @@
 """Abstract pipeline base providing lifecycle hooks, stage chain execution, and validation.
 
 Every preset pipeline inherits from ``BasePipeline`` which combines a Pydantic
-model (for frozen config validation) with a LangChain ``Runnable`` interface
-(for composability). The class enforces subclass metadata (``pipeline_type``,
+model for frozen configuration with explicit sequential execution. The class enforces subclass metadata (``pipeline_type``,
 ``description``), wires ``model_post_init`` to requirement checks and component
 building, and exposes helpers for constructing and running stage chains.
 """
@@ -12,7 +11,6 @@ from abc import ABC, abstractmethod
 from collections.abc import Sequence
 from typing import ClassVar
 
-from langchain_core.runnables import Runnable, RunnableConfig
 from pydantic import BaseModel, ConfigDict, field_validator
 
 from sec_nlp.core.infra.logger import logger
@@ -20,7 +18,7 @@ from sec_nlp.types import ConfigValue, InitSubclassKwargs
 
 from .config import BasePipelineSettings
 from .result import BasePipelineResult
-from .stages import PipelineStageRunnable
+from .stages import PipelineStage, RunContext, StageSequence
 
 __all__: tuple[str, ...] = ("BasePipeline",)
 
@@ -29,10 +27,9 @@ _CLASSVAR_UNSET = "__UNSET__"
 
 class BasePipeline(
     BaseModel,
-    Runnable[ConfigValue | None, BasePipelineResult],
     ABC,
 ):
-    """Abstract base for all pipeline types, combining Pydantic config with LangChain Runnable.
+    """Represent a configured specialist service with explicit execution steps.
 
     Subclasses define ``pipeline_type``, ``description``, ``config_model()``,
     ``result_model()``, and ``run()``. The base wires ``model_post_init`` so
@@ -94,6 +91,7 @@ class BasePipeline(
     def model_post_init(self, __context: dict[str, ConfigValue] | None) -> None:
         """Run requirement checks and build reusable components after config freezes."""
         self._validate_requirements()
+        self.config.start_run()
         self._build_components()
 
     def cli_cmd(self) -> BasePipelineResult:
@@ -103,10 +101,10 @@ class BasePipeline(
     def invoke(
         self,
         input: ConfigValue | None = None,
-        config: RunnableConfig | None = None,
+        config: dict[str, ConfigValue] | None = None,
         **kwargs: ConfigValue,
     ) -> BasePipelineResult:
-        """LangChain ``Runnable.invoke`` entrypoint delegating to ``run()``."""
+        """Execute the configured specialist service."""
         _ = config
         _ = kwargs
         if input is not None:
@@ -119,72 +117,46 @@ class BasePipeline(
         self,
         *,
         initial_state: StageStateT,
-        stages: Sequence[Runnable[StageStateT, StageStateT]],
+        stages: Sequence[PipelineStage[StageStateT]],
     ) -> StageStateT:
-        """Build a stage chain from *stages* and invoke it on *initial_state*."""
-        chain = self.build_stage_chain(stages=stages)
-        return self.run_stage_chain(
-            initial_state=initial_state,
-            stage_chain=chain,
+        """Execute ordered steps with this service's run context."""
+        return self.build_configured_stage_chain(stages=stages).invoke(
+            initial_state
         )
 
     def run_stage_chain[StageStateT](
         self,
         *,
         initial_state: StageStateT,
-        stage_chain: Runnable[StageStateT, StageStateT],
+        stage_chain: StageSequence[StageStateT],
     ) -> StageStateT:
-        """Invoke a prebuilt stage chain against a single mutable state object."""
+        """Execute a prepared sequence through ordinary Python calls."""
         return stage_chain.invoke(initial_state)
 
     def require_stage_chain[StageStateT](
-        self,
-        stage_chain: Runnable[StageStateT, StageStateT] | None,
-    ) -> Runnable[StageStateT, StageStateT]:
-        """Return *stage_chain* or raise ``RuntimeError`` if not yet built."""
+        self, stage_chain: StageSequence[StageStateT] | None
+    ) -> StageSequence[StageStateT]:
+        """Return an initialized sequence or raise a lifecycle error."""
         if stage_chain is None:
-            raise RuntimeError(
-                "Stage chain not initialized; _build_components() must set _stage_chain"
-            )
+            raise RuntimeError("Specialist steps have not been initialized")
         return stage_chain
 
     def build_stage_chain[StageStateT](
-        self,
-        *,
-        stages: Sequence[Runnable[StageStateT, StageStateT]],
-    ) -> Runnable[StageStateT, StageStateT]:
-        """Pipe ordered stage runnables into a single composite ``Runnable``."""
+        self, *, stages: Sequence[PipelineStage[StageStateT]]
+    ) -> StageSequence[StageStateT]:
+        """Build an ordered sequence retaining this run's identifiers."""
         if not stages:
-            raise ValueError("Stage chains require at least one stage")
-        chain: Runnable[StageStateT, StageStateT] = stages[0]
-        for stage in stages[1:]:
-            chain = chain | stage
-        return chain
-
-    def configure_stage_runnables[StageStateT](
-        self,
-        *,
-        stages: Sequence[PipelineStageRunnable[StageStateT]],
-    ) -> tuple[Runnable[StageStateT, StageStateT], ...]:
-        """Attach pipeline-type and run-id tracing metadata to each stage runnable."""
-        run_id = str(self.config.run_id)
-        return tuple(
-            stage.configured(
-                pipeline_type=self.pipeline_type,
-                run_id=run_id,
-            )
-            for stage in stages
+            raise ValueError("Stage sequences require at least one step")
+        return StageSequence(
+            tuple(stages),
+            RunContext(self.pipeline_type, str(self.config.run_id)),
         )
 
     def build_configured_stage_chain[StageStateT](
-        self,
-        *,
-        stages: Sequence[PipelineStageRunnable[StageStateT]],
-    ) -> Runnable[StageStateT, StageStateT]:
-        """Configure tracing metadata on *stages*, then pipe them into a chain."""
-        return self.build_stage_chain(
-            stages=self.configure_stage_runnables(stages=stages)
-        )
+        self, *, stages: Sequence[PipelineStage[StageStateT]]
+    ) -> StageSequence[StageStateT]:
+        """Build a sequence of specialist steps with shared run context."""
+        return self.build_stage_chain(stages=stages)
 
     def _validate_requirements(self) -> None:
         """Warn when declared LLM or vector-DB requirements lack config."""

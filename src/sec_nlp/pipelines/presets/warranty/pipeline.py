@@ -10,15 +10,14 @@ from datetime import date
 from pathlib import Path
 from typing import ClassVar, Literal
 
-from langchain_core.documents import Document
-from langchain_core.runnables import Runnable
 from pydantic import PrivateAttr
-from tqdm import tqdm
 
+from sec_nlp.core.documents import DocumentRecord as Document
 from sec_nlp.core.infra.logger import log_divider, logger
 from sec_nlp.core.ingest.loader import Loader
 from sec_nlp.core.text.filters import SectionFilter, create_item_filter
-from sec_nlp.pipelines import BasePipeline
+from sec_nlp.pipelines.base.pipeline import BasePipeline
+from sec_nlp.pipelines.base.stages import StageSequence
 from sec_nlp.pipelines.observability.telemetry import log_chunk_length_stats
 from sec_nlp.pipelines.output_io import (
     build_accession_file_stem,
@@ -67,8 +66,8 @@ class WarrantyPipeline(BasePipeline):
 
     _loader: Loader = PrivateAttr()
     _section_filter: SectionFilter | None = PrivateAttr(default=None)
-    _stage_chain: Runnable[WarrantyRunState, WarrantyRunState] | None = (
-        PrivateAttr(default=None)
+    _stage_chain: StageSequence[WarrantyRunState] | None = PrivateAttr(
+        default=None
     )
 
     @classmethod
@@ -126,6 +125,7 @@ class WarrantyPipeline(BasePipeline):
 
     def run(self) -> WarrantyResult:
         """Execute the warranty pipeline."""
+        self.config.start_run()
         try:
             try:
                 setup_paths = self.config.setup_paths
@@ -137,19 +137,11 @@ class WarrantyPipeline(BasePipeline):
             all_outputs: list[Path] = []
             metadata: ResultDict = {}
 
-            with tqdm(
-                self.config.symbols,
-                desc="Processing symbols",
-                unit="symbol",
-                colour="green",
-            ) as pbar:
-                for _idx, symbol in enumerate(pbar):
-                    # Add clear separators between symbols
-                    log_divider(logger, color="cyan")
-                    pbar.set_description(f"Processing {symbol}")
-                    symbol_outputs = self._process_symbol(symbol)
-                    all_outputs.extend(symbol_outputs)
-                    metadata[symbol] = len(symbol_outputs)
+            for _idx, symbol in enumerate(self.config.symbols):
+                log_divider(logger, color="cyan")
+                symbol_outputs = self._process_symbol(symbol)
+                all_outputs.extend(symbol_outputs)
+                metadata[symbol] = len(symbol_outputs)
 
             return WarrantyResult(
                 success=True,
@@ -307,195 +299,6 @@ class WarrantyPipeline(BasePipeline):
 
         return [output_file] if output_file else []
 
-    def _load_xbrl_for_filing(
-        self, symbol: str, filing_dir: Path, accession_number: str
-    ) -> list[Document]:
-        """
-        Load XBRL facts for a specific filing directory.
-
-        Parses inline XBRL (ix:nonFraction) or legacy raw tags and returns them
-        as Documents so the deterministic extractor can operate without the LLM.
-        """
-        import re
-
-        # Find HTML file in this filing directory
-        html_files = list(filing_dir.glob("*.html"))
-        html_path = html_files[0] if html_files else None
-
-        text = ""
-        if html_path:
-            try:
-                text = html_path.read_text(errors="ignore")
-            except Exception as e:
-                logger.error("Failed to read %s: %s", html_path.name, e)
-
-        tags = [
-            # Warranty liability/accrual tags
-            "us-gaap:StandardProductWarrantyAccrual",
-            "us-gaap:ProductWarrantyAccrual",
-            "us-gaap:WarrantyAccrual",
-            "us-gaap:StandardProductWarrantyAccrualCurrent",
-            "us-gaap:ProductWarrantyAccrualCurrent",
-            "us-gaap:WarrantyAccrualCurrent",
-            "us-gaap:StandardProductWarrantyAccrualNoncurrent",
-            "us-gaap:ProductWarrantyAccrualNoncurrent",
-            "us-gaap:WarrantyAccrualNoncurrent",
-            "us-gaap:ProductWarrantyObligation",
-            # Warranty payout/payments tags
-            "us-gaap:StandardProductWarrantyAccrualPayments",
-            "us-gaap:ProductWarrantyAccrualPayments",
-            "us-gaap:StandardProductWarrantyAccrualWarrantyClaimsPaid",
-            "us-gaap:ProductWarrantyAccrualWarrantyClaimsPaid",
-            # Revenue tags
-            "us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax",
-            "us-gaap:Revenues",
-            "us-gaap:SalesRevenueNet",
-        ]
-
-        facts: list[Document] = []
-        seen: set[tuple[str, str | None, str | None, float]] = set()
-
-        def build_document(
-            *,
-            element: str,
-            raw_val: str,
-            tag: str,
-            source: str,
-        ) -> Document | None:
-            """Parse a single XBRL element into a Document."""
-            scale = 0
-            scale_match = re.search(r'scale="(-?\d+)"', element)
-            if scale_match:
-                try:
-                    scale = int(scale_match.group(1))
-                except ValueError:
-                    scale = 0
-
-            try:
-                val = float(raw_val.replace(",", ""))
-                if scale:
-                    val *= 10**scale
-            except ValueError:
-                return None
-
-            # Extract contextRef for period info
-            context_ref = None
-            period_end = None
-            fiscal_year = None
-            context_match = re.search(r'contextRef="([^"]+)"', element)
-            if context_match:
-                context_ref = context_match.group(1)
-                # Parse date from contextRef like "As_Of_11_1_2020_..."
-                date_match = re.search(
-                    r"As_Of_(\d{1,2})_(\d{1,2})_(\d{4})", context_ref
-                )
-                if date_match:
-                    month, day, year = date_match.groups()
-                    period_end = f"{year}-{month.zfill(2)}-{day.zfill(2)}"
-                    fiscal_year = year
-                else:
-                    # Fallback: grab YYYY-MM-DD or YYYYMMDD anywhere in the contextRef
-                    ymd_match = re.search(
-                        r"(\d{4})[-_]?(\d{2})[-_]?(\d{2})", context_ref
-                    )
-                    if ymd_match:
-                        year, month, day = ymd_match.groups()
-                        period_end = f"{year}-{month}-{day}"
-                        fiscal_year = year
-                    else:
-                        year_match = re.search(
-                            r"(20\d{2}|19\d{2})", context_ref
-                        )
-                        if year_match:
-                            fiscal_year = year_match.group(1)
-
-            key = (tag.lower(), context_ref, period_end, val)
-            if key in seen:
-                return None
-            seen.add(key)
-
-            meta = {
-                "tag": tag,
-                "source": source,
-                "scale": scale,
-                "raw_value": raw_val,
-                "category": "xbrl",
-                "symbol": symbol,
-                "accession_number": accession_number,
-                "context_ref": context_ref,
-                "period_end": period_end,
-                "fiscal_year": fiscal_year,
-            }
-            return Document(
-                # Store plain numeric value so downstream float() parsing works
-                page_content=str(val),
-                metadata=meta,
-            )
-
-        def parse_facts_from_text(text: str, source: str) -> list[Document]:
-            """Parse both inline ix:nonFraction and raw tags from a text blob."""
-            docs: list[Document] = []
-            for tag in tags:
-                # Inline XBRL (common post-2020)
-                for m in re.finditer(
-                    rf'<ix:nonFraction[^>]*name="{re.escape(tag)}"[^>]*>([-+]?\d[\d,\.]*)</ix:nonFraction>',
-                    text,
-                    flags=re.IGNORECASE,
-                ):
-                    doc = build_document(
-                        element=m.group(0),
-                        raw_val=m.group(1),
-                        tag=tag,
-                        source=source,
-                    )
-                    if doc:
-                        docs.append(doc)
-
-                # Raw tag (older pre-inline filings)
-                for m in re.finditer(
-                    rf"<{re.escape(tag)}[^>]*>([-+]?\d[\d,\.]*)</{re.escape(tag)}>",
-                    text,
-                    flags=re.IGNORECASE,
-                ):
-                    doc = build_document(
-                        element=m.group(0),
-                        raw_val=m.group(1),
-                        tag=tag,
-                        source=source,
-                    )
-                    if doc:
-                        docs.append(doc)
-            return docs
-
-        if text:
-            facts.extend(parse_facts_from_text(text, str(html_path)))
-
-        # Fallback: parse full-submission (or other XBRL) when inline HTML has no facts
-        if not facts:
-            full_submission = filing_dir / "full-submission.txt"
-            if full_submission.exists():
-                try:
-                    fs_text = full_submission.read_text(errors="ignore")
-                    facts.extend(
-                        parse_facts_from_text(fs_text, str(full_submission))
-                    )
-                    if facts:
-                        logger.info(
-                            "Parsed %d XBRL facts from full-submission.txt for %s/%s",
-                            len(facts),
-                            symbol,
-                            accession_number,
-                        )
-                except Exception as e:
-                    logger.debug(
-                        "Failed to parse full-submission.txt for %s/%s: %s",
-                        symbol,
-                        accession_number,
-                        e,
-                    )
-
-        return facts
-
     def _extract_warranty_data(
         self, symbol: str, docs: list[Document]
     ) -> list[WarrantyExtractionDict]:
@@ -525,141 +328,6 @@ class WarrantyPipeline(BasePipeline):
         results.extend(xbrl_results)
 
         return results
-
-    def _period_matches(
-        self,
-        target_period: str | None,
-        target_period_end: str | None,
-        candidate_period: str | int | None,
-        candidate_period_end: str | int | None,
-    ) -> bool:
-        """Helper to match periods across records/chunks."""
-        target_period_str = (
-            str(target_period).strip() if target_period is not None else None
-        )
-        candidate_period_str = (
-            str(candidate_period).strip()
-            if candidate_period is not None
-            else None
-        )
-        if target_period_str and candidate_period_str:
-            return target_period_str == candidate_period_str
-
-        target_end_str = (
-            str(target_period_end).strip()
-            if target_period_end is not None
-            else None
-        )
-        candidate_end_str = (
-            str(candidate_period_end).strip()
-            if candidate_period_end is not None
-            else None
-        )
-        if target_end_str and candidate_end_str:
-            return target_end_str == candidate_end_str
-
-        if target_period_str and candidate_end_str:
-            return candidate_end_str.startswith(target_period_str)
-        if target_end_str and candidate_period_str:
-            return target_end_str.startswith(candidate_period_str)
-        return False
-
-    def _select_docs_for_period(
-        self,
-        docs: list[Document],
-        target_period: str | None,
-        target_period_end: str | None,
-        limit: int = 5,
-    ) -> list[Document]:
-        """
-        Select text docs that mention the target period and match warranty keywords.
-
-        Falls back to keyword-only matches, then to the first N text docs to
-        avoid missing data when the period is absent in text.
-        """
-        text_docs = [
-            d
-            for d in docs
-            if str((d.metadata or {}).get("category", "")).lower() != "xbrl"
-        ]
-        if not text_docs:
-            return []
-
-        tokens: set[str] = set()
-        if target_period:
-            tokens.add(str(target_period))
-        if target_period_end:
-            target_end_str = str(target_period_end)
-            tokens.update(
-                {
-                    target_end_str,
-                    target_end_str.replace("-", ""),
-                    target_end_str[:4],
-                }
-            )
-
-        keywords = [kw.lower() for kw in (self.config.keywords or [])]
-
-        def _matches_keywords(text: str) -> bool:
-            """Return whether text matches configured warranty keywords."""
-            if not keywords:
-                return True
-            lower = text.lower()
-            return any(kw in lower for kw in keywords)
-
-        matched: list[Document] = []
-        for doc in text_docs:
-            content = doc.page_content or ""
-            if tokens and not any(
-                token and token in content for token in tokens
-            ):
-                continue
-            if not _matches_keywords(content):
-                continue
-            matched.append(doc)
-            if len(matched) >= limit:
-                break
-
-        if not matched:
-            # Relax to keyword-only matches
-            for doc in text_docs:
-                content = doc.page_content or ""
-                if _matches_keywords(content):
-                    matched.append(doc)
-                if len(matched) >= limit:
-                    break
-
-        return matched or text_docs[:limit]
-
-    def _has_llm_value_for_fields(
-        self,
-        extraction_results: list[WarrantyExtractionDict],
-        target_period: str | None,
-        target_period_end: str | None,
-        fields: list[str],
-    ) -> bool:
-        """Check if any LLM result already provided numeric values for fields."""
-        for rec in extraction_results:
-            meta = rec.get("source_metadata", {}) or {}
-            if meta.get("method") == "xbrl_facts":
-                continue
-            res_period = rec.get("period") or meta.get("period")
-            res_period_end = rec.get("period_end") or meta.get("period_end")
-            if not self._period_matches(
-                target_period, target_period_end, res_period, res_period_end
-            ):
-                continue
-            if any(
-                isinstance(rec.get(field), (int, float)) for field in fields
-            ):
-                return True
-        return False
-
-    def _extract_from_xbrl_docs(
-        self, symbol: str, docs: list[Document]
-    ) -> list[WarrantyExtractionDict]:
-        """Delegate to the shared XBRL extractor."""
-        return extract_from_xbrl_docs(symbol, docs)
 
     def _write_results(
         self,

@@ -9,8 +9,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TypedDict
 
-from langchain_core.documents import Document
-
+from sec_nlp.core.documents import DocumentRecord as Document
 from sec_nlp.core.infra.logger import logger
 from sec_nlp.pipelines.output_io import (
     build_run_file_stem,

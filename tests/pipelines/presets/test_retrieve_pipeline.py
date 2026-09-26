@@ -11,31 +11,36 @@ from datetime import date
 from pathlib import Path
 from types import SimpleNamespace
 
-from langchain_core.documents import Document
-
+from sec_nlp.core.documents import DocumentRecord as Document
 from sec_nlp.core.edgar.efts_models import EFTSBatchResult, EFTSHit
 from sec_nlp.core.edgar.filing_mode import FilingMode
 from sec_nlp.core.text.semantic_settings import SemanticChunkingSettings
-from sec_nlp.pipelines.presets.retrieve import (
+from sec_nlp.pipelines.presets.retrieve.bridge import RetrieveChatSeedBundle
+from sec_nlp.pipelines.presets.retrieve.config import RetrieveSettings
+from sec_nlp.pipelines.presets.retrieve.defaults import (
     DEFAULT_RETRIEVE_COLLECTION_NAME,
-    RetrieveChatSeedBundle,
-    RetrievePipeline,
-    RetrieveSettings,
 )
 from sec_nlp.pipelines.presets.retrieve.models import RetrievalHit
+from sec_nlp.pipelines.presets.retrieve.pipeline import RetrievePipeline
 from sec_nlp.pipelines.presets.retrieve.run_stages import (
     RetrieveRunState,
     build_retrieve_stage_chain,
 )
 from sec_nlp.pipelines.presets.retrieve.steps import (
     candidate_search as candidate_search_steps,
-    download_and_chunk_hits,
     download_chunk as download_chunk_steps,
     embed as embed_steps,
-    index_retrieval_hits,
+)
+from sec_nlp.pipelines.presets.retrieve.steps.download_chunk import (
+    download_and_chunk_hits,
+)
+from sec_nlp.pipelines.presets.retrieve.steps.embed import (
+    rerank_with_embeddings,
+)
+from sec_nlp.pipelines.presets.retrieve.steps.index import index_retrieval_hits
+from sec_nlp.pipelines.presets.retrieve.steps.query import (
     prune_hits_by_query_terms,
     rank_retrieval_hits,
-    rerank_with_embeddings,
 )
 from sec_nlp.pipelines.presets.retrieve.steps.tokenization import (
     DEFAULT_QUERY_STOPWORDS,

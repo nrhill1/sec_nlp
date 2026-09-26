@@ -13,7 +13,7 @@ from sec_nlp.core.market import (
     MarketQuote,
     create_market_retriever,
 )
-from sec_nlp.core.stats import (
+from sec_nlp.core.stats.correlation import (
     CorrExtensionError,
     average_true_range,
     beta,

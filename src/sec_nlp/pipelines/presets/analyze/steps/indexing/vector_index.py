@@ -10,9 +10,9 @@ from __future__ import annotations
 
 from time import perf_counter
 
-from langchain_core.documents import Document
 from langchain_qdrant import QdrantVectorStore
 
+from sec_nlp.core.documents import DocumentRecord as Document
 from sec_nlp.core.infra.logger import logger
 from sec_nlp.core.text.deduplication import SimHashDeduplicator
 from sec_nlp.pipelines.types import MetadataRecord
@@ -76,11 +76,13 @@ class VectorIndexer:
         for doc, base_meta, hash_value in candidates:
             if hash_value is not None and hash_value in existing_hashes:
                 continue
-            doc.metadata = {
-                **base_meta,
-                "symbol": symbol,
-                "simhash": hash_value,
-            }
+            doc.metadata.update(
+                {
+                    **base_meta,
+                    "symbol": symbol,
+                    "simhash": hash_value,
+                }
+            )
             to_store.append(doc)
 
         if not to_store:
@@ -99,7 +101,9 @@ class VectorIndexer:
             max(duplicates, 0),
         )
 
-        vstore.add_documents(documents=to_store)
+        from sec_nlp.adapters.documents import to_langchain
+
+        vstore.add_documents(documents=[to_langchain(doc) for doc in to_store])
         timings["store"] = perf_counter() - t_store_start
         added = len(to_store)
         collection = vstore.collection_name

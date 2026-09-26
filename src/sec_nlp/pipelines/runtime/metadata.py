@@ -7,15 +7,25 @@ runtime module reduces import sprawl and makes the shared metadata contract
 explicit across analyze and EXB flows.
 """
 
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from qdrant_client.models import (
+        FieldCondition,
+        Filter,
+    )
+
+
 import re
 from collections import defaultdict
 from collections.abc import Iterable, Mapping, Sequence
 from pathlib import Path
 from typing import TypedDict
 
-from langchain_core.documents import Document
-from qdrant_client.models import FieldCondition, Filter, MatchAny, MatchValue
-
+from sec_nlp.core.documents import DocumentRecord as Document
+from sec_nlp.core.types import is_json_array, is_json_object
 from sec_nlp.pipelines.serialization import is_score_key, round_score
 from sec_nlp.pipelines.types import (
     AnalysisResultDict,
@@ -144,6 +154,13 @@ def build_metadata_filter(raw_filters: MetadataFilters) -> Filter | None:
         field_key = _prefixed_key(key)
 
         if len(cleaned) == 1:
+            from qdrant_client.models import (
+                FieldCondition,
+                Filter,
+                MatchAny,
+                MatchValue,
+            )
+
             conditions.append(
                 FieldCondition(
                     key=field_key,
@@ -164,12 +181,26 @@ def build_metadata_filter(raw_filters: MetadataFilters) -> Filter | None:
                 int_values.append(value)
 
         if len(str_values) == len(cleaned):
+            from qdrant_client.models import (
+                FieldCondition,
+                Filter,
+                MatchAny,
+                MatchValue,
+            )
+
             conditions.append(
                 FieldCondition(key=field_key, match=MatchAny(any=str_values))
             )
             continue
 
         if len(int_values) == len(cleaned):
+            from qdrant_client.models import (
+                FieldCondition,
+                Filter,
+                MatchAny,
+                MatchValue,
+            )
+
             conditions.append(
                 FieldCondition(key=field_key, match=MatchAny(any=int_values))
             )
@@ -178,6 +209,13 @@ def build_metadata_filter(raw_filters: MetadataFilters) -> Filter | None:
         if len(bool_values) == len(cleaned):
             unique_bools = list(dict.fromkeys(bool_values))
             if len(unique_bools) == 1:
+                from qdrant_client.models import (
+                    FieldCondition,
+                    Filter,
+                    MatchAny,
+                    MatchValue,
+                )
+
                 conditions.append(
                     FieldCondition(
                         key=field_key,
@@ -187,12 +225,21 @@ def build_metadata_filter(raw_filters: MetadataFilters) -> Filter | None:
             continue
 
         coerced_values = [str(value) for value in cleaned]
+        from qdrant_client.models import (
+            FieldCondition,
+            Filter,
+            MatchAny,
+            MatchValue,
+        )
+
         conditions.append(
             FieldCondition(key=field_key, match=MatchAny(any=coerced_values))
         )
 
     if not conditions:
         return None
+
+    from qdrant_client.models import FieldCondition, MatchAny, MatchValue
 
     return Filter(must=list(conditions))
 
@@ -228,7 +275,7 @@ def get_meta_str_any(
             return coerced
     if include_source_meta:
         source_meta = meta.get("source_metadata")
-        if isinstance(source_meta, dict):
+        if is_json_object(source_meta):
             for key in keys:
                 value = source_meta.get(key)
                 if value is None:
@@ -266,12 +313,14 @@ def prepare_vector_docs(
 
     for doc in docs:
         base_meta = doc.metadata or {}
-        doc.metadata = {
-            **base_meta,
-            "symbol": symbol,
-            "text": doc.page_content,
-            "relevance_score": None,
-        }
+        doc.metadata.update(
+            {
+                **base_meta,
+                "symbol": symbol,
+                "text": doc.page_content,
+                "relevance_score": None,
+            }
+        )
         vector_docs.append(doc)
 
     return vector_docs
@@ -369,7 +418,7 @@ def _normalize_metadata_value(
         return round_score(value)
     if isinstance(value, (str, int, float, bool)) or value is None:
         return value
-    if isinstance(value, dict):
+    if is_json_object(value):
         nested: JsonDict = {}
         for nested_key, nested_value in value.items():
             if not isinstance(nested_key, str):
@@ -380,7 +429,7 @@ def _normalize_metadata_value(
             if normalized is not None:
                 nested[nested_key] = normalized
         return nested or None
-    if isinstance(value, list):
+    if is_json_array(value):
         items: list[JsonValue] = []
         for item in value:
             normalized = _normalize_metadata_value(key, item)
@@ -408,7 +457,7 @@ def _as_str_list(value: JsonValue | None) -> list[str]:
     if isinstance(value, str):
         cleaned = value.strip()
         return [cleaned] if cleaned else []
-    if isinstance(value, Sequence) and not isinstance(value, str):
+    if is_json_array(value) and not isinstance(value, str):
         items: list[str] = []
         for item in value:
             if isinstance(item, bool):
@@ -421,7 +470,7 @@ def _as_str_list(value: JsonValue | None) -> list[str]:
 
 def _as_metadata(value: JsonValue | None) -> JsonObject:
     """Coerce one JSON value into a metadata object when safe."""
-    if isinstance(value, Mapping):
+    if is_json_object(value):
         cleaned: dict[str, JsonValue] = {}
         for key, raw in value.items():
             if not isinstance(key, str):

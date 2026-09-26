@@ -11,9 +11,9 @@ import asyncio
 from dataclasses import dataclass, field
 from datetime import date, timedelta
 
-from langchain_core.documents import Document
 from pydantic import BaseModel, ConfigDict, Field
 
+from sec_nlp.core.documents import DocumentRecord as Document
 from sec_nlp.core.edgar.efts import EFTSAPIError, EFTSClient, create_efts_client
 from sec_nlp.core.edgar.efts_models import EFTSHit
 from sec_nlp.core.edgar.filing_mode import FilingMode
@@ -32,16 +32,6 @@ class EFTSSearchResult:
     total: int = 0
     new_accessions: list[str] = field(default_factory=list)
     downloaded_accessions: list[str] = field(default_factory=list)
-
-
-@dataclass
-class HybridSearchResult:
-    """Combined results from local vector search and EFTS."""
-
-    local_docs: list[Document] = field(default_factory=list)
-    efts_results: list[EFTSSearchResult] = field(default_factory=list)
-    discovered_filings: int = 0
-    downloaded_filings: int = 0
 
 
 class EFTSSearchRunnable(BaseModel):

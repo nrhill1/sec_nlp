@@ -4,8 +4,8 @@
 from pathlib import Path
 
 import pytest
-from langchain_core.documents import Document
 
+from sec_nlp.core.documents import DocumentRecord as Document
 from sec_nlp.core.edgar.filing_mode import FilingMode
 from sec_nlp.core.ingest import parser as parser_module
 from sec_nlp.core.ingest.loader import Loader, LoaderRunMetadata
@@ -376,16 +376,14 @@ class TestTransformHtml:
         """Test file parsing fallback when unstructured cannot fetch spaCy."""
 
         def _raise_spacy_download_error(
-            self: parser_module.UnstructuredHTMLLoader,
+            **_kwargs,
         ) -> list[Document]:
-            _ = self
             raise RuntimeError(
                 "Failed to download spaCy model from https://github.com/explosion/..."
             )
 
         monkeypatch.setattr(
-            parser_module.UnstructuredHTMLLoader,
-            "load",
+            "unstructured.partition.html.partition_html",
             _raise_spacy_download_error,
         )
 
@@ -423,8 +421,7 @@ class TestTransformHtml:
             )
 
         monkeypatch.setattr(
-            parser_module,
-            "partition_html",
+            "unstructured.partition.html.partition_html",
             _raise_spacy_download_error,
         )
 
@@ -452,14 +449,12 @@ class TestTransformHtml:
         """Test file parsing fallback when parser network access is blocked."""
 
         def _raise_socket_blocked(
-            self: parser_module.UnstructuredHTMLLoader,
+            **_kwargs,
         ) -> list[Document]:
-            _ = self
             raise RuntimeError("A test tried to use socket.socket.")
 
         monkeypatch.setattr(
-            parser_module.UnstructuredHTMLLoader,
-            "load",
+            "unstructured.partition.html.partition_html",
             _raise_socket_blocked,
         )
 

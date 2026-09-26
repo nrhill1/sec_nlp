@@ -19,7 +19,6 @@ from time import perf_counter
 from typing import ClassVar, Literal, Protocol
 
 import numpy as np
-from langchain_core.runnables import Runnable
 from langchain_ollama.embeddings import OllamaEmbeddings
 from pydantic import PrivateAttr
 from qdrant_client import QdrantClient
@@ -48,19 +47,21 @@ from sec_nlp.core.news.client import (
     create_news_retriever,
 )
 from sec_nlp.core.types import as_json_dict, coerce_result_json_dict
-from sec_nlp.pipelines import BasePipeline
+from sec_nlp.pipelines.base.pipeline import BasePipeline
+from sec_nlp.pipelines.base.stages import StageSequence
 from sec_nlp.pipelines.output_io import build_run_output_context
-from sec_nlp.types import JsonValue, ResultDict
-
-from ..retrieve import RetrievePipeline, RetrieveSettings
-from ..retrieve.defaults import DEFAULT_RETRIEVE_COLLECTION_NAME
-from .bridge import ChatRetrievedChunk, ChatSeedBundle
-from .config import ChatSettings
-from .io import (
+from sec_nlp.pipelines.presets.chat.io.formats.transcript import (
     write_chat_transcript_csv,
     write_chat_transcript_json,
     write_chat_transcript_yaml,
 )
+from sec_nlp.pipelines.presets.retrieve.config import RetrieveSettings
+from sec_nlp.pipelines.presets.retrieve.pipeline import RetrievePipeline
+from sec_nlp.types import JsonValue, ResultDict
+
+from ..retrieve.defaults import DEFAULT_RETRIEVE_COLLECTION_NAME
+from .bridge import ChatRetrievedChunk, ChatSeedBundle
+from .config import ChatSettings
 from .models import ChatCitation, ChatResult, ChatTranscriptPayload, ChatTurn
 from .run_stages import (
     ChatRunState,
@@ -139,9 +140,7 @@ class ChatPipeline(BasePipeline):
     )
     _last_llm_max_new_tokens: int | None = PrivateAttr(default=None)
     _last_context_token_budget: int | None = PrivateAttr(default=None)
-    _stage_chain: Runnable[ChatRunState, ChatRunState] | None = PrivateAttr(
-        default=None
-    )
+    _stage_chain: StageSequence[ChatRunState] | None = PrivateAttr(default=None)
 
     @classmethod
     def config_model(cls) -> type[ChatSettings]:
@@ -271,6 +270,7 @@ class ChatPipeline(BasePipeline):
         )
 
     def run(self) -> ChatResult:
+        self.config.start_run()
         return self.run_for_flow(
             seed_context=self.config.seed_context,
             seed_chunks=self.config.seed_chunks,
@@ -311,6 +311,7 @@ class ChatPipeline(BasePipeline):
                 TimeRemainingColumn(),
                 console=console,
                 transient=True,
+                disable=True,
             ) as progress:
                 overall_task = progress.add_task(
                     "Chat pipeline",

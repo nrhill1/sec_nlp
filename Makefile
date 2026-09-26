@@ -72,7 +72,6 @@ help:
 	@echo "  docker-shell           Open a shell in the background app container"
 	@echo "  docker-down            Stop the local Docker stack"
 	@echo "  docker-logs            Follow app container logs"
-	@echo "  stubs                  Generate type stubs (Python)"
 	@echo "  test                   Run all tests"
 	@echo "  lint                   Run all linters"
 	@echo "  fmt                    Format all code"
@@ -93,6 +92,8 @@ help:
 	@echo "  maturin-build          Build release wheels via maturin"
 	@echo "  maturin-sdist          Build a source distribution via maturin"
 	@echo "  build-ext              Build + install Rust extensions (market + efts + corr + xbrl + entity + newswatch)"
+	@echo "  build-wheels           Build the app with market plus five native sibling wheels"
+	@echo "  install-local          Install the complete local base app and its native wheels"
 	@echo ""
 	@echo "For detailed help on each subsystem, run:"
 	@echo "  make -C src help       # Python commands"
@@ -116,7 +117,6 @@ help:
 	@echo "  perf-gate-smoke        Run perf smoke and enforce SLO gate"
 	@echo "  perf-compare           Compare latest two performance suite artifacts"
 	@echo "  pre-commit             Run pre-commit hooks"
-	@echo "  stubs                  Generate Python stubs into ./types (uses stubgen)"
 
 # =========================================================================
 # Environment Setup
@@ -209,35 +209,45 @@ rs-nw-%:
 .PHONY: maturin-dev
 maturin-dev:
 	@mkdir -p $(MATURIN_WHEEL_OUT)
-	@RUSTFLAGS="$(RUSTFLAGS_DEV)" maturin build -m $(MARKET_MANIFEST) --interpreter $(PYTHON_BIN) --out $(MATURIN_WHEEL_OUT)
-	@$(PYTHON_BIN) -m pip install --no-deps --force-reinstall $$(ls -t $(MATURIN_WHEEL_OUT)/market-*.whl | head -n 1)
+	@RUSTFLAGS="$(RUSTFLAGS_DEV)" maturin develop --uv
 
 .PHONY: maturin-build
 maturin-build:
-	@RUSTFLAGS="$(RUSTFLAGS_PROD)" maturin build -m $(MARKET_MANIFEST) $(MATURIN_BUILD_FLAGS)
+	@RUSTFLAGS="$(RUSTFLAGS_PROD)" maturin build $(MATURIN_BUILD_FLAGS)
 
 .PHONY: maturin-sdist
 maturin-sdist:
-	@maturin sdist -m $(MARKET_MANIFEST) $(MATURIN_SDIST_FLAGS)
+	@maturin sdist $(MATURIN_SDIST_FLAGS)
+
+.PHONY: build-wheels
+build-wheels:
+	@set -euo pipefail
+	@mkdir -p $(MATURIN_WHEEL_OUT)
+	@RUSTFLAGS="$(RUSTFLAGS_DEV)" maturin build --interpreter $(PYTHON_BIN) --out $(MATURIN_WHEEL_OUT)
+	@for manifest in $(EFTS_MANIFEST) $(CORR_MANIFEST) $(XBRL_MANIFEST) $(ENTITY_MANIFEST) $(NEWSWATCH_MANIFEST); do \
+		RUSTFLAGS="$(RUSTFLAGS_DEV)" maturin build -m "$$manifest" --interpreter $(PYTHON_BIN) --out $(MATURIN_WHEEL_OUT); \
+	done
+
+.PHONY: install-local
+install-local: build-wheels
+	@set -euo pipefail
+	@uv pip uninstall --python $(PYTHON_BIN) market
+	@wheels=(); \
+	for package in sec_nlp efts corr xbrl entity newswatch; do \
+		wheels+=("$$(ls -t $(MATURIN_WHEEL_OUT)/$$package-*.whl | head -n 1)"); \
+	done; \
+	uv pip install --python $(PYTHON_BIN) --reinstall "$${wheels[@]}"
 
 .PHONY: build-ext
-build-ext: ready
+build-ext: ready build-wheels
 	@set -euo pipefail
-	@echo "==> Building Rust extensions..."
-	@mkdir -p $(MATURIN_WHEEL_OUT)
-	@RUSTFLAGS="$(RUSTFLAGS_DEV)" maturin build -m $(MARKET_MANIFEST) --interpreter $(PYTHON_BIN) --out $(MATURIN_WHEEL_OUT)
-	@$(PYTHON_BIN) -m pip install --no-deps --force-reinstall $$(ls -t $(MATURIN_WHEEL_OUT)/market-*.whl | head -n 1)
-	@RUSTFLAGS="$(RUSTFLAGS_DEV)" maturin build -m $(EFTS_MANIFEST) --interpreter $(PYTHON_BIN) --out $(MATURIN_WHEEL_OUT)
-	@$(PYTHON_BIN) -m pip install --no-deps --force-reinstall $$(ls -t $(MATURIN_WHEEL_OUT)/efts-*.whl | head -n 1)
-	@RUSTFLAGS="$(RUSTFLAGS_DEV)" maturin build -m $(CORR_MANIFEST) --interpreter $(PYTHON_BIN) --out $(MATURIN_WHEEL_OUT)
-	@$(PYTHON_BIN) -m pip install --no-deps --force-reinstall $$(ls -t $(MATURIN_WHEEL_OUT)/corr-*.whl | head -n 1)
-	@RUSTFLAGS="$(RUSTFLAGS_DEV)" maturin build -m $(XBRL_MANIFEST) --interpreter $(PYTHON_BIN) --out $(MATURIN_WHEEL_OUT)
-	@$(PYTHON_BIN) -m pip install --no-deps --force-reinstall $$(ls -t $(MATURIN_WHEEL_OUT)/xbrl-*.whl | head -n 1)
-	@RUSTFLAGS="$(RUSTFLAGS_DEV)" maturin build -m $(ENTITY_MANIFEST) --interpreter $(PYTHON_BIN) --out $(MATURIN_WHEEL_OUT)
-	@$(PYTHON_BIN) -m pip install --no-deps --force-reinstall $$(ls -t $(MATURIN_WHEEL_OUT)/entity-*.whl | head -n 1)
-	@RUSTFLAGS="$(RUSTFLAGS_DEV)" maturin build -m $(NEWSWATCH_MANIFEST) --interpreter $(PYTHON_BIN) --out $(MATURIN_WHEEL_OUT)
-	@$(PYTHON_BIN) -m pip install --no-deps --force-reinstall $$(ls -t $(MATURIN_WHEEL_OUT)/newswatch-*.whl | head -n 1)
-	@echo "✓ Rust extensions built"
+	@$(PYTHON_BIN) -m pip uninstall -y market
+	@wheels=(); \
+	for package in sec_nlp efts corr xbrl entity newswatch; do \
+		wheels+=("$$(ls -t $(MATURIN_WHEEL_OUT)/$$package-*.whl | head -n 1)"); \
+	done; \
+	$(PYTHON_BIN) -m pip install --no-deps --force-reinstall "$${wheels[@]}"
+	@echo "✓ App and native extensions built"
 	@echo ""
 
 # =========================================================================
@@ -369,12 +379,6 @@ cov-html: ready
 	@echo "  Python: $(ROOT_DIR)/htmlcov/index.html"
 	@echo ""
 
-.PHONY: stubs
-stubs:
-	@echo "==> Generating Python stubs into ./types ..."
-	@mkdir -p types
-	@stubgen -p sec_nlp -o types >/dev/null
-	@echo "✓ Stubs generated in ./types"
 
 # =========================================================================
 # Pre-commit

@@ -5,8 +5,9 @@ import pytest
 from pydantic import ConfigDict
 from pydantic_settings import SettingsConfigDict
 
-from sec_nlp.pipelines.base import BasePipeline, BasePipelineResult
 from sec_nlp.pipelines.base.config import BasePipelineSettings
+from sec_nlp.pipelines.base.pipeline import BasePipeline
+from sec_nlp.pipelines.base.result import BasePipelineResult
 from sec_nlp.types import JsonObject
 
 

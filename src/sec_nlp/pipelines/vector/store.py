@@ -6,41 +6,34 @@ from __future__ import annotations
 from collections.abc import Iterable
 from uuid import uuid4
 
-from langchain_core.documents import Document
 from langchain_qdrant import QdrantVectorStore
-from tqdm import tqdm
+
+from sec_nlp.core.documents import DocumentRecord as Document
 
 
 def upload_documents(
     *,
     vector_store: QdrantVectorStore,
     documents: Iterable[Document],
-    symbol: str | None = None,
     batch_size: int = 32,
-    bar_color: str = "magenta",
-    desc: str | None = None,
 ) -> None:
-    """Upload documents to a vector store with a compact progress bar."""
+    """Upload internal records to the optional vector adapter in bounded batches.
+
+    Args:
+        vector_store: Configured vector backend selected by the caller.
+        documents: Source records whose provenance must survive indexing.
+        batch_size: Maximum records sent in one insertion request.
+    """
+    from sec_nlp.adapters.documents import to_langchain
+
     docs: list[Document] = list(documents)
     if not docs:
         return
 
     ids: list[str] = [uuid4().hex for _ in range(len(docs))]
-    label: str = (
-        desc or f"Uploading vectors{f' for {symbol}' if symbol else ''}"
-    )
-
-    with tqdm(
-        total=len(docs),
-        desc=label,
-        unit="chunk",
-        colour=bar_color,
-        leave=False,
-    ) as pbar:
-        for start in range(0, len(docs), batch_size):
-            end = start + batch_size
-            vector_store.add_documents(
-                documents=docs[start:end],
-                ids=ids[start:end],
-            )
-            pbar.update(end - start)
+    for start in range(0, len(docs), batch_size):
+        end = start + batch_size
+        vector_store.add_documents(
+            documents=[to_langchain(doc) for doc in docs[start:end]],
+            ids=ids[start:end],
+        )

@@ -9,7 +9,7 @@ from langchain_core.runnables import Runnable
 from pydantic import BaseModel, Field
 
 from sec_nlp.core.llm.chains import ResultOutputParser, build_runnable
-from sec_nlp.pipelines import BasePipelineResult
+from sec_nlp.pipelines.base.result import BasePipelineResult
 from sec_nlp.types import JsonDict, JsonValue
 
 

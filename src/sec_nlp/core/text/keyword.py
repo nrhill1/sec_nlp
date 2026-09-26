@@ -7,9 +7,10 @@ import hashlib
 from collections.abc import Iterable, Mapping
 
 import ahocorasick  # type: ignore[import]
-from langchain_core.documents import Document
 from pydantic import ConfigDict, Field, ValidationInfo, field_validator
 from pydantic.dataclasses import dataclass
+
+from sec_nlp.core.documents import DocumentRecord as Document
 
 
 @dataclass(frozen=True, config=ConfigDict(extra="forbid"))
@@ -382,11 +383,13 @@ class KeywordMatcher:
                 )
                 keyword_score = score.total_score
                 if score.hits:
-                    doc.metadata = {
-                        **(doc.metadata or {}),
-                        "keyword_hits": [hit.pattern for hit in score.hits],
-                        "keyword_score": keyword_score,
-                    }
+                    doc.metadata.update(
+                        {
+                            **(doc.metadata or {}),
+                            "keyword_hits": [hit.pattern for hit in score.hits],
+                            "keyword_score": keyword_score,
+                        }
+                    )
                     keyword_hits.append(doc)
                 else:
                     fallback_pool.append(doc)
@@ -407,7 +410,11 @@ class KeywordMatcher:
             """Compute weighted keyword score and ranking vectors."""
             meta = doc.metadata or {}
             return (
-                float(meta.get("keyword_score", 0.0)),
+                float(score)
+                if isinstance(
+                    score := meta.get("keyword_score"), (str, int, float)
+                )
+                else 0.0,
                 len(doc.page_content or ""),
                 1
                 if (meta.get("section_number") or meta.get("exhibit_number"))
@@ -423,10 +430,12 @@ class KeywordMatcher:
             filtered = filtered[:max_chunks]
 
         for idx, doc in enumerate(filtered, 1):
-            doc.metadata = {
-                **(doc.metadata or {}),
-                "rank": idx,
-            }
+            doc.metadata.update(
+                {
+                    **(doc.metadata or {}),
+                    "rank": idx,
+                }
+            )
 
         stats = FilterStats(
             kept=len(filtered),

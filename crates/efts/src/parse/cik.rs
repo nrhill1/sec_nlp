@@ -8,7 +8,7 @@ static CIK_PATTERN: Lazy<Regex> =
 pub(crate) fn extract_cik(
     source: &Map<String, Value>,
     company_name: &str,
-    accession: &str,
+    _accession: &str,
 ) -> String {
     if let Some(cik) = coerce_cik(source.get("cik")) {
         return cik;
@@ -21,9 +21,6 @@ pub(crate) fn extract_cik(
         }
     }
     if let Some(cik) = extract_cik_from_company(company_name) {
-        return cik;
-    }
-    if let Some(cik) = extract_cik_from_accession(accession) {
         return cik;
     }
     "0000000000".to_string()
@@ -73,12 +70,4 @@ fn extract_cik_from_company(company_name: &str) -> Option<String> {
     }
     let match_value = CIK_PATTERN.captures(company_name)?;
     coerce_cik_str(&match_value[1])
-}
-
-fn extract_cik_from_accession(accession: &str) -> Option<String> {
-    if accession.is_empty() {
-        return None;
-    }
-    let prefix = accession.split('-').next().unwrap_or("");
-    coerce_cik_str(prefix)
 }

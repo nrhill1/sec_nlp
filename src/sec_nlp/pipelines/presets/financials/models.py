@@ -7,7 +7,7 @@ from typing import ClassVar, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from sec_nlp.pipelines import BasePipelineResult
+from sec_nlp.pipelines.base.result import BasePipelineResult
 from sec_nlp.types import JsonValue
 
 

@@ -1,5 +1,5 @@
 # src/sec_nlp/pipelines/presets/news/run_stages.py
-"""Runnable stage helpers for news pipeline execution."""
+"""Ordered specialist steps for news pipeline execution."""
 
 from __future__ import annotations
 
@@ -7,19 +7,18 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from langchain_core.runnables import Runnable
 from pydantic import Field
 from rich.progress import Progress, TaskID
 
-from sec_nlp.pipelines.base.stages import PipelineStageRunnable
-
-from .models import NewsCorrelation, NewsHeadline, NewsTimelineEntry
-from .steps import (
-    correlate_news_items,
+from sec_nlp.pipelines.base.stages import PipelineStage, StageSequence
+from sec_nlp.pipelines.presets.news.steps.correlate import correlate_news_items
+from sec_nlp.pipelines.presets.news.steps.fetch import (
     fetch_news_items,
-    match_news_items,
     resolve_symbol_aliases,
 )
+from sec_nlp.pipelines.presets.news.steps.match import match_news_items
+
+from .models import NewsCorrelation, NewsHeadline, NewsTimelineEntry
 
 if TYPE_CHECKING:
     from .pipeline import NewsPipeline
@@ -43,7 +42,7 @@ class NewsRunState:
     metadata: dict[str, int | float | str | None] = field(default_factory=dict)
 
 
-class ResolveAliasesStage(PipelineStageRunnable[NewsRunState]):
+class ResolveAliasesStage(PipelineStage[NewsRunState]):
     """Normalization stage that resolves alias inputs for consistent downstream matching."""
 
     name: str = Field(default="resolve_aliases")
@@ -63,7 +62,7 @@ class ResolveAliasesStage(PipelineStageRunnable[NewsRunState]):
         return state
 
 
-class FetchItemsStage(PipelineStageRunnable[NewsRunState]):
+class FetchItemsStage(PipelineStage[NewsRunState]):
     """Ingress acquisition stage that retrieves raw news items for a symbol window."""
 
     name: str = Field(default="fetch_items")
@@ -83,7 +82,7 @@ class FetchItemsStage(PipelineStageRunnable[NewsRunState]):
         return state
 
 
-class MatchItemsStage(PipelineStageRunnable[NewsRunState]):
+class MatchItemsStage(PipelineStage[NewsRunState]):
     """Selection stage that matches fetched headlines against configured topic filters."""
 
     name: str = Field(default="match_items")
@@ -107,7 +106,7 @@ class MatchItemsStage(PipelineStageRunnable[NewsRunState]):
         return state
 
 
-class CorrelateItemsStage(PipelineStageRunnable[NewsRunState]):
+class CorrelateItemsStage(PipelineStage[NewsRunState]):
     """Enrichment stage that correlates matched headlines with timeline and market data."""
 
     name: str = Field(default="correlate_items")
@@ -130,7 +129,7 @@ class CorrelateItemsStage(PipelineStageRunnable[NewsRunState]):
         return state
 
 
-class WriteOutputsStage(PipelineStageRunnable[NewsRunState]):
+class WriteOutputsStage(PipelineStage[NewsRunState]):
     """Egress stage that persists symbol-level news artifacts and summary metadata."""
 
     name: str = Field(default="write_outputs")
@@ -163,7 +162,7 @@ class WriteOutputsStage(PipelineStageRunnable[NewsRunState]):
         return state
 
 
-_NEWS_STAGES: tuple[PipelineStageRunnable[NewsRunState], ...] = (
+_NEWS_STAGES: tuple[PipelineStage[NewsRunState], ...] = (
     ResolveAliasesStage(),
     FetchItemsStage(),
     MatchItemsStage(),
@@ -174,6 +173,6 @@ _NEWS_STAGES: tuple[PipelineStageRunnable[NewsRunState], ...] = (
 
 def build_news_stage_chain(
     pipeline: NewsPipeline,
-) -> Runnable[NewsRunState, NewsRunState]:
+) -> StageSequence[NewsRunState]:
     """Build deterministic news stage chain."""
     return pipeline.build_configured_stage_chain(stages=_NEWS_STAGES)

@@ -10,8 +10,8 @@ from collections.abc import Generator
 from pathlib import Path
 
 import pytest
-from langchain_core.documents import Document
 
+from sec_nlp.core.documents import DocumentRecord as Document
 from sec_nlp.core.edgar.filing_mode import FilingMode
 from sec_nlp.core.ingest.loader import Loader
 

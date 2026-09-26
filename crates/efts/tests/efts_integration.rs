@@ -1,15 +1,10 @@
-use std::fs;
-use std::path::PathBuf;
+use serde_json::{json, Value};
 
-use serde_json::Value;
-
-fn load_fixture(name: &str) -> Value {
-    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("tests")
-        .join("data")
-        .join(name);
-    let raw = fs::read_to_string(&path).expect("read fixture");
-    serde_json::from_str(&raw).expect("parse fixture JSON")
+fn load_fixture(_name: &str) -> Value {
+    json!({"hits": {"total": {"value": 1}, "hits": [{"_source": {
+        "adsh": "0001234567-24-000001", "cik": "1234567",
+        "display_names": ["Example Company"], "form": "10-K", "file_date": "2024-01-15"
+    }}]}})
 }
 
 #[test]

@@ -3,13 +3,12 @@
 
 from dataclasses import dataclass
 
-from langchain_core.documents import Document
-
-from sec_nlp.app.flows.contracts import (
+from sec_nlp.app.workspace.evidence import (
     ContractEvidenceBundle,
     ContractEvidenceChunk,
     FlowRetrievedChunk,
 )
+from sec_nlp.core.documents import DocumentRecord as Document
 from sec_nlp.types import JsonValue
 
 

@@ -1,10 +1,17 @@
 # src/sec_nlp/pipelines/llm/config.py
 """LLM configuration for pipelines."""
 
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from langchain_ollama.llms import OllamaLLM
+
+
 from functools import cached_property
 from pathlib import Path
 
-from langchain_ollama.llms import OllamaLLM
 from pydantic import BaseModel, ConfigDict, Field
 
 from sec_nlp.core.llm.ollama import OllamaKwargs, resolve_ollama_base_url
@@ -113,7 +120,7 @@ class LLMConfig(BaseModel):
                     f"Model '{self.model_name}' is not supported; only Ollama models are supported"
                 )
 
-            from sec_nlp.core.llm import build_ollama_llm
+            from sec_nlp.core.llm.ollama import build_ollama_llm
 
             ollama_kwargs = dict(self.ollama_kwargs)
             base_url = self.base_url

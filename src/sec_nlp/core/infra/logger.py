@@ -13,33 +13,16 @@ import shutil
 from datetime import datetime
 from pathlib import Path
 from types import TracebackType
-from typing import Literal, TextIO
+from typing import Literal
 
 from rich.text import Text
 from rich.traceback import Traceback
-from tqdm import tqdm
 
 from sec_nlp.core.infra.rich_console import (
     ANSI_PALETTE,
     create_rich_console,
     get_rich_console,
 )
-
-
-class TqdmLoggingHandler(logging.StreamHandler[TextIO]):
-    """Log handler that routes output through ``tqdm.write`` to avoid clobbering progress bars."""
-
-    def emit(self, record: logging.LogRecord) -> None:
-        try:
-            msg = self.format(record)
-            if tqdm is None:
-                self.stream.write(f"{msg}{self.terminator}")
-            else:
-                tqdm.write(msg, file=self.stream)
-            self.flush()
-        except Exception:
-            self.handleError(record)
-
 
 _logging_configured: bool = False
 

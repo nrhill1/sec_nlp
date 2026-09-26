@@ -8,7 +8,7 @@ Purpose:
 Like retrieve bridge, this file should stay alias-only.
 """
 
-from sec_nlp.app.flows.contracts import (
+from sec_nlp.app.workspace.evidence import (
     FlowRetrievedChunk,
     FlowSeedBundle,
     FlowSeedChunk,
@@ -16,7 +16,7 @@ from sec_nlp.app.flows.contracts import (
 
 # NOTE:
 # Keep these names for backward compatibility while flow seed contracts are
-# consolidated under ``sec_nlp.app.flows.contracts``.
+# consolidated under ``sec_nlp.app.workspace.evidence``.
 ChatSeedChunk = FlowSeedChunk
 ChatSeedBundle = FlowSeedBundle
 ChatRetrievedChunk = FlowRetrievedChunk

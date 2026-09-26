@@ -83,7 +83,7 @@ def download_holdings_filings(
     *, symbol: str, settings: HoldingsSettings
 ) -> list[DownloadedHoldingsFiling]:
     """Download and collect 13F filing directories for a symbol."""
-    from sec_edgar_downloader import Downloader
+    from sec_nlp.core.ingest.downloader import FilingDownloader as Downloader
 
     normalized_symbol = symbol.strip().upper()
     start_date, end_date = settings.date_range

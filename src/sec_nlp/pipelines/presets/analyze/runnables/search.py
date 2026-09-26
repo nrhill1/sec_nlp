@@ -12,15 +12,15 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
-from langchain_core.documents import Document
 from langchain_core.runnables import RunnableConfig, RunnableSerializable
 from langchain_qdrant import QdrantVectorStore
 from pydantic import BaseModel, ConfigDict, Field
 
+from sec_nlp.core.documents import DocumentRecord as Document
 from sec_nlp.core.infra.logger import log_divider, logger
 from sec_nlp.core.types import coerce_bool, coerce_float
 from sec_nlp.pipelines.output_io import write_yaml
-from sec_nlp.pipelines.runtime import (
+from sec_nlp.pipelines.runtime.metadata import (
     MetadataFilters,
     build_metadata_filter,
     normalize_metadata_for_output,
@@ -186,6 +186,9 @@ class SearchRunnable(
                     )
                     and self._passes_query_term_gate(query, doc.page_content)
                 ]
+            from sec_nlp.adapters.documents import from_langchain
+
+            filtered = [(from_langchain(doc), score) for doc, score in filtered]
             results_by_query[query] = SearchQueryResults(
                 filtered=filtered,
                 total=len(results),
@@ -506,7 +509,11 @@ class SearchRunnable(
                     if section:
                         section_counts[str(section)] += 1
 
-                    for tag in meta.get("tags") or []:
+                    for tag in (
+                        tags
+                        if isinstance(tags := meta.get("tags"), list)
+                        else []
+                    ):
                         tag_counts[str(tag)] += 1
 
                     sentiment = meta.get("sentiment")

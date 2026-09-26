@@ -12,7 +12,7 @@ from sec_nlp.core.edgar.efts_models import EFTSHit
 from sec_nlp.pipelines.presets.exb.config import ExhibitConfig
 from sec_nlp.pipelines.presets.exb.steps import candidates as candidate_steps
 from sec_nlp.pipelines.presets.retrieve.config import RetrieveSettings
-from sec_nlp.pipelines.vector import VectorConfig
+from sec_nlp.pipelines.vector.config import VectorConfig
 
 
 def _config(tmp_path: Path, **updates: object) -> ExhibitConfig:

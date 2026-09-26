@@ -5,10 +5,10 @@
 import difflib
 from enum import StrEnum
 
-from langchain_core.documents import Document
 from pydantic import BaseModel, ConfigDict, Field
 from pydantic.dataclasses import dataclass
 
+from sec_nlp.core.documents import DocumentRecord as Document
 from sec_nlp.types import JsonObject
 
 
@@ -290,14 +290,14 @@ def compare_documents(
     new_by_section: dict[str, str] = {}
 
     for doc in old_docs:
-        section = doc.metadata.get(section_key, "unknown")
+        section = str(doc.metadata.get(section_key) or "unknown")
         if section in old_by_section:
             old_by_section[section] += "\n\n" + doc.page_content
         else:
             old_by_section[section] = doc.page_content
 
     for doc in new_docs:
-        section = doc.metadata.get(section_key, "unknown")
+        section = str(doc.metadata.get(section_key) or "unknown")
         if section in new_by_section:
             new_by_section[section] += "\n\n" + doc.page_content
         else:

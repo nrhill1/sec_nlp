@@ -5,9 +5,9 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 
-from langchain_core.documents import Document
 from langchain_ollama.embeddings import OllamaEmbeddings
 
+from sec_nlp.core.documents import DocumentRecord as Document
 from sec_nlp.core.infra.logger import logger
 from sec_nlp.core.text.chunking import SentenceSplitter
 from sec_nlp.core.text.deduplication import SimHashConfig, SimHashDeduplicator
@@ -138,13 +138,15 @@ class ChunkPreprocessor:
         for doc in docs:
             base_meta = doc.metadata or {}
             for idx, chunk in enumerate(splitter.split_documents([doc])):
-                chunk.metadata = {
-                    **(chunk.metadata or {}),
-                    **base_meta,
-                    "chunk_index": idx,
-                    "section_number": base_meta.get("section_number", ""),
-                    "chunking_mode": "sentence",
-                }
+                chunk.metadata.update(
+                    {
+                        **(chunk.metadata or {}),
+                        **base_meta,
+                        "chunk_index": idx,
+                        "section_number": base_meta.get("section_number", ""),
+                        "chunking_mode": "sentence",
+                    }
+                )
                 chunks.append(chunk)
         return chunks
 
@@ -159,11 +161,13 @@ class ChunkPreprocessor:
             base_meta = doc.metadata or {}
             doc_chunks = semantic_chunker.split_documents([doc])
             for chunk in doc_chunks:
-                chunk.metadata = {
-                    **(chunk.metadata or {}),
-                    **base_meta,
-                    "section_number": base_meta.get("section_number", ""),
-                }
+                chunk.metadata.update(
+                    {
+                        **(chunk.metadata or {}),
+                        **base_meta,
+                        "section_number": base_meta.get("section_number", ""),
+                    }
+                )
                 chunks.append(chunk)
 
         logger.info(
@@ -280,7 +284,10 @@ class ChunkPreprocessor:
             score = meta.get("topic_score")
             if score is None:
                 score = len((doc.page_content or "").strip())
-            scored.append((doc, int(score)))
+            normalized_score = (
+                int(score) if isinstance(score, (str, int, float)) else 0
+            )
+            scored.append((doc, normalized_score))
 
         scored.sort(key=lambda t: t[1], reverse=True)
         return [doc for doc, _ in scored[:k]]

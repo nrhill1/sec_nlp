@@ -7,8 +7,7 @@ import re
 from pathlib import Path
 from xml.etree import ElementTree
 
-from langchain_core.documents import Document
-
+from sec_nlp.core.documents import DocumentRecord as Document
 from sec_nlp.core.infra.logger import logger
 from sec_nlp.types import JsonDict, JsonValue
 
@@ -213,7 +212,7 @@ def _is_info_table_file(path: Path) -> bool:
 
 
 class HoldingsParser:
-    """Parse 13F info tables into LangChain Documents."""
+    """Parse 13F info tables into internal document records."""
 
     def parse_accession_dir(self, accession_dir: Path) -> list[Document]:
         table_files = [

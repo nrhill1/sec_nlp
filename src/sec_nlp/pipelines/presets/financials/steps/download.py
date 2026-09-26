@@ -65,7 +65,7 @@ def download_financial_filings(
     *, symbol: str, settings: FinancialsSettings
 ) -> list[DownloadedFiling]:
     """Download and collect filing directories for a symbol."""
-    from sec_edgar_downloader import Downloader
+    from sec_nlp.core.ingest.downloader import FilingDownloader as Downloader
 
     normalized_symbol = symbol.strip().upper()
     start_date, end_date = settings.date_range

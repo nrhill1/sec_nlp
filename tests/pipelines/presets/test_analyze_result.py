@@ -1,7 +1,7 @@
 # tests/pipelines/presets/test_analyze_result.py
 """Tests for analyze pipeline result parsing."""
 
-from sec_nlp.pipelines.presets.analyze import AnalysisResult
+from sec_nlp.pipelines.presets.analyze.models import AnalysisResult
 
 
 def test_key_points_allows_none() -> None:

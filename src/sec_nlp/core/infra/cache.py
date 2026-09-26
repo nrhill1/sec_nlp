@@ -31,7 +31,7 @@ from pathlib import Path
 
 from pydantic.dataclasses import dataclass
 
-from sec_nlp.core.infra.settings import PROJECT_ROOT
+from sec_nlp.core.infra.settings import CACHE_DIR
 from sec_nlp.types import JsonValue
 
 # Type alias for JSON-serializable data
@@ -45,7 +45,7 @@ def _ensure_dir(path: Path) -> Path:
 
 
 # Keep cache under the project root to avoid user-level surprises
-APP_CACHE_DIR: Path = PROJECT_ROOT / ".cache"
+APP_CACHE_DIR: Path = CACHE_DIR
 
 
 def get_cache_dir(*subdirs: str) -> Path:

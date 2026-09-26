@@ -72,7 +72,7 @@ def _collect_material_filing_events(
     *, symbol: str, settings: InsiderSettings
 ) -> list[MaterialFilingEvent]:
     """Collect material filing events."""
-    from sec_edgar_downloader import Downloader
+    from sec_nlp.core.ingest.downloader import FilingDownloader as Downloader
 
     normalized_symbol = symbol.strip().upper()
     start_date, end_date = _effective_date_range(settings)

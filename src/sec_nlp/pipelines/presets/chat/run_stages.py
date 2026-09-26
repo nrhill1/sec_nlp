@@ -1,5 +1,5 @@
 # src/sec_nlp/pipelines/presets/chat/run_stages.py
-"""Runnable stage helpers for chat pipeline execution."""
+"""Ordered specialist steps for chat pipeline execution."""
 
 from __future__ import annotations
 
@@ -9,12 +9,11 @@ from pathlib import Path
 from time import perf_counter
 from typing import TYPE_CHECKING
 
-from langchain_core.runnables import Runnable
 from pydantic import Field
 from rich.progress import Progress, TaskID
 
 from sec_nlp.core.infra.logger import logger
-from sec_nlp.pipelines.base.stages import PipelineStageRunnable
+from sec_nlp.pipelines.base.stages import PipelineStage, StageSequence
 from sec_nlp.types import JsonValue
 
 from .bridge import ChatRetrievedChunk, ChatSeedBundle
@@ -99,7 +98,7 @@ class ChatStageContext:
     ]
 
 
-class SearchContextStage(PipelineStageRunnable[ChatRunState]):
+class SearchContextStage(PipelineStage[ChatRunState]):
     """Ingress retrieval stage that sources context from seeds first, then vector search."""
 
     name: str = Field(default="search_context")
@@ -161,7 +160,7 @@ class SearchContextStage(PipelineStageRunnable[ChatRunState]):
         return state
 
 
-class PrepareContextStage(PipelineStageRunnable[ChatRunState]):
+class PrepareContextStage(PipelineStage[ChatRunState]):
     """Context assembly stage that builds citations, coverage metadata, and external context."""
 
     name: str = Field(default="prepare_context")
@@ -197,7 +196,7 @@ class PrepareContextStage(PipelineStageRunnable[ChatRunState]):
         return state
 
 
-class GenerateAnswerStage(PipelineStageRunnable[ChatRunState]):
+class GenerateAnswerStage(PipelineStage[ChatRunState]):
     """Generation stage that produces grounded answer text and used citation identifiers."""
 
     name: str = Field(default="generate_answer")
@@ -232,7 +231,7 @@ class GenerateAnswerStage(PipelineStageRunnable[ChatRunState]):
         return state
 
 
-class BuildTurnsStage(PipelineStageRunnable[ChatRunState]):
+class BuildTurnsStage(PipelineStage[ChatRunState]):
     """Transcript stage that materializes question-answer turns for downstream writing."""
 
     name: str = Field(default="build_turns")
@@ -254,7 +253,7 @@ class BuildTurnsStage(PipelineStageRunnable[ChatRunState]):
         return state
 
 
-class WriteChatOutputsStage(PipelineStageRunnable[ChatRunState]):
+class WriteChatOutputsStage(PipelineStage[ChatRunState]):
     """Egress stage that persists chat transcript and summary artifacts when enabled."""
 
     name: str = Field(default="write_outputs")
@@ -285,7 +284,7 @@ class WriteChatOutputsStage(PipelineStageRunnable[ChatRunState]):
 
 def build_chat_stage_chain(
     pipeline: ChatPipeline,
-) -> Runnable[ChatRunState, ChatRunState]:
+) -> StageSequence[ChatRunState]:
     """Build deterministic chat stage chain."""
     context = ChatStageContext(
         config=pipeline.config,
@@ -344,7 +343,7 @@ def build_chat_stage_chain(
             )
         ),
     )
-    stages: tuple[PipelineStageRunnable[ChatRunState], ...] = (
+    stages: tuple[PipelineStage[ChatRunState], ...] = (
         SearchContextStage(context=context),
         PrepareContextStage(context=context),
         GenerateAnswerStage(context=context),

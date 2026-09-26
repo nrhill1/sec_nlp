@@ -11,9 +11,10 @@ from collections.abc import Sequence
 from enum import StrEnum
 from typing import TYPE_CHECKING
 
-from langchain_core.documents import Document
 from pydantic import ConfigDict
 from pydantic.dataclasses import dataclass
+
+from sec_nlp.core.documents import DocumentRecord as Document
 
 if TYPE_CHECKING:
     from efts import (
@@ -378,12 +379,14 @@ def rank_documents(
         if score >= min_hits:
             # Score the document to get detailed counts
             topic_score = score_document(doc.page_content or "", keywords)
-            doc.metadata = {
-                **(doc.metadata or {}),
-                "topic_score": int(score),
-                "topic_hits": list(topic_score.keyword_counts.keys()),
-                "topic_hits_detail": topic_score.keyword_counts,
-            }
+            doc.metadata.update(
+                {
+                    **(doc.metadata or {}),
+                    "topic_score": int(score),
+                    "topic_hits": list(topic_score.keyword_counts.keys()),
+                    "topic_hits_detail": topic_score.keyword_counts,
+                }
+            )
             result.append((doc, score))
 
     if prioritize:

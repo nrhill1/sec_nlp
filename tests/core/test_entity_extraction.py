@@ -6,9 +6,10 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 import pytest
-from langchain_core.documents import Document
 
+from sec_nlp.core.documents import DocumentRecord as Document
 from sec_nlp.core.text import entity_extraction
+from sec_nlp.core.types import is_json_array, is_json_object
 
 
 def test_load_entity_module_raises_clear_error(
@@ -126,5 +127,10 @@ def test_enrich_documents_adds_entity_and_event_metadata(
     assert "events" not in original.metadata
     assert len(enriched_docs) == 1
     assert enriched_docs[0].metadata["section"] == "Item 1A"
-    assert enriched_docs[0].metadata["entities"][0]["entity_type"] == "CUSIP"
-    assert enriched_docs[0].metadata["events"][0]["event_type"] == "restatement"
+    entities = enriched_docs[0].metadata["entities"]
+    events = enriched_docs[0].metadata["events"]
+    assert is_json_array(entities) and is_json_array(events)
+    entity_record, event_record = entities[0], events[0]
+    assert is_json_object(entity_record) and is_json_object(event_record)
+    assert entity_record["entity_type"] == "CUSIP"
+    assert event_record["event_type"] == "restatement"

@@ -9,7 +9,7 @@ from sec_nlp.pipelines.common.ranking import (
     rank_retrieval_hits,
 )
 from sec_nlp.pipelines.presets.retrieve.config import RetrieveSettings
-from sec_nlp.pipelines.presets.retrieve.steps import (
+from sec_nlp.pipelines.presets.retrieve.steps.candidate_search import (
     run_candidate_search,
 )
 from sec_nlp.pipelines.presets.retrieve.steps.tokenization import (

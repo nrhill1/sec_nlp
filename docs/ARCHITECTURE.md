@@ -6,6 +6,7 @@
 
 - `src/sec_nlp/cli/` - command models, argument normalization, and command dispatch.
 - `src/sec_nlp/app/flows/` - typed multi-stage flow specs, in-memory artifacts, and runnable adapters.
+- `src/sec_nlp/app/investing/` - portable investing profiles, sourced daily briefs, offline reports, and research journals.
 - `src/sec_nlp/pipelines/base/` - shared pipeline lifecycle, config, validation, and result models.
 - `src/sec_nlp/pipelines/presets/` - production pipeline implementations (`analyze`, `exb`, `warranty`, `financials`, `holdings`, `insider`, `news`, `events`, `retrieve`, `chat`).
 - `src/sec_nlp/pipelines/tools/` - reusable LangChain `StructuredTool` wrappers (`market_context_tool`, `retrieve_hits_tool`, `qdrant_search_tool`, `news_context_tool`).
@@ -25,12 +26,40 @@
 
 ## Pipeline Families
 
+The `invest` command is a separate application workflow, outside the pipeline
+lifecycle. It uses an independent frozen profile so a daily brief does not need
+SEC contact settings, filing downloads, embeddings, or model configuration.
+Existing filing pipelines remain the deeper research entry points.
+
 - LLM-centric: `analyze`, `chat`
 - Retrieval/indexing: `retrieve`, `exb`
 - Deterministic SEC extraction: `warranty`, `financials`, `holdings`, `insider`
 - Timeline/correlation: `news`, `events`
 
 `retrieve` is EFTS-first and uses lexical ranking/pruning (stopword-aware by default) with selective chunk hydration before optional embedding rerank/index.
+
+## Investing Workspace
+
+`invest init/brief/note/review` provides a daily observation path alongside the
+SEC pipelines. The CLI reads a frozen `InvestingSettings` profile, and the
+application service calls `core.market` once per symbol and `core.news` once
+per feed. Retrieval failures are recorded independently. Dates, phrase matches,
+deduplication, adjusted-session returns, and research prompts are computed in
+Python without an LLM, filing downloads, or vector infrastructure.
+
+Each report stores the exact profile, dated observations, source statuses, and
+journal entries in `brief.json`, plus Markdown and a self-contained HTML view.
+These files live under the chosen investing workspace rather than the pipeline
+output root or SQLite run registry. Notes are immutable individual JSON files;
+configuration remains explicitly editable. Files are published atomically
+without overwriting existing records, and report JSON is published last.
+
+Offline snapshot rendering writes separate exports and does not enter live
+history. Synthetic demos are flagged throughout their artifacts. Only an earlier
+live report with an identical profile is eligible for headline comparisons.
+No news article or document content is interpreted as executable instructions.
+
+Reference: [Investing workflow](INVESTING.md)
 
 ## Retrieve->Chat Flow Runtime
 

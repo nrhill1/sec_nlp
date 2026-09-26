@@ -10,10 +10,10 @@ from datetime import date
 from pathlib import Path
 
 from sec_nlp.core.infra.logger import logger
-from sec_nlp.core.types import coerce_json_dict
+from sec_nlp.core.types import coerce_json_dict, is_json_object
 from sec_nlp.pipelines.output_io import write_yaml
 from sec_nlp.pipelines.presets.analyze.market import _parse_date_value
-from sec_nlp.pipelines.runtime import group_results_by_accession
+from sec_nlp.pipelines.runtime.metadata import group_results_by_accession
 from sec_nlp.pipelines.types import AnalysisResultDict, MetadataRecord
 from sec_nlp.types import JsonDict, JsonValue
 
@@ -255,7 +255,7 @@ def _extract_filing_date(meta: MetadataRecord) -> date | None:
         if parsed is not None:
             return parsed
     source_meta = meta.get("source_metadata")
-    if isinstance(source_meta, dict):
+    if is_json_object(source_meta):
         for key in _DATE_KEYS:
             parsed = _parse_date_value(source_meta.get(key))
             if parsed is not None:

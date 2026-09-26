@@ -1,30 +1,28 @@
 # src/sec_nlp/pipelines/vector/config.py
 """Vector database configuration and operations for pipelines."""
 
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from langchain_ollama.embeddings import OllamaEmbeddings
+    from langchain_qdrant import QdrantVectorStore
+    from qdrant_client import QdrantClient
+    from qdrant_client.models import Distance
+
+
 import os
 from collections.abc import Iterable
 from threading import Lock
 from typing import Literal
 from uuid import uuid4
 
-from langchain_core.documents import Document
-from langchain_ollama.embeddings import OllamaEmbeddings
-from langchain_qdrant import QdrantVectorStore
 from pydantic import BaseModel, ConfigDict, Field, field_validator
-from qdrant_client import QdrantClient
-from qdrant_client.models import Distance
-from tqdm import tqdm
 
+from sec_nlp.core.documents import DocumentRecord as Document
 from sec_nlp.core.infra.logger import logger
-from sec_nlp.core.infra.qdrant_runtime import (
-    ensure_local_docker_qdrant,
-    is_local_docker_qdrant_target,
-)
 from sec_nlp.core.llm.ollama import resolve_ollama_base_url
-from sec_nlp.pipelines.vector.client import (
-    create_qdrant_client,
-    format_qdrant_endpoint,
-)
 
 type EmbedderCacheKey = tuple[str, str | None]
 type QdrantClientCacheKey = tuple[
@@ -70,6 +68,7 @@ class VectorConfig(BaseModel):
     model_config = ConfigDict(
         defer_build=True,
         frozen=True,
+        extra="forbid",
     )
 
     # Collection settings
@@ -144,23 +143,6 @@ class VectorConfig(BaseModel):
         ge=1,
         description="Qdrant request timeout in seconds",
     )
-    qdrant_auto_start: bool = Field(
-        default=True,
-        description=(
-            "Attempt `colima start` followed by `sec-nlp qdrant up` when "
-            "the default localhost Docker endpoint is unreachable."
-        ),
-    )
-    qdrant_startup_timeout: int = Field(
-        default=8,
-        ge=1,
-        le=120,
-        description=(
-            "Seconds to wait for localhost:6333 after automatic Docker "
-            "Qdrant startup is triggered."
-        ),
-    )
-
     # Qdrant collection configuration
     qdrant_distance: Literal["Cosine", "Euclid", "Dot"] = Field(
         default="Cosine",
@@ -193,6 +175,10 @@ class VectorConfig(BaseModel):
     def _configured_qdrant_target(self) -> str:
         """Return the configured endpoint before fallback is applied."""
         location = None if self.qdrant_url else self.qdrant_location
+        from sec_nlp.pipelines.vector.client import (
+            format_qdrant_endpoint,
+        )
+
         return format_qdrant_endpoint(
             location=location,
             url=self.qdrant_url,
@@ -208,6 +194,10 @@ class VectorConfig(BaseModel):
         url: str | None,
     ) -> QdrantClient:
         """Construct a Qdrant client and verify connectivity."""
+        from sec_nlp.pipelines.vector.client import (
+            create_qdrant_client,
+        )
+
         qdrant = create_qdrant_client(
             location=location,
             url=url,
@@ -244,23 +234,6 @@ class VectorConfig(BaseModel):
             (":memory:", None, ":memory:", True),
         ]
 
-    def _should_attempt_local_docker_bootstrap(
-        self,
-        *,
-        location: str | None,
-        url: str | None,
-    ) -> bool:
-        """Return whether localhost Docker Qdrant bootstrap is eligible."""
-        if not self.qdrant_auto_start:
-            return False
-        return is_local_docker_qdrant_target(
-            location=location,
-            url=url,
-            host=self.qdrant_host,
-            port=self.qdrant_port,
-            https=self.qdrant_https,
-        )
-
     def setup_qdrant_client_with_target(self) -> QdrantClientTarget:
         """Initialize Qdrant client and return the resolved target string."""
         cache_key: QdrantClientCacheKey = (
@@ -287,48 +260,11 @@ class VectorConfig(BaseModel):
         attempts = self._connection_attempts()
         configured_target = attempts[0][2]
         errors: list[str] = []
-        bootstrap_attempted = False
         for location, url, target, is_fallback in attempts:
             try:
                 qdrant = self._connect_qdrant(location=location, url=url)
             except Exception as exc:
                 errors.append(f"{target}: {type(exc).__name__}: {exc}")
-                if (
-                    not is_fallback
-                    and not bootstrap_attempted
-                    and self._should_attempt_local_docker_bootstrap(
-                        location=location,
-                        url=url,
-                    )
-                ):
-                    bootstrap_attempted = True
-                    logger.warning(
-                        "Qdrant endpoint %s unavailable; attempting local Docker startup before fallback",
-                        configured_target,
-                    )
-                    if ensure_local_docker_qdrant(
-                        readiness_timeout=self.qdrant_startup_timeout
-                    ):
-                        try:
-                            qdrant = self._connect_qdrant(
-                                location=location,
-                                url=url,
-                            )
-                        except Exception as retry_exc:
-                            errors.append(
-                                f"{target} after startup: {type(retry_exc).__name__}: {retry_exc}"
-                            )
-                        else:
-                            if not disable_cache:
-                                with _QDRANT_CACHE_LOCK:
-                                    _QDRANT_CLIENT_CACHE[cache_key] = qdrant
-                                    _QDRANT_ENDPOINT_CACHE[cache_key] = target
-
-                            logger.info(
-                                "Connected to Qdrant at %s after local Docker startup",
-                                target,
-                            )
-                            return qdrant, target
                 continue
 
             if is_fallback:
@@ -424,6 +360,8 @@ class VectorConfig(BaseModel):
 
         logger.info("Loading embedding model: %s", self.embedding_model)
 
+        from langchain_ollama.embeddings import OllamaEmbeddings
+
         embedder = OllamaEmbeddings(
             model=self.embedding_model,
             base_url=resolve_ollama_base_url(),
@@ -473,6 +411,8 @@ class VectorConfig(BaseModel):
         Returns:
             Configured VectorStore instance
         """
+        from qdrant_client.models import Distance
+
         distance_mapping = {
             "Cosine": Distance.COSINE,
             "Euclid": Distance.EUCLID,
@@ -485,6 +425,8 @@ class VectorConfig(BaseModel):
         resolved_collection: str = (
             collection_name or self.collection_name or f"sec_nlp_{uuid4().hex}"
         )
+
+        from langchain_qdrant import QdrantVectorStore
 
         return QdrantVectorStore(
             client=qdrant_client,
@@ -518,14 +460,6 @@ class VectorConfig(BaseModel):
         ) // self.embedding_batch_size
 
         indices: Iterable[int] = range(0, len(texts), self.embedding_batch_size)
-        if show_progress:
-            indices = tqdm(
-                indices,
-                desc="Generating embeddings",
-                unit="batch",
-                total=num_batches,
-                leave=False,
-            )
 
         for i in indices:
             batch = texts[i : i + self.embedding_batch_size]
@@ -566,6 +500,8 @@ class VectorConfig(BaseModel):
         Returns:
             List of document IDs
         """
+        from sec_nlp.adapters.documents import to_langchain
+
         if not documents:
             return []
 
@@ -577,19 +513,13 @@ class VectorConfig(BaseModel):
         indices: Iterable[int] = range(
             0, len(documents), self.embedding_batch_size
         )
-        if show_progress:
-            indices = tqdm(
-                indices,
-                desc="Adding to vector store",
-                unit="batch",
-                total=num_batches,
-                leave=False,
-            )
 
         for i in indices:
             batch = documents[i : i + self.embedding_batch_size]
             try:
-                batch_ids = vector_store.add_documents(batch)
+                batch_ids = vector_store.add_documents(
+                    [to_langchain(doc) for doc in batch]
+                )
                 all_ids.extend(batch_ids)
             except Exception as e:
                 logger.error("Failed to add batch at index %d: %s", i, e)
@@ -653,6 +583,8 @@ class VectorConfig(BaseModel):
         Returns:
             List of document IDs
         """
+        from sec_nlp.adapters.documents import to_langchain
+
         if not documents:
             return []
 
@@ -661,7 +593,9 @@ class VectorConfig(BaseModel):
         for i in range(0, len(documents), self.embedding_batch_size):
             batch = documents[i : i + self.embedding_batch_size]
             try:
-                batch_ids = await vector_store.aadd_documents(batch)
+                batch_ids = await vector_store.aadd_documents(
+                    [to_langchain(doc) for doc in batch]
+                )
                 all_ids.extend(batch_ids)
             except Exception as e:
                 logger.error("Failed to add batch at index %d: %s", i, e)

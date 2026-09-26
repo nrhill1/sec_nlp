@@ -1,10 +1,16 @@
 # src/sec_nlp/core/llm/ollama.py
 """Ollama model client construction and embedding setup helpers."""
 
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from langchain_ollama.llms import OllamaLLM
+
+
 import os
 from typing import TypedDict, Unpack
-
-from langchain_ollama.llms import OllamaLLM
 
 from sec_nlp.core.infra.logger import logger
 from sec_nlp.types import JsonValue
@@ -64,6 +70,8 @@ def build_ollama_llm(
         kwargs["keep_alive"] = -1
     if "num_gpu" not in kwargs:
         kwargs["num_gpu"] = -1
+
+    from langchain_ollama.llms import OllamaLLM
 
     ollama_llm = OllamaLLM(
         model=model_name,

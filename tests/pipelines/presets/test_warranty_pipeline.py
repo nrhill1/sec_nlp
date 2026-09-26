@@ -2,10 +2,8 @@
 from pathlib import Path
 from typing import ClassVar
 
-from sec_nlp.pipelines.presets.warranty import (
-    WarrantyPipeline,
-)
 from sec_nlp.pipelines.presets.warranty.config import WarrantyConfig
+from sec_nlp.pipelines.presets.warranty.pipeline import WarrantyPipeline
 from sec_nlp.pipelines.types import FilingMetadata, WarrantyExtractionDict
 
 

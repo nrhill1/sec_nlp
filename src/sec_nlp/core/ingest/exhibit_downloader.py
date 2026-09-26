@@ -1,14 +1,13 @@
 # src/sec_nlp/core/ingest/exhibit_downloader.py
-# src/sec_nlp/core/exhibit_downloader.py
 """Download and parse exhibit documents from SEC EDGAR filings."""
 
 import re
-import time
 from pathlib import Path
 
-import requests
-from tqdm import tqdm
+import httpx
+from rich.progress import track
 
+from sec_nlp.core.edgar.transport import fetch_sec_bytes
 from sec_nlp.core.infra.logger import format_size, logger
 
 
@@ -76,13 +75,7 @@ class ExhibitDownloader:
         self.company_name = company_name
         self.email = email
         self.rate_limit = rate_limit
-        self.session = requests.Session()
-        self.session.headers.update(
-            {
-                "User-Agent": f"{company_name} {email}",
-                "Accept-Encoding": "gzip, deflate",
-            }
-        )
+        self.user_agent = f"{company_name} {email}"
 
     def parse_full_submission(
         self, full_submission_path: Path, accession_number: str | None = None
@@ -109,7 +102,7 @@ class ExhibitDownloader:
                 full_submission_path, encoding="utf-8", errors="ignore"
             ) as f:
                 content = f.read()
-        except Exception as e:
+        except (httpx.HTTPError, OSError, ValueError) as e:
             logger.error("Failed to read full submission: %s", e)
             return []
 
@@ -187,8 +180,10 @@ class ExhibitDownloader:
                 exhibits.append(exhibit)
                 logger.debug("Found exhibit %s: %s", exhibit_number, filename)
 
-            except Exception as e:
-                logger.debug("Error parsing document section: %s", e)
+            except (httpx.HTTPError, OSError, ValueError) as e:
+                logger.debug(
+                    "Error parsing document section: %s", e, exc_info=True
+                )
                 continue
 
         logger.debug(
@@ -232,12 +227,9 @@ class ExhibitDownloader:
         logger.debug("Fetching filing index from SEC...")
 
         try:
-            time.sleep(self.rate_limit)
-            response = self.session.get(archive_url, timeout=30)
-            response.raise_for_status()
-
-            # Parse HTML to find exhibit links
-            html = response.text
+            html = fetch_sec_bytes(archive_url, self.user_agent).decode(
+                "utf-8", errors="replace"
+            )
 
             # Find all exhibit file links
             # Pattern: href="ex-10_1.htm" or similar
@@ -267,11 +259,9 @@ class ExhibitDownloader:
             matched = 0
             skipped_filter = 0
 
-            for link in tqdm(
+            for link in track(
                 exhibit_links,
-                desc="Downloading exhibits",
-                unit="file",
-                leave=False,
+                description="Downloading exhibits",
                 disable=len(exhibit_links) <= 1,
             ):
                 try:
@@ -291,17 +281,13 @@ class ExhibitDownloader:
 
                     # Download the exhibit file
                     file_url = f"{archive_url}{link}"
-                    time.sleep(self.rate_limit)
 
                     logger.debug(
                         "Downloading exhibit %s from %s", exhibit_number, link
                     )
 
-                    file_response = self.session.get(file_url, timeout=30)
-                    file_response.raise_for_status()
-
-                    content_bytes = file_response.content or b""
-                    content = file_response.text
+                    content_bytes = fetch_sec_bytes(file_url, self.user_agent)
+                    content = content_bytes.decode("utf-8", errors="replace")
                     total_bytes += len(content_bytes)
                     logger.debug(
                         "Downloaded exhibit %s (%s): %s",
@@ -313,7 +299,7 @@ class ExhibitDownloader:
                     # Save to disk if output_dir provided
                     if output_dir:
                         output_dir.mkdir(parents=True, exist_ok=True)
-                        output_file = output_dir / link
+                        output_file = output_dir / Path(link).name
                         with open(output_file, "w", encoding="utf-8") as f:
                             f.write(content)
                         logger.debug("Saved to %s", output_file)
@@ -328,8 +314,10 @@ class ExhibitDownloader:
 
                     exhibits.append(exhibit)
 
-                except Exception as e:
-                    logger.debug("Failed to download %s: %s", link, e)
+                except (httpx.HTTPError, OSError, ValueError) as e:
+                    logger.debug(
+                        "Failed to download %s: %s", link, e, exc_info=True
+                    )
                     continue
 
             logger.info(
@@ -343,7 +331,7 @@ class ExhibitDownloader:
             )
             return exhibits
 
-        except Exception as e:
+        except (httpx.HTTPError, OSError, ValueError) as e:
             logger.error("Failed to fetch filing index: %s", e)
             return []
 

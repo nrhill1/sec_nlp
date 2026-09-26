@@ -9,8 +9,7 @@ from datetime import date
 from pathlib import Path
 from types import SimpleNamespace
 
-from langchain_core.documents import Document
-
+from sec_nlp.core.documents import DocumentRecord as Document
 from sec_nlp.core.edgar.holdings_parser import HoldingsParser
 from sec_nlp.pipelines.presets.holdings.config import HoldingsSettings
 from sec_nlp.pipelines.presets.holdings.models import HoldingPosition
@@ -326,8 +325,9 @@ def test_download_holdings_filings_uses_include_amends_for_13f_amendments(
             )
             return 0
 
-    fake_module = SimpleNamespace(Downloader=_FakeDownloader)
-    monkeypatch.setitem(sys.modules, "sec_edgar_downloader", fake_module)
+    monkeypatch.setattr(
+        "sec_nlp.core.ingest.downloader.FilingDownloader", _FakeDownloader
+    )
 
     settings = HoldingsSettings(
         email="test@example.com",

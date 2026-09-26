@@ -10,8 +10,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import TypedDict
 
-from langchain_core.documents import Document
-
+from sec_nlp.core.documents import DocumentRecord as Document
 from sec_nlp.types import JsonValue
 
 # =============================================================================
@@ -24,13 +23,7 @@ type PathList = list[Path]
 # SQL query parameter types
 type QueryParam = str | int | float | datetime | None
 type MetadataScalar = str | int | float | bool | None
-type MetadataValue = (
-    MetadataScalar
-    | list[MetadataScalar]
-    | dict[str, MetadataScalar]
-    | list[dict[str, MetadataScalar]]
-    | dict[str, list[dict[str, MetadataScalar]]]
-)
+type MetadataValue = JsonValue
 type MetadataMap = Mapping[str, MetadataValue]
 type MetadataRecord = dict[str, MetadataValue]
 

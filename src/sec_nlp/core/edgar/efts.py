@@ -6,12 +6,13 @@ Endpoint: https://efts.sec.gov/LATEST/search-index
 
 Rate limits: SEC requests no more than 10 requests per second.
 
-EFTS searches are executed via the Rust extension.
+HTTPX owns all requests under the shared SEC rate budget. The native extension
+only parses downloaded responses and provides optional keyword ranking.
 """
 
 from __future__ import annotations
 
-import re
+import logging
 from collections.abc import Sequence
 from datetime import date
 from functools import lru_cache
@@ -19,9 +20,8 @@ from importlib import import_module
 from types import ModuleType
 from typing import Final
 
+import httpx
 from pydantic import BaseModel, ConfigDict, Field
-
-from sec_nlp.core.infra.logger import logger
 
 from .efts_models import (
     EFTSBatchResult,
@@ -32,10 +32,13 @@ from .efts_models import (
     EFTSSortField,
     EFTSSortOrder,
 )
+from .transport import SecTransport
+
+logger = logging.getLogger(__name__)
 
 EFTS_BASE_URL: Final[str] = "https://efts.sec.gov/LATEST/search-index"
 DEFAULT_USER_AGENT: Final[str] = "SEC NLP Tool (contact@example.com)"
-MIN_REQUEST_INTERVAL: Final[float] = 0.1  # 10 requests per second max
+MIN_REQUEST_INTERVAL: Final[float] = 0.2  # Shared app budget: 5 per second
 
 
 @lru_cache(maxsize=1)
@@ -43,8 +46,8 @@ def _load_efts_module() -> ModuleType | None:
     """Load the optional native EFTS extension module."""
     try:
         return import_module("efts")
-    except Exception as exc:  # pragma: no cover - depends on extension install
-        logger.debug("efts import failed: %s", exc)
+    except ImportError:  # pragma: no cover - depends on extension install
+        logger.debug("efts import failed", exc_info=True)
         return None
 
 
@@ -100,7 +103,7 @@ class EFTSClient(BaseModel):
     """
 
     model_config = ConfigDict(
-        arbitrary_types_allowed=True,
+        frozen=True,
         extra="forbid",
     )
 
@@ -173,7 +176,7 @@ class EFTSClient(BaseModel):
     ) -> list[EFTSHit]:
         """Fetch all results up to max_results, handling pagination.
 
-        Uses the Rust async search_all implementation for efficient pagination.
+        Uses bounded pages through the common SEC request layer.
 
         Args:
             query: Search query string
@@ -189,32 +192,28 @@ class EFTSClient(BaseModel):
         Returns:
             List of all EFTSHit results up to max_results
         """
-        module = _load_efts_module()
-        if module is None:
-            raise EFTSAPIError(
-                status_code=0,
-                message="efts extension is not available; "
-                "build it with `make rs-sg-dev`.",
-            )
-
-        try:
-            return await _rust_execute_search_all_async(
-                module,
-                self.config,
+        if max_results < 1:
+            raise ValueError("max_results must be positive")
+        hits: list[EFTSHit] = []
+        offset = 0
+        while len(hits) < max_results:
+            response = await self.search(
                 query,
-                forms,
-                ciks,
-                tickers,
-                start_date,
-                end_date,
-                max_results,
-                sort_field,
-                sort_order,
+                forms=forms,
+                ciks=ciks,
+                tickers=tickers,
+                start_date=start_date,
+                end_date=end_date,
+                limit=min(100, max_results - len(hits)),
+                start=offset,
+                sort_field=sort_field,
+                sort_order=sort_order,
             )
-        except EFTSAPIError:
-            raise
-        except Exception as exc:
-            raise _rust_error_from_exception(exc) from exc
+            hits.extend(response.hits)
+            if not response.hits or not response.has_more:
+                break
+            offset += len(response.hits)
+        return hits[:max_results]
 
     async def batch_search(
         self,
@@ -231,8 +230,7 @@ class EFTSClient(BaseModel):
     ) -> list[EFTSBatchResult]:
         """Execute multiple search queries in a single batch.
 
-        Uses the Rust async batch search for efficient parallel execution
-        with rate limiting between queries.
+        Returns one result or error per query under the shared request budget.
 
         Args:
             queries: List of search query strings
@@ -248,296 +246,62 @@ class EFTSClient(BaseModel):
         Returns:
             List of EFTSBatchResult, one per query in the same order
         """
-        module = _load_efts_module()
-        if module is None:
-            raise EFTSAPIError(
-                status_code=0,
-                message="efts extension is not available; "
-                "build it with `make build-ext`.",
-            )
-
-        try:
-            return await _rust_execute_batch_search_async(
-                module,
-                self.config,
-                queries,
-                forms,
-                ciks,
-                tickers,
-                start_date,
-                end_date,
-                limit_per_query,
-                sort_field,
-                sort_order,
-            )
-        except EFTSAPIError:
-            raise
-        except Exception as exc:
-            raise _rust_error_from_exception(exc) from exc
+        results: list[EFTSBatchResult] = []
+        for query in queries:
+            try:
+                response = await self.search(
+                    query,
+                    forms=forms,
+                    ciks=ciks,
+                    tickers=tickers,
+                    start_date=start_date,
+                    end_date=end_date,
+                    limit=limit_per_query,
+                    sort_field=sort_field,
+                    sort_order=sort_order,
+                )
+                results.append(
+                    EFTSBatchResult(
+                        query=query,
+                        hits=response.hits,
+                        total=response.total,
+                    )
+                )
+            except (EFTSAPIError, ValueError) as exc:
+                logger.debug("EFTS batch query failed", exc_info=True)
+                results.append(EFTSBatchResult(query=query, error=str(exc)))
+        return results
 
     async def _execute_search(
         self, params: EFTSSearchParams
     ) -> EFTSSearchResponse:
-        """Execute search with rate limiting and retries."""
-        return await self._try_rust_search(params)
-
-    async def _try_rust_search(
-        self,
-        params: EFTSSearchParams,
-    ) -> EFTSSearchResponse:
-        """Attempt native EFTS search and return structured results."""
+        """Fetch through the shared SEC transport and parse without native HTTP."""
         module = _load_efts_module()
         if module is None:
-            raise EFTSAPIError(
-                status_code=0,
-                message="efts extension is not available; "
-                "build it with `make rs-sg-dev`.",
-            )
-
+            raise EFTSAPIError(0, "Build EFTS parser with make build-ext")
         try:
-            return await _rust_execute_search_async(
-                module,
-                self.config,
-                params,
+            async with SecTransport(
+                self.config.user_agent,
+                timeout=self.config.timeout,
+                retries=self.config.max_retries,
+            ) as transport:
+                content = await transport.get_bytes(
+                    self.config.base_url,
+                    params=params.to_api_params(),
+                )
+            parsed = module.parse_response_json(
+                content.decode("utf-8"), params.query
             )
-        except EFTSAPIError:
-            raise
-        except Exception as exc:
-            raise _rust_error_from_exception(exc) from exc
-
-
-# -- Helper functions for the Rust extension --
-
-
-def _rust_error_from_exception(exc: Exception) -> EFTSAPIError:
-    """Convert Python exceptions to normalized RustError payloads."""
-    message = str(exc)
-    match = re.search(r"EFTS API Error \((\d+)\):\s*(.+)", message)
-    if match:
-        status_code = int(match.group(1))
-        text = match.group(2)
-        detail = None
-        if "; " in text:
-            text, detail = text.split("; ", 1)
-        return EFTSAPIError(
-            status_code=status_code,
-            message=text,
-            detail=detail,
-        )
-    return EFTSAPIError(status_code=0, message=message)
-
-
-async def _rust_execute_search_async(
-    module: ModuleType,
-    config: EFTSClientConfig,
-    params: EFTSSearchParams,
-) -> EFTSSearchResponse:
-    """Execute search using native Rust async method."""
-    forms = params.forms if params.forms else None
-    ciks = params.ciks if params.ciks else None
-    tickers = params.tickers if params.tickers else None
-    start_date = params.start_date.isoformat() if params.start_date else None
-    end_date = params.end_date.isoformat() if params.end_date else None
-
-    client = module.EFTSClient(
-        user_agent=config.user_agent,
-        timeout=config.timeout,
-        max_retries=config.max_retries,
-        retry_delay=config.retry_delay,
-        rate_limit_delay=config.rate_limit_delay,
-        base_url=config.base_url,
-    )
-    # Use native async method - returns awaitable
-    rust_response = await client.search_async(
-        params.query,
-        forms=forms,
-        ciks=ciks,
-        tickers=tickers,
-        start_date=start_date,
-        end_date=end_date,
-        limit=params.limit,
-        start=params.start,
-        sort_field=params.sort_field.value,
-        sort_order=params.sort_order.value,
-    )
-    return _convert_rust_response(rust_response)
-
-
-def _rust_execute_search(
-    module: ModuleType,
-    config: EFTSClientConfig,
-    params: EFTSSearchParams,
-) -> EFTSSearchResponse:
-    """Execute search using blocking Rust method (for sync callers)."""
-    forms = params.forms if params.forms else None
-    ciks = params.ciks if params.ciks else None
-    tickers = params.tickers if params.tickers else None
-    start_date = params.start_date.isoformat() if params.start_date else None
-    end_date = params.end_date.isoformat() if params.end_date else None
-
-    client = module.EFTSClient(
-        user_agent=config.user_agent,
-        timeout=config.timeout,
-        max_retries=config.max_retries,
-        retry_delay=config.retry_delay,
-        rate_limit_delay=config.rate_limit_delay,
-        base_url=config.base_url,
-    )
-    rust_response = client.search(
-        params.query,
-        forms=forms,
-        ciks=ciks,
-        tickers=tickers,
-        start_date=start_date,
-        end_date=end_date,
-        limit=params.limit,
-        start=params.start,
-        sort_field=params.sort_field.value,
-        sort_order=params.sort_order.value,
-    )
-    return _convert_rust_response(rust_response)
-
-
-def _convert_rust_response(rust_response) -> EFTSSearchResponse:
-    """Convert Rust EFTSSearchResponse to Pydantic model."""
-    # Convert Rust EFTSHit objects to Pydantic EFTSHit models
-    hits = [
-        EFTSHit(
-            accession_number=hit.accession_number,
-            cik=hit.cik,
-            company_name=hit.company_name,
-            tickers=list(hit.tickers),
-            form_type=hit.form_type,
-            filed_date=hit.filed_date,
-            file_number=hit.file_number,
-            film_number=hit.film_number,
-            snippet=hit.snippet,
-            score=hit.score,
-            filing_url=hit.filing_url,
-        )
-        for hit in rust_response.hits
-    ]
-    return EFTSSearchResponse(
-        query=rust_response.query,
-        total=rust_response.total,
-        hits=hits,
-        start=rust_response.start,
-        limit=rust_response.limit,
-    )
-
-
-def _convert_rust_hit(hit) -> EFTSHit:
-    """Convert a single Rust EFTSHit to Pydantic model."""
-    return EFTSHit(
-        accession_number=hit.accession_number,
-        cik=hit.cik,
-        company_name=hit.company_name,
-        tickers=list(hit.tickers),
-        form_type=hit.form_type,
-        filed_date=hit.filed_date,
-        file_number=hit.file_number,
-        film_number=hit.film_number,
-        snippet=hit.snippet,
-        score=hit.score,
-        filing_url=hit.filing_url,
-    )
-
-
-async def _rust_execute_batch_search_async(
-    module: ModuleType,
-    config: EFTSClientConfig,
-    queries: Sequence[str],
-    forms: Sequence[str] | None,
-    ciks: Sequence[str] | None,
-    tickers: Sequence[str] | None,
-    start_date: date | None,
-    end_date: date | None,
-    limit_per_query: int,
-    sort_field: EFTSSortField,
-    sort_order: EFTSSortOrder,
-) -> list[EFTSBatchResult]:
-    """Execute batch search using native Rust async method."""
-    forms_list = list(forms) if forms else None
-    ciks_list = list(ciks) if ciks else None
-    tickers_list = list(tickers) if tickers else None
-    start_date_str = start_date.isoformat() if start_date else None
-    end_date_str = end_date.isoformat() if end_date else None
-
-    client = module.EFTSClient(
-        user_agent=config.user_agent,
-        timeout=config.timeout,
-        max_retries=config.max_retries,
-        retry_delay=config.retry_delay,
-        rate_limit_delay=config.rate_limit_delay,
-        base_url=config.base_url,
-    )
-    # Use native async batch method - returns awaitable
-    rust_results = await client.batch_search_async(
-        list(queries),
-        forms=forms_list,
-        ciks=ciks_list,
-        tickers=tickers_list,
-        start_date=start_date_str,
-        end_date=end_date_str,
-        limit_per_query=limit_per_query,
-        sort_field=sort_field.value,
-        sort_order=sort_order.value,
-    )
-    return [_convert_rust_batch_result(result) for result in rust_results]
-
-
-def _convert_rust_batch_result(rust_result) -> EFTSBatchResult:
-    """Convert Rust EFTSBatchResult to Pydantic model."""
-    hits = [_convert_rust_hit(hit) for hit in rust_result.hits]
-    return EFTSBatchResult(
-        query=rust_result.query,
-        hits=hits,
-        total=rust_result.total,
-        error=rust_result.error,
-    )
-
-
-async def _rust_execute_search_all_async(
-    module: ModuleType,
-    config: EFTSClientConfig,
-    query: str,
-    forms: Sequence[str] | None,
-    ciks: Sequence[str] | None,
-    tickers: Sequence[str] | None,
-    start_date: date | None,
-    end_date: date | None,
-    max_results: int,
-    sort_field: EFTSSortField,
-    sort_order: EFTSSortOrder,
-) -> list[EFTSHit]:
-    """Execute search_all using native Rust async method."""
-    forms_list = list(forms) if forms else None
-    ciks_list = list(ciks) if ciks else None
-    tickers_list = list(tickers) if tickers else None
-    start_date_str = start_date.isoformat() if start_date else None
-    end_date_str = end_date.isoformat() if end_date else None
-
-    client = module.EFTSClient(
-        user_agent=config.user_agent,
-        timeout=config.timeout,
-        max_retries=config.max_retries,
-        retry_delay=config.retry_delay,
-        rate_limit_delay=config.rate_limit_delay,
-        base_url=config.base_url,
-    )
-    # Use native async method - returns awaitable
-    rust_hits = await client.search_all_async(
-        query,
-        forms=forms_list,
-        ciks=ciks_list,
-        tickers=tickers_list,
-        start_date=start_date_str,
-        end_date=end_date_str,
-        max_results=max_results,
-        sort_field=sort_field.value,
-        sort_order=sort_order.value,
-    )
-    return [_convert_rust_hit(hit) for hit in rust_hits]
+            response = EFTSSearchResponse.model_validate_json(parsed)
+            return response.model_copy(
+                update={"start": params.start, "limit": params.limit}
+            )
+        except httpx.HTTPStatusError as exc:
+            logger.debug("EFTS status failure", exc_info=True)
+            raise EFTSAPIError(exc.response.status_code, str(exc)) from exc
+        except (httpx.TransportError, ValueError, UnicodeError) as exc:
+            logger.debug("EFTS request or parse failure", exc_info=True)
+            raise EFTSAPIError(0, str(exc)) from exc
 
 
 class EFTSAPIError(Exception):

@@ -5,9 +5,9 @@
 import re
 from dataclasses import dataclass, field
 
-from langchain_core.documents import Document
 from simhash import Simhash, SimhashIndex
 
+from sec_nlp.core.documents import DocumentRecord as Document
 from sec_nlp.core.infra.logger import logger
 
 
@@ -174,10 +174,12 @@ class SimHashDeduplicator:
             is_unique, hash_value = self.add_if_unique(content)
             if is_unique:
                 # Store hash in metadata for downstream use
-                doc.metadata = {
-                    **(doc.metadata or {}),
-                    "simhash": hash_value,
-                }
+                doc.metadata.update(
+                    {
+                        **(doc.metadata or {}),
+                        "simhash": hash_value,
+                    }
+                )
                 unique_docs.append(doc)
 
         if len(unique_docs) < initial_count:

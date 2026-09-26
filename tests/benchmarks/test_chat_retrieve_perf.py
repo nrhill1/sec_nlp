@@ -22,12 +22,12 @@ from scripts.profile.perf_suite import (
     _select_cases,
     _stable_summary_from_artifact,
 )
-from sec_nlp.app.flows.models import (
-    FlowDefaults,
-    FlowRunResult,
-    FlowSpec,
-    FlowStageResult,
-    FlowStageSpec,
+from sec_nlp.app.workspace.recipes import (
+    RecipeDefaults,
+    RecipeRunResult,
+    RecipeStep,
+    RecipeStepResult,
+    ResearchRecipe,
 )
 from sec_nlp.core.types import as_json_dict
 from sec_nlp.types import JsonValue
@@ -125,18 +125,18 @@ def test_safe_output_counts_handles_chat_and_retrieve() -> None:
 
 def test_flow_helpers_collect_stage_metrics_and_counts() -> None:
     """Build flow metrics from one synthetic flow result."""
-    result = FlowRunResult(
+    result = RecipeRunResult(
         flow_run_id="flow-1",
         flow_name="synthetic_flow",
         success=False,
         stage_results=[
-            FlowStageResult(
+            RecipeStepResult(
                 stage_id="retrieve_terms",
                 pipeline="retrieve",
                 success=True,
                 duration_seconds=12.5,
             ),
-            FlowStageResult(
+            RecipeStepResult(
                 stage_id="chat_answer",
                 pipeline="chat",
                 success=False,
@@ -175,18 +175,18 @@ def test_flow_helpers_collect_stage_metrics_and_counts() -> None:
 
 def test_apply_flow_benchmark_overrides_uses_unique_collections() -> None:
     """Clone one flow spec with unique collection names for the run."""
-    spec = FlowSpec(
+    spec = ResearchRecipe(
         name="bench_flow",
-        defaults=FlowDefaults(email="original@example.com"),
+        defaults=RecipeDefaults(email="original@example.com"),
         stages=[
-            FlowStageSpec(
+            RecipeStep(
                 id="retrieve_seed",
                 pipeline="retrieve",
                 overrides={
                     "vdb": {"collection_name": "industry_rems_high"},
                 },
             ),
-            FlowStageSpec(
+            RecipeStep(
                 id="chat_answer",
                 pipeline="chat",
                 overrides={

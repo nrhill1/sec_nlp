@@ -11,7 +11,6 @@ from __future__ import annotations
 from pathlib import Path
 from typing import ClassVar, Literal
 
-from langchain_core.runnables import Runnable
 from pydantic import PrivateAttr
 from rich.progress import (
     BarColumn,
@@ -28,20 +27,23 @@ from sec_nlp.core.edgar.holdings_parser import HoldingsParser
 from sec_nlp.core.infra.logger import logger
 from sec_nlp.core.infra.rich_console import get_rich_console
 from sec_nlp.core.types import coerce_result_json_dict
-from sec_nlp.pipelines import BasePipeline
+from sec_nlp.pipelines.base.pipeline import BasePipeline
+from sec_nlp.pipelines.base.stages import StageSequence
 from sec_nlp.pipelines.output_io import build_run_output_context
-from sec_nlp.types import ResultDict
-
-from .config import HoldingsSettings
-from .io import (
+from sec_nlp.pipelines.presets.holdings.io.formats.diff_report import (
     HoldingsDiffPayload,
     HoldingsSummaryPayload,
     write_holdings_diff_json,
     write_holdings_diff_yaml,
-    write_holdings_snapshot_csv,
     write_holdings_summary_json,
     write_holdings_summary_yaml,
 )
+from sec_nlp.pipelines.presets.holdings.io.formats.snapshot import (
+    write_holdings_snapshot_csv,
+)
+from sec_nlp.types import ResultDict
+
+from .config import HoldingsSettings
 from .models import (
     HoldingPosition,
     HoldingsDiff,
@@ -70,8 +72,8 @@ class HoldingsPipeline(BasePipeline):
     config: HoldingsSettings
 
     _parser: HoldingsParser | None = PrivateAttr(default=None)
-    _stage_chain: Runnable[HoldingsRunState, HoldingsRunState] | None = (
-        PrivateAttr(default=None)
+    _stage_chain: StageSequence[HoldingsRunState] | None = PrivateAttr(
+        default=None
     )
 
     @classmethod
@@ -93,6 +95,7 @@ class HoldingsPipeline(BasePipeline):
         self._stage_chain = build_holdings_stage_chain(self)
 
     def run(self) -> HoldingsResult:
+        self.config.start_run()
         try:
             self.config.setup_paths()
             outputs: list[Path] = []
@@ -113,6 +116,7 @@ class HoldingsPipeline(BasePipeline):
                 TimeRemainingColumn(),
                 console=console,
                 transient=True,
+                disable=True,
             ) as progress:
                 overall_task = progress.add_task(
                     "Processing symbols",

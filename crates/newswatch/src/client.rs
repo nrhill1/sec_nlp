@@ -4,7 +4,6 @@ use std::sync::OnceLock;
 use futures::stream::{self, StreamExt};
 use tokio::runtime::Runtime;
 
-use crate::dedup::dedupe_news_items;
 use crate::error::NewswatchError;
 use crate::feeds::{json_api, rss};
 use crate::filter::apply_keyword_filter;
@@ -13,7 +12,6 @@ use crate::models::{FeedConfig, FeedType, NewsItem};
 
 const DEFAULT_MAX_RETRIES: u32 = 2;
 const DEFAULT_RETRY_DELAY_SECS: f64 = 0.5;
-const DEFAULT_DEDUP_HAMMING_DISTANCE: u32 = 3;
 const MAX_FEED_CONCURRENCY: usize = 4;
 static RUNTIME: OnceLock<Runtime> = OnceLock::new();
 
@@ -31,7 +29,6 @@ fn get_runtime() -> &'static Runtime {
 pub struct NewsClientCore {
     feeds: Vec<FeedConfig>,
     http: HttpClient,
-    dedup_hamming_distance: u32,
 }
 
 impl NewsClientCore {
@@ -53,7 +50,6 @@ impl NewsClientCore {
                 DEFAULT_MAX_RETRIES,
                 DEFAULT_RETRY_DELAY_SECS,
             )?,
-            dedup_hamming_distance: DEFAULT_DEDUP_HAMMING_DISTANCE,
         })
     }
 
@@ -95,12 +91,12 @@ impl NewsClientCore {
         let mut filtered = apply_keyword_filter(all_items, keywords)?;
         filtered.sort_by(|left, right| right.published_at.cmp(&left.published_at));
 
-        let mut deduped = dedupe_news_items(filtered, self.dedup_hamming_distance);
-        if max_results > 0 && deduped.len() > max_results {
-            deduped.truncate(max_results);
+        // Preserve source dates and distinct URLs; Python normalizes and deduplicates.
+        if max_results > 0 && filtered.len() > max_results {
+            filtered.truncate(max_results);
         }
 
-        Ok(deduped)
+        Ok(filtered)
     }
 }
 

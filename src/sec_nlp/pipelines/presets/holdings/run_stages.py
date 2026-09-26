@@ -1,5 +1,5 @@
 # src/sec_nlp/pipelines/presets/holdings/run_stages.py
-"""Runnable stage helpers for holdings pipeline execution."""
+"""Ordered specialist steps for holdings pipeline execution."""
 
 from __future__ import annotations
 
@@ -7,20 +7,23 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from langchain_core.runnables import Runnable
 from pydantic import Field
 from rich.progress import Progress, TaskID
 
-from sec_nlp.pipelines.base.stages import PipelineStageRunnable
-
-from .models import HoldingPosition, HoldingsDiff, OwnershipSummary
-from .steps import (
-    DownloadedHoldingsFiling,
-    build_holdings_diffs,
+from sec_nlp.pipelines.base.stages import PipelineStage, StageSequence
+from sec_nlp.pipelines.presets.holdings.steps.aggregate import (
     build_ownership_summary,
+)
+from sec_nlp.pipelines.presets.holdings.steps.diff import build_holdings_diffs
+from sec_nlp.pipelines.presets.holdings.steps.download import (
+    DownloadedHoldingsFiling,
     download_holdings_filings,
+)
+from sec_nlp.pipelines.presets.holdings.steps.parse import (
     parse_holding_positions,
 )
+
+from .models import HoldingPosition, HoldingsDiff, OwnershipSummary
 
 if TYPE_CHECKING:
     from .pipeline import HoldingsPipeline
@@ -42,7 +45,7 @@ class HoldingsRunState:
     metadata: dict[str, int | float | str | None] = field(default_factory=dict)
 
 
-class DownloadHoldingsFilingsStage(PipelineStageRunnable[HoldingsRunState]):
+class DownloadHoldingsFilingsStage(PipelineStage[HoldingsRunState]):
     """Ingress acquisition stage that downloads holdings filings for a symbol."""
 
     name: str = Field(default="download_filings")
@@ -62,7 +65,7 @@ class DownloadHoldingsFilingsStage(PipelineStageRunnable[HoldingsRunState]):
         return state
 
 
-class ParseHoldingsPositionsStage(PipelineStageRunnable[HoldingsRunState]):
+class ParseHoldingsPositionsStage(PipelineStage[HoldingsRunState]):
     """Parsing stage that extracts position rows from downloaded holdings filings."""
 
     name: str = Field(default="parse_positions")
@@ -92,7 +95,7 @@ class ParseHoldingsPositionsStage(PipelineStageRunnable[HoldingsRunState]):
         return state
 
 
-class DiffHoldingsPositionsStage(PipelineStageRunnable[HoldingsRunState]):
+class DiffHoldingsPositionsStage(PipelineStage[HoldingsRunState]):
     """Diff stage that computes quarter-over-quarter ownership position changes."""
 
     name: str = Field(default="diff_positions")
@@ -112,7 +115,7 @@ class DiffHoldingsPositionsStage(PipelineStageRunnable[HoldingsRunState]):
         return state
 
 
-class AggregateHoldingsSummaryStage(PipelineStageRunnable[HoldingsRunState]):
+class AggregateHoldingsSummaryStage(PipelineStage[HoldingsRunState]):
     """Aggregation stage that builds ownership summary metrics from parsed positions."""
 
     name: str = Field(default="aggregate_summary")
@@ -134,7 +137,7 @@ class AggregateHoldingsSummaryStage(PipelineStageRunnable[HoldingsRunState]):
         return state
 
 
-class WriteHoldingsOutputsStage(PipelineStageRunnable[HoldingsRunState]):
+class WriteHoldingsOutputsStage(PipelineStage[HoldingsRunState]):
     """Egress stage that writes holdings artifacts and summary metadata."""
 
     name: str = Field(default="write_outputs")
@@ -175,7 +178,7 @@ class WriteHoldingsOutputsStage(PipelineStageRunnable[HoldingsRunState]):
         return state
 
 
-_HOLDINGS_STAGES: tuple[PipelineStageRunnable[HoldingsRunState], ...] = (
+_HOLDINGS_STAGES: tuple[PipelineStage[HoldingsRunState], ...] = (
     DownloadHoldingsFilingsStage(),
     ParseHoldingsPositionsStage(),
     DiffHoldingsPositionsStage(),
@@ -186,6 +189,6 @@ _HOLDINGS_STAGES: tuple[PipelineStageRunnable[HoldingsRunState], ...] = (
 
 def build_holdings_stage_chain(
     pipeline: HoldingsPipeline,
-) -> Runnable[HoldingsRunState, HoldingsRunState]:
+) -> StageSequence[HoldingsRunState]:
     """Build deterministic holdings stage chain."""
     return pipeline.build_configured_stage_chain(stages=_HOLDINGS_STAGES)

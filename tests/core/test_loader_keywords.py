@@ -230,7 +230,7 @@ class TestDocumentKeywordFiltering:
 
     def test_filter_documents_by_keywords(self, tmp_path: Path) -> None:
         """Test filtering documents by keywords."""
-        from langchain_core.documents import Document
+        from sec_nlp.core.documents import DocumentRecord as Document
 
         loader = Loader(
             email="test@example.com",
@@ -251,7 +251,7 @@ class TestDocumentKeywordFiltering:
 
     def test_filter_documents_boundary(self, tmp_path: Path) -> None:
         """Test document filtering with boundary matching."""
-        from langchain_core.documents import Document
+        from sec_nlp.core.documents import DocumentRecord as Document
 
         loader = Loader(
             email="test@example.com",

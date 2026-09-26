@@ -1,5 +1,5 @@
 # src/sec_nlp/pipelines/presets/events/run_stages.py
-"""Runnable stage helpers for events pipeline execution."""
+"""Ordered specialist steps for events pipeline execution."""
 
 from __future__ import annotations
 
@@ -7,18 +7,17 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from langchain_core.runnables import Runnable
 from pydantic import Field
 from rich.progress import Progress, TaskID
 
-from sec_nlp.pipelines.base.stages import PipelineStageRunnable
+from sec_nlp.pipelines.base.stages import PipelineStage, StageSequence
+from sec_nlp.pipelines.presets.events.steps.enrich import (
+    enrich_events_with_news,
+)
+from sec_nlp.pipelines.presets.events.steps.scan import scan_events_for_symbol
+from sec_nlp.pipelines.presets.events.steps.score import score_event_impacts
 
 from .models import DetectedEvent
-from .steps import (
-    enrich_events_with_news,
-    scan_events_for_symbol,
-    score_event_impacts,
-)
 
 if TYPE_CHECKING:
     from .pipeline import EventsPipeline
@@ -43,7 +42,7 @@ class EventsRunState:
     metadata: dict[str, int | float | str | None] = field(default_factory=dict)
 
 
-class ScanEventsStage(PipelineStageRunnable[EventsRunState]):
+class ScanEventsStage(PipelineStage[EventsRunState]):
     """Ingress stage that scans filings and materializes candidate event records."""
 
     name: str = Field(default="scan_events")
@@ -65,7 +64,7 @@ class ScanEventsStage(PipelineStageRunnable[EventsRunState]):
         return state
 
 
-class EnrichEventsStage(PipelineStageRunnable[EventsRunState]):
+class EnrichEventsStage(PipelineStage[EventsRunState]):
     """Enrichment stage that links related news context onto scanned event records."""
 
     name: str = Field(default="enrich_events")
@@ -86,7 +85,7 @@ class EnrichEventsStage(PipelineStageRunnable[EventsRunState]):
         return state
 
 
-class ScoreEventsStage(PipelineStageRunnable[EventsRunState]):
+class ScoreEventsStage(PipelineStage[EventsRunState]):
     """Scoring stage that computes impact metrics for enriched event records."""
 
     name: str = Field(default="score_events")
@@ -107,7 +106,7 @@ class ScoreEventsStage(PipelineStageRunnable[EventsRunState]):
         return state
 
 
-class WriteEventsOutputsStage(PipelineStageRunnable[EventsRunState]):
+class WriteEventsOutputsStage(PipelineStage[EventsRunState]):
     """Egress stage that persists event artifacts and run metadata."""
 
     name: str = Field(default="write_outputs")
@@ -134,7 +133,7 @@ class WriteEventsOutputsStage(PipelineStageRunnable[EventsRunState]):
         return state
 
 
-_EVENTS_STAGES: tuple[PipelineStageRunnable[EventsRunState], ...] = (
+_EVENTS_STAGES: tuple[PipelineStage[EventsRunState], ...] = (
     ScanEventsStage(),
     EnrichEventsStage(),
     ScoreEventsStage(),
@@ -144,6 +143,6 @@ _EVENTS_STAGES: tuple[PipelineStageRunnable[EventsRunState], ...] = (
 
 def build_events_stage_chain(
     pipeline: EventsPipeline,
-) -> Runnable[EventsRunState, EventsRunState]:
+) -> StageSequence[EventsRunState]:
     """Build deterministic events stage chain."""
     return pipeline.build_configured_stage_chain(stages=_EVENTS_STAGES)

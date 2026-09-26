@@ -1,4 +1,4 @@
-use chrono::{NaiveDate, Utc};
+use chrono::NaiveDate;
 use serde_json::{Map, Value};
 
 use crate::models::SearchHit;
@@ -35,7 +35,8 @@ pub(crate) fn parse_hit(raw: &Value) -> SearchHit {
         film_number,
         snippet,
         score,
-        filing_url: None,
+        filing_url: get_optional_str(source, "filing_url")
+            .or_else(|| get_optional_str(source, "link")),
     }
 }
 
@@ -74,7 +75,7 @@ fn extract_filed_date(source: &Map<String, Value>) -> String {
             return date.format("%Y-%m-%d").to_string();
         }
     }
-    Utc::now().date_naive().format("%Y-%m-%d").to_string()
+    String::new()
 }
 
 fn extract_accession(source: &Map<String, Value>) -> String {

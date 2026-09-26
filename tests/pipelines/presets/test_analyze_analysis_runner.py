@@ -4,9 +4,9 @@
 import json
 from pathlib import Path
 
-from langchain_core.documents import Document
 from langchain_core.runnables import Runnable, RunnableConfig
 
+from sec_nlp.core.documents import DocumentRecord as Document
 from sec_nlp.pipelines.presets.analyze.models import (
     AnalysisInput,
     AnalysisResult,
@@ -141,6 +141,11 @@ def _make_cache_inputs(
     inputs: list[AnalysisInput] = []
     for doc in docs:
         metadata = doc.metadata or {}
+        raw_topic_hits = metadata.get("topic_hits")
+        topic_hits: list[str] | None = None
+        if raw_topic_hits is not None:
+            assert isinstance(raw_topic_hits, list)
+            topic_hits = [hit for hit in raw_topic_hits if isinstance(hit, str)]
         matched_queries = runner._extract_matched_queries(metadata)
         inputs.append(
             AnalysisInput(
@@ -153,7 +158,7 @@ def _make_cache_inputs(
                     matched_queries
                 ),
                 context=runner._build_context(doc),
-                topic_hits=metadata.get("topic_hits"),
+                topic_hits=topic_hits,
                 analysis_instructions=runner.analysis_instructions,
             )
         )

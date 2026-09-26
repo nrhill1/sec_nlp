@@ -69,7 +69,7 @@ def _collect_filing_events(
     end_date: date,
 ) -> list[FilingEvent]:
     """Collect filing events aligned to the configured symbol set."""
-    from sec_edgar_downloader import Downloader
+    from sec_nlp.core.ingest.downloader import FilingDownloader as Downloader
 
     forms = settings.forms or list(_DEFAULT_FILING_FORMS)
     extended_start = start_date - timedelta(

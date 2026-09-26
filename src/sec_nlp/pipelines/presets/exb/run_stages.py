@@ -1,22 +1,26 @@
 # src/sec_nlp/pipelines/presets/exb/run_stages.py
-"""Runnable stage helpers for exhibit pipeline execution."""
+"""Ordered specialist steps for exhibit pipeline execution."""
 
 from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    pass
+
 
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from langchain_core.documents import Document
-from langchain_core.runnables import Runnable
 from pydantic import Field
 
+from sec_nlp.core.documents import DocumentRecord as Document
 from sec_nlp.core.infra.logger import log_divider, logger
 from sec_nlp.core.text.keyword import KeywordMatcher
-from sec_nlp.pipelines.base.stages import PipelineStageRunnable
+from sec_nlp.pipelines.base.stages import PipelineStage, StageSequence
 from sec_nlp.pipelines.observability.telemetry import log_chunk_length_stats
-from sec_nlp.pipelines.runtime import prepare_vector_docs
-from sec_nlp.pipelines.vector import upload_documents
+from sec_nlp.pipelines.runtime.metadata import prepare_vector_docs
 
 from .io.exhibit_summary import write_exhibit_summary
 from .io.outputs import write_exhibit_outputs
@@ -69,7 +73,7 @@ class ExhibitRunState:
     done: bool = False
 
 
-class CandidateAccessionsStage(PipelineStageRunnable[ExhibitRunState]):
+class CandidateAccessionsStage(PipelineStage[ExhibitRunState]):
     """Scope stage that narrows accession search space before expensive exhibit extraction."""
 
     name: str = Field(default="candidate_accessions")
@@ -113,7 +117,7 @@ class CandidateAccessionsStage(PipelineStageRunnable[ExhibitRunState]):
         return state
 
 
-class CollectExhibitDocsStage(PipelineStageRunnable[ExhibitRunState]):
+class CollectExhibitDocsStage(PipelineStage[ExhibitRunState]):
     """Acquisition stage that extracts exhibit documents and keyword classification data."""
 
     name: str = Field(default="collect_exhibit_docs")
@@ -151,7 +155,7 @@ class CollectExhibitDocsStage(PipelineStageRunnable[ExhibitRunState]):
         return state
 
 
-class DropReferenceStubStage(PipelineStageRunnable[ExhibitRunState]):
+class DropReferenceStubStage(PipelineStage[ExhibitRunState]):
     """Cleanup stage that removes non-substantive reference-only exhibit chunks."""
 
     name: str = Field(default="drop_reference_stubs")
@@ -176,7 +180,7 @@ class DropReferenceStubStage(PipelineStageRunnable[ExhibitRunState]):
         return state
 
 
-class FilterChunksStage(PipelineStageRunnable[ExhibitRunState]):
+class FilterChunksStage(PipelineStage[ExhibitRunState]):
     """Selection stage that enforces keyword, dedupe, and per-accession chunk policies."""
 
     name: str = Field(default="filter_chunks")
@@ -219,7 +223,7 @@ class FilterChunksStage(PipelineStageRunnable[ExhibitRunState]):
         return state
 
 
-class ExcludeIndexedAccessionsStage(PipelineStageRunnable[ExhibitRunState]):
+class ExcludeIndexedAccessionsStage(PipelineStage[ExhibitRunState]):
     """Deduplication stage that excludes accessions already indexed in vector storage."""
 
     name: str = Field(default="exclude_indexed_accessions")
@@ -250,7 +254,7 @@ class ExcludeIndexedAccessionsStage(PipelineStageRunnable[ExhibitRunState]):
         return state
 
 
-class IndexAndWriteStage(PipelineStageRunnable[ExhibitRunState]):
+class IndexAndWriteStage(PipelineStage[ExhibitRunState]):
     """Egress stage that indexes surviving chunks and writes symbol-level artifacts."""
 
     name: str = Field(default="index_and_write")
@@ -275,12 +279,12 @@ class IndexAndWriteStage(PipelineStageRunnable[ExhibitRunState]):
                 symbol=state.symbol,
             )
             if vector_docs:
+                from sec_nlp.pipelines.vector.store import upload_documents
+
                 upload_documents(
                     vector_store=state.runtime._vector_store,
                     documents=vector_docs,
-                    symbol=state.symbol,
                     batch_size=32,
-                    desc=f"Uploading vectors for {state.symbol}",
                 )
                 logger.info(
                     "Stored %d chunks in vector database for %s",
@@ -307,7 +311,7 @@ class IndexAndWriteStage(PipelineStageRunnable[ExhibitRunState]):
         return state
 
 
-_EXHIBIT_STAGES: tuple[PipelineStageRunnable[ExhibitRunState], ...] = (
+_EXHIBIT_STAGES: tuple[PipelineStage[ExhibitRunState], ...] = (
     CandidateAccessionsStage(),
     CollectExhibitDocsStage(),
     DropReferenceStubStage(),
@@ -319,6 +323,6 @@ _EXHIBIT_STAGES: tuple[PipelineStageRunnable[ExhibitRunState], ...] = (
 
 def build_exhibit_stage_chain(
     pipeline: ExhibitPipeline,
-) -> Runnable[ExhibitRunState, ExhibitRunState]:
+) -> StageSequence[ExhibitRunState]:
     """Build deterministic exhibit stage chain."""
     return pipeline.build_configured_stage_chain(stages=_EXHIBIT_STAGES)

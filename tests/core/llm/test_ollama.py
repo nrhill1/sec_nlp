@@ -9,7 +9,7 @@ from sec_nlp.core.llm.ollama import build_ollama_llm
 class TestBuildOllamaLLM:
     """Tests for build_ollama_llm function."""
 
-    @patch("sec_nlp.core.llm.ollama.OllamaLLM")
+    @patch("langchain_ollama.llms.OllamaLLM")
     def test_build_ollama_llm_with_defaults(
         self, mock_ollama_class: MagicMock
     ) -> None:
@@ -31,7 +31,7 @@ class TestBuildOllamaLLM:
         )
         assert llm == mock_instance
 
-    @patch("sec_nlp.core.llm.ollama.OllamaLLM")
+    @patch("langchain_ollama.llms.OllamaLLM")
     def test_build_ollama_llm_with_custom_base_url(
         self, mock_ollama_class: MagicMock
     ) -> None:
@@ -53,7 +53,7 @@ class TestBuildOllamaLLM:
         )
         assert llm == mock_instance
 
-    @patch("sec_nlp.core.llm.ollama.OllamaLLM")
+    @patch("langchain_ollama.llms.OllamaLLM")
     def test_build_ollama_llm_with_custom_temperature(
         self, mock_ollama_class: MagicMock
     ) -> None:
@@ -74,7 +74,7 @@ class TestBuildOllamaLLM:
         )
         assert llm == mock_instance
 
-    @patch("sec_nlp.core.llm.ollama.OllamaLLM")
+    @patch("langchain_ollama.llms.OllamaLLM")
     def test_build_ollama_llm_with_sec_nlp_env_base_url(
         self,
         mock_ollama_class: MagicMock,
@@ -101,7 +101,7 @@ class TestBuildOllamaLLM:
         )
         assert llm == mock_instance
 
-    @patch("sec_nlp.core.llm.ollama.OllamaLLM")
+    @patch("langchain_ollama.llms.OllamaLLM")
     def test_build_ollama_llm_with_legacy_env_base_url(
         self,
         mock_ollama_class: MagicMock,
@@ -128,7 +128,7 @@ class TestBuildOllamaLLM:
         )
         assert llm == mock_instance
 
-    @patch("sec_nlp.core.llm.ollama.OllamaLLM")
+    @patch("langchain_ollama.llms.OllamaLLM")
     def test_build_ollama_llm_explicit_url_overrides_env(
         self,
         mock_ollama_class: MagicMock,
@@ -155,7 +155,7 @@ class TestBuildOllamaLLM:
         )
         assert llm == mock_instance
 
-    @patch("sec_nlp.core.llm.ollama.OllamaLLM")
+    @patch("langchain_ollama.llms.OllamaLLM")
     def test_build_ollama_llm_with_additional_kwargs(
         self, mock_ollama_class: MagicMock
     ) -> None:
@@ -183,7 +183,7 @@ class TestBuildOllamaLLM:
         )
         assert llm == mock_instance
 
-    @patch("sec_nlp.core.llm.ollama.OllamaLLM")
+    @patch("langchain_ollama.llms.OllamaLLM")
     @patch("sec_nlp.core.llm.ollama.logger")
     def test_build_ollama_llm_logs_creation(
         self, mock_logger: MagicMock, mock_ollama_class: MagicMock
@@ -200,7 +200,7 @@ class TestBuildOllamaLLM:
         assert "Created Ollama LLM" in call_args[0]
         assert "llama3.2" in call_args
 
-    @patch("sec_nlp.core.llm.ollama.OllamaLLM")
+    @patch("langchain_ollama.llms.OllamaLLM")
     def test_build_ollama_llm_different_models(
         self, mock_ollama_class: MagicMock
     ) -> None:
@@ -225,7 +225,7 @@ class TestBuildOllamaLLM:
             assert args["top_k"] == 10
             assert args["top_p"] == 0.5
 
-    @patch("sec_nlp.core.llm.ollama.OllamaLLM")
+    @patch("langchain_ollama.llms.OllamaLLM")
     def test_build_ollama_llm_returns_runnable(
         self, mock_ollama_class: MagicMock
     ) -> None:
@@ -238,7 +238,7 @@ class TestBuildOllamaLLM:
         # The returned object should be the mock instance
         assert llm == mock_instance
 
-    @patch("sec_nlp.core.llm.ollama.OllamaLLM")
+    @patch("langchain_ollama.llms.OllamaLLM")
     def test_build_ollama_llm_zero_temperature(
         self, mock_ollama_class: MagicMock
     ) -> None:
@@ -254,7 +254,7 @@ class TestBuildOllamaLLM:
         assert args["top_k"] == 10
         assert args["top_p"] == 0.5
 
-    @patch("sec_nlp.core.llm.ollama.OllamaLLM")
+    @patch("langchain_ollama.llms.OllamaLLM")
     def test_build_ollama_llm_high_temperature(
         self, mock_ollama_class: MagicMock
     ) -> None:

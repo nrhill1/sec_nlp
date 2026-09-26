@@ -9,8 +9,7 @@ from __future__ import annotations
 
 import statistics
 
-from langchain_core.documents import Document
-
+from sec_nlp.core.documents import DocumentRecord as Document
 from sec_nlp.core.infra.logger import color_text, logger
 from sec_nlp.core.text.keyword import FilterStats
 
@@ -39,7 +38,7 @@ def log_chunk_length_stats(
     for d in docs:
         meta = d.metadata or {}
         sent_count = meta.get("sentence_count")
-        if sent_count is not None:
+        if isinstance(sent_count, (str, int, float)):
             try:
                 sentence_counts.append(int(sent_count))
             except (TypeError, ValueError):
@@ -51,7 +50,9 @@ def log_chunk_length_stats(
         for d in docs:
             meta = d.metadata or {}
             try:
-                keyword_scores.append(float(meta.get(keyword_field, 0.0)))
+                raw_score = meta.get(keyword_field, 0.0)
+                if isinstance(raw_score, (str, int, float)):
+                    keyword_scores.append(float(raw_score))
             except (TypeError, ValueError):
                 continue
 

@@ -1,83 +1,75 @@
 # src/sec_nlp/pipelines/base/stages.py
-"""Frozen, serializable stage primitives for pipeline state transitions.
+"""Sequential specialist operations with lightweight run context.
 
-Each pipeline step (search, embed, index, analyze, etc.) is a
-``PipelineStageRunnable`` that receives a mutable state object, performs one
-transformation, and returns the same state. Stages are composed into chains
-via ``BasePipeline.build_configured_stage_chain``, which attaches
-LangChain tracing metadata (pipeline type, run ID, deterministic UUID).
+The services retain their typed state and extraction steps. Execution is a
+normal Python loop with shared run identifiers, without graph compilation or
+an AI runtime dependency.
 """
 
-from __future__ import annotations
+from abc import ABC, abstractmethod
+from dataclasses import dataclass
 
-from abc import abstractmethod
-from uuid import NAMESPACE_URL, uuid5
+from pydantic import BaseModel, ConfigDict, Field
 
-from langchain_core.runnables import (
-    Runnable,
-    RunnableConfig,
-    RunnableSerializable,
-)
-from pydantic import ConfigDict, Field
-
-from sec_nlp.types import ConfigValue
+from sec_nlp.core.infra.logger import logger
 
 
-class PipelineStageRunnable[StageStateT](
-    RunnableSerializable[StageStateT, StageStateT]
-):
-    """Frozen ``RunnableSerializable`` base for a single pipeline stage.
+@dataclass(frozen=True, slots=True)
+class RunContext:
+    """Identify one user-triggered specialist operation for diagnostic logging.
 
-    Subclasses implement ``_run(state)`` to mutate and return the shared
-    pipeline state. The ``configured()`` method attaches stable LangChain
-    metadata for tracing and observability.
+    Attributes:
+        pipeline_type: Specialist service name.
+        run_id: Identifier shared by exported artifacts.
+    """
+
+    pipeline_type: str
+    run_id: str
+
+
+class PipelineStage[StageStateT](BaseModel, ABC):
+    """Apply one deterministic transformation to a specialist's typed state.
+
+    Subclasses keep their existing parsing and export logic. The caller owns
+    orchestration, cancellation, and display; stages never construct a graph.
     """
 
     model_config = ConfigDict(
-        arbitrary_types_allowed=True,
-        extra="forbid",
-        frozen=True,
-        defer_build=True,
+        arbitrary_types_allowed=True, extra="forbid", frozen=True
+    )
+    name: str = Field(
+        min_length=1, description="Diagnostic name for this step."
     )
 
-    name: str = Field(min_length=1)
-
-    def invoke(
-        self,
-        input: StageStateT,
-        config: RunnableConfig | None = None,
-        **kwargs: ConfigValue,
-    ) -> StageStateT:
-        """Apply this stage's transformation to the pipeline state and return it."""
-        _ = config
-        _ = kwargs
-        return self._run(input)
-
-    def configured(
-        self,
-        *,
-        pipeline_type: str,
-        run_id: str | None = None,
-    ) -> Runnable[StageStateT, StageStateT]:
-        """Return a copy of this runnable with LangChain tracing tags and metadata."""
-        metadata: dict[str, str] = {
-            "pipeline_type": pipeline_type,
-            "stage_name": self.name,
-        }
-        if run_id is not None:
-            metadata["run_id"] = run_id
-            metadata["stage_debug_uuid"] = str(
-                uuid5(
-                    NAMESPACE_URL,
-                    f"{run_id}:{pipeline_type}:{self.name}",
-                )
-            )
-        return self.with_config(
-            run_name=self.name,
-            tags=[f"pipeline:{pipeline_type}", f"stage:{self.name}"],
-            metadata=metadata,
-        )
+    def invoke(self, state: StageStateT) -> StageStateT:
+        """Apply this step and return its updated typed state."""
+        return self._run(state)
 
     @abstractmethod
     def _run(self, state: StageStateT) -> StageStateT:
-        """Mutate and return the provided state instance."""
+        """Apply the specialized extraction or export operation."""
+
+
+@dataclass(frozen=True, slots=True)
+class StageSequence[StageStateT]:
+    """Execute an ordered tuple of specialist steps through ordinary calls.
+
+    Attributes:
+        stages: Operations in their required execution order.
+        context: Run identifiers for diagnostics.
+    """
+
+    stages: tuple[PipelineStage[StageStateT], ...]
+    context: RunContext
+
+    def invoke(self, state: StageStateT) -> StageStateT:
+        """Run each operation and return the final state."""
+        for stage in self.stages:
+            logger.debug(
+                "%s/%s: %s",
+                self.context.pipeline_type,
+                self.context.run_id,
+                stage.name,
+            )
+            state = stage.invoke(state)
+        return state

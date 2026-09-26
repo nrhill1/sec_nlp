@@ -8,7 +8,7 @@ from uuid import uuid4
 import pytest
 from pydantic import ValidationError
 
-from sec_nlp.pipelines.runtime import (
+from sec_nlp.pipelines.runtime.state import (
     ProcessedAccession,
     ProcessingState,
     ProcessingStateData,

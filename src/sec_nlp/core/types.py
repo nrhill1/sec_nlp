@@ -28,6 +28,11 @@ def is_json_mapping(value: JsonValue) -> TypeGuard[Mapping[str, JsonValue]]:
     return is_json_object(value)
 
 
+def is_json_array(value: JsonValue) -> TypeGuard[Sequence[JsonValue]]:
+    """Return whether a JSON value is an array rather than a string or mapping."""
+    return isinstance(value, Sequence) and not isinstance(value, str)
+
+
 def mapping_to_json_dict(mapping: JsonObject) -> JsonDict:
     """Convert a JSON mapping to a mutable JsonDict."""
     return {key: mapping[key] for key in mapping}

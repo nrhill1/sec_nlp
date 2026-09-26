@@ -7,11 +7,9 @@ from unittest.mock import patch
 
 import pytest
 
-from sec_nlp.pipelines import (
-    BasePipeline,
-    BasePipelineResult,
-    BasePipelineSettings,
-)
+from sec_nlp.pipelines.base.config import BasePipelineSettings
+from sec_nlp.pipelines.base.pipeline import BasePipeline
+from sec_nlp.pipelines.base.result import BasePipelineResult
 from sec_nlp.types import JsonObject, ResultDict
 
 

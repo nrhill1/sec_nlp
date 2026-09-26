@@ -6,13 +6,10 @@ import json
 from pathlib import Path
 
 import pytest
-from langchain_core.runnables import Runnable
 
-from sec_nlp.pipelines import (
-    BasePipeline,
-    BasePipelineResult,
-    BasePipelineSettings,
-)
+from sec_nlp.pipelines.base.config import BasePipelineSettings
+from sec_nlp.pipelines.base.pipeline import BasePipeline
+from sec_nlp.pipelines.base.result import BasePipelineResult
 from sec_nlp.types import JsonValue, ResultDict
 
 
@@ -92,8 +89,11 @@ class TestBasePipelineSettings:
         """BasePipelineSettings cannot be instantiated directly."""
         assert inspect.isabstract(BasePipelineSettings)
 
-    def test_base_config_default_values(self) -> None:
+    def test_base_config_default_values(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         """Test BasePipelineSettings default values."""
+        monkeypatch.delenv("LOG_FORMAT", raising=False)
         config = _ConcreteConfig()
 
         assert config.verbose is False
@@ -457,7 +457,7 @@ class TestBasePipeline:
         assert run_called is True
         assert isinstance(result, ConcreteResult)
 
-    def test_pipeline_is_runnable_and_invoke_calls_run(self) -> None:
+    def test_pipeline_invoke_calls_run(self) -> None:
         """Test BasePipeline subclasses satisfy Runnable.invoke semantics."""
 
         class ConcreteResult(BasePipelineResult):
@@ -495,7 +495,7 @@ class TestBasePipeline:
                 pass
 
         pipeline = ConcretePipeline(config=ConcreteConfig())
-        assert isinstance(pipeline, Runnable)
+        assert isinstance(pipeline, BasePipeline)
 
         result = pipeline.invoke()
 

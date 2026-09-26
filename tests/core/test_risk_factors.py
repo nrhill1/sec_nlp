@@ -1,8 +1,7 @@
 # tests/core/test_risk_factors.py
 """Tests for risk factor extraction and clustering utilities."""
 
-from langchain_core.documents import Document
-
+from sec_nlp.core.documents import DocumentRecord as Document
 from sec_nlp.core.text.risk_factors import (
     RiskFactorClusterConfig,
     build_risk_factor_clusters,

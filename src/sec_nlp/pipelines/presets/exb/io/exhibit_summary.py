@@ -9,8 +9,7 @@ import re
 from datetime import date
 from pathlib import Path
 
-from langchain_core.documents import Document
-
+from sec_nlp.core.documents import DocumentRecord as Document
 from sec_nlp.core.infra.logger import logger
 from sec_nlp.core.types import as_json_dict
 from sec_nlp.pipelines.output_io import (

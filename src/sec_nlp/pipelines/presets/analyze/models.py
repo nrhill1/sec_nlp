@@ -14,8 +14,7 @@ from pydantic import (
 )
 
 from sec_nlp.core.types import coerce_json_value
-from sec_nlp.pipelines import BasePipelineResult
-from sec_nlp.pipelines.base.result import SummaryFieldValue
+from sec_nlp.pipelines.base.result import BasePipelineResult, SummaryFieldValue
 from sec_nlp.pipelines.serialization import round_score
 from sec_nlp.pipelines.types import AnalysisResultDict
 from sec_nlp.types import JsonDict, JsonValue

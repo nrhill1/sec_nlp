@@ -1,8 +1,7 @@
 # tests/core/test_diff.py
 """Unit tests for sec_nlp.core.infra.diff module."""
 
-from langchain_core.documents import Document
-
+from sec_nlp.core.documents import DocumentRecord as Document
 from sec_nlp.core.infra.diff import (
     ChangeType,
     FilingDiff,

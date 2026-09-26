@@ -115,7 +115,7 @@ class TestFilterIntegration:
 
     def test_proxy_filter_contains_section(self) -> None:
         """Test contains_section method with proxy content."""
-        from langchain_core.documents import Document
+        from sec_nlp.core.documents import DocumentRecord as Document
 
         create_proxy_filter(sections=["board_composition"])
         Document(

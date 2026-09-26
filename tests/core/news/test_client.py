@@ -16,7 +16,7 @@ def test_load_newswatch_module_raises_clear_error(
     client._load_newswatch_module.cache_clear()
 
     def fail_import(_name: str):
-        raise RuntimeError("boom")
+        raise ImportError("boom")
 
     monkeypatch.setattr(client, "import_module", fail_import)
 
@@ -72,7 +72,7 @@ def test_news_retriever_fetch_maps_native_items(
         "SEC NLP Tool (you@example.com)",
         0.25,
     )
-    assert calls["fetch"] == (["supply chain"], 5)
+    assert calls["fetch"] == (["supply chain"], 500)
     assert items[0].title == "Acme supply chain update"
     assert items[0].matched_keywords == ["supply chain"]
 
@@ -121,3 +121,48 @@ def test_create_news_retriever_reuses_cached_client(
     assert constructor_calls == 1
 
     client._cached_news_retriever.cache_clear()
+
+
+def test_normalization_preserves_recurring_releases_and_unknown_dates() -> None:
+    items = [
+        client.NewsItem(
+            title="Policy statement",
+            url=f"https://example.com/{idx}",
+            source="Central bank",
+            published_at=stamp,
+        )
+        for idx, stamp in enumerate(
+            [
+                "2026-01-28",
+                "2026-03-18",
+                "Wed, 18 Mar 2026 12:00:00 GMT",
+                None,
+                None,
+            ]
+        )
+    ]
+    normalized = client.normalize_news_items(items)
+    assert len(normalized) == 4
+    assert normalized[0].published_at is not None
+    assert normalized[0].published_at.startswith("2026-03-18")
+    assert normalized[-1].published_at is None
+
+
+def test_sec_feed_requests_use_shared_transport(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        client,
+        "fetch_sec_bytes",
+        lambda *_: (
+            b"<rss><channel><item><title>SEC update</title><link>https://www.sec.gov/news/example</link><pubDate>Fri, 25 Sep 2026 12:00:00 GMT</pubDate></item></channel></rss>"
+        ),
+    )
+    module = ModuleType("native_must_not_fetch")
+    retriever = client.NewsRetriever(
+        [("https://www.sec.gov/news/pressreleases.rss", "rss", "SEC")],
+        "Test test@example.com",
+        module=module,
+    )
+    items = retriever.fetch([])
+    assert len(items) == 1 and items[0].source == "SEC"

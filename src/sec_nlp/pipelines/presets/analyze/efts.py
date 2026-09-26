@@ -6,8 +6,7 @@ from __future__ import annotations
 from collections import defaultdict
 from datetime import date, timedelta
 
-from langchain_core.documents import Document
-
+from sec_nlp.core.documents import DocumentRecord as Document
 from sec_nlp.core.edgar.efts_models import EFTSHit
 from sec_nlp.core.infra.logger import logger
 from sec_nlp.core.ingest.downloader import download_accessions
@@ -25,7 +24,7 @@ from sec_nlp.pipelines.presets.analyze.runnables.search import (
 from sec_nlp.pipelines.presets.analyze.steps.search.efts_search import (
     EFTSSearchResult,
 )
-from sec_nlp.pipelines.runtime import get_accession_from_metadata
+from sec_nlp.pipelines.runtime.metadata import get_accession_from_metadata
 from sec_nlp.pipelines.types import MetadataScalar, MetadataValue
 
 
@@ -350,7 +349,7 @@ def annotate_efts_match(
             cleaned.append({"query": query, "score": float(score)})
         metadata["efts_matches"] = cleaned
         update_search_sources(metadata, "efts")
-        doc.metadata = metadata
+        doc.metadata.update(metadata)
 
 
 def build_hybrid_search_results(
@@ -384,7 +383,7 @@ def build_hybrid_search_results(
         for doc, _ in vector_filtered:
             metadata: dict[str, MetadataValue] = dict(doc.metadata or {})
             update_search_sources(metadata, "vector")
-            doc.metadata = metadata
+            doc.metadata.update(metadata)
             accession = get_accession_from_metadata(doc.metadata)
             if accession:
                 vector_accessions[accession].append(doc)
@@ -413,7 +412,7 @@ def build_hybrid_search_results(
             if "efts_score" not in metadata:
                 metadata["efts_score"] = float(raw_score)
             update_search_sources(metadata, "efts")
-            doc.metadata = metadata
+            doc.metadata.update(metadata)
             adjusted_score = adjust_efts_score(
                 norm,
                 vector_scores=vector_scores,

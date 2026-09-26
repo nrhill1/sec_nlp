@@ -24,18 +24,12 @@ from pydantic_settings import (  # noqa: E402
 
 from sec_nlp.core.infra.logger import logger, setup_logging  # noqa: E402
 from sec_nlp.pipelines.base.result import BasePipelineResult  # noqa: E402
-from sec_nlp.pipelines.presets.analyze import (  # noqa: E402
-    AnalyzeConfig,
-    AnalyzePipeline,
-)
-from sec_nlp.pipelines.presets.exb import (  # noqa: E402
-    ExhibitConfig,
-    ExhibitPipeline,
-)
-from sec_nlp.pipelines.presets.warranty import (  # noqa: E402
-    WarrantyConfig,
-    WarrantyPipeline,
-)
+from sec_nlp.pipelines.presets.analyze.config import AnalyzeConfig
+from sec_nlp.pipelines.presets.analyze.pipeline import AnalyzePipeline
+from sec_nlp.pipelines.presets.exb.config import ExhibitConfig
+from sec_nlp.pipelines.presets.exb.pipeline import ExhibitPipeline
+from sec_nlp.pipelines.presets.warranty.config import WarrantyConfig
+from sec_nlp.pipelines.presets.warranty.pipeline import WarrantyPipeline
 
 try:
     from memory_profiler import (

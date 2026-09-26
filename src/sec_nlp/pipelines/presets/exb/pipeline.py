@@ -1,32 +1,38 @@
 # src/sec_nlp/pipelines/presets/exb/pipeline.py
 """Pipeline for downloading and extracting exhibit content by category."""
 
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from langchain_qdrant import QdrantVectorStore
+    from qdrant_client import QdrantClient
+
+    from .steps.search.search import ExhibitSearch
+
+
 from pathlib import Path
 from typing import ClassVar, Literal, TypedDict
 
-from langchain_core.documents import Document
-from langchain_core.runnables import Runnable
-from langchain_qdrant import QdrantVectorStore
 from pydantic import PrivateAttr
-from qdrant_client import QdrantClient
-from qdrant_client.models import Distance, VectorParams
-from tqdm import tqdm
 
-from sec_nlp.app.flows.contracts import (
+from sec_nlp.app.workspace.evidence import (
     ContractEvidenceBundle,
     FlowRetrievedChunk,
 )
+from sec_nlp.core.documents import DocumentRecord as Document
 from sec_nlp.core.infra.logger import log_divider, logger
 from sec_nlp.core.ingest.loader import Loader
 from sec_nlp.core.text.keyword import KeywordMatcher
-from sec_nlp.pipelines import BasePipeline
+from sec_nlp.pipelines.base.pipeline import BasePipeline
+from sec_nlp.pipelines.base.stages import StageSequence
 from sec_nlp.pipelines.chunk_filters import limit_docs_per_accession
 from sec_nlp.pipelines.observability.telemetry import (
     log_filter_stats,
 )
 from sec_nlp.pipelines.output_io import write_json
 from sec_nlp.pipelines.utils import slugify
-from sec_nlp.pipelines.vector.query import scroll_exists
 from sec_nlp.types import JsonValue, ResultDict
 
 from .bridge import (
@@ -49,7 +55,6 @@ from .steps.search.payloads import (
     SearchManifestPayload,
     SearchRecordPayload,
 )
-from .steps.search.search import ExhibitSearch
 
 
 class SearchRecord(TypedDict):
@@ -88,7 +93,7 @@ class ExhibitPipeline(BasePipeline):
     )
 
     requires_llm: ClassVar[bool] = False
-    requires_vector_db: ClassVar[bool] = True
+    requires_vector_db: ClassVar[bool] = False
 
     config: ExhibitConfig
 
@@ -101,8 +106,8 @@ class ExhibitPipeline(BasePipeline):
 
     # Semantic Search
     _search: ExhibitSearch | None = PrivateAttr(default=None)
-    _stage_chain: Runnable[ExhibitRunState, ExhibitRunState] | None = (
-        PrivateAttr(default=None)
+    _stage_chain: StageSequence[ExhibitRunState] | None = PrivateAttr(
+        default=None
     )
 
     @classmethod
@@ -138,7 +143,9 @@ class ExhibitPipeline(BasePipeline):
                 f"Downloads: {self.config.dl_path.resolve()}\n"
             ) from e
 
-        if not self.config.dry_run:
+        if (
+            self.config.index_results or self.config.search_only
+        ) and not self.config.dry_run:
             try:
                 self._qdrant_client = self.config.vdb.setup_qdrant_client()
                 embedder, embedding_dim = (
@@ -153,6 +160,8 @@ class ExhibitPipeline(BasePipeline):
 
                 # Ensure collection exists
                 if not self._qdrant_client.collection_exists(collection_name):
+                    from qdrant_client.models import Distance, VectorParams
+
                     self._qdrant_client.create_collection(
                         collection_name=collection_name,
                         vectors_config=VectorParams(
@@ -189,6 +198,7 @@ class ExhibitPipeline(BasePipeline):
 
     def run(self) -> ExhibitResult:
         """Execute the exhibit pipeline and return standard result payload."""
+        self.config.start_run()
         result, _, _ = self._run_internal(include_bridge=False)
         return result
 
@@ -261,46 +271,31 @@ class ExhibitPipeline(BasePipeline):
             # Skip chunking/indexing if search_only mode
             if not self.config.search_only:
                 # Process symbols with progress bar
-                with tqdm(
-                    self.config.symbols,
-                    desc="Processing symbols",
-                    unit="symbol",
-                    colour="green",
-                    leave=True,
-                    disable=not self.config.verbose,
-                    bar_format="\n{n_fmt}/{total_fmt} [{elapsed}<{remaining}]",
-                ) as pbar:
-                    for symbol in pbar:
-                        pbar.set_description(f"Processing {symbol}")
-                        (
-                            symbol_outputs,
-                            bridge_docs,
-                        ) = self._process_symbol_internal(
-                            symbol,
-                            include_bridge=include_bridge,
-                        )
-                        all_outputs.extend(symbol_outputs)
-                        metadata[symbol] = len(symbol_outputs)
-                        if include_bridge and bridge_docs:
-                            if include_prebuilt_chunks:
-                                symbol_seed_chunks = build_contract_seed_chunks(
-                                    symbol=symbol,
-                                    docs=bridge_docs,
-                                )
-                                if symbol_seed_chunks:
-                                    bridge_symbols.append(symbol)
-                                    prebuilt_chunks.extend(symbol_seed_chunks)
-                            else:
-                                symbol_bundle = build_contract_evidence_bundle(
-                                    symbol=symbol,
-                                    docs=bridge_docs,
-                                    run_id=str(self.config.run_id),
-                                    run_short_id=short_id,
-                                    queries=bridge_queries,
-                                )
-                                if symbol_bundle.chunks:
-                                    bridge_symbols.append(symbol)
-                                    bridge_chunks.extend(symbol_bundle.chunks)
+                for symbol in self.config.symbols:
+                    symbol_outputs, bridge_docs = self._process_symbol_internal(
+                        symbol, include_bridge=include_bridge
+                    )
+                    all_outputs.extend(symbol_outputs)
+                    metadata[symbol] = len(symbol_outputs)
+                    if include_bridge and bridge_docs:
+                        if include_prebuilt_chunks:
+                            symbol_seed_chunks = build_contract_seed_chunks(
+                                symbol=symbol, docs=bridge_docs
+                            )
+                            if symbol_seed_chunks:
+                                bridge_symbols.append(symbol)
+                                prebuilt_chunks.extend(symbol_seed_chunks)
+                        else:
+                            symbol_bundle = build_contract_evidence_bundle(
+                                symbol=symbol,
+                                docs=bridge_docs,
+                                run_id=str(self.config.run_id),
+                                run_short_id=short_id,
+                                queries=bridge_queries,
+                            )
+                            if symbol_bundle.chunks:
+                                bridge_symbols.append(symbol)
+                                bridge_chunks.extend(symbol_bundle.chunks)
             else:
                 logger.info("Skipping chunking/indexing (search_only mode)")
 
@@ -443,6 +438,8 @@ class ExhibitPipeline(BasePipeline):
             search_kwargs.setdefault(
                 "lambda_mult", self.config.search.mmr_lambda
             )
+
+        from .steps.search.search import ExhibitSearch
 
         self._search = ExhibitSearch(
             vector_store=self._vector_store,
@@ -625,6 +622,8 @@ class ExhibitPipeline(BasePipeline):
         if not self._qdrant_client:
             return False
 
+        from sec_nlp.pipelines.vector.query import scroll_exists
+
         return scroll_exists(
             self._qdrant_client,
             self._collection_name(),
@@ -645,7 +644,7 @@ class ExhibitPipeline(BasePipeline):
         # Group docs by accession number
         accession_to_docs: dict[str, list[Document]] = {}
         for doc in docs:
-            accession = (doc.metadata or {}).get("accession_number", "unknown")
+            accession = str(doc.metadata.get("accession_number") or "unknown")
             accession_to_docs.setdefault(accession, []).append(doc)
 
         # Check which accessions are already indexed

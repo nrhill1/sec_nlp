@@ -3,18 +3,18 @@
 
 from unittest.mock import Mock
 
-from langchain_core.documents import Document
 from langchain_qdrant import QdrantVectorStore
 
-from sec_nlp.pipelines.presets.analyze import (
+from sec_nlp.core.documents import DocumentRecord as Document
+from sec_nlp.pipelines.presets.analyze import pipeline as analyze_pipeline
+from sec_nlp.pipelines.presets.analyze.config import (
     AnalyzeConfig,
-    AnalyzePipeline,
-    OutputFormatter,
+    EFTSConfig,
     SearchConfig,
-    pipeline as analyze_pipeline,
 )
-from sec_nlp.pipelines.presets.analyze.config import EFTSConfig
+from sec_nlp.pipelines.presets.analyze.io.outputs import OutputFormatter
 from sec_nlp.pipelines.presets.analyze.market import MarketConfig
+from sec_nlp.pipelines.presets.analyze.pipeline import AnalyzePipeline
 from sec_nlp.pipelines.presets.analyze.run_stages import (
     build_analyze_stage_chain,
 )

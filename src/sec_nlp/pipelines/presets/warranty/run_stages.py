@@ -1,5 +1,5 @@
 # src/sec_nlp/pipelines/presets/warranty/run_stages.py
-"""Runnable stage helpers for warranty pipeline execution."""
+"""Ordered specialist steps for warranty pipeline execution."""
 
 from __future__ import annotations
 
@@ -8,11 +8,10 @@ from datetime import date
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from langchain_core.runnables import Runnable
 from pydantic import Field
 
 from sec_nlp.core.infra.logger import log_divider, logger
-from sec_nlp.pipelines.base.stages import PipelineStageRunnable
+from sec_nlp.pipelines.base.stages import PipelineStage, StageSequence
 
 if TYPE_CHECKING:
     from .pipeline import WarrantyPipeline
@@ -31,14 +30,16 @@ class WarrantyRunState:
     skip_symbol: bool = False
 
 
-class PrepareSymbolStage(PipelineStageRunnable[WarrantyRunState]):
+class PrepareSymbolStage(PipelineStage[WarrantyRunState]):
     """Ingress stage that initializes symbol context and triggers filing downloads."""
 
     name: str = Field(default="prepare_symbol")
 
     def _run(self, state: WarrantyRunState) -> WarrantyRunState:
         """Execute this warranty stage and return updated run state."""
-        from sec_edgar_downloader import Downloader
+        from sec_nlp.core.ingest.downloader import (
+            FilingDownloader as Downloader,
+        )
 
         log_divider(logger, color="cyan")
         logger.info("Processing symbol: %s", state.symbol)
@@ -69,7 +70,7 @@ class PrepareSymbolStage(PipelineStageRunnable[WarrantyRunState]):
         return state
 
 
-class ResolveHtmlPathsStage(PipelineStageRunnable[WarrantyRunState]):
+class ResolveHtmlPathsStage(PipelineStage[WarrantyRunState]):
     """Resolution stage that discovers local HTML filing paths for symbol processing."""
 
     name: str = Field(default="resolve_html_paths")
@@ -107,7 +108,7 @@ class ResolveHtmlPathsStage(PipelineStageRunnable[WarrantyRunState]):
         return state
 
 
-class ProcessFilingsStage(PipelineStageRunnable[WarrantyRunState]):
+class ProcessFilingsStage(PipelineStage[WarrantyRunState]):
     """Egress processing stage that parses filings and emits symbol output artifacts."""
 
     name: str = Field(default="process_filings")
@@ -128,7 +129,7 @@ class ProcessFilingsStage(PipelineStageRunnable[WarrantyRunState]):
         return state
 
 
-_WARRANTY_STAGES: tuple[PipelineStageRunnable[WarrantyRunState], ...] = (
+_WARRANTY_STAGES: tuple[PipelineStage[WarrantyRunState], ...] = (
     PrepareSymbolStage(),
     ResolveHtmlPathsStage(),
     ProcessFilingsStage(),
@@ -137,6 +138,6 @@ _WARRANTY_STAGES: tuple[PipelineStageRunnable[WarrantyRunState], ...] = (
 
 def build_warranty_stage_chain(
     pipeline: WarrantyPipeline,
-) -> Runnable[WarrantyRunState, WarrantyRunState]:
+) -> StageSequence[WarrantyRunState]:
     """Build deterministic warranty stage chain."""
     return pipeline.build_configured_stage_chain(stages=_WARRANTY_STAGES)

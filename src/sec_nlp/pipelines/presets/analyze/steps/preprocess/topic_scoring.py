@@ -10,8 +10,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 
-from langchain_core.documents import Document
-
+from sec_nlp.core.documents import DocumentRecord as Document
 from sec_nlp.core.infra.logger import logger
 from sec_nlp.core.text.keyword import KeywordMatcher
 from sec_nlp.core.text.ranking import (

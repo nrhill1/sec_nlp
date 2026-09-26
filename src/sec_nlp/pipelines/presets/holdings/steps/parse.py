@@ -5,9 +5,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from langchain_core.documents import Document
-
+from sec_nlp.core.documents import DocumentRecord as Document
 from sec_nlp.core.edgar.holdings_parser import HoldingsParser
+from sec_nlp.core.types import is_json_object
 from sec_nlp.types import JsonValue
 
 from ..models import HoldingPosition
@@ -60,7 +60,7 @@ def _map_document(
     """Map a parsed document into holdings position rows."""
     metadata = document.metadata
     voting_authority = metadata.get("voting_authority")
-    voting = voting_authority if isinstance(voting_authority, dict) else {}
+    voting = voting_authority if is_json_object(voting_authority) else {}
 
     return HoldingPosition(
         symbol=symbol,

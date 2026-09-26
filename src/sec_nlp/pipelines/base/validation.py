@@ -348,7 +348,7 @@ class PipelineValidator(BaseModel):
             MissingDependencyException: If requests is not installed
             LLMUnavailableException: If the LLM endpoint is unreachable
         """
-        from sec_nlp.pipelines.llm import LLMConfig
+        from sec_nlp.pipelines.llm.config import LLMConfig
 
         llm_config = getattr(self.config, "llm", None)
         assert isinstance(llm_config, LLMConfig), "llm must be LLMConfig"
@@ -440,7 +440,7 @@ class PipelineValidator(BaseModel):
             VectorUnavailableException: If Qdrant service is unavailable
             MissingDependencyException: If qdrant-client is not installed
         """
-        from sec_nlp.pipelines.vector import VectorConfig
+        from sec_nlp.pipelines.vector.config import VectorConfig
 
         vdb_config = getattr(self.config, "vdb", None)
         assert isinstance(vdb_config, VectorConfig), "vdb must be VectorConfig"

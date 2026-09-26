@@ -2,10 +2,10 @@
 """Tests for semantic chunk token-cap enforcement and config mapping."""
 
 import pytest
-from langchain_core.documents import Document
 from langchain_core.embeddings import Embeddings
 
 import sec_nlp.core.text.semantic_chunking as semantic_chunking
+from sec_nlp.core.documents import DocumentRecord as Document
 from sec_nlp.core.text.semantic_chunking import (
     SemanticChunker,
     SemanticChunkerConfig,

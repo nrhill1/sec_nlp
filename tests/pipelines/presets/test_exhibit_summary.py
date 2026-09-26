@@ -3,8 +3,7 @@
 
 from pathlib import Path
 
-from langchain_core.documents import Document
-
+from sec_nlp.core.documents import DocumentRecord as Document
 from sec_nlp.core.types import as_json_dict, coerce_json_value
 from sec_nlp.pipelines.presets.exb.config import ExhibitConfig
 from sec_nlp.pipelines.presets.exb.io.exhibit_summary import (

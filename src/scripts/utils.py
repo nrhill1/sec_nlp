@@ -5,14 +5,21 @@ import sys
 import tomllib
 from pathlib import Path
 
-from sec_nlp.core.infra.settings import PROJECT_ROOT as _PROJECT_ROOT
-
 
 def find_project_root() -> Path:
+    """Find the checkout root for developer-only build and profiling scripts.
+
+    Raises:
+        RuntimeError: If these scripts are used outside a source checkout.
     """
-    Return the validated project root discovered at import time.
-    """
-    return _PROJECT_ROOT
+    for candidate in Path(__file__).resolve().parents:
+        project_file = candidate / "pyproject.toml"
+        if project_file.is_file():
+            with project_file.open("rb") as stream:
+                metadata = tomllib.load(stream)
+            if metadata.get("project", {}).get("name") == "sec-nlp":
+                return candidate
+    raise RuntimeError("Developer scripts require the sec-nlp source checkout")
 
 
 def get_src_path() -> Path:

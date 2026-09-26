@@ -11,31 +11,24 @@ requires-python = ">=3.13"
 dependencies = [
   "python-dotenv",
   "pydantic>=2.0.0",
-  "langchain>=1.0.2",
-  "langchain-core>=1.0.0",
-  "langchain-community",
-  "langchain-qdrant",
-  "langchain-text-splitters",
-  "langchain-experimental",
+  "pydantic-settings>=2.11.0",
+  "httpx>=0.28.0",
+  "PyYAML>=6.0",
   "beautifulsoup4",
   "lxml",
-  "markdownify",
-  "sec_edgar_downloader",
   "simhash>=2.1.2",
-  "qdrant-client>=1.15.1",
   "platformdirs>=4.5.0",
-  "pydantic-settings>=2.11.0",
-  "langchain-ollama>=1.0.0",
-  "questionary>=2.1.1",
-  "python-ulid>=3.1.0",
-  "tqdm",
   "unstructured>=0.18.20",
   "pyahocorasick>=2.2.0",
-  "pandas>=2.3.3",
-  "fredapi>=0.5.2",
   "rich>=13.8.0",
-  "numpy>=2.3.4",
+  "textual>=8.2.0",
+  "requests>=2.32.0",
 ]
+
+[project.optional-dependencies]
+ai = ["langchain-core>=1.0.0", "langchain-ollama>=1.0.0", "numpy>=2.3.4"]
+vector = ["langchain-core>=1.0.0", "langchain-ollama>=1.0.0", "langchain-qdrant", "qdrant-client>=1.15.1", "langchain-experimental", "numpy>=2.3.4"]
+economic = ["fredapi>=0.5.2"]
 
 [project.scripts]
 sec-nlp = "sec_nlp.cli.__main__:main"
@@ -52,6 +45,7 @@ cache-keys = [
   {file = "crates/entity/Cargo.toml"},
   {file = "crates/newswatch/Cargo.toml"},
   {file = "**/*.rs"},
+  {file = "**/*.pyi"},
 ]
 
 [tool.maturin]

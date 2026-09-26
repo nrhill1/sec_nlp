@@ -4,9 +4,9 @@
 from unittest.mock import Mock
 
 import pytest
-from langchain_core.documents import Document
 
-from sec_nlp.pipelines.vector import VectorConfig
+from sec_nlp.core.documents import DocumentRecord as Document
+from sec_nlp.pipelines.vector.config import VectorConfig
 from tests.utils.typing import Benchmark
 
 

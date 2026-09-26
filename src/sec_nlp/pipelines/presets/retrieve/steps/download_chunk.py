@@ -6,8 +6,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from langchain_core.documents import Document
-
+from sec_nlp.core.documents import DocumentRecord as Document
 from sec_nlp.core.edgar.filing_mode import FilingMode
 from sec_nlp.core.infra.logger import logger
 from sec_nlp.core.ingest.downloader import download_accessions

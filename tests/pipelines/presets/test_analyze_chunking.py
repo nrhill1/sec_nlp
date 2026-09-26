@@ -2,10 +2,10 @@
 """Tests for section-aware chunking in the analyze pipeline."""
 
 import pytest
-from langchain_core.documents import Document
 from langchain_core.embeddings import Embeddings
 
 import sec_nlp.core.text.semantic_chunking as semantic_chunking
+from sec_nlp.core.documents import DocumentRecord as Document
 from sec_nlp.core.text.filters import create_exhibit_filter
 from sec_nlp.core.text.section_extractor import SectionExtractor
 from sec_nlp.core.text.semantic_chunking import (

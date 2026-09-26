@@ -1,5 +1,5 @@
 # src/sec_nlp/pipelines/presets/financials/run_stages.py
-"""Runnable stage helpers for financials pipeline execution."""
+"""Ordered specialist steps for financials pipeline execution."""
 
 from __future__ import annotations
 
@@ -7,20 +7,23 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from langchain_core.runnables import Runnable
 from pydantic import Field
 from rich.progress import Progress, TaskID
 
-from sec_nlp.pipelines.base.stages import PipelineStageRunnable
-
-from .models import FinancialFact, FinancialStatement
-from .steps import (
-    DownloadedFiling,
+from sec_nlp.pipelines.base.stages import PipelineStage, StageSequence
+from sec_nlp.pipelines.presets.financials.steps.aggregate import (
     aggregate_financials,
     build_delta_report,
+)
+from sec_nlp.pipelines.presets.financials.steps.download import (
+    DownloadedFiling,
     download_financial_filings,
+)
+from sec_nlp.pipelines.presets.financials.steps.extract import (
     extract_financial_facts,
 )
+
+from .models import FinancialFact, FinancialStatement
 from .steps.aggregate import FinancialDelta
 
 if TYPE_CHECKING:
@@ -43,7 +46,7 @@ class FinancialsRunState:
     metadata: dict[str, int | str] = field(default_factory=dict)
 
 
-class DownloadFilingsStage(PipelineStageRunnable[FinancialsRunState]):
+class DownloadFilingsStage(PipelineStage[FinancialsRunState]):
     """Ingress acquisition stage that downloads filing accession directories by symbol."""
 
     name: str = Field(default="download_filings")
@@ -63,7 +66,7 @@ class DownloadFilingsStage(PipelineStageRunnable[FinancialsRunState]):
         return state
 
 
-class ExtractFactsStage(PipelineStageRunnable[FinancialsRunState]):
+class ExtractFactsStage(PipelineStage[FinancialsRunState]):
     """Extraction stage that converts downloaded filings into normalized fact rows."""
 
     name: str = Field(default="extract_facts")
@@ -92,7 +95,7 @@ class ExtractFactsStage(PipelineStageRunnable[FinancialsRunState]):
         return state
 
 
-class AggregateFinancialsStage(PipelineStageRunnable[FinancialsRunState]):
+class AggregateFinancialsStage(PipelineStage[FinancialsRunState]):
     """Aggregation stage that composes extracted facts into statement-level rows."""
 
     name: str = Field(default="aggregate_financials")
@@ -112,7 +115,7 @@ class AggregateFinancialsStage(PipelineStageRunnable[FinancialsRunState]):
         return state
 
 
-class BuildDeltaReportStage(PipelineStageRunnable[FinancialsRunState]):
+class BuildDeltaReportStage(PipelineStage[FinancialsRunState]):
     """Delta stage that computes period-over-period statement changes when enabled."""
 
     name: str = Field(default="build_delta_report")
@@ -133,7 +136,7 @@ class BuildDeltaReportStage(PipelineStageRunnable[FinancialsRunState]):
         return state
 
 
-class WriteFinancialsOutputsStage(PipelineStageRunnable[FinancialsRunState]):
+class WriteFinancialsOutputsStage(PipelineStage[FinancialsRunState]):
     """Egress stage that writes financial artifacts and summary metadata."""
 
     name: str = Field(default="write_outputs")
@@ -160,7 +163,7 @@ class WriteFinancialsOutputsStage(PipelineStageRunnable[FinancialsRunState]):
         return state
 
 
-_FINANCIALS_STAGES: tuple[PipelineStageRunnable[FinancialsRunState], ...] = (
+_FINANCIALS_STAGES: tuple[PipelineStage[FinancialsRunState], ...] = (
     DownloadFilingsStage(),
     ExtractFactsStage(),
     AggregateFinancialsStage(),
@@ -171,6 +174,6 @@ _FINANCIALS_STAGES: tuple[PipelineStageRunnable[FinancialsRunState], ...] = (
 
 def build_financials_stage_chain(
     pipeline: FinancialsPipeline,
-) -> Runnable[FinancialsRunState, FinancialsRunState]:
+) -> StageSequence[FinancialsRunState]:
     """Build deterministic financials stage chain."""
     return pipeline.build_configured_stage_chain(stages=_FINANCIALS_STAGES)

@@ -44,7 +44,7 @@ from scripts.utils import find_project_root, setup_import_path
 
 setup_import_path()
 
-from sec_nlp.app.flows.spec import load_flow_spec
+from sec_nlp.app.workspace.recipes import load_recipe
 from sec_nlp.core.infra.logger import logger, setup_logging
 from sec_nlp.core.types import as_json_dict
 from sec_nlp.pipelines.observability.run_registry import RunRegistry
@@ -59,14 +59,14 @@ import json
 import sys
 from time import perf_counter
 
-from sec_nlp.app.flows.runner import FlowRunner
-from sec_nlp.app.flows.spec import load_flow_spec
+from sec_nlp.app.workspace.recipes import run_recipe
+from sec_nlp.app.workspace.recipes import load_recipe
 
 spec_path = sys.argv[1]
 
 try:
     started = perf_counter()
-    result = FlowRunner(spec=load_flow_spec(spec_path)).run()
+    result = run_recipe(load_recipe(spec_path))
     elapsed_seconds = perf_counter() - started
     stage_timings = {}
     for stage_result in result.stage_results:
@@ -306,7 +306,7 @@ def _write_flow_spec_snapshot(
     """Write a temporary aligned flow spec for subprocess execution."""
     if case.flow_spec is None:
         raise ValueError(f"Flow case {case.name} is missing flow_spec")
-    spec = load_flow_spec(case.flow_spec)
+    spec = load_recipe(case.flow_spec)
     aligned_spec = _apply_flow_benchmark_overrides(
         spec,
         email=email,
@@ -590,7 +590,18 @@ def _run_cli_case_in_worktree(
     """Run one retrieve/chat case in a target worktree."""
     run_id = str(uuid4())
     started = datetime.now(UTC).isoformat()
-    cmd = ["uv", "run", "sec-nlp", *case.args, "--run-id", run_id]
+    action, *arguments = case.args
+    capability = "ask" if action == "chat" else action
+    cmd = [
+        "uv",
+        "run",
+        "sec-nlp",
+        "research",
+        capability,
+        *arguments,
+        "--run-id",
+        run_id,
+    ]
     logger.info(
         "Running %s in %s (repeat %d)",
         case.name,

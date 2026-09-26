@@ -160,43 +160,24 @@ def test_efts_hit_falls_back_to_search_symbol_when_no_tickers() -> None:
     )
 
 
-def test_efts_search_uses_rust_client(
-    monkeypatch: pytest.MonkeyPatch, socket_enabled: None
+def test_efts_search_uses_shared_client(
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from sec_nlp.core.edgar import efts as efts_module
+    from sec_nlp.core.edgar.efts import EFTSClient
+    from sec_nlp.core.edgar.efts_models import EFTSBatchResult
 
-    # Create mock hit object with attribute access
-    mock_hit = Mock()
-    mock_hit.accession_number = "0001234567-24-000001"
-    mock_hit.cik = "0001234567"
-    mock_hit.company_name = "Test Co"
-    mock_hit.tickers = ["AAPL"]
-    mock_hit.form_type = "10-K"
-    mock_hit.filed_date = date(2024, 1, 15)
-    mock_hit.file_number = None
-    mock_hit.film_number = None
-    mock_hit.snippet = "test"
-    mock_hit.score = 1.0
-    mock_hit.filing_url = None
-
-    # Create mock batch result object with attribute access
-    mock_batch_result = Mock()
-    mock_batch_result.query = "warranty"
-    mock_batch_result.total = 1
-    mock_batch_result.hits = [mock_hit]
-    mock_batch_result.error = None
-
-    rust_client_instance = Mock()
-    # Use AsyncMock for the async method
-    rust_client_instance.batch_search_async = AsyncMock(
-        return_value=[mock_batch_result]
+    hit = EFTSHit(
+        accession_number="0001234567-24-000001",
+        cik="0001234567",
+        company_name="Test Co",
+        tickers=["AAPL"],
+        form_type="10-K",
+        filed_date=date(2024, 1, 15),
     )
-    rust_client_class = Mock(return_value=rust_client_instance)
-    rust_module = Mock()
-    rust_module.EFTSClient = rust_client_class
-
-    monkeypatch.setattr(efts_module, "_load_efts_module", lambda: rust_module)
-
+    fetch = AsyncMock(
+        return_value=[EFTSBatchResult(query="warranty", total=1, hits=[hit])]
+    )
+    monkeypatch.setattr(EFTSClient, "batch_search", fetch)
     runner = EFTSSearchRunnable(
         efts_config=EFTSConfig(enabled=True, limit=1),
         symbols=["AAPL"],
@@ -205,10 +186,6 @@ def test_efts_search_uses_rust_client(
         end_date=None,
         email="test@example.com",
     )
-
     results = asyncio.run(runner.search_queries(["warranty"]))
-
-    assert results
-    assert results[0].hits
-    rust_client_class.assert_called_once()
-    rust_client_instance.batch_search_async.assert_called_once()
+    assert results and results[0].hits
+    fetch.assert_awaited_once()

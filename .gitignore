@@ -12,6 +12,9 @@ Thumbs.db
 .env.*.local
 .envrc
 
+# Local investing profiles, research notes, and generated reports
+/investing/
+
 ## Editors and IDEs
 .vscode/
 .idea/

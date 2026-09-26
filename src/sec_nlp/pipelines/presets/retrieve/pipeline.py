@@ -10,15 +10,19 @@ into Qdrant for downstream chat consumption.
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from langchain_ollama.embeddings import OllamaEmbeddings
+    from qdrant_client import QdrantClient
+
+
 from dataclasses import dataclass
 from pathlib import Path
 from time import perf_counter
 from typing import ClassVar, Literal
 
-from langchain_core.runnables import Runnable
-from langchain_ollama.embeddings import OllamaEmbeddings
 from pydantic import PrivateAttr
-from qdrant_client import QdrantClient
 from rich.progress import (
     BarColumn,
     Progress,
@@ -39,33 +43,40 @@ from sec_nlp.core.types import (
     coerce_result_json_dict,
     coerce_unknown_json_value,
 )
-from sec_nlp.pipelines import BasePipeline
+from sec_nlp.pipelines.base.pipeline import BasePipeline
+from sec_nlp.pipelines.base.stages import StageSequence
 from sec_nlp.pipelines.output_io import build_run_output_context
+from sec_nlp.pipelines.presets.retrieve.io.formats.ranked_results import (
+    RankedResultsPayload,
+    write_ranked_results_csv,
+    write_ranked_results_json,
+    write_ranked_results_yaml,
+)
+from sec_nlp.pipelines.presets.retrieve.steps.candidate_search import (
+    RetrieveCandidateSearcher,
+    run_candidate_search,
+)
+from sec_nlp.pipelines.presets.retrieve.steps.download_chunk import (
+    download_and_chunk_hits,
+)
+from sec_nlp.pipelines.presets.retrieve.steps.embed import (
+    rerank_with_embeddings,
+)
+from sec_nlp.pipelines.presets.retrieve.steps.index import index_retrieval_hits
+from sec_nlp.pipelines.presets.retrieve.steps.query import (
+    prune_hits_by_query_terms,
+    rank_retrieval_hits,
+)
 from sec_nlp.types import JsonValue, ResultDict
 
 from ..chat.bridge import ChatRetrievedChunk
 from .bridge import RetrieveChatSeedBundle, RetrieveChatSeedChunk
 from .config import RetrieveSettings
 from .defaults import DEFAULT_RETRIEVE_COLLECTION_NAME
-from .io import (
-    RankedResultsPayload,
-    write_ranked_results_csv,
-    write_ranked_results_json,
-    write_ranked_results_yaml,
-)
 from .models import RetrievalHit, RetrieveResult
 from .run_stages import (
     RetrieveRunState,
     build_retrieve_stage_chain,
-)
-from .steps import (
-    RetrieveCandidateSearcher,
-    download_and_chunk_hits,
-    index_retrieval_hits,
-    prune_hits_by_query_terms,
-    rank_retrieval_hits,
-    rerank_with_embeddings,
-    run_candidate_search,
 )
 from .steps.tokenization import DEFAULT_QUERY_STOPWORDS
 
@@ -107,8 +118,8 @@ class RetrievePipeline(BasePipeline):
     _qdrant_client: QdrantClient | None = PrivateAttr(default=None)
     _embedder_init_attempts: int = PrivateAttr(default=0)
     _qdrant_init_attempts: int = PrivateAttr(default=0)
-    _stage_chain: Runnable[RetrieveRunState, RetrieveRunState] | None = (
-        PrivateAttr(default=None)
+    _stage_chain: StageSequence[RetrieveRunState] | None = PrivateAttr(
+        default=None
     )
 
     @classmethod
@@ -209,6 +220,7 @@ class RetrievePipeline(BasePipeline):
             self._qdrant_client = None
 
     def run(self) -> RetrieveResult:
+        self.config.start_run()
         result, _, _ = self._run_internal(
             include_bridge=False,
             include_prebuilt_chunks=False,
@@ -360,6 +372,7 @@ class RetrievePipeline(BasePipeline):
                 TimeRemainingColumn(),
                 console=console,
                 transient=True,
+                disable=True,
             ) as progress:
                 overall_task = progress.add_task(
                     "Processing symbols",

@@ -21,7 +21,6 @@ from time import perf_counter
 from uuid import UUID
 
 from langchain_core.callbacks.base import BaseCallbackHandler
-from langchain_core.documents import Document
 from langchain_core.runnables import (
     Runnable,
     RunnableConfig,
@@ -30,8 +29,9 @@ from langchain_core.runnables import (
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr
 from rich.progress import Progress, TaskID
 
+from sec_nlp.core.documents import DocumentRecord as Document
 from sec_nlp.core.infra.logger import logger
-from sec_nlp.pipelines.runtime import get_accession_from_metadata
+from sec_nlp.pipelines.runtime.metadata import get_accession_from_metadata
 from sec_nlp.pipelines.types import AnalysisResultDict, MetadataRecord
 from sec_nlp.types import JsonValue
 
@@ -166,7 +166,11 @@ class AnalyzerRunnable(
                     matched_query=matched_query_value,
                     matched_queries=matched_query_list,
                     context=self._build_context(doc),
-                    topic_hits=metadata.get("topic_hits"),
+                    topic_hits=[
+                        item for item in raw_hits if isinstance(item, str)
+                    ]
+                    if isinstance(raw_hits := metadata.get("topic_hits"), list)
+                    else None,
                     analysis_instructions=self.analysis_instructions,
                 )
             )
@@ -587,7 +591,7 @@ class AnalyzerRunnable(
                     {"query": query, "score": float(score)},
                 ],
             }
-            doc.metadata = meta
+            doc.metadata.update(meta)
             symbol_value = meta.get("symbol")
             symbol = (
                 symbol_value
@@ -906,8 +910,10 @@ class AnalyzerRunnable(
             context_parts.append(f"section: {section}")
 
         topic_hits = (doc.metadata or {}).get("topic_hits")
-        if topic_hits:
-            context_parts.append("topics: " + ", ".join(topic_hits[:5]))
+        if isinstance(topic_hits, list):
+            context_parts.append(
+                "topics: " + ", ".join(str(hit) for hit in topic_hits[:5])
+            )
 
         market_hint = (doc.metadata or {}).get("market_enrichment_context")
         if isinstance(market_hint, str) and market_hint:

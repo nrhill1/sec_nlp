@@ -5,9 +5,9 @@
 import re
 from enum import StrEnum
 
-from langchain_core.documents import Document
 from pydantic import BaseModel, Field, ValidationInfo, field_validator
 
+from sec_nlp.core.documents import DocumentRecord as Document
 from sec_nlp.core.infra.logger import logger
 from sec_nlp.core.text.section_patterns import (
     HOLDINGS_SECTION_PATTERNS,

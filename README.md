@@ -4,6 +4,29 @@
 
 SEC/market intelligence toolkit with Python pipeline orchestration and Rust-backed extensions. It supports local LLM analysis, deterministic extraction pipelines, filing retrieval, and timeline/correlation workflows from a single CLI.
 
+## Investing and current events
+
+Use `sec-nlp invest` for a daily observation workflow: one editable watchlist,
+dated market moves, current-events sources, thesis review prompts, and a local
+research journal. Each brief saves an interactive HTML report, Markdown, and
+the exact JSON evidence snapshot. It does not require Ollama or Qdrant services.
+
+```bash
+uv run sec-nlp invest init
+# Edit investing/config.json to set your goal, watchlist, and sources.
+uv run sec-nlp invest brief --demo   # Synthetic data, entirely offline
+uv run sec-nlp invest brief          # Refresh configured news and market sources
+uv run sec-nlp invest review         # Review your saved research offline
+```
+
+The starter profile observes macro releases and uses SPY as a reference asset;
+its company watchlist is empty until you choose symbols. For example,
+`invest init --workspace my-desk --symbols AAPL --symbols MSFT` creates a
+separate workspace for those explicitly selected assets.
+
+See [the investing workflow guide](docs/INVESTING.md) for configuration,
+research notes, offline replay, data limits, and SEC research follow-ups.
+
 ## Highlights
 
 - Local-first filing analysis with Ollama-backed models
@@ -39,6 +62,7 @@ SEC/market intelligence toolkit with Python pipeline orchestration and Rust-back
 
 - `sec-nlp efts` - direct SEC EDGAR Full-Text Search queries
 - `sec-nlp market` - Yahoo-backed market extension lookups (latest/range)
+- `sec-nlp invest` - daily market briefs, current events, thesis reviews, and research notes
 - `sec-nlp qdrant` - Qdrant container + collection management
 - `sec-nlp runs` - run registry inspection/pruning
 - `sec-nlp clean` - remove downloads/outputs/logs

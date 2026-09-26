@@ -9,7 +9,7 @@ from langchain_core.prompts.base import BasePromptTemplate
 from langchain_core.runnables import Runnable, RunnableSerializable
 from pydantic import BaseModel
 
-from sec_nlp.pipelines import BasePipelineResult
+from sec_nlp.pipelines.base.result import BasePipelineResult
 
 
 class ResultOutputParser[R: BasePipelineResult](

@@ -3,18 +3,16 @@
 
 from __future__ import annotations
 
-import json
 import re
-import urllib.request
 from collections.abc import Iterable
 from datetime import date
 from functools import lru_cache
 from pathlib import Path
 from typing import TypedDict
 
-from langchain_core.documents import Document
-
+from sec_nlp.core.documents import DocumentRecord as Document
 from sec_nlp.core.edgar.filing_mode import FilingMode
+from sec_nlp.core.edgar.transport import fetch_sec_json
 from sec_nlp.core.infra.logger import logger
 
 
@@ -116,15 +114,18 @@ def _load_ticker_registry(
     """Load cached ticker registry mapping from disk."""
     logger.debug("Fetching ticker-to-CIK mapping from SEC...")
     url = "https://www.sec.gov/files/company_tickers.json"
-    headers = {"User-Agent": f"{company_name} {email}"}
-    req = urllib.request.Request(url, headers=headers)
-
-    with urllib.request.urlopen(req) as response:
-        data = json.loads(response.read())
+    data = fetch_sec_json(url, f"{company_name} {email}")
+    if not isinstance(data, dict):
+        raise ValueError("SEC ticker registry is not a JSON mapping")
 
     registry: dict[str, _TickerEntry] = {}
     for entry in data.values():
-        ticker_symbol = entry.get("ticker", "").upper()
+        if not isinstance(entry, dict):
+            continue
+        raw_ticker = entry.get("ticker")
+        ticker_symbol = (
+            raw_ticker.upper() if isinstance(raw_ticker, str) else ""
+        )
         cik_num = entry.get("cik_str")
         company_title = str(entry.get("title", "")).strip()
         if ticker_symbol and cik_num:

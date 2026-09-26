@@ -4,15 +4,16 @@
 from collections.abc import Sequence
 from pathlib import Path
 
-from langchain_core.documents import Document
+from langchain_core.documents import Document as VectorDocument
 from langchain_qdrant import QdrantVectorStore
 from qdrant_client import QdrantClient
 from qdrant_client.conversions import common_types as qdrant_types
 from qdrant_client.http.models import Record
 from qdrant_client.models import FieldCondition, Filter, MatchAny, MatchValue
 
+from sec_nlp.core.documents import DocumentRecord as Document
 from sec_nlp.core.text.deduplication import SimHashConfig, SimHashDeduplicator
-from sec_nlp.pipelines.presets.analyze import AnalyzeConfig
+from sec_nlp.pipelines.presets.analyze.config import AnalyzeConfig
 from sec_nlp.pipelines.presets.analyze.steps.indexing.vector_index import (
     VectorIndexer,
 )
@@ -95,7 +96,7 @@ class _FakeVectorStore(QdrantVectorStore):
     def __init__(self, *, client: _FakeClient) -> None:
         self._fake_client = client
         self._collection_name = "analyze-test"
-        self.added_documents: list[Document] = []
+        self.added_documents: list[VectorDocument] = []
 
     @property
     def client(self) -> QdrantClient:
@@ -105,7 +106,9 @@ class _FakeVectorStore(QdrantVectorStore):
     def collection_name(self) -> str:
         return self._collection_name
 
-    def add_documents(self, documents: list[Document], **kwargs) -> list[str]:
+    def add_documents(
+        self, documents: list[VectorDocument], **kwargs
+    ) -> list[str]:
         _ = kwargs
         self.added_documents.extend(documents)
         return [str(idx) for idx, _doc in enumerate(documents)]

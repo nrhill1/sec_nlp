@@ -8,8 +8,9 @@ from functools import lru_cache
 from importlib import import_module
 from types import ModuleType
 
-from langchain_core.documents import Document
 from pydantic import BaseModel, ConfigDict
+
+from sec_nlp.core.documents import DocumentRecord as Document
 
 
 class EntityExtensionError(RuntimeError):

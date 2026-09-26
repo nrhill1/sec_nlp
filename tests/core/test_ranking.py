@@ -4,8 +4,8 @@
 from __future__ import annotations
 
 import pytest
-from langchain_core.documents import Document
 
+from sec_nlp.core.documents import DocumentRecord as Document
 from sec_nlp.core.text.ranking import (
     EFTS_AVAILABLE,
     DocumentRanker,
@@ -201,12 +201,12 @@ class TestRankDocuments:
 
         assert len(ranked) == 2
         # Document with most hits should be first
-        assert (
-            ranked[0].metadata["topic_score"]
-            >= ranked[1].metadata["topic_score"]
-        )
-        assert "topic_hits" in ranked[0].metadata
-        assert "warranty" in ranked[0].metadata["topic_hits"]
+        first_score = ranked[0].metadata["topic_score"]
+        second_score = ranked[1].metadata["topic_score"]
+        assert isinstance(first_score, (int, float))
+        assert isinstance(second_score, (int, float))
+        assert first_score >= second_score
+        assert ranked[0].metadata["topic_hits"] == ["warranty"]
 
     def test_rank_documents_empty(self) -> None:
         """Test ranking empty document list."""
@@ -242,4 +242,5 @@ class TestRankDocuments:
 
         ranked = rank_documents(docs, ["warranty"], min_hits=2)
         assert len(ranked) == 1
-        assert ranked[0].metadata["topic_score"] >= 2
+        score = ranked[0].metadata["topic_score"]
+        assert isinstance(score, (int, float)) and score >= 2

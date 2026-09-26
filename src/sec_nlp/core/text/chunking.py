@@ -17,59 +17,40 @@ from collections.abc import Callable, Sequence
 from importlib import import_module
 from pathlib import Path
 
-from langchain_core.documents import Document
+from sec_nlp.core.documents import DocumentRecord as Document
+from sec_nlp.core.infra.logger import logger
+from sec_nlp.core.infra.settings import CACHE_DIR
 
-from sec_nlp.core.infra.settings import PROJECT_ROOT
-
-
-def _ensure_dir(path: Path) -> Path:
-    """Create a directory tree; rely on system defaults for permissions."""
-    path.mkdir(parents=True, exist_ok=True)
-    return path
-
-
-# Keep NLTK data inside the verified package root by default
-_DEFAULT_NLTK_DATA_DIR: Path = _ensure_dir(PROJECT_ROOT / ".nltk_data")
-
-env_nltk: str | None = os.environ.get("NLTK_DATA")
-NLTK_DATA_DIR: Path = (
-    Path(env_nltk) if env_nltk is not None else _DEFAULT_NLTK_DATA_DIR
-)
-
-_NLTK_AVAILABLE: bool
+# Tokenizer data is optional and never downloaded or created during import.
+NLTK_DATA_DIR = Path(os.environ.get("NLTK_DATA", str(CACHE_DIR / "nltk_data")))
+_NLTK_AVAILABLE = False
 _SENT_TOKENIZE: Callable[[str], list[str]] | None = None
 
-try:
-    nltk_module = import_module("nltk")
-    tokenize_module = import_module("nltk.tokenize")
-    sent_tokenize_fn = getattr(tokenize_module, "sent_tokenize", None)
-    if callable(sent_tokenize_fn):
-        _SENT_TOKENIZE = sent_tokenize_fn
-        nltk_data = getattr(nltk_module, "data", None)
-        nltk_data_dir = str(NLTK_DATA_DIR)
-        if nltk_data is not None:
-            data_path = getattr(nltk_data, "path", None)
-            if isinstance(data_path, list) and nltk_data_dir not in data_path:
-                data_path.insert(0, nltk_data_dir)
 
-            find_fn = getattr(nltk_data, "find", None)
-            if callable(find_fn):
-                try:
-                    find_fn("tokenizers/punkt")
-                except LookupError:
-                    NLTK_DATA_DIR.mkdir(parents=True, exist_ok=True)
-                    download_fn = getattr(nltk_module, "download", None)
-                    if callable(download_fn):
-                        download_fn(
-                            "punkt",
-                            quiet=True,
-                            download_dir=nltk_data_dir,
-                        )
-        _NLTK_AVAILABLE = True
-    else:
-        _NLTK_AVAILABLE = False
-except (ImportError, OSError):
-    _NLTK_AVAILABLE = False
+_TOKENIZER_CHECKED = False
+
+
+def _load_tokenizer() -> None:
+    """Use installed sentence data lazily, without downloading model files."""
+    global _TOKENIZER_CHECKED, _NLTK_AVAILABLE, _SENT_TOKENIZE
+    if _TOKENIZER_CHECKED:
+        return
+    _TOKENIZER_CHECKED = True
+    try:
+        nltk = import_module("nltk")
+        sent_tokenize = import_module("nltk.tokenize").sent_tokenize
+
+        if str(NLTK_DATA_DIR) not in nltk.data.path:
+            nltk.data.path.insert(0, str(NLTK_DATA_DIR))
+        sent_tokenize("A sentence. Another sentence.")
+    except (ImportError, LookupError, OSError, AttributeError):
+        logger.debug(
+            "Installed sentence tokenizer unavailable; using local fallback",
+            exc_info=True,
+        )
+        return
+    _SENT_TOKENIZE = sent_tokenize
+    _NLTK_AVAILABLE = True
 
 
 def _fallback_sent_tokenize(text: str) -> list[str]:
@@ -84,6 +65,7 @@ def count_sentences(text: str) -> int:
     """Count sentences in text using the available tokenizer."""
     if not text or not text.strip():
         return 0
+    _load_tokenizer()
     if _NLTK_AVAILABLE and _SENT_TOKENIZE is not None:
         return len(_SENT_TOKENIZE(text))
     return len(_fallback_sent_tokenize(text))
@@ -133,6 +115,7 @@ class SentenceSplitter:
         if not text or not text.strip():
             return []
 
+        _load_tokenizer()
         if _NLTK_AVAILABLE and _SENT_TOKENIZE is not None:
             return list(_SENT_TOKENIZE(text))
         return _fallback_sent_tokenize(text)

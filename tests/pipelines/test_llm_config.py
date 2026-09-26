@@ -10,7 +10,7 @@ from unittest.mock import patch
 
 import pytest
 
-from sec_nlp.pipelines.llm import LLMConfig
+from sec_nlp.pipelines.llm.config import LLMConfig
 from sec_nlp.types import JsonDict, JsonValue
 
 
@@ -70,7 +70,7 @@ class TestLLMConfig:
             captured.update(kwargs)
             return fake_llm
 
-        with patch("sec_nlp.core.llm.build_ollama_llm", fake_builder):
+        with patch("sec_nlp.core.llm.ollama.build_ollama_llm", fake_builder):
             config = LLMConfig(
                 model_name="ollama:qwen",
                 temperature=0.25,

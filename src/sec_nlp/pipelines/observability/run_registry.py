@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import TypedDict
 
 from sec_nlp.core.infra.logger import logger
-from sec_nlp.core.infra.settings import PROJECT_ROOT
+from sec_nlp.core.infra.settings import CACHE_DIR
 from sec_nlp.pipelines.types import QueryParam
 
 
@@ -32,7 +32,7 @@ class RunRecordDict(TypedDict):
 
 
 # Default location for the run registry database
-_REGISTRY_DIR: Path = (PROJECT_ROOT / ".cache" / "sec-nlp").resolve()
+_REGISTRY_DIR: Path = (CACHE_DIR).resolve()
 DEFAULT_REGISTRY_PATH: Path = _REGISTRY_DIR / "runs.db"
 
 

@@ -11,10 +11,10 @@ from unittest.mock import MagicMock
 import pytest
 from _pytest.config import Config
 from _pytest.logging import LogCaptureFixture
-from langchain_core.documents import Document
 
+from sec_nlp.core.documents import DocumentRecord as Document
 from sec_nlp.core.ingest.loader import Loader
-from sec_nlp.pipelines import BasePipelineSettings
+from sec_nlp.pipelines.base.config import BasePipelineSettings
 from sec_nlp.types import JsonDict
 from tests.fixtures.sample_filings import (
     SAMPLE_ERROR_HTML,

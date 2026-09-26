@@ -93,7 +93,7 @@ def download_insider_filings(
     *, symbol: str, settings: InsiderSettings
 ) -> list[DownloadedInsiderFiling]:
     """Download and collect Form 3/4/5 directories for a symbol."""
-    from sec_edgar_downloader import Downloader
+    from sec_nlp.core.ingest.downloader import FilingDownloader as Downloader
 
     normalized_symbol = symbol.strip().upper()
     start_date, end_date = _effective_date_range(settings)

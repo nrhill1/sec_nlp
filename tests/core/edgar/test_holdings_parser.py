@@ -5,6 +5,7 @@ from datetime import date
 from pathlib import Path
 
 from sec_nlp.core.edgar.holdings_parser import parse_holdings_documents
+from sec_nlp.core.types import is_json_object
 
 
 def _write_full_submission(path: Path, filed_date: date) -> None:
@@ -64,7 +65,7 @@ def test_holdings_parser_parses_info_table(tmp_path: Path) -> None:
     assert metadata.get("accession_number") == "0000000000-24-000001"
     assert metadata.get("filed_date") == "2024-01-31"
     voting = metadata.get("voting_authority")
-    assert isinstance(voting, dict)
+    assert is_json_object(voting)
     assert voting.get("sole") == 1000
 
 

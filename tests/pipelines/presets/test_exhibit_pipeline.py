@@ -6,8 +6,8 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
-from langchain_core.documents import Document
 
+from sec_nlp.core.documents import DocumentRecord as Document
 from sec_nlp.pipelines.presets.exb.config import ExhibitConfig
 from sec_nlp.pipelines.presets.exb.models import (
     ExhibitContractResult,
@@ -18,7 +18,7 @@ from sec_nlp.pipelines.presets.exb.run_stages import (
     ExhibitRunState,
     build_exhibit_stage_chain,
 )
-from sec_nlp.pipelines.vector import VectorConfig
+from sec_nlp.pipelines.vector.config import VectorConfig
 
 
 class TestExhibitPipeline:
@@ -61,7 +61,7 @@ class TestExhibitPipeline:
         assert (
             pipeline.requires_llm is False
         )  # exb pipeline doesn't require LLM
-        assert pipeline.requires_vector_db is True
+        assert pipeline.requires_vector_db is False
 
         # Verify vector store is None in dry_run mode
         assert pipeline._vector_store is None
@@ -118,7 +118,7 @@ class TestExhibitPipeline:
 
         assert pipeline.pipeline_type == "exhibit"
         assert pipeline.requires_llm is False
-        assert pipeline.requires_vector_db is True
+        assert pipeline.requires_vector_db is False
         assert pipeline.get_config_model() == ExhibitConfig
         assert pipeline.get_result_model() == ExhibitResult
         assert "exhibit" in pipeline.description.lower()

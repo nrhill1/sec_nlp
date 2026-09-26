@@ -7,7 +7,7 @@ from pathlib import Path
 
 from sec_nlp.core.infra.logger import logger
 from sec_nlp.pipelines.presets.analyze.market import MarketEnrichment
-from sec_nlp.pipelines.runtime import (
+from sec_nlp.pipelines.runtime.metadata import (
     get_accession_from_metadata,
     group_results_by_accession,
 )

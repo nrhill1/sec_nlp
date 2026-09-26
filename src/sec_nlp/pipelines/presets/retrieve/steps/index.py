@@ -3,12 +3,16 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from langchain_ollama.embeddings import OllamaEmbeddings
+    from qdrant_client import QdrantClient
+    from qdrant_client.models import PointStruct
+
+
 import hashlib
 from uuid import NAMESPACE_URL, uuid5
-
-from langchain_ollama.embeddings import OllamaEmbeddings
-from qdrant_client import QdrantClient
-from qdrant_client.models import Distance, PointStruct, VectorParams
 
 from sec_nlp.core.infra.logger import logger
 from sec_nlp.types import JsonValue
@@ -177,6 +181,8 @@ def index_retrieval_hits(
                 settings.vdb.setup_embedding_model()
             )
         if not has_collection:
+            from qdrant_client.models import Distance, PointStruct, VectorParams
+
             qdrant.create_collection(
                 collection_name=collection_name,
                 vectors_config=VectorParams(
@@ -199,6 +205,8 @@ def index_retrieval_hits(
         for (hit, point_id), vector in zip(keyed_hits, vectors, strict=False):
             if not vector:
                 continue
+            from qdrant_client.models import Distance, PointStruct, VectorParams
+
             points.append(
                 PointStruct(
                     id=point_id,

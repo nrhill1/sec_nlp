@@ -15,9 +15,11 @@ from dataclasses import dataclass
 from inspect import Parameter, Signature, signature
 from typing import Literal
 
-from langchain_core.documents import Document
+from langchain_core.documents import Document as LangChainDocument
 from langchain_core.embeddings import Embeddings
 
+from sec_nlp.adapters.documents import from_langchain
+from sec_nlp.core.documents import DocumentRecord as Document
 from sec_nlp.core.infra.logger import logger
 from sec_nlp.core.text.chunking import _fallback_sent_tokenize
 from sec_nlp.core.text.semantic_settings import SemanticChunkingSettings
@@ -222,15 +224,17 @@ class SemanticChunker:
         return _invoke
 
     @staticmethod
-    def _coerce_documents(raw_documents: Sequence[Document]) -> list[Document]:
+    def _coerce_documents(
+        raw_documents: Sequence[Document | LangChainDocument],
+    ) -> list[Document]:
         """Validate that the splitter returned LangChain Document instances."""
         result: list[Document] = []
         for doc in raw_documents:
-            if not isinstance(doc, Document):
+            if not isinstance(doc, (Document, LangChainDocument)):
                 raise TypeError(
                     "Experimental SemanticChunker returned non-Document value"
                 )
-            result.append(doc)
+            result.append(from_langchain(doc))
         return result
 
     def _create_documents(

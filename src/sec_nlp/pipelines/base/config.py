@@ -4,7 +4,7 @@
 All pipeline configs inherit from ``BasePipelineSettings``, which layers
 Pydantic settings (CLI → env → .env) on top of common fields: symbols, date
 range, filing mode, run identifiers, and output paths. The class also handles
-run-registry bookkeeping (register on init, mark complete via
+run-registry bookkeeping (explicit start, mark complete via
 ``complete_run``) and provides convenience properties for run metadata.
 """
 
@@ -41,7 +41,6 @@ from sec_nlp.types import (
     ConfigValue,
     InitSubclassKwargs,
     JsonDict,
-    JsonObject,
     JsonValue,
 )
 
@@ -54,7 +53,7 @@ class BasePipelineSettings(BaseSettings, ABC):
     Configuration values are resolved in descending precedence:
     CLI arguments → environment variables → ``.env`` file → field defaults.
     Subclasses must set ``pipeline_type`` and implement ``pipeline_label()``.
-    The model registers each run in the SQLite run registry at init time and
+    The caller explicitly starts a run in the SQLite registry and
     exposes ``complete_run()`` for status/metadata recording.
     """
 
@@ -219,8 +218,10 @@ class BasePipelineSettings(BaseSettings, ABC):
 
         return merged_values
 
-    def model_post_init(self, __context: JsonObject | None) -> None:
-        """Register this run in the SQLite run registry after config freezes."""
+    def start_run(self) -> None:
+        """Register an explicitly started operation once, keeping settings validation pure."""
+        if self._short_id_ref["value"]:
+            return
         try:
             from sec_nlp.pipelines.observability.run_registry import (
                 get_registry,
@@ -236,7 +237,10 @@ class BasePipelineSettings(BaseSettings, ABC):
             if short_id is not None:
                 self._short_id_ref["value"] = short_id
         except (ImportError, OSError, sqlite3.Error):
-            logger.debug("Run registry unavailable during init")
+            logger.debug(
+                "Run registry unavailable during execution startup",
+                exc_info=True,
+            )
 
     @abstractmethod
     def pipeline_label(self) -> str:
@@ -434,42 +438,13 @@ class BasePipelineSettings(BaseSettings, ABC):
     @property
     def short_id(self) -> int:
         """Get the short sequential run ID (e.g., 42)."""
-        self._ensure_short_id()
         return self._short_id_ref["value"]
 
     @property
     def short_id_display(self) -> str:
         """Get the short ID for display (e.g., '#42')."""
-        self._ensure_short_id()
         sid = self._short_id_ref["value"]
         return f"#{sid}" if sid else str(self.run_id)
-
-    def _ensure_short_id(self) -> None:
-        """Lazily resolve the sequential short ID from the run registry."""
-        if self._short_id_ref["value"]:
-            return
-        try:
-            from sec_nlp.pipelines.observability.run_registry import (
-                get_registry,
-            )
-
-            registry = get_registry()
-            existing = registry.get_run(str(self.run_id))
-            if existing is not None:
-                self._short_id_ref["value"] = existing.record_id
-                return
-
-            short_id = registry.register_run(
-                run_id=str(self.run_id),
-                pipeline_type=self.pipeline_type,
-                started_at=self._run_timestamp,
-                output_dir=str(self.out_path),
-            )
-            if short_id is not None:
-                self._short_id_ref["value"] = short_id
-        except (ImportError, OSError, sqlite3.Error):
-            logger.debug("Run registry unavailable for short_id lookup")
-            return
 
     @property
     def run_timestamp(self) -> datetime:
@@ -530,7 +505,9 @@ class BasePipelineSettings(BaseSettings, ABC):
                 metadata=serialized_metadata,
             )
         except (ImportError, OSError, sqlite3.Error):
-            logger.debug("Run registry unavailable for run completion")
+            logger.debug(
+                "Run registry unavailable for run completion", exc_info=True
+            )
 
     def get_pipeline_output_dir(self) -> Path:
         """Return the run-scoped output directory for this pipeline."""

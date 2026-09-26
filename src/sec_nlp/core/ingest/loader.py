@@ -1,25 +1,25 @@
 # src/sec_nlp/core/ingest/loader.py
-# src/sec_nlp/core/loader.py
 """Unified Loader that downloads and preprocesses SEC filings.
 
-Self-contained implementation using sec_edgar_downloader for fetching and
-unstructured.io + LangChain for parsing/splitting.
-
-Fetch mode:
-- "download": download files via sec_edgar_downloader (default)
-
-Primary method returns LangChain Documents directly.
+The shared SEC transport fetches filings, and the local HTML processor parses
+and chunks them into internal document records. Async and sequential loading
+share the same transformation path and preserve source metadata.
 """
+
+from __future__ import annotations
 
 import asyncio
 from collections.abc import Coroutine, Generator, Iterable, Sequence
 from datetime import date, datetime
 from pathlib import Path
-from typing import Literal, Protocol, TypedDict
+from typing import TYPE_CHECKING, Literal, Protocol, TypedDict
 
-from langchain_core.documents import Document
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, field_validator
-from unstructured.documents.elements import Element
+
+from sec_nlp.core.documents import DocumentRecord as Document
+
+if TYPE_CHECKING:
+    from unstructured.documents.elements import Element
 
 from sec_nlp.core.edgar.filing_mode import FilingMode
 from sec_nlp.core.edgar.holdings_parser import HoldingsParser
@@ -68,7 +68,7 @@ def _default_meta() -> LoaderRunMetadata:
 
 
 class Loader(BaseModel):
-    """Download + preprocess filings into LangChain Documents.
+    """Download + preprocess filings into document records.
 
     Example:
         loader = Loader(email="you@example.com")
@@ -203,7 +203,7 @@ class Loader(BaseModel):
         section_filter: SectionFilter | None = None,
         symbols: Iterable[str] | None = None,
     ) -> list[Document]:
-        """Download filings and return preprocessed LangChain Documents.
+        """Download filings and return preprocessed document records.
 
         Args:
             mode: FilingMode.annual -> 10-K, .quarterly -> 10-Q
@@ -421,7 +421,7 @@ class Loader(BaseModel):
             meta = dict(doc.metadata or {})
             if not meta.get("symbol"):
                 meta["symbol"] = symbol
-            doc.metadata = meta
+            doc.metadata.update(meta)
         return docs
 
     @staticmethod
@@ -570,7 +570,7 @@ class Loader(BaseModel):
             if not updated.get("accession_number"):
                 updated["accession_number"] = accession
             updated["related_filings"] = related
-            doc.metadata = updated
+            doc.metadata.update(updated)
 
     @staticmethod
     def _extract_accession(metadata: JsonDict) -> str | None:
@@ -722,7 +722,8 @@ class Loader(BaseModel):
             if section_filter is not None
             else self.section_filter
         )
-        return await self._parser.transform_html_async(
+        return await asyncio.to_thread(
+            self.transform_html,
             html_path,
             keywords=keywords,
             section_filter=active_filter,
@@ -879,7 +880,7 @@ class Loader(BaseModel):
     ) -> list[FilingRecord]:
         """Filter filings by date range.
 
-        Note: filings are external objects from sec_edgar_downloader.
+        Filing records provide acceptance timestamps from the shared SEC provider.
         """
         filtered = []
         for filing in filings:

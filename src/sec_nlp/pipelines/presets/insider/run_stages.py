@@ -1,5 +1,5 @@
 # src/sec_nlp/pipelines/presets/insider/run_stages.py
-"""Runnable stage helpers for insider pipeline execution."""
+"""Ordered specialist steps for insider pipeline execution."""
 
 from __future__ import annotations
 
@@ -7,23 +7,28 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from langchain_core.runnables import Runnable
 from pydantic import Field
 from rich.progress import Progress, TaskID
 
-from sec_nlp.pipelines.base.stages import PipelineStageRunnable
-
-from .models import InsiderAlert, InsiderLedger, InsiderTransaction
-from .steps import (
-    DownloadedInsiderFiling,
+from sec_nlp.pipelines.base.stages import PipelineStage, StageSequence
+from sec_nlp.pipelines.presets.insider.steps.aggregate import (
     TradeCluster,
     build_insider_ledgers,
     compute_net_buy_ratio,
-    correlate_insider_activity,
-    download_insider_filings,
     find_trade_clusters,
+)
+from sec_nlp.pipelines.presets.insider.steps.correlate import (
+    correlate_insider_activity,
+)
+from sec_nlp.pipelines.presets.insider.steps.download import (
+    DownloadedInsiderFiling,
+    download_insider_filings,
+)
+from sec_nlp.pipelines.presets.insider.steps.parse import (
     parse_insider_transactions,
 )
+
+from .models import InsiderAlert, InsiderLedger, InsiderTransaction
 
 if TYPE_CHECKING:
     from .pipeline import InsiderPipeline
@@ -48,7 +53,7 @@ class InsiderRunState:
     metadata: dict[str, int | float | str | None] = field(default_factory=dict)
 
 
-class DownloadInsiderFilingsStage(PipelineStageRunnable[InsiderRunState]):
+class DownloadInsiderFilingsStage(PipelineStage[InsiderRunState]):
     """Ingress acquisition stage that downloads insider filings for a symbol."""
 
     name: str = Field(default="download_filings")
@@ -68,7 +73,7 @@ class DownloadInsiderFilingsStage(PipelineStageRunnable[InsiderRunState]):
         return state
 
 
-class ParseInsiderTransactionsStage(PipelineStageRunnable[InsiderRunState]):
+class ParseInsiderTransactionsStage(PipelineStage[InsiderRunState]):
     """Parsing stage that extracts transaction rows from downloaded insider filings."""
 
     name: str = Field(default="parse_transactions")
@@ -97,7 +102,7 @@ class ParseInsiderTransactionsStage(PipelineStageRunnable[InsiderRunState]):
         return state
 
 
-class AggregateInsiderActivityStage(PipelineStageRunnable[InsiderRunState]):
+class AggregateInsiderActivityStage(PipelineStage[InsiderRunState]):
     """Aggregation stage that derives ledgers, clusters, and buy ratio signals."""
 
     name: str = Field(default="aggregate_activity")
@@ -120,7 +125,7 @@ class AggregateInsiderActivityStage(PipelineStageRunnable[InsiderRunState]):
         return state
 
 
-class CorrelateInsiderActivityStage(PipelineStageRunnable[InsiderRunState]):
+class CorrelateInsiderActivityStage(PipelineStage[InsiderRunState]):
     """Correlation stage that maps insider activity to market and filing context."""
 
     name: str = Field(default="correlate_activity")
@@ -142,7 +147,7 @@ class CorrelateInsiderActivityStage(PipelineStageRunnable[InsiderRunState]):
         return state
 
 
-class WriteInsiderOutputsStage(PipelineStageRunnable[InsiderRunState]):
+class WriteInsiderOutputsStage(PipelineStage[InsiderRunState]):
     """Egress stage that writes insider artifacts and summary metadata."""
 
     name: str = Field(default="write_outputs")
@@ -182,7 +187,7 @@ class WriteInsiderOutputsStage(PipelineStageRunnable[InsiderRunState]):
         return state
 
 
-_INSIDER_STAGES: tuple[PipelineStageRunnable[InsiderRunState], ...] = (
+_INSIDER_STAGES: tuple[PipelineStage[InsiderRunState], ...] = (
     DownloadInsiderFilingsStage(),
     ParseInsiderTransactionsStage(),
     AggregateInsiderActivityStage(),
@@ -193,6 +198,6 @@ _INSIDER_STAGES: tuple[PipelineStageRunnable[InsiderRunState], ...] = (
 
 def build_insider_stage_chain(
     pipeline: InsiderPipeline,
-) -> Runnable[InsiderRunState, InsiderRunState]:
+) -> StageSequence[InsiderRunState]:
     """Build deterministic insider stage chain."""
     return pipeline.build_configured_stage_chain(stages=_INSIDER_STAGES)

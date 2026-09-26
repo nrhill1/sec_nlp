@@ -4,8 +4,7 @@
 import time
 from pathlib import Path
 
-from langchain_core.documents import Document
-
+from sec_nlp.core.documents import DocumentRecord as Document
 from sec_nlp.core.edgar.filing_mode import FilingMode
 from sec_nlp.core.ingest.loader import Loader
 from sec_nlp.core.text.filters import SectionFilter, create_item_filter

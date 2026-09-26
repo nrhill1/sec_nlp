@@ -1,0 +1,4948 @@
+schema_version: 1
+profiles:
+  retrieve:
+    dry_run: false
+    efts_candidates: 850
+    forms:
+    - 10-K
+    - 10-Q
+    - 8-K
+    - 6-K
+    - 20-F
+    hydrate_top_n: 90
+    index_results: true
+    output_format: json
+    queries:
+    - rare earth oxide pricing NdPr demand magnet supply chain resilience
+    - processing bottlenecks separation capacity and downstream conversion throughput
+    - permit timing and mine-to-refinery ramp risks with capex dependency
+    - offtake structure customer concentration and pricing reset exposure
+    - export controls and geopolitical risk for rare earth critical inputs
+    - liquidity debt maturities covenant flexibility and funding runway
+    - inventory strategy logistics constraints and freight cost sensitivity
+    query_term_min_hits: 0
+    query_term_min_ratio: 0.0
+    rerank_with_embeddings: true
+    start_date: '2021-01-01'
+    stopword_aware_lexical: true
+    symbols:
+    - MP
+    - LAC
+    - UUUU
+    - TMRC
+    - AREC
+    - USAR
+    top_k: 150
+    vdb:
+      collection_name: thematic_rems_conflict_monopoly_large
+      qdrant_location: null
+      qdrant_url: http://localhost:6333
+  chat:
+    collections:
+    - industry_mining_high
+    context_token_budget: 10500
+    dry_run: false
+    forms:
+    - 10-K
+    - 10-Q
+    - 8-K
+    - 6-K
+    - 20-F
+    generation_token_cap: 1280
+    include_market_context: true
+    include_news_context: true
+    interactive: false
+    max_context_chunks: 14
+    output_format: yaml
+    question: Compare NdPr supply-chain risk, processing bottlenecks, and pricing power across the REM
+      basket, highlighting the strongest and weakest positioning.
+    rerank_mode: mmr
+    start_date: '2021-01-01'
+    symbols:
+    - MP
+    - LAC
+    - UUUU
+    - TMRC
+    - AREC
+    - USAR
+    top_k: 12
+recipes:
+  benchmark_matrix_flows/01_rems_large_merged_aligned.yaml:
+    name: benchmark_rems_large_merged_aligned
+    defaults:
+      email: you@example.com
+    stages:
+    - id: retrieve_seed
+      pipeline: retrieve
+      overrides:
+        queries:
+        - rare earth oxide pricing NdPr demand magnet supply chain separation capacity disclosures and
+          trend changes
+        - processing bottlenecks offtake agreements export controls impacts on revenue visibility and
+          risk factors
+        - China dependency permitting timelines concentrate feedstock commentary with quantified impact
+          where available
+        - capex funding strategic stockpiles defense demand sensitivity and scenario planning
+        - shipping routes conversion yields downstream integration execution milestones and bottlenecks
+        - liquidity cash flow working capital revolving credit debt covenant compliance updates
+        - capital expenditure project timeline budget variance and return-on-investment assumptions
+        - major customer concentration contract renewal risk termination clauses and pricing resets
+        - inflation labor freight energy input costs and gross-margin pass-through dynamics
+        - foreign exchange volatility and hedging strategy implications for near-term guidance
+        - litigation environmental liabilities contingent reserves and remediation cost outlook
+        top_k: 120
+        efts_candidates: 620
+        hydrate_top_n: 180
+        vdb:
+          collection_name: benchmark_rems_large_merged_aligned
+          embedding_model: qwen3-embedding:4b
+          vector_size: 2560
+        start_date: '2023-03-12'
+      condition: always
+      inputs: []
+    - id: chat_answer
+      pipeline: chat
+      overrides:
+        collections:
+        - benchmark_rems_large_merged_aligned
+        top_k: 16
+        llm_timeout_seconds: 360
+        llm:
+          model_name: qwen3:8b
+          require_json: false
+          temperature: 0.05
+          max_new_tokens: 1280
+          num_ctx: 32768
+        vdb:
+          collection_name: benchmark_rems_large_merged_aligned
+          embedding_model: qwen3-embedding:4b
+          vector_size: 2560
+          qdrant_url: http://localhost:6333
+          qdrant_location: null
+        start_date: '2023-03-12'
+      condition: always
+      inputs:
+      - from_stage: retrieve_seed
+        artifact: retrieve_seed
+        target_field: seed_context
+    on_failure: stop
+  benchmark_matrix_flows/02_rems_high_qwen_aligned.yaml:
+    name: benchmark_rems_high_qwen_aligned
+    defaults:
+      email: you@example.com
+    stages:
+    - id: retrieve_seed
+      pipeline: retrieve
+      overrides:
+        queries:
+        - NdPr demand inflections from EV wind and defense and the implied earnings path under multiple
+          demand regimes
+        - mine-to-magnet vertical integration economics and the tradeoff between margin capture and execution
+          risk
+        - refining chokepoints, shipping constraints, and scenario-based supply interruption impacts on
+          valuation
+        - customer concentration and qualification-cycle delays as drivers of downside skew and volatility
+        - free-cash-flow sensitivity to realized pricing, freight, and reagent costs with stress assumptions
+        - financing optionality, dilution risk, and balance-sheet resilience for long-horizon portfolio
+          construction
+        top_k: 100
+        efts_candidates: 420
+        hydrate_top_n: 150
+        vdb:
+          collection_name: benchmark_rems_high_qwen_aligned
+          embedding_model: qwen3-embedding:4b
+          vector_size: 2560
+        start_date: '2023-03-12'
+      condition: always
+      inputs: []
+    - id: chat_answer
+      pipeline: chat
+      overrides:
+        question: Write a full investment committee memo for this REM basket with ranking, target exposure
+          bands, scenario returns, risk limits, and explicit buy-hold-exit criteria.
+        collections:
+        - benchmark_rems_high_qwen_aligned
+        top_k: 16
+        max_context_chunks: 40
+        context_token_budget: 32000
+        generation_token_cap: 0
+        llm_timeout_seconds: 360
+        llm:
+          model_name: qwen3:8b
+          require_json: false
+          temperature: 0.03
+          max_new_tokens: 8192
+          num_ctx: 32768
+        vdb:
+          collection_name: benchmark_rems_high_qwen_aligned
+          embedding_model: qwen3-embedding:4b
+          vector_size: 2560
+          qdrant_url: http://localhost:6333
+          qdrant_location: null
+        start_date: '2023-03-12'
+      condition: always
+      inputs:
+      - from_stage: retrieve_seed
+        artifact: retrieve_seed
+        target_field: seed_context
+    on_failure: stop
+  benchmark_matrix_flows/03_quantum_large_merged_aligned.yaml:
+    name: benchmark_quantum_large_merged_aligned
+    defaults:
+      email: you@example.com
+    stages:
+    - id: retrieve_seed
+      pipeline: retrieve
+      overrides:
+        queries:
+        - quantum hardware roadmap error correction qubit fidelity hybrid workloads disclosures and trend
+          changes
+        - government contracts commercial pilots bookings conversion impacts on revenue visibility and
+          risk factors
+        - funding runway dilution risk IP portfolio commentary with quantified impact where available
+        - cloud quantum access talent retention R&D intensity sensitivity and scenario planning
+        - strategic partnerships manufacturing scale go-to-market execution execution milestones and bottlenecks
+        - liquidity cash flow working capital revolving credit debt covenant compliance updates
+        - capital expenditure project timeline budget variance and return-on-investment assumptions
+        - major customer concentration contract renewal risk termination clauses and pricing resets
+        - inflation labor freight energy input costs and gross-margin pass-through dynamics
+        - foreign exchange volatility and hedging strategy implications for near-term guidance
+        - litigation environmental liabilities contingent reserves and remediation cost outlook
+        top_k: 120
+        efts_candidates: 620
+        hydrate_top_n: 180
+        vdb:
+          collection_name: benchmark_quantum_large_merged_aligned
+          embedding_model: qwen3-embedding:4b
+          vector_size: 2560
+        symbols:
+        - IONQ
+        - RGTI
+        - QBTS
+        - QUBT
+        - IBM
+        - HON
+        start_date: '2023-03-12'
+      condition: always
+      inputs: []
+    - id: chat_answer
+      pipeline: chat
+      overrides:
+        question: Assess commercialization readiness and funding durability across the quantum basket,
+          and identify which names have the clearest path to scalable revenue.
+        collections:
+        - benchmark_quantum_large_merged_aligned
+        top_k: 16
+        llm_timeout_seconds: 360
+        llm:
+          model_name: qwen3:8b
+          require_json: false
+          temperature: 0.05
+          max_new_tokens: 1280
+          num_ctx: 32768
+        vdb:
+          collection_name: benchmark_quantum_large_merged_aligned
+          embedding_model: qwen3-embedding:4b
+          vector_size: 2560
+          qdrant_url: http://localhost:6333
+          qdrant_location: null
+        symbols:
+        - IONQ
+        - RGTI
+        - QBTS
+        - QUBT
+        - IBM
+        - HON
+        start_date: '2023-03-12'
+      condition: always
+      inputs:
+      - from_stage: retrieve_seed
+        artifact: retrieve_seed
+        target_field: seed_context
+    on_failure: stop
+  benchmark_matrix_flows/04_quantum_high_qwen_ministral_aligned.yaml:
+    name: benchmark_quantum_high_qwen_ministral_aligned
+    defaults:
+      email: you@example.com
+    stages:
+    - id: retrieve_seed
+      pipeline: retrieve
+      overrides:
+        queries:
+        - roadmap milestones, error-correction claims, and commercialization timing as valuation triggers
+        - government and defense contract concentration, renewal uncertainty, and backlog quality
+        - cash runway, dilution timing, and margin path under scale-up and delay scenarios
+        - pipeline conversion rates, recurring revenue quality, and deal concentration risk
+        - competitive positioning across superconducting trapped-ion and neutral-atom approaches for relative
+          positioning
+        top_k: 90
+        efts_candidates: 340
+        hydrate_top_n: 120
+        vdb:
+          collection_name: benchmark_quantum_high_qwen_ministral_aligned
+          embedding_model: qwen3-embedding:4b
+          vector_size: 2560
+        symbols:
+        - IONQ
+        - RGTI
+        - QBTS
+        - QUBT
+        - IBM
+        - HON
+        start_date: '2023-03-12'
+      condition: always
+      inputs: []
+    - id: chat_answer
+      pipeline: chat
+      overrides:
+        question: Build an investment strategy playbook for this quantum basket with position weights,
+          optionality versus solvency tradeoffs, catalyst-based entries, and hard risk limits.
+        collections:
+        - benchmark_quantum_high_qwen_ministral_aligned
+        top_k: 14
+        max_context_chunks: 40
+        context_token_budget: 32000
+        generation_token_cap: 0
+        llm_timeout_seconds: 360
+        llm:
+          model_name: ministral-3:3b
+          require_json: false
+          temperature: 0.05
+          max_new_tokens: 8192
+          num_ctx: 32768
+        vdb:
+          collection_name: benchmark_quantum_high_qwen_ministral_aligned
+          embedding_model: qwen3-embedding:4b
+          vector_size: 2560
+          qdrant_url: http://localhost:6333
+          qdrant_location: null
+        symbols:
+        - IONQ
+        - RGTI
+        - QBTS
+        - QUBT
+        - IBM
+        - HON
+        start_date: '2023-03-12'
+      condition: always
+      inputs:
+      - from_stage: retrieve_seed
+        artifact: retrieve_seed
+        target_field: seed_context
+    on_failure: stop
+  conflict_monopoly_flows/01_rems_conflict_monopoly_large.yaml:
+    name: rems_conflict_monopoly_large_flow
+    defaults:
+      email: you@example.com
+    stages:
+    - id: retrieve_simple_terms
+      pipeline: retrieve
+      overrides:
+        queries:
+        - rare earth export controls
+        - NdPr pricing power
+        - magnet supply chain concentration
+        - China rare earth dependency
+        - rare earth offtake exclusivity
+        - rare earth monopoly risk
+        - critical minerals sanctions exposure
+        - rare earth defense demand
+        efts_candidates: 900
+        hydrate_top_n: 260
+        vdb:
+          embedding_model: qwen3-embedding:4b
+          vector_size: 2560
+        start_date: '2023-03-12'
+      condition: always
+      inputs: []
+    - id: retrieve_conflict_terms
+      pipeline: retrieve
+      overrides:
+        queries:
+        - rare earth export controls China
+        - critical minerals sanctions
+        - rare earth defense stockpile
+        - rare earth tariff retaliation
+        - China processing dependence
+        - rare earth customs restrictions
+        - magnet supply disruption
+        - domestic rare earth grants
+        top_k: 165
+        efts_candidates: 950
+        hydrate_top_n: 300
+        vdb:
+          embedding_model: qwen3-embedding:4b
+          vector_size: 2560
+        start_date: '2023-03-12'
+      condition: always
+      inputs: []
+    - id: retrieve_monopoly_terms
+      pipeline: retrieve
+      overrides:
+        queries:
+        - rare earth consolidation
+        - joint venture rare earth
+        - mine to magnet integration
+        - rare earth offtake agreements
+        - customer concentration rare earth
+        - processing bottleneck rare earth
+        - rare earth pricing leverage
+        - capacity reservation rare earth
+        top_k: 170
+        efts_candidates: 950
+        hydrate_top_n: 320
+        vdb:
+          embedding_model: qwen3-embedding:4b
+          vector_size: 2560
+        start_date: '2023-03-12'
+      condition: always
+      inputs: []
+    - id: retrieve_complex_terms
+      pipeline: retrieve
+      overrides:
+        queries:
+        - rare earth pricing leverage barriers to entry
+        - rare earth procurement lockout risk
+        - domestic processing buildout delays
+        - rare earth stockpiling customer concentration
+        - rare earth separation capacity reservation
+        - magnet supply chain monopoly
+        top_k: 180
+        efts_candidates: 1000
+        hydrate_top_n: 340
+        vdb:
+          embedding_model: qwen3-embedding:4b
+          vector_size: 2560
+        start_date: '2023-03-12'
+      condition: always
+      inputs: []
+    - id: chat_answer
+      pipeline: chat
+      overrides:
+        question: Compare the rare earth basket on exposure to geopolitical conflict, monopoly formation,
+          and supply-chain concentration. Separate evidence tied to simple-term hits versus complex-term
+          hits, identify who gains pricing power or procurement leverage, and call out which issuers remain
+          most exposed to lockout risk or concentrated processing chokepoints.
+        collections:
+        - thematic_rems_conflict_monopoly_large
+        top_k: 24
+        max_context_chunks: 32
+        context_token_budget: 32000
+        generation_token_cap: 0
+        llm_timeout_seconds: 360
+        llm:
+          model_name: qwen3:8b
+          require_json: false
+          temperature: 0.03
+          max_new_tokens: 8192
+          num_ctx: 32768
+        vdb:
+          collection_name: thematic_rems_conflict_monopoly_large
+          embedding_model: qwen3-embedding:4b
+          vector_size: 2560
+          qdrant_url: http://localhost:6333
+          qdrant_location: null
+        start_date: '2023-03-12'
+      condition: always
+      inputs: []
+    on_failure: stop
+  conflict_monopoly_flows/02_quantum_conflict_monopoly_large.yaml:
+    name: quantum_conflict_monopoly_large_flow
+    defaults:
+      email: you@example.com
+    stages:
+    - id: retrieve_simple_terms
+      pipeline: retrieve
+      overrides:
+        queries:
+        - quantum export controls
+        - quantum commercialization concentration
+        - quantum cloud partnerships
+        - quantum government concentration
+        - quantum IP concentration
+        - quantum foundry dependence
+        - sovereign compute restrictions
+        - quantum defense contracts
+        efts_candidates: 900
+        hydrate_top_n: 260
+        vdb:
+          collection_name: thematic_quantum_conflict_monopoly_large
+          embedding_model: qwen3-embedding:4b
+          vector_size: 2560
+        symbols:
+        - IONQ
+        - RGTI
+        - QBTS
+        - QUBT
+        - IBM
+        - HON
+        start_date: '2023-03-12'
+      condition: always
+      inputs: []
+    - id: retrieve_conflict_terms
+      pipeline: retrieve
+      overrides:
+        queries:
+        - quantum export controls entity list
+        - quantum defense procurement
+        - sovereign compute requirements
+        - trusted vendor mandates
+        - restricted country screening
+        - quantum semiconductor bottlenecks
+        - quantum talent restrictions
+        - national lab contracts
+        top_k: 165
+        efts_candidates: 950
+        hydrate_top_n: 300
+        vdb:
+          collection_name: thematic_quantum_conflict_monopoly_large
+          embedding_model: qwen3-embedding:4b
+          vector_size: 2560
+        symbols:
+        - IONQ
+        - RGTI
+        - QBTS
+        - QUBT
+        - IBM
+        - HON
+        start_date: '2023-03-12'
+      condition: always
+      inputs: []
+    - id: retrieve_monopoly_terms
+      pipeline: retrieve
+      overrides:
+        queries:
+        - quantum platform lock in
+        - exclusive cloud partnership
+        - sole source awards
+        - patent concentration quantum
+        - exclusive licensing quantum
+        - hyperscaler bargaining power
+        - foundry concentration quantum
+        - quantum acquisitions
+        top_k: 170
+        efts_candidates: 950
+        hydrate_top_n: 320
+        vdb:
+          collection_name: thematic_quantum_conflict_monopoly_large
+          embedding_model: qwen3-embedding:4b
+          vector_size: 2560
+        symbols:
+        - IONQ
+        - RGTI
+        - QBTS
+        - QUBT
+        - IBM
+        - HON
+        start_date: '2023-03-12'
+      condition: always
+      inputs: []
+    - id: retrieve_complex_terms
+      pipeline: retrieve
+      overrides:
+        queries:
+        - quantum commercialization concentration
+        - quantum hardware architecture concentration
+        - quantum government program exclusivity
+        - quantum fabrication access barriers
+        - quantum long-term procurement frameworks
+        - quantum channel lock in
+        top_k: 180
+        efts_candidates: 1000
+        hydrate_top_n: 340
+        vdb:
+          collection_name: thematic_quantum_conflict_monopoly_large
+          embedding_model: qwen3-embedding:4b
+          vector_size: 2560
+        symbols:
+        - IONQ
+        - RGTI
+        - QBTS
+        - QUBT
+        - IBM
+        - HON
+        start_date: '2023-03-12'
+      condition: always
+      inputs: []
+    - id: chat_answer
+      pipeline: chat
+      overrides:
+        question: Compare the quantum basket on geopolitical-conflict exposure, emerging monopoly or gatekeeper
+          dynamics, and concentration risk. Distinguish simple-term evidence from complex-term evidence,
+          identify which issuers are building durable control points versus depending on governments or
+          hyperscalers, and call out who is most exposed if procurement or export regimes tighten.
+        collections:
+        - thematic_quantum_conflict_monopoly_large
+        top_k: 24
+        max_context_chunks: 32
+        context_token_budget: 32000
+        generation_token_cap: 0
+        llm_timeout_seconds: 360
+        llm:
+          model_name: qwen3:8b
+          require_json: false
+          temperature: 0.03
+          max_new_tokens: 8192
+          num_ctx: 32768
+        vdb:
+          collection_name: thematic_quantum_conflict_monopoly_large
+          embedding_model: qwen3-embedding:4b
+          vector_size: 2560
+          qdrant_url: http://localhost:6333
+          qdrant_location: null
+        symbols:
+        - IONQ
+        - RGTI
+        - QBTS
+        - QUBT
+        - IBM
+        - HON
+        start_date: '2023-03-12'
+      condition: always
+      inputs: []
+    on_failure: stop
+  industry_tier_jobs/01_flow_rems_low.yaml:
+    name: rems_low_flow_preset
+    defaults:
+      email: you@example.com
+    stages:
+    - id: retrieve_seed
+      pipeline: retrieve
+      overrides:
+        top_k: 60
+        efts_candidates: 260
+        vdb:
+          collection_name: industry_rems_low
+          embedding_model: granite-embedding:30m
+          vector_size: 384
+      condition: always
+      inputs: []
+    - id: chat_answer
+      pipeline: chat
+      overrides:
+        question: Compare NdPr supply security, pricing leverage, and balance-sheet risk across this REM
+          basket using filing-grounded evidence.
+        collections:
+        - industry_rems_low
+        top_k: 10
+        max_context_chunks: 8
+        context_token_budget: 5000
+        generation_token_cap: 512
+        llm:
+          model_name: llama3.2:1b
+          require_json: false
+          temperature: 0.05
+          max_new_tokens: 512
+          num_ctx: 8192
+        vdb:
+          collection_name: industry_rems_low
+          embedding_model: granite-embedding:30m
+          vector_size: 384
+          qdrant_url: http://localhost:6333
+          qdrant_location: null
+      condition: always
+      inputs:
+      - from_stage: retrieve_seed
+        artifact: retrieve_seed
+        target_field: seed_context
+    on_failure: stop
+  industry_tier_jobs/02_flow_rems_medium.yaml:
+    name: rems_medium_flow_preset
+    defaults:
+      email: you@example.com
+    stages:
+    - id: retrieve_seed
+      pipeline: retrieve
+      overrides:
+        top_k: 100
+        efts_candidates: 500
+        hydrate_top_n: 150
+        vdb:
+          collection_name: industry_rems_medium
+          embedding_model: mxbai-embed-large:latest
+          vector_size: 1024
+      condition: always
+      inputs: []
+    - id: chat_answer
+      pipeline: chat
+      overrides:
+        question: Compare NdPr supply security, pricing leverage, and balance-sheet risk across this REM
+          basket using filing-grounded evidence.
+        collections:
+        - industry_rems_medium
+        max_context_chunks: 12
+        context_token_budget: 8000
+        generation_token_cap: 896
+        llm:
+          model_name: ministral-3:3b
+          require_json: false
+          temperature: 0.05
+          max_new_tokens: 896
+          num_ctx: 16384
+        vdb:
+          collection_name: industry_rems_medium
+          embedding_model: mxbai-embed-large:latest
+          vector_size: 1024
+          qdrant_url: http://localhost:6333
+          qdrant_location: null
+      condition: always
+      inputs:
+      - from_stage: retrieve_seed
+        artifact: retrieve_seed
+        target_field: seed_context
+    on_failure: stop
+  industry_tier_jobs/03_flow_rems_high.yaml:
+    name: rems_high_flow_preset
+    defaults:
+      email: you@example.com
+    stages:
+    - id: retrieve_seed
+      pipeline: retrieve
+      overrides:
+        hydrate_top_n: 220
+        vdb:
+          collection_name: industry_rems_high
+          embedding_model: qwen3-embedding:4b
+          vector_size: 2560
+      condition: always
+      inputs: []
+    - id: chat_answer
+      pipeline: chat
+      overrides:
+        question: Compare NdPr supply security, pricing leverage, and balance-sheet risk across this REM
+          basket using filing-grounded evidence.
+        collections:
+        - industry_rems_high
+        top_k: 16
+        max_context_chunks: 16
+        context_token_budget: 12000
+        llm:
+          model_name: qwen3:8b
+          require_json: false
+          temperature: 0.05
+          max_new_tokens: 1280
+          num_ctx: 32768
+        vdb:
+          collection_name: industry_rems_high
+          embedding_model: qwen3-embedding:4b
+          vector_size: 2560
+          qdrant_url: http://localhost:6333
+          qdrant_location: null
+      condition: always
+      inputs:
+      - from_stage: retrieve_seed
+        artifact: retrieve_seed
+        target_field: seed_context
+    on_failure: stop
+  industry_tier_jobs/04_flow_tech_low.yaml:
+    name: tech_low_flow_preset
+    defaults:
+      email: you@example.com
+    stages:
+    - id: retrieve_seed
+      pipeline: retrieve
+      overrides:
+        queries:
+        - AI infrastructure demand trends and data center capacity commitments
+        - gross margin durability amid mix shift and pricing normalization
+        - enterprise software renewal quality and cloud consumption elasticity
+        - supply chain concentration and component availability risk drivers
+        - capital allocation priorities buybacks capex and strategic M&A posture
+        - regulatory and antitrust exposure tied to platform strategy
+        - FX and macro sensitivity in guidance assumptions
+        top_k: 60
+        efts_candidates: 260
+        vdb:
+          collection_name: industry_tech_low
+          embedding_model: granite-embedding:30m
+          vector_size: 384
+        symbols:
+        - AAPL
+        - MSFT
+        - NVDA
+        - AMD
+        - AVGO
+        - ORCL
+      condition: always
+      inputs: []
+    - id: chat_answer
+      pipeline: chat
+      overrides:
+        question: Identify the strongest and weakest operating leverage profiles in this tech basket and
+          explain key execution and valuation risks from filings.
+        collections:
+        - industry_tech_low
+        top_k: 10
+        max_context_chunks: 8
+        context_token_budget: 5000
+        generation_token_cap: 512
+        llm:
+          model_name: llama3.2:1b
+          require_json: false
+          temperature: 0.05
+          max_new_tokens: 512
+          num_ctx: 8192
+        vdb:
+          collection_name: industry_tech_low
+          embedding_model: granite-embedding:30m
+          vector_size: 384
+          qdrant_url: http://localhost:6333
+          qdrant_location: null
+        symbols:
+        - AAPL
+        - MSFT
+        - NVDA
+        - AMD
+        - AVGO
+        - ORCL
+      condition: always
+      inputs:
+      - from_stage: retrieve_seed
+        artifact: retrieve_seed
+        target_field: seed_context
+    on_failure: stop
+  industry_tier_jobs/05_flow_tech_medium.yaml:
+    name: tech_medium_flow_preset
+    defaults:
+      email: you@example.com
+    stages:
+    - id: retrieve_seed
+      pipeline: retrieve
+      overrides:
+        queries:
+        - AI infrastructure demand trends and data center capacity commitments
+        - gross margin durability amid mix shift and pricing normalization
+        - enterprise software renewal quality and cloud consumption elasticity
+        - supply chain concentration and component availability risk drivers
+        - capital allocation priorities buybacks capex and strategic M&A posture
+        - regulatory and antitrust exposure tied to platform strategy
+        - FX and macro sensitivity in guidance assumptions
+        top_k: 100
+        efts_candidates: 500
+        hydrate_top_n: 150
+        vdb:
+          collection_name: industry_tech_medium
+          embedding_model: mxbai-embed-large:latest
+          vector_size: 1024
+        symbols:
+        - AAPL
+        - MSFT
+        - NVDA
+        - AMD
+        - AVGO
+        - ORCL
+      condition: always
+      inputs: []
+    - id: chat_answer
+      pipeline: chat
+      overrides:
+        question: Identify the strongest and weakest operating leverage profiles in this tech basket and
+          explain key execution and valuation risks from filings.
+        collections:
+        - industry_tech_medium
+        max_context_chunks: 12
+        context_token_budget: 8000
+        generation_token_cap: 896
+        llm:
+          model_name: ministral-3:3b
+          require_json: false
+          temperature: 0.05
+          max_new_tokens: 896
+          num_ctx: 16384
+        vdb:
+          collection_name: industry_tech_medium
+          embedding_model: mxbai-embed-large:latest
+          vector_size: 1024
+          qdrant_url: http://localhost:6333
+          qdrant_location: null
+        symbols:
+        - AAPL
+        - MSFT
+        - NVDA
+        - AMD
+        - AVGO
+        - ORCL
+      condition: always
+      inputs:
+      - from_stage: retrieve_seed
+        artifact: retrieve_seed
+        target_field: seed_context
+    on_failure: stop
+  industry_tier_jobs/06_flow_tech_high.yaml:
+    name: tech_high_flow_preset
+    defaults:
+      email: you@example.com
+    stages:
+    - id: retrieve_seed
+      pipeline: retrieve
+      overrides:
+        queries:
+        - AI infrastructure demand trends and data center capacity commitments
+        - gross margin durability amid mix shift and pricing normalization
+        - enterprise software renewal quality and cloud consumption elasticity
+        - supply chain concentration and component availability risk drivers
+        - capital allocation priorities buybacks capex and strategic M&A posture
+        - regulatory and antitrust exposure tied to platform strategy
+        - FX and macro sensitivity in guidance assumptions
+        hydrate_top_n: 220
+        vdb:
+          collection_name: industry_tech_high
+          embedding_model: qwen3-embedding:4b
+          vector_size: 2560
+        symbols:
+        - AAPL
+        - MSFT
+        - NVDA
+        - AMD
+        - AVGO
+        - ORCL
+      condition: always
+      inputs: []
+    - id: chat_answer
+      pipeline: chat
+      overrides:
+        question: Identify the strongest and weakest operating leverage profiles in this tech basket and
+          explain key execution and valuation risks from filings.
+        collections:
+        - industry_tech_high
+        top_k: 16
+        max_context_chunks: 16
+        context_token_budget: 12000
+        llm:
+          model_name: qwen3:8b
+          require_json: false
+          temperature: 0.05
+          max_new_tokens: 1280
+          num_ctx: 32768
+        vdb:
+          collection_name: industry_tech_high
+          embedding_model: qwen3-embedding:4b
+          vector_size: 2560
+          qdrant_url: http://localhost:6333
+          qdrant_location: null
+        symbols:
+        - AAPL
+        - MSFT
+        - NVDA
+        - AMD
+        - AVGO
+        - ORCL
+      condition: always
+      inputs:
+      - from_stage: retrieve_seed
+        artifact: retrieve_seed
+        target_field: seed_context
+    on_failure: stop
+  industry_tier_jobs/07_flow_quantum_low.yaml:
+    name: quantum_low_flow_preset
+    defaults:
+      email: you@example.com
+    stages:
+    - id: retrieve_seed
+      pipeline: retrieve
+      overrides:
+        queries:
+        - quantum roadmap milestones and error-correction commercialization signals
+        - government contract dependency and budget-cycle timing risk
+        - cash runway dilution exposure and financing path clarity
+        - hybrid workload adoption and enterprise pilot conversion quality
+        - IP moat and competitive differentiation in hardware architecture
+        - manufacturing scale constraints and vendor concentration
+        - partnership durability and backlog conversion confidence
+        top_k: 60
+        efts_candidates: 260
+        vdb:
+          collection_name: industry_quantum_low
+          embedding_model: granite-embedding:30m
+          vector_size: 384
+        symbols:
+        - IONQ
+        - RGTI
+        - QBTS
+        - QUBT
+        - IBM
+        - HON
+      condition: always
+      inputs: []
+    - id: chat_answer
+      pipeline: chat
+      overrides:
+        question: Assess commercialization readiness, funding risk, and contract concentration across
+          this quantum basket using only cited filing evidence.
+        collections:
+        - industry_quantum_low
+        top_k: 10
+        max_context_chunks: 8
+        context_token_budget: 5000
+        generation_token_cap: 512
+        llm:
+          model_name: llama3.2:1b
+          require_json: false
+          temperature: 0.05
+          max_new_tokens: 512
+          num_ctx: 8192
+        vdb:
+          collection_name: industry_quantum_low
+          embedding_model: granite-embedding:30m
+          vector_size: 384
+          qdrant_url: http://localhost:6333
+          qdrant_location: null
+        symbols:
+        - IONQ
+        - RGTI
+        - QBTS
+        - QUBT
+        - IBM
+        - HON
+      condition: always
+      inputs:
+      - from_stage: retrieve_seed
+        artifact: retrieve_seed
+        target_field: seed_context
+    on_failure: stop
+  industry_tier_jobs/08_flow_quantum_medium.yaml:
+    name: quantum_medium_flow_preset
+    defaults:
+      email: you@example.com
+    stages:
+    - id: retrieve_seed
+      pipeline: retrieve
+      overrides:
+        queries:
+        - quantum roadmap milestones and error-correction commercialization signals
+        - government contract dependency and budget-cycle timing risk
+        - cash runway dilution exposure and financing path clarity
+        - hybrid workload adoption and enterprise pilot conversion quality
+        - IP moat and competitive differentiation in hardware architecture
+        - manufacturing scale constraints and vendor concentration
+        - partnership durability and backlog conversion confidence
+        top_k: 100
+        efts_candidates: 500
+        hydrate_top_n: 150
+        vdb:
+          collection_name: industry_quantum_medium
+          embedding_model: mxbai-embed-large:latest
+          vector_size: 1024
+        symbols:
+        - IONQ
+        - RGTI
+        - QBTS
+        - QUBT
+        - IBM
+        - HON
+      condition: always
+      inputs: []
+    - id: chat_answer
+      pipeline: chat
+      overrides:
+        question: Assess commercialization readiness, funding risk, and contract concentration across
+          this quantum basket using only cited filing evidence.
+        collections:
+        - industry_quantum_medium
+        max_context_chunks: 12
+        context_token_budget: 8000
+        generation_token_cap: 896
+        llm:
+          model_name: ministral-3:3b
+          require_json: false
+          temperature: 0.05
+          max_new_tokens: 896
+          num_ctx: 16384
+        vdb:
+          collection_name: industry_quantum_medium
+          embedding_model: mxbai-embed-large:latest
+          vector_size: 1024
+          qdrant_url: http://localhost:6333
+          qdrant_location: null
+        symbols:
+        - IONQ
+        - RGTI
+        - QBTS
+        - QUBT
+        - IBM
+        - HON
+      condition: always
+      inputs:
+      - from_stage: retrieve_seed
+        artifact: retrieve_seed
+        target_field: seed_context
+    on_failure: stop
+  industry_tier_jobs/09_flow_quantum_high.yaml:
+    name: quantum_high_flow_preset
+    defaults:
+      email: you@example.com
+    stages:
+    - id: retrieve_seed
+      pipeline: retrieve
+      overrides:
+        queries:
+        - quantum roadmap milestones and error-correction commercialization signals
+        - government contract dependency and budget-cycle timing risk
+        - cash runway dilution exposure and financing path clarity
+        - hybrid workload adoption and enterprise pilot conversion quality
+        - IP moat and competitive differentiation in hardware architecture
+        - manufacturing scale constraints and vendor concentration
+        - partnership durability and backlog conversion confidence
+        hydrate_top_n: 220
+        vdb:
+          collection_name: industry_quantum_high
+          embedding_model: qwen3-embedding:4b
+          vector_size: 2560
+        symbols:
+        - IONQ
+        - RGTI
+        - QBTS
+        - QUBT
+        - IBM
+        - HON
+      condition: always
+      inputs: []
+    - id: chat_answer
+      pipeline: chat
+      overrides:
+        question: Assess commercialization readiness, funding risk, and contract concentration across
+          this quantum basket using only cited filing evidence.
+        collections:
+        - industry_quantum_high
+        top_k: 16
+        max_context_chunks: 16
+        context_token_budget: 12000
+        llm:
+          model_name: qwen3:8b
+          require_json: false
+          temperature: 0.05
+          max_new_tokens: 1280
+          num_ctx: 32768
+        vdb:
+          collection_name: industry_quantum_high
+          embedding_model: qwen3-embedding:4b
+          vector_size: 2560
+          qdrant_url: http://localhost:6333
+          qdrant_location: null
+        symbols:
+        - IONQ
+        - RGTI
+        - QBTS
+        - QUBT
+        - IBM
+        - HON
+      condition: always
+      inputs:
+      - from_stage: retrieve_seed
+        artifact: retrieve_seed
+        target_field: seed_context
+    on_failure: stop
+  industry_tier_jobs/10_flow_biotech_low.yaml:
+    name: biotech_low_flow_preset
+    defaults:
+      email: you@example.com
+    stages:
+    - id: retrieve_seed
+      pipeline: retrieve
+      overrides:
+        queries:
+        - clinical readout timing and pivotal trial dependency by program
+        - regulatory pathway complexity and post-approval surveillance burden
+        - manufacturing scalability and CMC execution risks
+        - patent exclusivity horizon and biosimilar competition exposure
+        - commercial launch durability reimbursement pressure and channel risk
+        - cash burn runway and business development optionality
+        - pipeline concentration and single-asset downside scenarios
+        top_k: 60
+        efts_candidates: 260
+        vdb:
+          collection_name: industry_biotech_low
+          embedding_model: granite-embedding:30m
+          vector_size: 384
+        symbols:
+        - MRNA
+        - BNTX
+        - CRSP
+        - REGN
+        - VRTX
+        - GILD
+      condition: always
+      inputs: []
+    - id: chat_answer
+      pipeline: chat
+      overrides:
+        question: Rank this biotech basket by near-term catalyst quality versus downside risk, citing
+          concrete filing disclosures on trials, regulation, and runway.
+        collections:
+        - industry_biotech_low
+        top_k: 10
+        max_context_chunks: 8
+        context_token_budget: 5000
+        generation_token_cap: 512
+        llm:
+          model_name: llama3.2:1b
+          require_json: false
+          temperature: 0.05
+          max_new_tokens: 512
+          num_ctx: 8192
+        vdb:
+          collection_name: industry_biotech_low
+          embedding_model: granite-embedding:30m
+          vector_size: 384
+          qdrant_url: http://localhost:6333
+          qdrant_location: null
+        symbols:
+        - MRNA
+        - BNTX
+        - CRSP
+        - REGN
+        - VRTX
+        - GILD
+      condition: always
+      inputs:
+      - from_stage: retrieve_seed
+        artifact: retrieve_seed
+        target_field: seed_context
+    on_failure: stop
+  industry_tier_jobs/11_flow_biotech_medium.yaml:
+    name: biotech_medium_flow_preset
+    defaults:
+      email: you@example.com
+    stages:
+    - id: retrieve_seed
+      pipeline: retrieve
+      overrides:
+        queries:
+        - clinical readout timing and pivotal trial dependency by program
+        - regulatory pathway complexity and post-approval surveillance burden
+        - manufacturing scalability and CMC execution risks
+        - patent exclusivity horizon and biosimilar competition exposure
+        - commercial launch durability reimbursement pressure and channel risk
+        - cash burn runway and business development optionality
+        - pipeline concentration and single-asset downside scenarios
+        top_k: 100
+        efts_candidates: 500
+        hydrate_top_n: 150
+        vdb:
+          collection_name: industry_biotech_medium
+          embedding_model: mxbai-embed-large:latest
+          vector_size: 1024
+        symbols:
+        - MRNA
+        - BNTX
+        - CRSP
+        - REGN
+        - VRTX
+        - GILD
+      condition: always
+      inputs: []
+    - id: chat_answer
+      pipeline: chat
+      overrides:
+        question: Rank this biotech basket by near-term catalyst quality versus downside risk, citing
+          concrete filing disclosures on trials, regulation, and runway.
+        collections:
+        - industry_biotech_medium
+        max_context_chunks: 12
+        context_token_budget: 8000
+        generation_token_cap: 896
+        llm:
+          model_name: ministral-3:3b
+          require_json: false
+          temperature: 0.05
+          max_new_tokens: 896
+          num_ctx: 16384
+        vdb:
+          collection_name: industry_biotech_medium
+          embedding_model: mxbai-embed-large:latest
+          vector_size: 1024
+          qdrant_url: http://localhost:6333
+          qdrant_location: null
+        symbols:
+        - MRNA
+        - BNTX
+        - CRSP
+        - REGN
+        - VRTX
+        - GILD
+      condition: always
+      inputs:
+      - from_stage: retrieve_seed
+        artifact: retrieve_seed
+        target_field: seed_context
+    on_failure: stop
+  industry_tier_jobs/12_flow_biotech_high.yaml:
+    name: biotech_high_flow_preset
+    defaults:
+      email: you@example.com
+    stages:
+    - id: retrieve_seed
+      pipeline: retrieve
+      overrides:
+        queries:
+        - clinical readout timing and pivotal trial dependency by program
+        - regulatory pathway complexity and post-approval surveillance burden
+        - manufacturing scalability and CMC execution risks
+        - patent exclusivity horizon and biosimilar competition exposure
+        - commercial launch durability reimbursement pressure and channel risk
+        - cash burn runway and business development optionality
+        - pipeline concentration and single-asset downside scenarios
+        hydrate_top_n: 220
+        vdb:
+          collection_name: industry_biotech_high
+          embedding_model: qwen3-embedding:4b
+          vector_size: 2560
+        symbols:
+        - MRNA
+        - BNTX
+        - CRSP
+        - REGN
+        - VRTX
+        - GILD
+      condition: always
+      inputs: []
+    - id: chat_answer
+      pipeline: chat
+      overrides:
+        question: Rank this biotech basket by near-term catalyst quality versus downside risk, citing
+          concrete filing disclosures on trials, regulation, and runway.
+        collections:
+        - industry_biotech_high
+        top_k: 16
+        max_context_chunks: 16
+        context_token_budget: 12000
+        llm:
+          model_name: qwen3:8b
+          require_json: false
+          temperature: 0.05
+          max_new_tokens: 1280
+          num_ctx: 32768
+        vdb:
+          collection_name: industry_biotech_high
+          embedding_model: qwen3-embedding:4b
+          vector_size: 2560
+          qdrant_url: http://localhost:6333
+          qdrant_location: null
+        symbols:
+        - MRNA
+        - BNTX
+        - CRSP
+        - REGN
+        - VRTX
+        - GILD
+      condition: always
+      inputs:
+      - from_stage: retrieve_seed
+        artifact: retrieve_seed
+        target_field: seed_context
+    on_failure: stop
+  industry_tier_jobs/13_flow_mining_low.yaml:
+    name: mining_low_flow_preset
+    defaults:
+      email: you@example.com
+    stages:
+    - id: retrieve_seed
+      pipeline: retrieve
+      overrides:
+        queries:
+        - ore grade trend and reserve replacement implications for medium-term output
+        - cost curve position under energy freight and labor inflation
+        - jurisdiction risk permitting challenges and fiscal regime uncertainty
+        - smelter and refining constraints plus treatment charge pressure
+        - water tailings and ESG compliance liabilities with potential capex drag
+        - balance sheet flexibility under commodity downside scenarios
+        - project execution slippage and ramp reliability indicators
+        top_k: 60
+        efts_candidates: 260
+        vdb:
+          collection_name: industry_mining_low
+          embedding_model: granite-embedding:30m
+          vector_size: 384
+        symbols:
+        - FCX
+        - SCCO
+        - BHP
+        - RIO
+        - VALE
+        - NEM
+      condition: always
+      inputs: []
+    - id: chat_answer
+      pipeline: chat
+      overrides:
+        question: Compare cost resilience, project execution risk, and jurisdiction exposure across this
+          mining basket based on filing evidence.
+        collections:
+        - industry_mining_low
+        top_k: 10
+        max_context_chunks: 8
+        context_token_budget: 5000
+        generation_token_cap: 512
+        llm:
+          model_name: llama3.2:1b
+          require_json: false
+          temperature: 0.05
+          max_new_tokens: 512
+          num_ctx: 8192
+        vdb:
+          collection_name: industry_mining_low
+          embedding_model: granite-embedding:30m
+          vector_size: 384
+          qdrant_url: http://localhost:6333
+          qdrant_location: null
+        symbols:
+        - FCX
+        - SCCO
+        - BHP
+        - RIO
+        - VALE
+        - NEM
+      condition: always
+      inputs:
+      - from_stage: retrieve_seed
+        artifact: retrieve_seed
+        target_field: seed_context
+    on_failure: stop
+  industry_tier_jobs/14_flow_mining_medium.yaml:
+    name: mining_medium_flow_preset
+    defaults:
+      email: you@example.com
+    stages:
+    - id: retrieve_seed
+      pipeline: retrieve
+      overrides:
+        queries:
+        - ore grade trend and reserve replacement implications for medium-term output
+        - cost curve position under energy freight and labor inflation
+        - jurisdiction risk permitting challenges and fiscal regime uncertainty
+        - smelter and refining constraints plus treatment charge pressure
+        - water tailings and ESG compliance liabilities with potential capex drag
+        - balance sheet flexibility under commodity downside scenarios
+        - project execution slippage and ramp reliability indicators
+        top_k: 100
+        efts_candidates: 500
+        hydrate_top_n: 150
+        vdb:
+          collection_name: industry_mining_medium
+          embedding_model: mxbai-embed-large:latest
+          vector_size: 1024
+        symbols:
+        - FCX
+        - SCCO
+        - BHP
+        - RIO
+        - VALE
+        - NEM
+      condition: always
+      inputs: []
+    - id: chat_answer
+      pipeline: chat
+      overrides:
+        question: Compare cost resilience, project execution risk, and jurisdiction exposure across this
+          mining basket based on filing evidence.
+        collections:
+        - industry_mining_medium
+        max_context_chunks: 12
+        context_token_budget: 8000
+        generation_token_cap: 896
+        llm:
+          model_name: ministral-3:3b
+          require_json: false
+          temperature: 0.05
+          max_new_tokens: 896
+          num_ctx: 16384
+        vdb:
+          collection_name: industry_mining_medium
+          embedding_model: mxbai-embed-large:latest
+          vector_size: 1024
+          qdrant_url: http://localhost:6333
+          qdrant_location: null
+        symbols:
+        - FCX
+        - SCCO
+        - BHP
+        - RIO
+        - VALE
+        - NEM
+      condition: always
+      inputs:
+      - from_stage: retrieve_seed
+        artifact: retrieve_seed
+        target_field: seed_context
+    on_failure: stop
+  industry_tier_jobs/15_flow_mining_high.yaml:
+    name: mining_high_flow_preset
+    defaults:
+      email: you@example.com
+    stages:
+    - id: retrieve_seed
+      pipeline: retrieve
+      overrides:
+        queries:
+        - ore grade trend and reserve replacement implications for medium-term output
+        - cost curve position under energy freight and labor inflation
+        - jurisdiction risk permitting challenges and fiscal regime uncertainty
+        - smelter and refining constraints plus treatment charge pressure
+        - water tailings and ESG compliance liabilities with potential capex drag
+        - balance sheet flexibility under commodity downside scenarios
+        - project execution slippage and ramp reliability indicators
+        hydrate_top_n: 220
+        vdb:
+          collection_name: industry_mining_high
+          embedding_model: qwen3-embedding:4b
+          vector_size: 2560
+        symbols:
+        - FCX
+        - SCCO
+        - BHP
+        - RIO
+        - VALE
+        - NEM
+      condition: always
+      inputs: []
+    - id: chat_answer
+      pipeline: chat
+      overrides:
+        question: Compare cost resilience, project execution risk, and jurisdiction exposure across this
+          mining basket based on filing evidence.
+        top_k: 16
+        max_context_chunks: 16
+        context_token_budget: 12000
+        llm:
+          model_name: qwen3:8b
+          require_json: false
+          temperature: 0.05
+          max_new_tokens: 1280
+          num_ctx: 32768
+        vdb:
+          collection_name: industry_mining_high
+          embedding_model: qwen3-embedding:4b
+          vector_size: 2560
+          qdrant_url: http://localhost:6333
+          qdrant_location: null
+        symbols:
+        - FCX
+        - SCCO
+        - BHP
+        - RIO
+        - VALE
+        - NEM
+      condition: always
+      inputs:
+      - from_stage: retrieve_seed
+        artifact: retrieve_seed
+        target_field: seed_context
+    on_failure: stop
+  industry_tier_jobs/16_retrieve_rems_medium.yaml:
+    name: rems_medium_retrieve_preset
+    defaults:
+      email: you@example.com
+    stages:
+    - id: retrieve_seed
+      pipeline: retrieve
+      overrides:
+        top_k: 100
+        efts_candidates: 500
+        hydrate_top_n: 150
+        vdb:
+          collection_name: industry_rems_medium
+          embedding_model: mxbai-embed-large:latest
+          vector_size: 1024
+      condition: always
+      inputs: []
+    on_failure: stop
+  industry_tier_jobs/17_retrieve_tech_medium.yaml:
+    name: tech_medium_retrieve_preset
+    defaults:
+      email: you@example.com
+    stages:
+    - id: retrieve_seed
+      pipeline: retrieve
+      overrides:
+        queries:
+        - AI infrastructure demand trends and data center capacity commitments
+        - gross margin durability amid mix shift and pricing normalization
+        - enterprise software renewal quality and cloud consumption elasticity
+        - supply chain concentration and component availability risk drivers
+        - capital allocation priorities buybacks capex and strategic M&A posture
+        - regulatory and antitrust exposure tied to platform strategy
+        - FX and macro sensitivity in guidance assumptions
+        top_k: 100
+        efts_candidates: 500
+        hydrate_top_n: 150
+        vdb:
+          collection_name: industry_tech_medium
+          embedding_model: mxbai-embed-large:latest
+          vector_size: 1024
+        symbols:
+        - AAPL
+        - MSFT
+        - NVDA
+        - AMD
+        - AVGO
+        - ORCL
+      condition: always
+      inputs: []
+    on_failure: stop
+  industry_tier_jobs/18_retrieve_biotech_medium.yaml:
+    name: biotech_medium_retrieve_preset
+    defaults:
+      email: you@example.com
+    stages:
+    - id: retrieve_seed
+      pipeline: retrieve
+      overrides:
+        queries:
+        - clinical readout timing and pivotal trial dependency by program
+        - regulatory pathway complexity and post-approval surveillance burden
+        - manufacturing scalability and CMC execution risks
+        - patent exclusivity horizon and biosimilar competition exposure
+        - commercial launch durability reimbursement pressure and channel risk
+        - cash burn runway and business development optionality
+        - pipeline concentration and single-asset downside scenarios
+        top_k: 100
+        efts_candidates: 500
+        hydrate_top_n: 150
+        vdb:
+          collection_name: industry_biotech_medium
+          embedding_model: mxbai-embed-large:latest
+          vector_size: 1024
+        symbols:
+        - MRNA
+        - BNTX
+        - CRSP
+        - REGN
+        - VRTX
+        - GILD
+      condition: always
+      inputs: []
+    on_failure: stop
+  industry_tier_jobs/19_chat_mining_high.yaml:
+    name: mining_high_chat_preset
+    defaults:
+      email: you@example.com
+    stages:
+    - id: chat_answer
+      pipeline: chat
+      overrides:
+        question: Compare cost resilience, project execution risk, and jurisdiction exposure across this
+          mining basket based on filing evidence.
+        top_k: 16
+        max_context_chunks: 16
+        context_token_budget: 12000
+        llm:
+          model_name: qwen3:8b
+          require_json: false
+          temperature: 0.05
+          max_new_tokens: 1280
+          num_ctx: 32768
+        vdb:
+          collection_name: industry_mining_high
+          embedding_model: qwen3-embedding:4b
+          vector_size: 2560
+          qdrant_url: http://localhost:6333
+          qdrant_location: null
+        symbols:
+        - FCX
+        - SCCO
+        - BHP
+        - RIO
+        - VALE
+        - NEM
+      condition: always
+      inputs: []
+    on_failure: stop
+  industry_tier_jobs/20_chat_quantum_low.yaml:
+    name: quantum_low_chat_preset
+    defaults:
+      email: you@example.com
+    stages:
+    - id: chat_answer
+      pipeline: chat
+      overrides:
+        question: Assess commercialization readiness, funding risk, and contract concentration across
+          this quantum basket using only cited filing evidence.
+        collections:
+        - industry_quantum_low
+        top_k: 10
+        max_context_chunks: 8
+        context_token_budget: 5000
+        generation_token_cap: 512
+        llm:
+          model_name: llama3.2:1b
+          require_json: false
+          temperature: 0.05
+          max_new_tokens: 512
+          num_ctx: 8192
+        vdb:
+          collection_name: industry_quantum_low
+          embedding_model: granite-embedding:30m
+          vector_size: 384
+          qdrant_url: http://localhost:6333
+          qdrant_location: null
+        symbols:
+        - IONQ
+        - RGTI
+        - QBTS
+        - QUBT
+        - IBM
+        - HON
+      condition: always
+      inputs: []
+    on_failure: stop
+  merged_basket_high_models/01_smoke_medium.yaml:
+    name: smoke_medium_merged_hq_retrieve_chat
+    defaults:
+      email: you@example.com
+    stages:
+    - id: retrieve_seed
+      pipeline: retrieve
+      overrides:
+        queries:
+        - risk factors liquidity working capital debt covenant disclosures and trend changes
+        - supply chain customer concentration capital expenditure impacts on revenue visibility and risk
+          factors
+        - guidance margin pressure geopolitical risk commentary with quantified impact where available
+        - tariffs inflation cost control sensitivity and scenario planning
+        - cash flow operational execution remediation liabilities execution milestones and bottlenecks
+        - liquidity cash flow working capital revolving credit debt covenant compliance updates
+        - capital expenditure project timeline budget variance and return-on-investment assumptions
+        - major customer concentration contract renewal risk termination clauses and pricing resets
+        top_k: 80
+        efts_candidates: 420
+        hydrate_top_n: 130
+        vdb:
+          collection_name: industry_smoke_high
+          embedding_model: qwen3-embedding:4b
+          vector_size: 2560
+        symbols:
+        - CDE
+        - AAPL
+        - FCX
+      condition: always
+      inputs: []
+    - id: chat_answer
+      pipeline: chat
+      overrides:
+        question: What are the most material near-term risk, liquidity, and margin signals across this
+          smoke basket, and which issuer appears most vulnerable?
+        collections:
+        - industry_smoke_high
+        max_context_chunks: 10
+        context_token_budget: 7500
+        generation_token_cap: 1024
+        llm:
+          model_name: qwen3:8b
+          require_json: false
+          temperature: 0.05
+          max_new_tokens: 1024
+          num_ctx: 32768
+        vdb:
+          collection_name: industry_smoke_high
+          embedding_model: qwen3-embedding:4b
+          vector_size: 2560
+          qdrant_url: http://localhost:6333
+          qdrant_location: null
+        symbols:
+        - CDE
+        - AAPL
+        - FCX
+      condition: always
+      inputs:
+      - from_stage: retrieve_seed
+        artifact: retrieve_seed
+        target_field: seed_context
+    on_failure: stop
+  merged_basket_high_models/02_smoke_large.yaml:
+    name: smoke_large_merged_hq_retrieve_chat
+    defaults:
+      email: you@example.com
+    stages:
+    - id: retrieve_seed
+      pipeline: retrieve
+      overrides:
+        queries:
+        - risk factors liquidity working capital debt covenant disclosures and trend changes
+        - supply chain customer concentration capital expenditure impacts on revenue visibility and risk
+          factors
+        - guidance margin pressure geopolitical risk commentary with quantified impact where available
+        - tariffs inflation cost control sensitivity and scenario planning
+        - cash flow operational execution remediation liabilities execution milestones and bottlenecks
+        - liquidity cash flow working capital revolving credit debt covenant compliance updates
+        - capital expenditure project timeline budget variance and return-on-investment assumptions
+        - major customer concentration contract renewal risk termination clauses and pricing resets
+        - inflation labor freight energy input costs and gross-margin pass-through dynamics
+        - foreign exchange volatility and hedging strategy implications for near-term guidance
+        - litigation environmental liabilities contingent reserves and remediation cost outlook
+        top_k: 120
+        efts_candidates: 620
+        hydrate_top_n: 180
+        vdb:
+          collection_name: industry_smoke_high
+          embedding_model: qwen3-embedding:4b
+          vector_size: 2560
+        symbols:
+        - CDE
+        - AAPL
+        - FCX
+      condition: always
+      inputs: []
+    - id: chat_answer
+      pipeline: chat
+      overrides:
+        question: What are the most material near-term risk, liquidity, and margin signals across this
+          smoke basket, and which issuer appears most vulnerable?
+        collections:
+        - industry_smoke_high
+        top_k: 16
+        llm:
+          model_name: qwen3:8b
+          require_json: false
+          temperature: 0.05
+          max_new_tokens: 1280
+          num_ctx: 32768
+        vdb:
+          collection_name: industry_smoke_high
+          embedding_model: qwen3-embedding:4b
+          vector_size: 2560
+          qdrant_url: http://localhost:6333
+          qdrant_location: null
+        symbols:
+        - CDE
+        - AAPL
+        - FCX
+      condition: always
+      inputs:
+      - from_stage: retrieve_seed
+        artifact: retrieve_seed
+        target_field: seed_context
+    on_failure: stop
+  merged_basket_high_models/03_smoke_xlarge.yaml:
+    name: smoke_xlarge_merged_hq_retrieve_chat
+    defaults:
+      email: you@example.com
+    stages:
+    - id: retrieve_seed
+      pipeline: retrieve
+      overrides:
+        queries:
+        - risk factors liquidity working capital debt covenant disclosures and trend changes
+        - supply chain customer concentration capital expenditure impacts on revenue visibility and risk
+          factors
+        - guidance margin pressure geopolitical risk commentary with quantified impact where available
+        - tariffs inflation cost control sensitivity and scenario planning
+        - cash flow operational execution remediation liabilities execution milestones and bottlenecks
+        - liquidity cash flow working capital revolving credit debt covenant compliance updates
+        - capital expenditure project timeline budget variance and return-on-investment assumptions
+        - major customer concentration contract renewal risk termination clauses and pricing resets
+        - inflation labor freight energy input costs and gross-margin pass-through dynamics
+        - foreign exchange volatility and hedging strategy implications for near-term guidance
+        - litigation environmental liabilities contingent reserves and remediation cost outlook
+        - inventory strategy lead-time management dual sourcing localization and continuity planning
+        - management outlook revisions, guidance confidence bands, and downside risk triggers
+        - board strategy for financing, partnership optionality, and portfolio optimization
+        top_k: 170
+        hydrate_top_n: 220
+        vdb:
+          collection_name: industry_smoke_high
+          embedding_model: qwen3-embedding:4b
+          vector_size: 2560
+        symbols:
+        - CDE
+        - AAPL
+        - FCX
+      condition: always
+      inputs: []
+    - id: chat_answer
+      pipeline: chat
+      overrides:
+        question: What are the most material near-term risk, liquidity, and margin signals across this
+          smoke basket, and which issuer appears most vulnerable?
+        collections:
+        - industry_smoke_high
+        top_k: 20
+        max_context_chunks: 18
+        context_token_budget: 13500
+        generation_token_cap: 1536
+        llm:
+          model_name: qwen3:8b
+          require_json: false
+          temperature: 0.05
+          max_new_tokens: 1536
+          num_ctx: 32768
+        vdb:
+          collection_name: industry_smoke_high
+          embedding_model: qwen3-embedding:4b
+          vector_size: 2560
+          qdrant_url: http://localhost:6333
+          qdrant_location: null
+        symbols:
+        - CDE
+        - AAPL
+        - FCX
+      condition: always
+      inputs:
+      - from_stage: retrieve_seed
+        artifact: retrieve_seed
+        target_field: seed_context
+    on_failure: stop
+  merged_basket_high_models/04_rems_medium.yaml:
+    name: rems_medium_merged_hq_retrieve_chat
+    defaults:
+      email: you@example.com
+    stages:
+    - id: retrieve_seed
+      pipeline: retrieve
+      overrides:
+        queries:
+        - rare earth oxide pricing NdPr demand magnet supply chain separation capacity disclosures and
+          trend changes
+        - processing bottlenecks offtake agreements export controls impacts on revenue visibility and
+          risk factors
+        - China dependency permitting timelines concentrate feedstock commentary with quantified impact
+          where available
+        - capex funding strategic stockpiles defense demand sensitivity and scenario planning
+        - shipping routes conversion yields downstream integration execution milestones and bottlenecks
+        - liquidity cash flow working capital revolving credit debt covenant compliance updates
+        - capital expenditure project timeline budget variance and return-on-investment assumptions
+        - major customer concentration contract renewal risk termination clauses and pricing resets
+        top_k: 80
+        efts_candidates: 420
+        hydrate_top_n: 130
+        vdb:
+          collection_name: industry_rems_high
+          embedding_model: qwen3-embedding:4b
+          vector_size: 2560
+      condition: always
+      inputs: []
+    - id: chat_answer
+      pipeline: chat
+      overrides:
+        collections:
+        - industry_rems_high
+        max_context_chunks: 10
+        context_token_budget: 7500
+        generation_token_cap: 1024
+        llm:
+          model_name: qwen3:8b
+          require_json: false
+          temperature: 0.05
+          max_new_tokens: 1024
+          num_ctx: 32768
+        vdb:
+          collection_name: industry_rems_high
+          embedding_model: qwen3-embedding:4b
+          vector_size: 2560
+          qdrant_url: http://localhost:6333
+          qdrant_location: null
+      condition: always
+      inputs:
+      - from_stage: retrieve_seed
+        artifact: retrieve_seed
+        target_field: seed_context
+    on_failure: stop
+  merged_basket_high_models/05_rems_large.yaml:
+    name: rems_large_merged_hq_retrieve_chat
+    defaults:
+      email: you@example.com
+    stages:
+    - id: retrieve_seed
+      pipeline: retrieve
+      overrides:
+        queries:
+        - rare earth oxide pricing NdPr demand magnet supply chain separation capacity disclosures and
+          trend changes
+        - processing bottlenecks offtake agreements export controls impacts on revenue visibility and
+          risk factors
+        - China dependency permitting timelines concentrate feedstock commentary with quantified impact
+          where available
+        - capex funding strategic stockpiles defense demand sensitivity and scenario planning
+        - shipping routes conversion yields downstream integration execution milestones and bottlenecks
+        - liquidity cash flow working capital revolving credit debt covenant compliance updates
+        - capital expenditure project timeline budget variance and return-on-investment assumptions
+        - major customer concentration contract renewal risk termination clauses and pricing resets
+        - inflation labor freight energy input costs and gross-margin pass-through dynamics
+        - foreign exchange volatility and hedging strategy implications for near-term guidance
+        - litigation environmental liabilities contingent reserves and remediation cost outlook
+        top_k: 120
+        efts_candidates: 620
+        hydrate_top_n: 180
+        vdb:
+          collection_name: industry_rems_high
+          embedding_model: qwen3-embedding:4b
+          vector_size: 2560
+      condition: always
+      inputs: []
+    - id: chat_answer
+      pipeline: chat
+      overrides:
+        collections:
+        - industry_rems_high
+        top_k: 16
+        llm:
+          model_name: qwen3:8b
+          require_json: false
+          temperature: 0.05
+          max_new_tokens: 1280
+          num_ctx: 32768
+        vdb:
+          collection_name: industry_rems_high
+          embedding_model: qwen3-embedding:4b
+          vector_size: 2560
+          qdrant_url: http://localhost:6333
+          qdrant_location: null
+      condition: always
+      inputs:
+      - from_stage: retrieve_seed
+        artifact: retrieve_seed
+        target_field: seed_context
+    on_failure: stop
+  merged_basket_high_models/06_rems_xlarge.yaml:
+    name: rems_xlarge_merged_hq_retrieve_chat
+    defaults:
+      email: you@example.com
+    stages:
+    - id: retrieve_seed
+      pipeline: retrieve
+      overrides:
+        queries:
+        - rare earth oxide pricing NdPr demand magnet supply chain separation capacity disclosures and
+          trend changes
+        - processing bottlenecks offtake agreements export controls impacts on revenue visibility and
+          risk factors
+        - China dependency permitting timelines concentrate feedstock commentary with quantified impact
+          where available
+        - capex funding strategic stockpiles defense demand sensitivity and scenario planning
+        - shipping routes conversion yields downstream integration execution milestones and bottlenecks
+        - liquidity cash flow working capital revolving credit debt covenant compliance updates
+        - capital expenditure project timeline budget variance and return-on-investment assumptions
+        - major customer concentration contract renewal risk termination clauses and pricing resets
+        - inflation labor freight energy input costs and gross-margin pass-through dynamics
+        - foreign exchange volatility and hedging strategy implications for near-term guidance
+        - litigation environmental liabilities contingent reserves and remediation cost outlook
+        - inventory strategy lead-time management dual sourcing localization and continuity planning
+        - management outlook revisions, guidance confidence bands, and downside risk triggers
+        - board strategy for financing, partnership optionality, and portfolio optimization
+        top_k: 170
+        hydrate_top_n: 220
+        vdb:
+          collection_name: industry_rems_high
+          embedding_model: qwen3-embedding:4b
+          vector_size: 2560
+      condition: always
+      inputs: []
+    - id: chat_answer
+      pipeline: chat
+      overrides:
+        collections:
+        - industry_rems_high
+        top_k: 20
+        max_context_chunks: 18
+        context_token_budget: 13500
+        generation_token_cap: 1536
+        llm:
+          model_name: qwen3:8b
+          require_json: false
+          temperature: 0.05
+          max_new_tokens: 1536
+          num_ctx: 32768
+        vdb:
+          collection_name: industry_rems_high
+          embedding_model: qwen3-embedding:4b
+          vector_size: 2560
+          qdrant_url: http://localhost:6333
+          qdrant_location: null
+      condition: always
+      inputs:
+      - from_stage: retrieve_seed
+        artifact: retrieve_seed
+        target_field: seed_context
+    on_failure: stop
+  merged_basket_high_models/07_tech_medium.yaml:
+    name: tech_medium_merged_hq_retrieve_chat
+    defaults:
+      email: you@example.com
+    stages:
+    - id: retrieve_seed
+      pipeline: retrieve
+      overrides:
+        queries:
+        - AI data center demand GPU supply cloud consumption enterprise backlog disclosures and trend
+          changes
+        - subscription retention semiconductor lead times inventory normalization impacts on revenue visibility
+          and risk factors
+        - pricing discipline gross margin outlook hyperscaler capex commentary with quantified impact
+          where available
+        - customer concentration export restrictions foundry capacity sensitivity and scenario planning
+        - platform adoption free cash flow competitive intensity execution milestones and bottlenecks
+        - liquidity cash flow working capital revolving credit debt covenant compliance updates
+        - capital expenditure project timeline budget variance and return-on-investment assumptions
+        - major customer concentration contract renewal risk termination clauses and pricing resets
+        top_k: 80
+        efts_candidates: 420
+        hydrate_top_n: 130
+        vdb:
+          collection_name: industry_tech_high
+          embedding_model: qwen3-embedding:4b
+          vector_size: 2560
+        symbols:
+        - AAPL
+        - MSFT
+        - NVDA
+        - AMD
+        - AVGO
+        - ORCL
+      condition: always
+      inputs: []
+    - id: chat_answer
+      pipeline: chat
+      overrides:
+        question: Summarize AI-infrastructure and enterprise demand signals for this tech basket, with
+          emphasis on backlog durability, margin risk, and capex efficiency.
+        collections:
+        - industry_tech_high
+        max_context_chunks: 10
+        context_token_budget: 7500
+        generation_token_cap: 1024
+        llm:
+          model_name: qwen3:8b
+          require_json: false
+          temperature: 0.05
+          max_new_tokens: 1024
+          num_ctx: 32768
+        vdb:
+          collection_name: industry_tech_high
+          embedding_model: qwen3-embedding:4b
+          vector_size: 2560
+          qdrant_url: http://localhost:6333
+          qdrant_location: null
+        symbols:
+        - AAPL
+        - MSFT
+        - NVDA
+        - AMD
+        - AVGO
+        - ORCL
+      condition: always
+      inputs:
+      - from_stage: retrieve_seed
+        artifact: retrieve_seed
+        target_field: seed_context
+    on_failure: stop
+  merged_basket_high_models/08_tech_large.yaml:
+    name: tech_large_merged_hq_retrieve_chat
+    defaults:
+      email: you@example.com
+    stages:
+    - id: retrieve_seed
+      pipeline: retrieve
+      overrides:
+        queries:
+        - AI data center demand GPU supply cloud consumption enterprise backlog disclosures and trend
+          changes
+        - subscription retention semiconductor lead times inventory normalization impacts on revenue visibility
+          and risk factors
+        - pricing discipline gross margin outlook hyperscaler capex commentary with quantified impact
+          where available
+        - customer concentration export restrictions foundry capacity sensitivity and scenario planning
+        - platform adoption free cash flow competitive intensity execution milestones and bottlenecks
+        - liquidity cash flow working capital revolving credit debt covenant compliance updates
+        - capital expenditure project timeline budget variance and return-on-investment assumptions
+        - major customer concentration contract renewal risk termination clauses and pricing resets
+        - inflation labor freight energy input costs and gross-margin pass-through dynamics
+        - foreign exchange volatility and hedging strategy implications for near-term guidance
+        - litigation environmental liabilities contingent reserves and remediation cost outlook
+        top_k: 120
+        efts_candidates: 620
+        hydrate_top_n: 180
+        vdb:
+          collection_name: industry_tech_high
+          embedding_model: qwen3-embedding:4b
+          vector_size: 2560
+        symbols:
+        - AAPL
+        - MSFT
+        - NVDA
+        - AMD
+        - AVGO
+        - ORCL
+      condition: always
+      inputs: []
+    - id: chat_answer
+      pipeline: chat
+      overrides:
+        question: Summarize AI-infrastructure and enterprise demand signals for this tech basket, with
+          emphasis on backlog durability, margin risk, and capex efficiency.
+        collections:
+        - industry_tech_high
+        top_k: 16
+        llm:
+          model_name: qwen3:8b
+          require_json: false
+          temperature: 0.05
+          max_new_tokens: 1280
+          num_ctx: 32768
+        vdb:
+          collection_name: industry_tech_high
+          embedding_model: qwen3-embedding:4b
+          vector_size: 2560
+          qdrant_url: http://localhost:6333
+          qdrant_location: null
+        symbols:
+        - AAPL
+        - MSFT
+        - NVDA
+        - AMD
+        - AVGO
+        - ORCL
+      condition: always
+      inputs:
+      - from_stage: retrieve_seed
+        artifact: retrieve_seed
+        target_field: seed_context
+    on_failure: stop
+  merged_basket_high_models/09_tech_xlarge.yaml:
+    name: tech_xlarge_merged_hq_retrieve_chat
+    defaults:
+      email: you@example.com
+    stages:
+    - id: retrieve_seed
+      pipeline: retrieve
+      overrides:
+        queries:
+        - AI data center demand GPU supply cloud consumption enterprise backlog disclosures and trend
+          changes
+        - subscription retention semiconductor lead times inventory normalization impacts on revenue visibility
+          and risk factors
+        - pricing discipline gross margin outlook hyperscaler capex commentary with quantified impact
+          where available
+        - customer concentration export restrictions foundry capacity sensitivity and scenario planning
+        - platform adoption free cash flow competitive intensity execution milestones and bottlenecks
+        - liquidity cash flow working capital revolving credit debt covenant compliance updates
+        - capital expenditure project timeline budget variance and return-on-investment assumptions
+        - major customer concentration contract renewal risk termination clauses and pricing resets
+        - inflation labor freight energy input costs and gross-margin pass-through dynamics
+        - foreign exchange volatility and hedging strategy implications for near-term guidance
+        - litigation environmental liabilities contingent reserves and remediation cost outlook
+        - inventory strategy lead-time management dual sourcing localization and continuity planning
+        - management outlook revisions, guidance confidence bands, and downside risk triggers
+        - board strategy for financing, partnership optionality, and portfolio optimization
+        top_k: 170
+        hydrate_top_n: 220
+        vdb:
+          collection_name: industry_tech_high
+          embedding_model: qwen3-embedding:4b
+          vector_size: 2560
+        symbols:
+        - AAPL
+        - MSFT
+        - NVDA
+        - AMD
+        - AVGO
+        - ORCL
+      condition: always
+      inputs: []
+    - id: chat_answer
+      pipeline: chat
+      overrides:
+        question: Summarize AI-infrastructure and enterprise demand signals for this tech basket, with
+          emphasis on backlog durability, margin risk, and capex efficiency.
+        collections:
+        - industry_tech_high
+        top_k: 20
+        max_context_chunks: 18
+        context_token_budget: 13500
+        generation_token_cap: 1536
+        llm:
+          model_name: qwen3:8b
+          require_json: false
+          temperature: 0.05
+          max_new_tokens: 1536
+          num_ctx: 32768
+        vdb:
+          collection_name: industry_tech_high
+          embedding_model: qwen3-embedding:4b
+          vector_size: 2560
+          qdrant_url: http://localhost:6333
+          qdrant_location: null
+        symbols:
+        - AAPL
+        - MSFT
+        - NVDA
+        - AMD
+        - AVGO
+        - ORCL
+      condition: always
+      inputs:
+      - from_stage: retrieve_seed
+        artifact: retrieve_seed
+        target_field: seed_context
+    on_failure: stop
+  merged_basket_high_models/10_quantum_medium.yaml:
+    name: quantum_medium_merged_hq_retrieve_chat
+    defaults:
+      email: you@example.com
+    stages:
+    - id: retrieve_seed
+      pipeline: retrieve
+      overrides:
+        queries:
+        - quantum hardware roadmap error correction qubit fidelity hybrid workloads disclosures and trend
+          changes
+        - government contracts commercial pilots bookings conversion impacts on revenue visibility and
+          risk factors
+        - funding runway dilution risk IP portfolio commentary with quantified impact where available
+        - cloud quantum access talent retention R&D intensity sensitivity and scenario planning
+        - strategic partnerships manufacturing scale go-to-market execution execution milestones and bottlenecks
+        - liquidity cash flow working capital revolving credit debt covenant compliance updates
+        - capital expenditure project timeline budget variance and return-on-investment assumptions
+        - major customer concentration contract renewal risk termination clauses and pricing resets
+        top_k: 80
+        efts_candidates: 420
+        hydrate_top_n: 130
+        vdb:
+          collection_name: industry_quantum_high
+          embedding_model: qwen3-embedding:4b
+          vector_size: 2560
+        symbols:
+        - IONQ
+        - RGTI
+        - QBTS
+        - QUBT
+        - IBM
+        - HON
+      condition: always
+      inputs: []
+    - id: chat_answer
+      pipeline: chat
+      overrides:
+        question: Assess commercialization readiness and funding durability across the quantum basket,
+          and identify which names have the clearest path to scalable revenue.
+        collections:
+        - industry_quantum_high
+        max_context_chunks: 10
+        context_token_budget: 7500
+        generation_token_cap: 1024
+        llm:
+          model_name: qwen3:8b
+          require_json: false
+          temperature: 0.05
+          max_new_tokens: 1024
+          num_ctx: 32768
+        vdb:
+          collection_name: industry_quantum_high
+          embedding_model: qwen3-embedding:4b
+          vector_size: 2560
+          qdrant_url: http://localhost:6333
+          qdrant_location: null
+        symbols:
+        - IONQ
+        - RGTI
+        - QBTS
+        - QUBT
+        - IBM
+        - HON
+      condition: always
+      inputs:
+      - from_stage: retrieve_seed
+        artifact: retrieve_seed
+        target_field: seed_context
+    on_failure: stop
+  merged_basket_high_models/11_quantum_large.yaml:
+    name: quantum_large_merged_hq_retrieve_chat
+    defaults:
+      email: you@example.com
+    stages:
+    - id: retrieve_seed
+      pipeline: retrieve
+      overrides:
+        queries:
+        - quantum hardware roadmap error correction qubit fidelity hybrid workloads disclosures and trend
+          changes
+        - government contracts commercial pilots bookings conversion impacts on revenue visibility and
+          risk factors
+        - funding runway dilution risk IP portfolio commentary with quantified impact where available
+        - cloud quantum access talent retention R&D intensity sensitivity and scenario planning
+        - strategic partnerships manufacturing scale go-to-market execution execution milestones and bottlenecks
+        - liquidity cash flow working capital revolving credit debt covenant compliance updates
+        - capital expenditure project timeline budget variance and return-on-investment assumptions
+        - major customer concentration contract renewal risk termination clauses and pricing resets
+        - inflation labor freight energy input costs and gross-margin pass-through dynamics
+        - foreign exchange volatility and hedging strategy implications for near-term guidance
+        - litigation environmental liabilities contingent reserves and remediation cost outlook
+        top_k: 120
+        efts_candidates: 620
+        hydrate_top_n: 180
+        vdb:
+          collection_name: industry_quantum_high
+          embedding_model: qwen3-embedding:4b
+          vector_size: 2560
+        symbols:
+        - IONQ
+        - RGTI
+        - QBTS
+        - QUBT
+        - IBM
+        - HON
+      condition: always
+      inputs: []
+    - id: chat_answer
+      pipeline: chat
+      overrides:
+        question: Assess commercialization readiness and funding durability across the quantum basket,
+          and identify which names have the clearest path to scalable revenue.
+        collections:
+        - industry_quantum_high
+        top_k: 16
+        llm:
+          model_name: qwen3:8b
+          require_json: false
+          temperature: 0.05
+          max_new_tokens: 1280
+          num_ctx: 32768
+        vdb:
+          collection_name: industry_quantum_high
+          embedding_model: qwen3-embedding:4b
+          vector_size: 2560
+          qdrant_url: http://localhost:6333
+          qdrant_location: null
+        symbols:
+        - IONQ
+        - RGTI
+        - QBTS
+        - QUBT
+        - IBM
+        - HON
+      condition: always
+      inputs:
+      - from_stage: retrieve_seed
+        artifact: retrieve_seed
+        target_field: seed_context
+    on_failure: stop
+  merged_basket_high_models/12_quantum_xlarge.yaml:
+    name: quantum_xlarge_merged_hq_retrieve_chat
+    defaults:
+      email: you@example.com
+    stages:
+    - id: retrieve_seed
+      pipeline: retrieve
+      overrides:
+        queries:
+        - quantum hardware roadmap error correction qubit fidelity hybrid workloads disclosures and trend
+          changes
+        - government contracts commercial pilots bookings conversion impacts on revenue visibility and
+          risk factors
+        - funding runway dilution risk IP portfolio commentary with quantified impact where available
+        - cloud quantum access talent retention R&D intensity sensitivity and scenario planning
+        - strategic partnerships manufacturing scale go-to-market execution execution milestones and bottlenecks
+        - liquidity cash flow working capital revolving credit debt covenant compliance updates
+        - capital expenditure project timeline budget variance and return-on-investment assumptions
+        - major customer concentration contract renewal risk termination clauses and pricing resets
+        - inflation labor freight energy input costs and gross-margin pass-through dynamics
+        - foreign exchange volatility and hedging strategy implications for near-term guidance
+        - litigation environmental liabilities contingent reserves and remediation cost outlook
+        - inventory strategy lead-time management dual sourcing localization and continuity planning
+        - management outlook revisions, guidance confidence bands, and downside risk triggers
+        - board strategy for financing, partnership optionality, and portfolio optimization
+        top_k: 170
+        hydrate_top_n: 220
+        vdb:
+          collection_name: industry_quantum_high
+          embedding_model: qwen3-embedding:4b
+          vector_size: 2560
+        symbols:
+        - IONQ
+        - RGTI
+        - QBTS
+        - QUBT
+        - IBM
+        - HON
+      condition: always
+      inputs: []
+    - id: chat_answer
+      pipeline: chat
+      overrides:
+        question: Assess commercialization readiness and funding durability across the quantum basket,
+          and identify which names have the clearest path to scalable revenue.
+        collections:
+        - industry_quantum_high
+        top_k: 20
+        max_context_chunks: 18
+        context_token_budget: 13500
+        generation_token_cap: 1536
+        llm:
+          model_name: qwen3:8b
+          require_json: false
+          temperature: 0.05
+          max_new_tokens: 1536
+          num_ctx: 32768
+        vdb:
+          collection_name: industry_quantum_high
+          embedding_model: qwen3-embedding:4b
+          vector_size: 2560
+          qdrant_url: http://localhost:6333
+          qdrant_location: null
+        symbols:
+        - IONQ
+        - RGTI
+        - QBTS
+        - QUBT
+        - IBM
+        - HON
+      condition: always
+      inputs:
+      - from_stage: retrieve_seed
+        artifact: retrieve_seed
+        target_field: seed_context
+    on_failure: stop
+  merged_basket_high_models/13_biotech_medium.yaml:
+    name: biotech_medium_merged_hq_retrieve_chat
+    defaults:
+      email: you@example.com
+    stages:
+    - id: retrieve_seed
+      pipeline: retrieve
+      overrides:
+        queries:
+        - clinical trial readouts FDA pathway safety signals pipeline prioritization disclosures and trend
+          changes
+        - patent exclusivity manufacturing capacity commercial launch uptake impacts on revenue visibility
+          and risk factors
+        - reimbursement pressure partnership milestones cash runway commentary with quantified impact
+          where available
+        - R&D spend regulatory delays CMC readiness sensitivity and scenario planning
+        - competitive landscape platform validation M&A optionality execution milestones and bottlenecks
+        - liquidity cash flow working capital revolving credit debt covenant compliance updates
+        - capital expenditure project timeline budget variance and return-on-investment assumptions
+        - major customer concentration contract renewal risk termination clauses and pricing resets
+        top_k: 80
+        efts_candidates: 420
+        hydrate_top_n: 130
+        vdb:
+          collection_name: industry_biotech_high
+          embedding_model: qwen3-embedding:4b
+          vector_size: 2560
+        symbols:
+        - MRNA
+        - BNTX
+        - CRSP
+        - REGN
+        - VRTX
+        - GILD
+      condition: always
+      inputs: []
+    - id: chat_answer
+      pipeline: chat
+      overrides:
+        question: Compare pipeline quality, regulatory execution risk, and cash-runway resilience across
+          this biotech basket, focusing on the next 12-18 months.
+        collections:
+        - industry_biotech_high
+        max_context_chunks: 10
+        context_token_budget: 7500
+        generation_token_cap: 1024
+        llm:
+          model_name: qwen3:8b
+          require_json: false
+          temperature: 0.05
+          max_new_tokens: 1024
+          num_ctx: 32768
+        vdb:
+          collection_name: industry_biotech_high
+          embedding_model: qwen3-embedding:4b
+          vector_size: 2560
+          qdrant_url: http://localhost:6333
+          qdrant_location: null
+        symbols:
+        - MRNA
+        - BNTX
+        - CRSP
+        - REGN
+        - VRTX
+        - GILD
+      condition: always
+      inputs:
+      - from_stage: retrieve_seed
+        artifact: retrieve_seed
+        target_field: seed_context
+    on_failure: stop
+  merged_basket_high_models/14_biotech_large.yaml:
+    name: biotech_large_merged_hq_retrieve_chat
+    defaults:
+      email: you@example.com
+    stages:
+    - id: retrieve_seed
+      pipeline: retrieve
+      overrides:
+        queries:
+        - clinical trial readouts FDA pathway safety signals pipeline prioritization disclosures and trend
+          changes
+        - patent exclusivity manufacturing capacity commercial launch uptake impacts on revenue visibility
+          and risk factors
+        - reimbursement pressure partnership milestones cash runway commentary with quantified impact
+          where available
+        - R&D spend regulatory delays CMC readiness sensitivity and scenario planning
+        - competitive landscape platform validation M&A optionality execution milestones and bottlenecks
+        - liquidity cash flow working capital revolving credit debt covenant compliance updates
+        - capital expenditure project timeline budget variance and return-on-investment assumptions
+        - major customer concentration contract renewal risk termination clauses and pricing resets
+        - inflation labor freight energy input costs and gross-margin pass-through dynamics
+        - foreign exchange volatility and hedging strategy implications for near-term guidance
+        - litigation environmental liabilities contingent reserves and remediation cost outlook
+        top_k: 120
+        efts_candidates: 620
+        hydrate_top_n: 180
+        vdb:
+          collection_name: industry_biotech_high
+          embedding_model: qwen3-embedding:4b
+          vector_size: 2560
+        symbols:
+        - MRNA
+        - BNTX
+        - CRSP
+        - REGN
+        - VRTX
+        - GILD
+      condition: always
+      inputs: []
+    - id: chat_answer
+      pipeline: chat
+      overrides:
+        question: Compare pipeline quality, regulatory execution risk, and cash-runway resilience across
+          this biotech basket, focusing on the next 12-18 months.
+        collections:
+        - industry_biotech_high
+        top_k: 16
+        llm:
+          model_name: qwen3:8b
+          require_json: false
+          temperature: 0.05
+          max_new_tokens: 1280
+          num_ctx: 32768
+        vdb:
+          collection_name: industry_biotech_high
+          embedding_model: qwen3-embedding:4b
+          vector_size: 2560
+          qdrant_url: http://localhost:6333
+          qdrant_location: null
+        symbols:
+        - MRNA
+        - BNTX
+        - CRSP
+        - REGN
+        - VRTX
+        - GILD
+      condition: always
+      inputs:
+      - from_stage: retrieve_seed
+        artifact: retrieve_seed
+        target_field: seed_context
+    on_failure: stop
+  merged_basket_high_models/15_biotech_xlarge.yaml:
+    name: biotech_xlarge_merged_hq_retrieve_chat
+    defaults:
+      email: you@example.com
+    stages:
+    - id: retrieve_seed
+      pipeline: retrieve
+      overrides:
+        queries:
+        - clinical trial readouts FDA pathway safety signals pipeline prioritization disclosures and trend
+          changes
+        - patent exclusivity manufacturing capacity commercial launch uptake impacts on revenue visibility
+          and risk factors
+        - reimbursement pressure partnership milestones cash runway commentary with quantified impact
+          where available
+        - R&D spend regulatory delays CMC readiness sensitivity and scenario planning
+        - competitive landscape platform validation M&A optionality execution milestones and bottlenecks
+        - liquidity cash flow working capital revolving credit debt covenant compliance updates
+        - capital expenditure project timeline budget variance and return-on-investment assumptions
+        - major customer concentration contract renewal risk termination clauses and pricing resets
+        - inflation labor freight energy input costs and gross-margin pass-through dynamics
+        - foreign exchange volatility and hedging strategy implications for near-term guidance
+        - litigation environmental liabilities contingent reserves and remediation cost outlook
+        - inventory strategy lead-time management dual sourcing localization and continuity planning
+        - management outlook revisions, guidance confidence bands, and downside risk triggers
+        - board strategy for financing, partnership optionality, and portfolio optimization
+        top_k: 170
+        hydrate_top_n: 220
+        vdb:
+          collection_name: industry_biotech_high
+          embedding_model: qwen3-embedding:4b
+          vector_size: 2560
+        symbols:
+        - MRNA
+        - BNTX
+        - CRSP
+        - REGN
+        - VRTX
+        - GILD
+      condition: always
+      inputs: []
+    - id: chat_answer
+      pipeline: chat
+      overrides:
+        question: Compare pipeline quality, regulatory execution risk, and cash-runway resilience across
+          this biotech basket, focusing on the next 12-18 months.
+        collections:
+        - industry_biotech_high
+        top_k: 20
+        max_context_chunks: 18
+        context_token_budget: 13500
+        generation_token_cap: 1536
+        llm:
+          model_name: qwen3:8b
+          require_json: false
+          temperature: 0.05
+          max_new_tokens: 1536
+          num_ctx: 32768
+        vdb:
+          collection_name: industry_biotech_high
+          embedding_model: qwen3-embedding:4b
+          vector_size: 2560
+          qdrant_url: http://localhost:6333
+          qdrant_location: null
+        symbols:
+        - MRNA
+        - BNTX
+        - CRSP
+        - REGN
+        - VRTX
+        - GILD
+      condition: always
+      inputs:
+      - from_stage: retrieve_seed
+        artifact: retrieve_seed
+        target_field: seed_context
+    on_failure: stop
+  merged_basket_high_models/16_mining_medium.yaml:
+    name: mining_medium_merged_hq_retrieve_chat
+    defaults:
+      email: you@example.com
+    stages:
+    - id: retrieve_seed
+      pipeline: retrieve
+      overrides:
+        queries:
+        - ore grade trends reserve replacement mine plan revisions smelter treatment charges disclosures
+          and trend changes
+        - royalty exposure permitting and ESG labor negotiations impacts on revenue visibility and risk
+          factors
+        - energy input costs transport logistics commodity price sensitivity commentary with quantified
+          impact where available
+        - hedging policy balance sheet leverage project development sensitivity and scenario planning
+        - water rights geopolitical jurisdiction risk production guidance variance execution milestones
+          and bottlenecks
+        - liquidity cash flow working capital revolving credit debt covenant compliance updates
+        - capital expenditure project timeline budget variance and return-on-investment assumptions
+        - major customer concentration contract renewal risk termination clauses and pricing resets
+        top_k: 80
+        efts_candidates: 420
+        hydrate_top_n: 130
+        vdb:
+          collection_name: industry_mining_high
+          embedding_model: qwen3-embedding:4b
+          vector_size: 2560
+        symbols:
+        - FCX
+        - SCCO
+        - BHP
+        - RIO
+        - VALE
+        - NEM
+      condition: always
+      inputs: []
+    - id: chat_answer
+      pipeline: chat
+      overrides:
+        question: Evaluate operational execution, jurisdiction risk, and margin sensitivity across this
+          mining basket under different commodity-price scenarios.
+        max_context_chunks: 10
+        context_token_budget: 7500
+        generation_token_cap: 1024
+        llm:
+          model_name: qwen3:8b
+          require_json: false
+          temperature: 0.05
+          max_new_tokens: 1024
+          num_ctx: 32768
+        vdb:
+          collection_name: industry_mining_high
+          embedding_model: qwen3-embedding:4b
+          vector_size: 2560
+          qdrant_url: http://localhost:6333
+          qdrant_location: null
+        symbols:
+        - FCX
+        - SCCO
+        - BHP
+        - RIO
+        - VALE
+        - NEM
+      condition: always
+      inputs:
+      - from_stage: retrieve_seed
+        artifact: retrieve_seed
+        target_field: seed_context
+    on_failure: stop
+  merged_basket_high_models/17_mining_large.yaml:
+    name: mining_large_merged_hq_retrieve_chat
+    defaults:
+      email: you@example.com
+    stages:
+    - id: retrieve_seed
+      pipeline: retrieve
+      overrides:
+        queries:
+        - ore grade trends reserve replacement mine plan revisions smelter treatment charges disclosures
+          and trend changes
+        - royalty exposure permitting and ESG labor negotiations impacts on revenue visibility and risk
+          factors
+        - energy input costs transport logistics commodity price sensitivity commentary with quantified
+          impact where available
+        - hedging policy balance sheet leverage project development sensitivity and scenario planning
+        - water rights geopolitical jurisdiction risk production guidance variance execution milestones
+          and bottlenecks
+        - liquidity cash flow working capital revolving credit debt covenant compliance updates
+        - capital expenditure project timeline budget variance and return-on-investment assumptions
+        - major customer concentration contract renewal risk termination clauses and pricing resets
+        - inflation labor freight energy input costs and gross-margin pass-through dynamics
+        - foreign exchange volatility and hedging strategy implications for near-term guidance
+        - litigation environmental liabilities contingent reserves and remediation cost outlook
+        top_k: 120
+        efts_candidates: 620
+        hydrate_top_n: 180
+        vdb:
+          collection_name: industry_mining_high
+          embedding_model: qwen3-embedding:4b
+          vector_size: 2560
+        symbols:
+        - FCX
+        - SCCO
+        - BHP
+        - RIO
+        - VALE
+        - NEM
+      condition: always
+      inputs: []
+    - id: chat_answer
+      pipeline: chat
+      overrides:
+        question: Evaluate operational execution, jurisdiction risk, and margin sensitivity across this
+          mining basket under different commodity-price scenarios.
+        top_k: 16
+        llm:
+          model_name: qwen3:8b
+          require_json: false
+          temperature: 0.05
+          max_new_tokens: 1280
+          num_ctx: 32768
+        vdb:
+          collection_name: industry_mining_high
+          embedding_model: qwen3-embedding:4b
+          vector_size: 2560
+          qdrant_url: http://localhost:6333
+          qdrant_location: null
+        symbols:
+        - FCX
+        - SCCO
+        - BHP
+        - RIO
+        - VALE
+        - NEM
+      condition: always
+      inputs:
+      - from_stage: retrieve_seed
+        artifact: retrieve_seed
+        target_field: seed_context
+    on_failure: stop
+  merged_basket_high_models/18_mining_xlarge.yaml:
+    name: mining_xlarge_merged_hq_retrieve_chat
+    defaults:
+      email: you@example.com
+    stages:
+    - id: retrieve_seed
+      pipeline: retrieve
+      overrides:
+        queries:
+        - ore grade trends reserve replacement mine plan revisions smelter treatment charges disclosures
+          and trend changes
+        - royalty exposure permitting and ESG labor negotiations impacts on revenue visibility and risk
+          factors
+        - energy input costs transport logistics commodity price sensitivity commentary with quantified
+          impact where available
+        - hedging policy balance sheet leverage project development sensitivity and scenario planning
+        - water rights geopolitical jurisdiction risk production guidance variance execution milestones
+          and bottlenecks
+        - liquidity cash flow working capital revolving credit debt covenant compliance updates
+        - capital expenditure project timeline budget variance and return-on-investment assumptions
+        - major customer concentration contract renewal risk termination clauses and pricing resets
+        - inflation labor freight energy input costs and gross-margin pass-through dynamics
+        - foreign exchange volatility and hedging strategy implications for near-term guidance
+        - litigation environmental liabilities contingent reserves and remediation cost outlook
+        - inventory strategy lead-time management dual sourcing localization and continuity planning
+        - management outlook revisions, guidance confidence bands, and downside risk triggers
+        - board strategy for financing, partnership optionality, and portfolio optimization
+        top_k: 170
+        hydrate_top_n: 220
+        vdb:
+          collection_name: industry_mining_high
+          embedding_model: qwen3-embedding:4b
+          vector_size: 2560
+        symbols:
+        - FCX
+        - SCCO
+        - BHP
+        - RIO
+        - VALE
+        - NEM
+      condition: always
+      inputs: []
+    - id: chat_answer
+      pipeline: chat
+      overrides:
+        question: Evaluate operational execution, jurisdiction risk, and margin sensitivity across this
+          mining basket under different commodity-price scenarios.
+        top_k: 20
+        max_context_chunks: 18
+        context_token_budget: 13500
+        generation_token_cap: 1536
+        llm:
+          model_name: qwen3:8b
+          require_json: false
+          temperature: 0.05
+          max_new_tokens: 1536
+          num_ctx: 32768
+        vdb:
+          collection_name: industry_mining_high
+          embedding_model: qwen3-embedding:4b
+          vector_size: 2560
+          qdrant_url: http://localhost:6333
+          qdrant_location: null
+        symbols:
+        - FCX
+        - SCCO
+        - BHP
+        - RIO
+        - VALE
+        - NEM
+      condition: always
+      inputs:
+      - from_stage: retrieve_seed
+        artifact: retrieve_seed
+        target_field: seed_context
+    on_failure: stop
+  model_variety_flows/01_rems_low_granite_llama.yaml:
+    name: rems_low_granite_llama
+    defaults:
+      email: your-real-email@example.com
+    stages:
+    - id: retrieve_seed
+      pipeline: retrieve
+      overrides:
+        queries:
+        - NdPr supply-demand balance and expected pricing path over the next 12 to 24 months
+        - unit-cost curve position, break-even sensitivity, and margin durability at lower realized prices
+        - capex milestones, funding sources, and dilution risk under delayed commissioning scenarios
+        - offtake mix fixed versus spot pricing, customer concentration, and contract reset exposure
+        - portfolio timing signals including entry triggers, trim signals, and downside risk catalysts
+        top_k: 60
+        efts_candidates: 300
+        vdb:
+          collection_name: variety_rems_low
+          embedding_model: granite-embedding:30m
+          vector_size: 384
+      condition: always
+      inputs: []
+    - id: chat_answer
+      pipeline: chat
+      overrides:
+        question: Draft an investment strategy memo for this REM basket with overweight-neutral-underweight
+          calls, entry triggers, downside hedges, and bull-base-bear drivers for the next 12 months.
+        collections:
+        - variety_rems_low
+        max_context_chunks: 40
+        context_token_budget: 30000
+        rerank_mode: score
+        generation_token_cap: 0
+        llm:
+          model_name: llama3.2:1b
+          require_json: false
+          temperature: 0.05
+          max_new_tokens: 8192
+          num_ctx: 32768
+        vdb:
+          collection_name: variety_rems_low
+          embedding_model: granite-embedding:30m
+          vector_size: 384
+          qdrant_url: http://localhost:6333
+          qdrant_location: null
+      condition: always
+      inputs:
+      - from_stage: retrieve_seed
+        artifact: retrieve_seed
+        target_field: seed_context
+    on_failure: stop
+  model_variety_flows/02_rems_medium_mxbai_ministral.yaml:
+    name: rems_medium_mxbai_ministral
+    defaults:
+      email: your-real-email@example.com
+    stages:
+    - id: retrieve_seed
+      pipeline: retrieve
+      overrides:
+        queries:
+        - neodymium-praseodymium pricing outlook, volume commitments, and contract reset clauses affecting
+          forward earnings
+        - feedstock quality, recovery yields, and separation throughput impacts on free-cash-flow conversion
+        - debt maturities, covenant headroom, and refinancing risk under stressed commodity assumptions
+        - tariff and policy shifts affecting sourcing concentration, realized pricing, and customer elasticity
+        - project slippage, cost inflation, and capital-allocation alternatives for portfolio risk control
+        top_k: 80
+        efts_candidates: 360
+        hydrate_top_n: 120
+        vdb:
+          collection_name: variety_rems_medium
+          embedding_model: mxbai-embed-large:latest
+          vector_size: 1024
+      condition: always
+      inputs: []
+    - id: chat_answer
+      pipeline: chat
+      overrides:
+        question: Build an investable REM basket strategy with position sizing guidance, expected return
+          drivers, key risk controls, and near-term catalyst watchlists by issuer.
+        collections:
+        - variety_rems_medium
+        top_k: 14
+        max_context_chunks: 40
+        context_token_budget: 30000
+        generation_token_cap: 0
+        llm:
+          model_name: ministral-3:3b
+          require_json: false
+          temperature: 0.05
+          max_new_tokens: 8192
+          num_ctx: 32768
+        vdb:
+          collection_name: variety_rems_medium
+          embedding_model: mxbai-embed-large:latest
+          vector_size: 1024
+          qdrant_url: http://localhost:6333
+          qdrant_location: null
+      condition: always
+      inputs:
+      - from_stage: retrieve_seed
+        artifact: retrieve_seed
+        target_field: seed_context
+    on_failure: stop
+  model_variety_flows/03_rems_high_qwen.yaml:
+    name: rems_high_qwen
+    defaults:
+      email: your-real-email@example.com
+    stages:
+    - id: retrieve_seed
+      pipeline: retrieve
+      overrides:
+        queries:
+        - NdPr demand inflections from EV wind and defense and the implied earnings path under multiple
+          demand regimes
+        - mine-to-magnet vertical integration economics and the tradeoff between margin capture and execution
+          risk
+        - refining chokepoints, shipping constraints, and scenario-based supply interruption impacts on
+          valuation
+        - customer concentration and qualification-cycle delays as drivers of downside skew and volatility
+        - free-cash-flow sensitivity to realized pricing, freight, and reagent costs with stress assumptions
+        - financing optionality, dilution risk, and balance-sheet resilience for long-horizon portfolio
+          construction
+        top_k: 100
+        efts_candidates: 420
+        hydrate_top_n: 150
+        vdb:
+          collection_name: variety_rems_high
+          embedding_model: qwen3-embedding:4b
+          vector_size: 2560
+        start_date: '2020-01-01'
+      condition: always
+      inputs: []
+    - id: chat_answer
+      pipeline: chat
+      overrides:
+        question: Write a full investment committee memo for this REM basket with ranking, target exposure
+          bands, scenario returns, risk limits, and explicit buy-hold-exit criteria.
+        collections:
+        - variety_rems_high
+        top_k: 16
+        max_context_chunks: 40
+        context_token_budget: 32000
+        generation_token_cap: 0
+        llm:
+          model_name: qwen3:8b
+          require_json: false
+          temperature: 0.03
+          max_new_tokens: 8192
+          num_ctx: 32768
+        vdb:
+          collection_name: variety_rems_high
+          embedding_model: qwen3-embedding:4b
+          vector_size: 2560
+          qdrant_url: http://localhost:6333
+          qdrant_location: null
+        start_date: '2020-01-01'
+      condition: always
+      inputs:
+      - from_stage: retrieve_seed
+        artifact: retrieve_seed
+        target_field: seed_context
+    on_failure: stop
+  model_variety_flows/04_tech_medium_mxbai_qwen8b.yaml:
+    name: tech_medium_mxbai_qwen8b
+    defaults:
+      email: your-real-email@example.com
+    stages:
+    - id: retrieve_seed
+      pipeline: retrieve
+      overrides:
+        queries:
+        - AI capex cycle durability and implications for multi-quarter revenue-growth positioning
+        - backlog quality, pipeline conversion risk, and revenue visibility for timing overweight decisions
+        - pricing versus competition and the effect on operating leverage and valuation multiples
+        - foundry dependency, supply concentration, and inventory normalization as downside risk channels
+        - free-cash-flow durability under elevated R-and-D and shareholder-return commitments
+        top_k: 80
+        efts_candidates: 320
+        hydrate_top_n: 110
+        vdb:
+          collection_name: variety_tech_medium
+          embedding_model: mxbai-embed-large:latest
+          vector_size: 1024
+        symbols:
+        - NVDA
+        - AMD
+        - AVGO
+        - INTC
+        - TSM
+        - ASML
+      condition: always
+      inputs: []
+    - id: chat_answer
+      pipeline: chat
+      overrides:
+        question: Produce a portfolio strategy for this tech basket with conviction ranking, position
+          sizing tiers, catalyst calendar, and risk-adjusted hold versus trim decisions.
+        collections:
+        - variety_tech_medium
+        top_k: 14
+        max_context_chunks: 40
+        context_token_budget: 30000
+        generation_token_cap: 0
+        llm:
+          model_name: qwen3:8b
+          require_json: false
+          temperature: 0.04
+          max_new_tokens: 8192
+          num_ctx: 32768
+        vdb:
+          collection_name: variety_tech_medium
+          embedding_model: mxbai-embed-large:latest
+          vector_size: 1024
+          qdrant_url: http://localhost:6333
+          qdrant_location: null
+        symbols:
+        - NVDA
+        - AMD
+        - AVGO
+        - INTC
+        - TSM
+        - ASML
+      condition: always
+      inputs:
+      - from_stage: retrieve_seed
+        artifact: retrieve_seed
+        target_field: seed_context
+    on_failure: stop
+  model_variety_flows/05_quantum_high_qwen_ministral.yaml:
+    name: quantum_high_qwen_ministral
+    defaults:
+      email: your-real-email@example.com
+    stages:
+    - id: retrieve_seed
+      pipeline: retrieve
+      overrides:
+        queries:
+        - roadmap milestones, error-correction claims, and commercialization timing as valuation triggers
+        - government and defense contract concentration, renewal uncertainty, and backlog quality
+        - cash runway, dilution timing, and margin path under scale-up and delay scenarios
+        - pipeline conversion rates, recurring revenue quality, and deal concentration risk
+        - competitive positioning across superconducting trapped-ion and neutral-atom approaches for relative
+          positioning
+        top_k: 90
+        efts_candidates: 340
+        hydrate_top_n: 120
+        vdb:
+          collection_name: variety_quantum_high
+          embedding_model: qwen3-embedding:4b
+          vector_size: 2560
+        symbols:
+        - IONQ
+        - RGTI
+        - QBTS
+        - QUBT
+        - IBM
+      condition: always
+      inputs: []
+    - id: chat_answer
+      pipeline: chat
+      overrides:
+        question: Build an investment strategy playbook for this quantum basket with position weights,
+          optionality versus solvency tradeoffs, catalyst-based entries, and hard risk limits.
+        collections:
+        - variety_quantum_high
+        top_k: 14
+        max_context_chunks: 40
+        context_token_budget: 32000
+        generation_token_cap: 0
+        llm:
+          model_name: ministral-3:3b
+          require_json: false
+          temperature: 0.05
+          max_new_tokens: 8192
+          num_ctx: 32768
+        vdb:
+          collection_name: variety_quantum_high
+          embedding_model: qwen3-embedding:4b
+          vector_size: 2560
+          qdrant_url: http://localhost:6333
+          qdrant_location: null
+        symbols:
+        - IONQ
+        - RGTI
+        - QBTS
+        - QUBT
+        - IBM
+      condition: always
+      inputs:
+      - from_stage: retrieve_seed
+        artifact: retrieve_seed
+        target_field: seed_context
+    on_failure: stop
+  model_variety_flows/06_biotech_low_granite_ministral.yaml:
+    name: biotech_low_granite_ministral
+    defaults:
+      email: your-real-email@example.com
+    stages:
+    - id: retrieve_seed
+      pipeline: retrieve
+      overrides:
+        queries:
+        - clinical milestone timing, enrollment risk, and endpoint sensitivity for event-driven positioning
+        - regulatory uncertainty, complete-response risk, and post-marketing burdens affecting probability-weighted
+          value
+        - partnership economics, royalty terms, and milestone dependence for downside protection assessment
+        - cash runway, financing plans, and dilution timing relative to catalyst windows
+        - manufacturing readiness and CMC execution risk impacting launch assumptions and risk premium
+        top_k: 70
+        efts_candidates: 280
+        vdb:
+          collection_name: variety_biotech_low
+          embedding_model: granite-embedding:30m
+          vector_size: 384
+        symbols:
+        - CRSP
+        - NTLA
+        - BEAM
+        - RXRX
+        - MRNA
+      condition: always
+      inputs: []
+    - id: chat_answer
+      pipeline: chat
+      overrides:
+        question: Draft a biotech investment strategy that ranks names by risk-adjusted expected return,
+          defines position sizing, and maps catalyst timelines to hedge and exit rules.
+        collections:
+        - variety_biotech_low
+        max_context_chunks: 40
+        context_token_budget: 30000
+        rerank_mode: score
+        generation_token_cap: 0
+        llm:
+          model_name: ministral-3:3b
+          require_json: false
+          temperature: 0.05
+          max_new_tokens: 8192
+          num_ctx: 32768
+        vdb:
+          collection_name: variety_biotech_low
+          embedding_model: granite-embedding:30m
+          vector_size: 384
+          qdrant_url: http://localhost:6333
+          qdrant_location: null
+        symbols:
+        - CRSP
+        - NTLA
+        - BEAM
+        - RXRX
+        - MRNA
+      condition: always
+      inputs:
+      - from_stage: retrieve_seed
+        artifact: retrieve_seed
+        target_field: seed_context
+    on_failure: stop
+  multi_jobs/01_smoke_smoke.yaml:
+    name: smoke_smoke_retrieve_chat
+    defaults:
+      email: you@example.com
+    stages:
+    - id: retrieve_seed
+      pipeline: retrieve
+      overrides:
+        queries:
+        - risk factors liquidity working capital debt covenant disclosures and trend changes
+        - supply chain customer concentration capital expenditure impacts on revenue visibility and risk
+          factors
+        - guidance margin pressure geopolitical risk commentary with quantified impact where available
+        - tariffs inflation cost control sensitivity and scenario planning
+        top_k: 25
+        efts_candidates: 140
+        hydrate_top_n: 35
+        rerank_with_embeddings: false
+        vdb:
+          collection_name: flow_smoke_smoke
+        symbols:
+        - CDE
+        - AAPL
+        - FCX
+      condition: always
+      inputs: []
+    - id: chat_answer
+      pipeline: chat
+      overrides:
+        question: What are the most material near-term risk, liquidity, and margin signals across this
+          smoke basket, and which issuer appears most vulnerable?
+        collections:
+        - flow_smoke_smoke
+        top_k: 8
+        max_context_chunks: 6
+        context_token_budget: 3500
+        include_market_context: false
+        include_news_context: false
+        rerank_mode: score
+        generation_token_cap: 448
+        symbols:
+        - CDE
+        - AAPL
+        - FCX
+      condition: always
+      inputs:
+      - from_stage: retrieve_seed
+        artifact: retrieve_seed
+        target_field: seed_context
+    on_failure: stop
+  multi_jobs/02_smoke_small.yaml:
+    name: smoke_small_retrieve_chat
+    defaults:
+      email: you@example.com
+    stages:
+    - id: retrieve_seed
+      pipeline: retrieve
+      overrides:
+        queries:
+        - risk factors liquidity working capital debt covenant disclosures and trend changes
+        - supply chain customer concentration capital expenditure impacts on revenue visibility and risk
+          factors
+        - guidance margin pressure geopolitical risk commentary with quantified impact where available
+        - tariffs inflation cost control sensitivity and scenario planning
+        - cash flow operational execution remediation liabilities execution milestones and bottlenecks
+        - liquidity cash flow working capital revolving credit debt covenant compliance updates
+        top_k: 40
+        efts_candidates: 220
+        hydrate_top_n: 60
+        vdb:
+          collection_name: flow_smoke_small
+        symbols:
+        - CDE
+        - AAPL
+        - FCX
+      condition: always
+      inputs: []
+    - id: chat_answer
+      pipeline: chat
+      overrides:
+        question: What are the most material near-term risk, liquidity, and margin signals across this
+          smoke basket, and which issuer appears most vulnerable?
+        collections:
+        - flow_smoke_small
+        top_k: 10
+        max_context_chunks: 8
+        context_token_budget: 4500
+        include_news_context: false
+        rerank_mode: score
+        generation_token_cap: 512
+        symbols:
+        - CDE
+        - AAPL
+        - FCX
+      condition: always
+      inputs:
+      - from_stage: retrieve_seed
+        artifact: retrieve_seed
+        target_field: seed_context
+    on_failure: stop
+  multi_jobs/03_smoke_medium.yaml:
+    name: smoke_medium_retrieve_chat
+    defaults:
+      email: you@example.com
+    stages:
+    - id: retrieve_seed
+      pipeline: retrieve
+      overrides:
+        queries:
+        - risk factors liquidity working capital debt covenant disclosures and trend changes
+        - supply chain customer concentration capital expenditure impacts on revenue visibility and risk
+          factors
+        - guidance margin pressure geopolitical risk commentary with quantified impact where available
+        - tariffs inflation cost control sensitivity and scenario planning
+        - cash flow operational execution remediation liabilities execution milestones and bottlenecks
+        - liquidity cash flow working capital revolving credit debt covenant compliance updates
+        - capital expenditure project timeline budget variance and return-on-investment assumptions
+        - major customer concentration contract renewal risk termination clauses and pricing resets
+        top_k: 60
+        efts_candidates: 320
+        vdb:
+          collection_name: flow_smoke_medium
+        symbols:
+        - CDE
+        - AAPL
+        - FCX
+      condition: always
+      inputs: []
+    - id: chat_answer
+      pipeline: chat
+      overrides:
+        question: What are the most material near-term risk, liquidity, and margin signals across this
+          smoke basket, and which issuer appears most vulnerable?
+        collections:
+        - flow_smoke_medium
+        max_context_chunks: 10
+        context_token_budget: 6000
+        include_news_context: false
+        rerank_mode: score
+        generation_token_cap: 640
+        symbols:
+        - CDE
+        - AAPL
+        - FCX
+      condition: always
+      inputs:
+      - from_stage: retrieve_seed
+        artifact: retrieve_seed
+        target_field: seed_context
+    on_failure: stop
+  multi_jobs/04_smoke_large.yaml:
+    name: smoke_large_retrieve_chat
+    defaults:
+      email: you@example.com
+    stages:
+    - id: retrieve_seed
+      pipeline: retrieve
+      overrides:
+        queries:
+        - risk factors liquidity working capital debt covenant disclosures and trend changes
+        - supply chain customer concentration capital expenditure impacts on revenue visibility and risk
+          factors
+        - guidance margin pressure geopolitical risk commentary with quantified impact where available
+        - tariffs inflation cost control sensitivity and scenario planning
+        - cash flow operational execution remediation liabilities execution milestones and bottlenecks
+        - liquidity cash flow working capital revolving credit debt covenant compliance updates
+        - capital expenditure project timeline budget variance and return-on-investment assumptions
+        - major customer concentration contract renewal risk termination clauses and pricing resets
+        - inflation labor freight energy input costs and gross-margin pass-through dynamics
+        - foreign exchange volatility and hedging strategy implications for near-term guidance
+        - litigation environmental liabilities contingent reserves and remediation cost outlook
+        top_k: 95
+        efts_candidates: 480
+        hydrate_top_n: 140
+        vdb:
+          collection_name: flow_smoke_large
+        symbols:
+        - CDE
+        - AAPL
+        - FCX
+      condition: always
+      inputs: []
+    - id: chat_answer
+      pipeline: chat
+      overrides:
+        question: What are the most material near-term risk, liquidity, and margin signals across this
+          smoke basket, and which issuer appears most vulnerable?
+        collections:
+        - flow_smoke_large
+        top_k: 14
+        max_context_chunks: 12
+        context_token_budget: 7800
+        generation_token_cap: 896
+        symbols:
+        - CDE
+        - AAPL
+        - FCX
+      condition: always
+      inputs:
+      - from_stage: retrieve_seed
+        artifact: retrieve_seed
+        target_field: seed_context
+    on_failure: stop
+  multi_jobs/05_smoke_xlarge.yaml:
+    name: smoke_xlarge_retrieve_chat
+    defaults:
+      email: you@example.com
+    stages:
+    - id: retrieve_seed
+      pipeline: retrieve
+      overrides:
+        queries:
+        - risk factors liquidity working capital debt covenant disclosures and trend changes
+        - supply chain customer concentration capital expenditure impacts on revenue visibility and risk
+          factors
+        - guidance margin pressure geopolitical risk commentary with quantified impact where available
+        - tariffs inflation cost control sensitivity and scenario planning
+        - cash flow operational execution remediation liabilities execution milestones and bottlenecks
+        - liquidity cash flow working capital revolving credit debt covenant compliance updates
+        - capital expenditure project timeline budget variance and return-on-investment assumptions
+        - major customer concentration contract renewal risk termination clauses and pricing resets
+        - inflation labor freight energy input costs and gross-margin pass-through dynamics
+        - foreign exchange volatility and hedging strategy implications for near-term guidance
+        - litigation environmental liabilities contingent reserves and remediation cost outlook
+        - inventory strategy lead-time management dual sourcing localization and continuity planning
+        - management outlook revisions, guidance confidence bands, and downside risk triggers
+        - board strategy for financing, partnership optionality, and portfolio optimization
+        efts_candidates: 700
+        hydrate_top_n: 200
+        vdb:
+          collection_name: flow_smoke_xlarge
+        symbols:
+        - CDE
+        - AAPL
+        - FCX
+      condition: always
+      inputs: []
+    - id: chat_answer
+      pipeline: chat
+      overrides:
+        question: What are the most material near-term risk, liquidity, and margin signals across this
+          smoke basket, and which issuer appears most vulnerable?
+        collections:
+        - flow_smoke_xlarge
+        top_k: 18
+        context_token_budget: 9500
+        generation_token_cap: 1024
+        symbols:
+        - CDE
+        - AAPL
+        - FCX
+      condition: always
+      inputs:
+      - from_stage: retrieve_seed
+        artifact: retrieve_seed
+        target_field: seed_context
+    on_failure: stop
+  multi_jobs/06_rems_smoke.yaml:
+    name: rems_smoke_retrieve_chat
+    defaults:
+      email: you@example.com
+    stages:
+    - id: retrieve_seed
+      pipeline: retrieve
+      overrides:
+        queries:
+        - rare earth oxide pricing NdPr demand magnet supply chain separation capacity disclosures and
+          trend changes
+        - processing bottlenecks offtake agreements export controls impacts on revenue visibility and
+          risk factors
+        - China dependency permitting timelines concentrate feedstock commentary with quantified impact
+          where available
+        - capex funding strategic stockpiles defense demand sensitivity and scenario planning
+        top_k: 25
+        efts_candidates: 140
+        hydrate_top_n: 35
+        rerank_with_embeddings: false
+        vdb:
+          collection_name: flow_rems_smoke
+      condition: always
+      inputs: []
+    - id: chat_answer
+      pipeline: chat
+      overrides:
+        collections:
+        - flow_rems_smoke
+        top_k: 8
+        max_context_chunks: 6
+        context_token_budget: 3500
+        include_market_context: false
+        include_news_context: false
+        rerank_mode: score
+        generation_token_cap: 448
+      condition: always
+      inputs:
+      - from_stage: retrieve_seed
+        artifact: retrieve_seed
+        target_field: seed_context
+    on_failure: stop
+  multi_jobs/07_rems_small.yaml:
+    name: rems_small_retrieve_chat
+    defaults:
+      email: you@example.com
+    stages:
+    - id: retrieve_seed
+      pipeline: retrieve
+      overrides:
+        queries:
+        - rare earth oxide pricing NdPr demand magnet supply chain separation capacity disclosures and
+          trend changes
+        - processing bottlenecks offtake agreements export controls impacts on revenue visibility and
+          risk factors
+        - China dependency permitting timelines concentrate feedstock commentary with quantified impact
+          where available
+        - capex funding strategic stockpiles defense demand sensitivity and scenario planning
+        - shipping routes conversion yields downstream integration execution milestones and bottlenecks
+        - liquidity cash flow working capital revolving credit debt covenant compliance updates
+        top_k: 40
+        efts_candidates: 220
+        hydrate_top_n: 60
+        vdb:
+          collection_name: flow_rems_small
+      condition: always
+      inputs: []
+    - id: chat_answer
+      pipeline: chat
+      overrides:
+        collections:
+        - flow_rems_small
+        top_k: 10
+        max_context_chunks: 8
+        context_token_budget: 4500
+        include_news_context: false
+        rerank_mode: score
+        generation_token_cap: 512
+      condition: always
+      inputs:
+      - from_stage: retrieve_seed
+        artifact: retrieve_seed
+        target_field: seed_context
+    on_failure: stop
+  multi_jobs/08_rems_medium.yaml:
+    name: rems_medium_retrieve_chat
+    defaults:
+      email: you@example.com
+    stages:
+    - id: retrieve_seed
+      pipeline: retrieve
+      overrides:
+        queries:
+        - rare earth oxide pricing NdPr demand magnet supply chain separation capacity disclosures and
+          trend changes
+        - processing bottlenecks offtake agreements export controls impacts on revenue visibility and
+          risk factors
+        - China dependency permitting timelines concentrate feedstock commentary with quantified impact
+          where available
+        - capex funding strategic stockpiles defense demand sensitivity and scenario planning
+        - shipping routes conversion yields downstream integration execution milestones and bottlenecks
+        - liquidity cash flow working capital revolving credit debt covenant compliance updates
+        - capital expenditure project timeline budget variance and return-on-investment assumptions
+        - major customer concentration contract renewal risk termination clauses and pricing resets
+        top_k: 60
+        efts_candidates: 320
+        vdb:
+          collection_name: flow_rems_medium
+      condition: always
+      inputs: []
+    - id: chat_answer
+      pipeline: chat
+      overrides:
+        collections:
+        - flow_rems_medium
+        max_context_chunks: 10
+        context_token_budget: 6000
+        include_news_context: false
+        rerank_mode: score
+        generation_token_cap: 640
+      condition: always
+      inputs:
+      - from_stage: retrieve_seed
+        artifact: retrieve_seed
+        target_field: seed_context
+    on_failure: stop
+  multi_jobs/09_rems_large.yaml:
+    name: rems_large_retrieve_chat
+    defaults:
+      email: you@example.com
+    stages:
+    - id: retrieve_seed
+      pipeline: retrieve
+      overrides:
+        queries:
+        - rare earth oxide pricing NdPr demand magnet supply chain separation capacity disclosures and
+          trend changes
+        - processing bottlenecks offtake agreements export controls impacts on revenue visibility and
+          risk factors
+        - China dependency permitting timelines concentrate feedstock commentary with quantified impact
+          where available
+        - capex funding strategic stockpiles defense demand sensitivity and scenario planning
+        - shipping routes conversion yields downstream integration execution milestones and bottlenecks
+        - liquidity cash flow working capital revolving credit debt covenant compliance updates
+        - capital expenditure project timeline budget variance and return-on-investment assumptions
+        - major customer concentration contract renewal risk termination clauses and pricing resets
+        - inflation labor freight energy input costs and gross-margin pass-through dynamics
+        - foreign exchange volatility and hedging strategy implications for near-term guidance
+        - litigation environmental liabilities contingent reserves and remediation cost outlook
+        top_k: 95
+        efts_candidates: 480
+        hydrate_top_n: 140
+        vdb:
+          collection_name: flow_rems_large
+      condition: always
+      inputs: []
+    - id: chat_answer
+      pipeline: chat
+      overrides:
+        collections:
+        - flow_rems_large
+        top_k: 14
+        max_context_chunks: 12
+        context_token_budget: 7800
+        generation_token_cap: 896
+      condition: always
+      inputs:
+      - from_stage: retrieve_seed
+        artifact: retrieve_seed
+        target_field: seed_context
+    on_failure: stop
+  multi_jobs/10_rems_xlarge.yaml:
+    name: rems_xlarge_retrieve_chat
+    defaults:
+      email: you@example.com
+    stages:
+    - id: retrieve_seed
+      pipeline: retrieve
+      overrides:
+        queries:
+        - rare earth oxide pricing NdPr demand magnet supply chain separation capacity disclosures and
+          trend changes
+        - processing bottlenecks offtake agreements export controls impacts on revenue visibility and
+          risk factors
+        - China dependency permitting timelines concentrate feedstock commentary with quantified impact
+          where available
+        - capex funding strategic stockpiles defense demand sensitivity and scenario planning
+        - shipping routes conversion yields downstream integration execution milestones and bottlenecks
+        - liquidity cash flow working capital revolving credit debt covenant compliance updates
+        - capital expenditure project timeline budget variance and return-on-investment assumptions
+        - major customer concentration contract renewal risk termination clauses and pricing resets
+        - inflation labor freight energy input costs and gross-margin pass-through dynamics
+        - foreign exchange volatility and hedging strategy implications for near-term guidance
+        - litigation environmental liabilities contingent reserves and remediation cost outlook
+        - inventory strategy lead-time management dual sourcing localization and continuity planning
+        - management outlook revisions, guidance confidence bands, and downside risk triggers
+        - board strategy for financing, partnership optionality, and portfolio optimization
+        efts_candidates: 700
+        hydrate_top_n: 200
+        vdb:
+          collection_name: flow_rems_xlarge
+      condition: always
+      inputs: []
+    - id: chat_answer
+      pipeline: chat
+      overrides:
+        collections:
+        - flow_rems_xlarge
+        top_k: 18
+        context_token_budget: 9500
+        generation_token_cap: 1024
+      condition: always
+      inputs:
+      - from_stage: retrieve_seed
+        artifact: retrieve_seed
+        target_field: seed_context
+    on_failure: stop
+  multi_jobs/11_tech_smoke.yaml:
+    name: tech_smoke_retrieve_chat
+    defaults:
+      email: you@example.com
+    stages:
+    - id: retrieve_seed
+      pipeline: retrieve
+      overrides:
+        queries:
+        - AI data center demand GPU supply cloud consumption enterprise backlog disclosures and trend
+          changes
+        - subscription retention semiconductor lead times inventory normalization impacts on revenue visibility
+          and risk factors
+        - pricing discipline gross margin outlook hyperscaler capex commentary with quantified impact
+          where available
+        - customer concentration export restrictions foundry capacity sensitivity and scenario planning
+        top_k: 25
+        efts_candidates: 140
+        hydrate_top_n: 35
+        rerank_with_embeddings: false
+        vdb:
+          collection_name: flow_tech_smoke
+        symbols:
+        - AAPL
+        - MSFT
+        - NVDA
+        - AMD
+        - AVGO
+        - ORCL
+      condition: always
+      inputs: []
+    - id: chat_answer
+      pipeline: chat
+      overrides:
+        question: Summarize AI-infrastructure and enterprise demand signals for this tech basket, with
+          emphasis on backlog durability, margin risk, and capex efficiency.
+        collections:
+        - flow_tech_smoke
+        top_k: 8
+        max_context_chunks: 6
+        context_token_budget: 3500
+        include_market_context: false
+        include_news_context: false
+        rerank_mode: score
+        generation_token_cap: 448
+        symbols:
+        - AAPL
+        - MSFT
+        - NVDA
+        - AMD
+        - AVGO
+        - ORCL
+      condition: always
+      inputs:
+      - from_stage: retrieve_seed
+        artifact: retrieve_seed
+        target_field: seed_context
+    on_failure: stop
+  multi_jobs/12_tech_small.yaml:
+    name: tech_small_retrieve_chat
+    defaults:
+      email: you@example.com
+    stages:
+    - id: retrieve_seed
+      pipeline: retrieve
+      overrides:
+        queries:
+        - AI data center demand GPU supply cloud consumption enterprise backlog disclosures and trend
+          changes
+        - subscription retention semiconductor lead times inventory normalization impacts on revenue visibility
+          and risk factors
+        - pricing discipline gross margin outlook hyperscaler capex commentary with quantified impact
+          where available
+        - customer concentration export restrictions foundry capacity sensitivity and scenario planning
+        - platform adoption free cash flow competitive intensity execution milestones and bottlenecks
+        - liquidity cash flow working capital revolving credit debt covenant compliance updates
+        top_k: 40
+        efts_candidates: 220
+        hydrate_top_n: 60
+        vdb:
+          collection_name: flow_tech_small
+        symbols:
+        - AAPL
+        - MSFT
+        - NVDA
+        - AMD
+        - AVGO
+        - ORCL
+      condition: always
+      inputs: []
+    - id: chat_answer
+      pipeline: chat
+      overrides:
+        question: Summarize AI-infrastructure and enterprise demand signals for this tech basket, with
+          emphasis on backlog durability, margin risk, and capex efficiency.
+        collections:
+        - flow_tech_small
+        top_k: 10
+        max_context_chunks: 8
+        context_token_budget: 4500
+        include_news_context: false
+        rerank_mode: score
+        generation_token_cap: 512
+        symbols:
+        - AAPL
+        - MSFT
+        - NVDA
+        - AMD
+        - AVGO
+        - ORCL
+      condition: always
+      inputs:
+      - from_stage: retrieve_seed
+        artifact: retrieve_seed
+        target_field: seed_context
+    on_failure: stop
+  multi_jobs/13_tech_medium.yaml:
+    name: tech_medium_retrieve_chat
+    defaults:
+      email: you@example.com
+    stages:
+    - id: retrieve_seed
+      pipeline: retrieve
+      overrides:
+        queries:
+        - AI data center demand GPU supply cloud consumption enterprise backlog disclosures and trend
+          changes
+        - subscription retention semiconductor lead times inventory normalization impacts on revenue visibility
+          and risk factors
+        - pricing discipline gross margin outlook hyperscaler capex commentary with quantified impact
+          where available
+        - customer concentration export restrictions foundry capacity sensitivity and scenario planning
+        - platform adoption free cash flow competitive intensity execution milestones and bottlenecks
+        - liquidity cash flow working capital revolving credit debt covenant compliance updates
+        - capital expenditure project timeline budget variance and return-on-investment assumptions
+        - major customer concentration contract renewal risk termination clauses and pricing resets
+        top_k: 60
+        efts_candidates: 320
+        vdb:
+          collection_name: flow_tech_medium
+        symbols:
+        - AAPL
+        - MSFT
+        - NVDA
+        - AMD
+        - AVGO
+        - ORCL
+      condition: always
+      inputs: []
+    - id: chat_answer
+      pipeline: chat
+      overrides:
+        question: Summarize AI-infrastructure and enterprise demand signals for this tech basket, with
+          emphasis on backlog durability, margin risk, and capex efficiency.
+        collections:
+        - flow_tech_medium
+        max_context_chunks: 10
+        context_token_budget: 6000
+        include_news_context: false
+        rerank_mode: score
+        generation_token_cap: 640
+        symbols:
+        - AAPL
+        - MSFT
+        - NVDA
+        - AMD
+        - AVGO
+        - ORCL
+      condition: always
+      inputs:
+      - from_stage: retrieve_seed
+        artifact: retrieve_seed
+        target_field: seed_context
+    on_failure: stop
+  multi_jobs/14_tech_large.yaml:
+    name: tech_large_retrieve_chat
+    defaults:
+      email: you@example.com
+    stages:
+    - id: retrieve_seed
+      pipeline: retrieve
+      overrides:
+        queries:
+        - AI data center demand GPU supply cloud consumption enterprise backlog disclosures and trend
+          changes
+        - subscription retention semiconductor lead times inventory normalization impacts on revenue visibility
+          and risk factors
+        - pricing discipline gross margin outlook hyperscaler capex commentary with quantified impact
+          where available
+        - customer concentration export restrictions foundry capacity sensitivity and scenario planning
+        - platform adoption free cash flow competitive intensity execution milestones and bottlenecks
+        - liquidity cash flow working capital revolving credit debt covenant compliance updates
+        - capital expenditure project timeline budget variance and return-on-investment assumptions
+        - major customer concentration contract renewal risk termination clauses and pricing resets
+        - inflation labor freight energy input costs and gross-margin pass-through dynamics
+        - foreign exchange volatility and hedging strategy implications for near-term guidance
+        - litigation environmental liabilities contingent reserves and remediation cost outlook
+        top_k: 95
+        efts_candidates: 480
+        hydrate_top_n: 140
+        vdb:
+          collection_name: flow_tech_large
+        symbols:
+        - AAPL
+        - MSFT
+        - NVDA
+        - AMD
+        - AVGO
+        - ORCL
+      condition: always
+      inputs: []
+    - id: chat_answer
+      pipeline: chat
+      overrides:
+        question: Summarize AI-infrastructure and enterprise demand signals for this tech basket, with
+          emphasis on backlog durability, margin risk, and capex efficiency.
+        collections:
+        - flow_tech_large
+        top_k: 14
+        max_context_chunks: 12
+        context_token_budget: 7800
+        generation_token_cap: 896
+        symbols:
+        - AAPL
+        - MSFT
+        - NVDA
+        - AMD
+        - AVGO
+        - ORCL
+      condition: always
+      inputs:
+      - from_stage: retrieve_seed
+        artifact: retrieve_seed
+        target_field: seed_context
+    on_failure: stop
+  multi_jobs/15_tech_xlarge.yaml:
+    name: tech_xlarge_retrieve_chat
+    defaults:
+      email: you@example.com
+    stages:
+    - id: retrieve_seed
+      pipeline: retrieve
+      overrides:
+        queries:
+        - AI data center demand GPU supply cloud consumption enterprise backlog disclosures and trend
+          changes
+        - subscription retention semiconductor lead times inventory normalization impacts on revenue visibility
+          and risk factors
+        - pricing discipline gross margin outlook hyperscaler capex commentary with quantified impact
+          where available
+        - customer concentration export restrictions foundry capacity sensitivity and scenario planning
+        - platform adoption free cash flow competitive intensity execution milestones and bottlenecks
+        - liquidity cash flow working capital revolving credit debt covenant compliance updates
+        - capital expenditure project timeline budget variance and return-on-investment assumptions
+        - major customer concentration contract renewal risk termination clauses and pricing resets
+        - inflation labor freight energy input costs and gross-margin pass-through dynamics
+        - foreign exchange volatility and hedging strategy implications for near-term guidance
+        - litigation environmental liabilities contingent reserves and remediation cost outlook
+        - inventory strategy lead-time management dual sourcing localization and continuity planning
+        - management outlook revisions, guidance confidence bands, and downside risk triggers
+        - board strategy for financing, partnership optionality, and portfolio optimization
+        efts_candidates: 700
+        hydrate_top_n: 200
+        vdb:
+          collection_name: flow_tech_xlarge
+        symbols:
+        - AAPL
+        - MSFT
+        - NVDA
+        - AMD
+        - AVGO
+        - ORCL
+      condition: always
+      inputs: []
+    - id: chat_answer
+      pipeline: chat
+      overrides:
+        question: Summarize AI-infrastructure and enterprise demand signals for this tech basket, with
+          emphasis on backlog durability, margin risk, and capex efficiency.
+        collections:
+        - flow_tech_xlarge
+        top_k: 18
+        context_token_budget: 9500
+        generation_token_cap: 1024
+        symbols:
+        - AAPL
+        - MSFT
+        - NVDA
+        - AMD
+        - AVGO
+        - ORCL
+      condition: always
+      inputs:
+      - from_stage: retrieve_seed
+        artifact: retrieve_seed
+        target_field: seed_context
+    on_failure: stop
+  multi_jobs/16_quantum_smoke.yaml:
+    name: quantum_smoke_retrieve_chat
+    defaults:
+      email: you@example.com
+    stages:
+    - id: retrieve_seed
+      pipeline: retrieve
+      overrides:
+        queries:
+        - quantum hardware roadmap error correction qubit fidelity hybrid workloads disclosures and trend
+          changes
+        - government contracts commercial pilots bookings conversion impacts on revenue visibility and
+          risk factors
+        - funding runway dilution risk IP portfolio commentary with quantified impact where available
+        - cloud quantum access talent retention R&D intensity sensitivity and scenario planning
+        top_k: 25
+        efts_candidates: 140
+        hydrate_top_n: 35
+        rerank_with_embeddings: false
+        vdb:
+          collection_name: flow_quantum_smoke
+        symbols:
+        - IONQ
+        - RGTI
+        - QBTS
+        - QUBT
+        - IBM
+        - HON
+      condition: always
+      inputs: []
+    - id: chat_answer
+      pipeline: chat
+      overrides:
+        question: Assess commercialization readiness and funding durability across the quantum basket,
+          and identify which names have the clearest path to scalable revenue.
+        collections:
+        - flow_quantum_smoke
+        top_k: 8
+        max_context_chunks: 6
+        context_token_budget: 3500
+        include_market_context: false
+        include_news_context: false
+        rerank_mode: score
+        generation_token_cap: 448
+        symbols:
+        - IONQ
+        - RGTI
+        - QBTS
+        - QUBT
+        - IBM
+        - HON
+      condition: always
+      inputs:
+      - from_stage: retrieve_seed
+        artifact: retrieve_seed
+        target_field: seed_context
+    on_failure: stop
+  multi_jobs/17_quantum_small.yaml:
+    name: quantum_small_retrieve_chat
+    defaults:
+      email: you@example.com
+    stages:
+    - id: retrieve_seed
+      pipeline: retrieve
+      overrides:
+        queries:
+        - quantum hardware roadmap error correction qubit fidelity hybrid workloads disclosures and trend
+          changes
+        - government contracts commercial pilots bookings conversion impacts on revenue visibility and
+          risk factors
+        - funding runway dilution risk IP portfolio commentary with quantified impact where available
+        - cloud quantum access talent retention R&D intensity sensitivity and scenario planning
+        - strategic partnerships manufacturing scale go-to-market execution execution milestones and bottlenecks
+        - liquidity cash flow working capital revolving credit debt covenant compliance updates
+        top_k: 40
+        efts_candidates: 220
+        hydrate_top_n: 60
+        vdb:
+          collection_name: flow_quantum_small
+        symbols:
+        - IONQ
+        - RGTI
+        - QBTS
+        - QUBT
+        - IBM
+        - HON
+      condition: always
+      inputs: []
+    - id: chat_answer
+      pipeline: chat
+      overrides:
+        question: Assess commercialization readiness and funding durability across the quantum basket,
+          and identify which names have the clearest path to scalable revenue.
+        collections:
+        - flow_quantum_small
+        top_k: 10
+        max_context_chunks: 8
+        context_token_budget: 4500
+        include_news_context: false
+        rerank_mode: score
+        generation_token_cap: 512
+        symbols:
+        - IONQ
+        - RGTI
+        - QBTS
+        - QUBT
+        - IBM
+        - HON
+      condition: always
+      inputs:
+      - from_stage: retrieve_seed
+        artifact: retrieve_seed
+        target_field: seed_context
+    on_failure: stop
+  multi_jobs/18_quantum_medium.yaml:
+    name: quantum_medium_retrieve_chat
+    defaults:
+      email: you@example.com
+    stages:
+    - id: retrieve_seed
+      pipeline: retrieve
+      overrides:
+        queries:
+        - quantum hardware roadmap error correction qubit fidelity hybrid workloads disclosures and trend
+          changes
+        - government contracts commercial pilots bookings conversion impacts on revenue visibility and
+          risk factors
+        - funding runway dilution risk IP portfolio commentary with quantified impact where available
+        - cloud quantum access talent retention R&D intensity sensitivity and scenario planning
+        - strategic partnerships manufacturing scale go-to-market execution execution milestones and bottlenecks
+        - liquidity cash flow working capital revolving credit debt covenant compliance updates
+        - capital expenditure project timeline budget variance and return-on-investment assumptions
+        - major customer concentration contract renewal risk termination clauses and pricing resets
+        top_k: 60
+        efts_candidates: 320
+        vdb:
+          collection_name: flow_quantum_medium
+        symbols:
+        - IONQ
+        - RGTI
+        - QBTS
+        - QUBT
+        - IBM
+        - HON
+      condition: always
+      inputs: []
+    - id: chat_answer
+      pipeline: chat
+      overrides:
+        question: Assess commercialization readiness and funding durability across the quantum basket,
+          and identify which names have the clearest path to scalable revenue.
+        collections:
+        - flow_quantum_medium
+        max_context_chunks: 10
+        context_token_budget: 6000
+        include_news_context: false
+        rerank_mode: score
+        generation_token_cap: 640
+        symbols:
+        - IONQ
+        - RGTI
+        - QBTS
+        - QUBT
+        - IBM
+        - HON
+      condition: always
+      inputs:
+      - from_stage: retrieve_seed
+        artifact: retrieve_seed
+        target_field: seed_context
+    on_failure: stop
+  multi_jobs/19_quantum_large.yaml:
+    name: quantum_large_retrieve_chat
+    defaults:
+      email: you@example.com
+    stages:
+    - id: retrieve_seed
+      pipeline: retrieve
+      overrides:
+        queries:
+        - quantum hardware roadmap error correction qubit fidelity hybrid workloads disclosures and trend
+          changes
+        - government contracts commercial pilots bookings conversion impacts on revenue visibility and
+          risk factors
+        - funding runway dilution risk IP portfolio commentary with quantified impact where available
+        - cloud quantum access talent retention R&D intensity sensitivity and scenario planning
+        - strategic partnerships manufacturing scale go-to-market execution execution milestones and bottlenecks
+        - liquidity cash flow working capital revolving credit debt covenant compliance updates
+        - capital expenditure project timeline budget variance and return-on-investment assumptions
+        - major customer concentration contract renewal risk termination clauses and pricing resets
+        - inflation labor freight energy input costs and gross-margin pass-through dynamics
+        - foreign exchange volatility and hedging strategy implications for near-term guidance
+        - litigation environmental liabilities contingent reserves and remediation cost outlook
+        top_k: 95
+        efts_candidates: 480
+        hydrate_top_n: 140
+        vdb:
+          collection_name: flow_quantum_large
+        symbols:
+        - IONQ
+        - RGTI
+        - QBTS
+        - QUBT
+        - IBM
+        - HON
+      condition: always
+      inputs: []
+    - id: chat_answer
+      pipeline: chat
+      overrides:
+        question: Assess commercialization readiness and funding durability across the quantum basket,
+          and identify which names have the clearest path to scalable revenue.
+        collections:
+        - flow_quantum_large
+        top_k: 14
+        max_context_chunks: 12
+        context_token_budget: 7800
+        generation_token_cap: 896
+        symbols:
+        - IONQ
+        - RGTI
+        - QBTS
+        - QUBT
+        - IBM
+        - HON
+      condition: always
+      inputs:
+      - from_stage: retrieve_seed
+        artifact: retrieve_seed
+        target_field: seed_context
+    on_failure: stop
+  multi_jobs/20_quantum_xlarge.yaml:
+    name: quantum_xlarge_retrieve_chat
+    defaults:
+      email: you@example.com
+    stages:
+    - id: retrieve_seed
+      pipeline: retrieve
+      overrides:
+        queries:
+        - quantum hardware roadmap error correction qubit fidelity hybrid workloads disclosures and trend
+          changes
+        - government contracts commercial pilots bookings conversion impacts on revenue visibility and
+          risk factors
+        - funding runway dilution risk IP portfolio commentary with quantified impact where available
+        - cloud quantum access talent retention R&D intensity sensitivity and scenario planning
+        - strategic partnerships manufacturing scale go-to-market execution execution milestones and bottlenecks
+        - liquidity cash flow working capital revolving credit debt covenant compliance updates
+        - capital expenditure project timeline budget variance and return-on-investment assumptions
+        - major customer concentration contract renewal risk termination clauses and pricing resets
+        - inflation labor freight energy input costs and gross-margin pass-through dynamics
+        - foreign exchange volatility and hedging strategy implications for near-term guidance
+        - litigation environmental liabilities contingent reserves and remediation cost outlook
+        - inventory strategy lead-time management dual sourcing localization and continuity planning
+        - management outlook revisions, guidance confidence bands, and downside risk triggers
+        - board strategy for financing, partnership optionality, and portfolio optimization
+        efts_candidates: 700
+        hydrate_top_n: 200
+        vdb:
+          collection_name: flow_quantum_xlarge
+        symbols:
+        - IONQ
+        - RGTI
+        - QBTS
+        - QUBT
+        - IBM
+        - HON
+      condition: always
+      inputs: []
+    - id: chat_answer
+      pipeline: chat
+      overrides:
+        question: Assess commercialization readiness and funding durability across the quantum basket,
+          and identify which names have the clearest path to scalable revenue.
+        collections:
+        - flow_quantum_xlarge
+        top_k: 18
+        context_token_budget: 9500
+        generation_token_cap: 1024
+        symbols:
+        - IONQ
+        - RGTI
+        - QBTS
+        - QUBT
+        - IBM
+        - HON
+      condition: always
+      inputs:
+      - from_stage: retrieve_seed
+        artifact: retrieve_seed
+        target_field: seed_context
+    on_failure: stop
+  multi_jobs/21_biotech_smoke.yaml:
+    name: biotech_smoke_retrieve_chat
+    defaults:
+      email: you@example.com
+    stages:
+    - id: retrieve_seed
+      pipeline: retrieve
+      overrides:
+        queries:
+        - clinical trial readouts FDA pathway safety signals pipeline prioritization disclosures and trend
+          changes
+        - patent exclusivity manufacturing capacity commercial launch uptake impacts on revenue visibility
+          and risk factors
+        - reimbursement pressure partnership milestones cash runway commentary with quantified impact
+          where available
+        - R&D spend regulatory delays CMC readiness sensitivity and scenario planning
+        top_k: 25
+        efts_candidates: 140
+        hydrate_top_n: 35
+        rerank_with_embeddings: false
+        vdb:
+          collection_name: flow_biotech_smoke
+        symbols:
+        - MRNA
+        - BNTX
+        - CRSP
+        - REGN
+        - VRTX
+        - GILD
+      condition: always
+      inputs: []
+    - id: chat_answer
+      pipeline: chat
+      overrides:
+        question: Compare pipeline quality, regulatory execution risk, and cash-runway resilience across
+          this biotech basket, focusing on the next 12-18 months.
+        collections:
+        - flow_biotech_smoke
+        top_k: 8
+        max_context_chunks: 6
+        context_token_budget: 3500
+        include_market_context: false
+        include_news_context: false
+        rerank_mode: score
+        generation_token_cap: 448
+        symbols:
+        - MRNA
+        - BNTX
+        - CRSP
+        - REGN
+        - VRTX
+        - GILD
+      condition: always
+      inputs:
+      - from_stage: retrieve_seed
+        artifact: retrieve_seed
+        target_field: seed_context
+    on_failure: stop
+  multi_jobs/22_biotech_small.yaml:
+    name: biotech_small_retrieve_chat
+    defaults:
+      email: you@example.com
+    stages:
+    - id: retrieve_seed
+      pipeline: retrieve
+      overrides:
+        queries:
+        - clinical trial readouts FDA pathway safety signals pipeline prioritization disclosures and trend
+          changes
+        - patent exclusivity manufacturing capacity commercial launch uptake impacts on revenue visibility
+          and risk factors
+        - reimbursement pressure partnership milestones cash runway commentary with quantified impact
+          where available
+        - R&D spend regulatory delays CMC readiness sensitivity and scenario planning
+        - competitive landscape platform validation M&A optionality execution milestones and bottlenecks
+        - liquidity cash flow working capital revolving credit debt covenant compliance updates
+        top_k: 40
+        efts_candidates: 220
+        hydrate_top_n: 60
+        vdb:
+          collection_name: flow_biotech_small
+        symbols:
+        - MRNA
+        - BNTX
+        - CRSP
+        - REGN
+        - VRTX
+        - GILD
+      condition: always
+      inputs: []
+    - id: chat_answer
+      pipeline: chat
+      overrides:
+        question: Compare pipeline quality, regulatory execution risk, and cash-runway resilience across
+          this biotech basket, focusing on the next 12-18 months.
+        collections:
+        - flow_biotech_small
+        top_k: 10
+        max_context_chunks: 8
+        context_token_budget: 4500
+        include_news_context: false
+        rerank_mode: score
+        generation_token_cap: 512
+        symbols:
+        - MRNA
+        - BNTX
+        - CRSP
+        - REGN
+        - VRTX
+        - GILD
+      condition: always
+      inputs:
+      - from_stage: retrieve_seed
+        artifact: retrieve_seed
+        target_field: seed_context
+    on_failure: stop
+  multi_jobs/23_biotech_medium.yaml:
+    name: biotech_medium_retrieve_chat
+    defaults:
+      email: you@example.com
+    stages:
+    - id: retrieve_seed
+      pipeline: retrieve
+      overrides:
+        queries:
+        - clinical trial readouts FDA pathway safety signals pipeline prioritization disclosures and trend
+          changes
+        - patent exclusivity manufacturing capacity commercial launch uptake impacts on revenue visibility
+          and risk factors
+        - reimbursement pressure partnership milestones cash runway commentary with quantified impact
+          where available
+        - R&D spend regulatory delays CMC readiness sensitivity and scenario planning
+        - competitive landscape platform validation M&A optionality execution milestones and bottlenecks
+        - liquidity cash flow working capital revolving credit debt covenant compliance updates
+        - capital expenditure project timeline budget variance and return-on-investment assumptions
+        - major customer concentration contract renewal risk termination clauses and pricing resets
+        top_k: 60
+        efts_candidates: 320
+        vdb:
+          collection_name: flow_biotech_medium
+        symbols:
+        - MRNA
+        - BNTX
+        - CRSP
+        - REGN
+        - VRTX
+        - GILD
+      condition: always
+      inputs: []
+    - id: chat_answer
+      pipeline: chat
+      overrides:
+        question: Compare pipeline quality, regulatory execution risk, and cash-runway resilience across
+          this biotech basket, focusing on the next 12-18 months.
+        collections:
+        - flow_biotech_medium
+        max_context_chunks: 10
+        context_token_budget: 6000
+        include_news_context: false
+        rerank_mode: score
+        generation_token_cap: 640
+        symbols:
+        - MRNA
+        - BNTX
+        - CRSP
+        - REGN
+        - VRTX
+        - GILD
+      condition: always
+      inputs:
+      - from_stage: retrieve_seed
+        artifact: retrieve_seed
+        target_field: seed_context
+    on_failure: stop
+  multi_jobs/24_biotech_large.yaml:
+    name: biotech_large_retrieve_chat
+    defaults:
+      email: you@example.com
+    stages:
+    - id: retrieve_seed
+      pipeline: retrieve
+      overrides:
+        queries:
+        - clinical trial readouts FDA pathway safety signals pipeline prioritization disclosures and trend
+          changes
+        - patent exclusivity manufacturing capacity commercial launch uptake impacts on revenue visibility
+          and risk factors
+        - reimbursement pressure partnership milestones cash runway commentary with quantified impact
+          where available
+        - R&D spend regulatory delays CMC readiness sensitivity and scenario planning
+        - competitive landscape platform validation M&A optionality execution milestones and bottlenecks
+        - liquidity cash flow working capital revolving credit debt covenant compliance updates
+        - capital expenditure project timeline budget variance and return-on-investment assumptions
+        - major customer concentration contract renewal risk termination clauses and pricing resets
+        - inflation labor freight energy input costs and gross-margin pass-through dynamics
+        - foreign exchange volatility and hedging strategy implications for near-term guidance
+        - litigation environmental liabilities contingent reserves and remediation cost outlook
+        top_k: 95
+        efts_candidates: 480
+        hydrate_top_n: 140
+        vdb:
+          collection_name: flow_biotech_large
+        symbols:
+        - MRNA
+        - BNTX
+        - CRSP
+        - REGN
+        - VRTX
+        - GILD
+      condition: always
+      inputs: []
+    - id: chat_answer
+      pipeline: chat
+      overrides:
+        question: Compare pipeline quality, regulatory execution risk, and cash-runway resilience across
+          this biotech basket, focusing on the next 12-18 months.
+        collections:
+        - flow_biotech_large
+        top_k: 14
+        max_context_chunks: 12
+        context_token_budget: 7800
+        generation_token_cap: 896
+        symbols:
+        - MRNA
+        - BNTX
+        - CRSP
+        - REGN
+        - VRTX
+        - GILD
+      condition: always
+      inputs:
+      - from_stage: retrieve_seed
+        artifact: retrieve_seed
+        target_field: seed_context
+    on_failure: stop
+  multi_jobs/25_biotech_xlarge.yaml:
+    name: biotech_xlarge_retrieve_chat
+    defaults:
+      email: you@example.com
+    stages:
+    - id: retrieve_seed
+      pipeline: retrieve
+      overrides:
+        queries:
+        - clinical trial readouts FDA pathway safety signals pipeline prioritization disclosures and trend
+          changes
+        - patent exclusivity manufacturing capacity commercial launch uptake impacts on revenue visibility
+          and risk factors
+        - reimbursement pressure partnership milestones cash runway commentary with quantified impact
+          where available
+        - R&D spend regulatory delays CMC readiness sensitivity and scenario planning
+        - competitive landscape platform validation M&A optionality execution milestones and bottlenecks
+        - liquidity cash flow working capital revolving credit debt covenant compliance updates
+        - capital expenditure project timeline budget variance and return-on-investment assumptions
+        - major customer concentration contract renewal risk termination clauses and pricing resets
+        - inflation labor freight energy input costs and gross-margin pass-through dynamics
+        - foreign exchange volatility and hedging strategy implications for near-term guidance
+        - litigation environmental liabilities contingent reserves and remediation cost outlook
+        - inventory strategy lead-time management dual sourcing localization and continuity planning
+        - management outlook revisions, guidance confidence bands, and downside risk triggers
+        - board strategy for financing, partnership optionality, and portfolio optimization
+        efts_candidates: 700
+        hydrate_top_n: 200
+        vdb:
+          collection_name: flow_biotech_xlarge
+        symbols:
+        - MRNA
+        - BNTX
+        - CRSP
+        - REGN
+        - VRTX
+        - GILD
+      condition: always
+      inputs: []
+    - id: chat_answer
+      pipeline: chat
+      overrides:
+        question: Compare pipeline quality, regulatory execution risk, and cash-runway resilience across
+          this biotech basket, focusing on the next 12-18 months.
+        collections:
+        - flow_biotech_xlarge
+        top_k: 18
+        context_token_budget: 9500
+        generation_token_cap: 1024
+        symbols:
+        - MRNA
+        - BNTX
+        - CRSP
+        - REGN
+        - VRTX
+        - GILD
+      condition: always
+      inputs:
+      - from_stage: retrieve_seed
+        artifact: retrieve_seed
+        target_field: seed_context
+    on_failure: stop
+  multi_jobs/26_mining_smoke.yaml:
+    name: mining_smoke_retrieve_chat
+    defaults:
+      email: you@example.com
+    stages:
+    - id: retrieve_seed
+      pipeline: retrieve
+      overrides:
+        queries:
+        - ore grade trends reserve replacement mine plan revisions smelter treatment charges disclosures
+          and trend changes
+        - royalty exposure permitting and ESG labor negotiations impacts on revenue visibility and risk
+          factors
+        - energy input costs transport logistics commodity price sensitivity commentary with quantified
+          impact where available
+        - hedging policy balance sheet leverage project development sensitivity and scenario planning
+        top_k: 25
+        efts_candidates: 140
+        hydrate_top_n: 35
+        rerank_with_embeddings: false
+        vdb:
+          collection_name: flow_mining_smoke
+        symbols:
+        - FCX
+        - SCCO
+        - BHP
+        - RIO
+        - VALE
+        - NEM
+      condition: always
+      inputs: []
+    - id: chat_answer
+      pipeline: chat
+      overrides:
+        question: Evaluate operational execution, jurisdiction risk, and margin sensitivity across this
+          mining basket under different commodity-price scenarios.
+        collections:
+        - flow_mining_smoke
+        top_k: 8
+        max_context_chunks: 6
+        context_token_budget: 3500
+        include_market_context: false
+        include_news_context: false
+        rerank_mode: score
+        generation_token_cap: 448
+        symbols:
+        - FCX
+        - SCCO
+        - BHP
+        - RIO
+        - VALE
+        - NEM
+      condition: always
+      inputs:
+      - from_stage: retrieve_seed
+        artifact: retrieve_seed
+        target_field: seed_context
+    on_failure: stop
+  multi_jobs/27_mining_small.yaml:
+    name: mining_small_retrieve_chat
+    defaults:
+      email: you@example.com
+    stages:
+    - id: retrieve_seed
+      pipeline: retrieve
+      overrides:
+        queries:
+        - ore grade trends reserve replacement mine plan revisions smelter treatment charges disclosures
+          and trend changes
+        - royalty exposure permitting and ESG labor negotiations impacts on revenue visibility and risk
+          factors
+        - energy input costs transport logistics commodity price sensitivity commentary with quantified
+          impact where available
+        - hedging policy balance sheet leverage project development sensitivity and scenario planning
+        - water rights geopolitical jurisdiction risk production guidance variance execution milestones
+          and bottlenecks
+        - liquidity cash flow working capital revolving credit debt covenant compliance updates
+        top_k: 40
+        efts_candidates: 220
+        hydrate_top_n: 60
+        vdb:
+          collection_name: flow_mining_small
+        symbols:
+        - FCX
+        - SCCO
+        - BHP
+        - RIO
+        - VALE
+        - NEM
+      condition: always
+      inputs: []
+    - id: chat_answer
+      pipeline: chat
+      overrides:
+        question: Evaluate operational execution, jurisdiction risk, and margin sensitivity across this
+          mining basket under different commodity-price scenarios.
+        collections:
+        - flow_mining_small
+        top_k: 10
+        max_context_chunks: 8
+        context_token_budget: 4500
+        include_news_context: false
+        rerank_mode: score
+        generation_token_cap: 512
+        symbols:
+        - FCX
+        - SCCO
+        - BHP
+        - RIO
+        - VALE
+        - NEM
+      condition: always
+      inputs:
+      - from_stage: retrieve_seed
+        artifact: retrieve_seed
+        target_field: seed_context
+    on_failure: stop
+  multi_jobs/28_mining_medium.yaml:
+    name: mining_medium_retrieve_chat
+    defaults:
+      email: you@example.com
+    stages:
+    - id: retrieve_seed
+      pipeline: retrieve
+      overrides:
+        queries:
+        - ore grade trends reserve replacement mine plan revisions smelter treatment charges disclosures
+          and trend changes
+        - royalty exposure permitting and ESG labor negotiations impacts on revenue visibility and risk
+          factors
+        - energy input costs transport logistics commodity price sensitivity commentary with quantified
+          impact where available
+        - hedging policy balance sheet leverage project development sensitivity and scenario planning
+        - water rights geopolitical jurisdiction risk production guidance variance execution milestones
+          and bottlenecks
+        - liquidity cash flow working capital revolving credit debt covenant compliance updates
+        - capital expenditure project timeline budget variance and return-on-investment assumptions
+        - major customer concentration contract renewal risk termination clauses and pricing resets
+        top_k: 60
+        efts_candidates: 320
+        vdb:
+          collection_name: flow_mining_medium
+        symbols:
+        - FCX
+        - SCCO
+        - BHP
+        - RIO
+        - VALE
+        - NEM
+      condition: always
+      inputs: []
+    - id: chat_answer
+      pipeline: chat
+      overrides:
+        question: Evaluate operational execution, jurisdiction risk, and margin sensitivity across this
+          mining basket under different commodity-price scenarios.
+        collections:
+        - flow_mining_medium
+        max_context_chunks: 10
+        context_token_budget: 6000
+        include_news_context: false
+        rerank_mode: score
+        generation_token_cap: 640
+        symbols:
+        - FCX
+        - SCCO
+        - BHP
+        - RIO
+        - VALE
+        - NEM
+      condition: always
+      inputs:
+      - from_stage: retrieve_seed
+        artifact: retrieve_seed
+        target_field: seed_context
+    on_failure: stop
+  multi_jobs/29_mining_large.yaml:
+    name: mining_large_retrieve_chat
+    defaults:
+      email: you@example.com
+    stages:
+    - id: retrieve_seed
+      pipeline: retrieve
+      overrides:
+        queries:
+        - ore grade trends reserve replacement mine plan revisions smelter treatment charges disclosures
+          and trend changes
+        - royalty exposure permitting and ESG labor negotiations impacts on revenue visibility and risk
+          factors
+        - energy input costs transport logistics commodity price sensitivity commentary with quantified
+          impact where available
+        - hedging policy balance sheet leverage project development sensitivity and scenario planning
+        - water rights geopolitical jurisdiction risk production guidance variance execution milestones
+          and bottlenecks
+        - liquidity cash flow working capital revolving credit debt covenant compliance updates
+        - capital expenditure project timeline budget variance and return-on-investment assumptions
+        - major customer concentration contract renewal risk termination clauses and pricing resets
+        - inflation labor freight energy input costs and gross-margin pass-through dynamics
+        - foreign exchange volatility and hedging strategy implications for near-term guidance
+        - litigation environmental liabilities contingent reserves and remediation cost outlook
+        top_k: 95
+        efts_candidates: 480
+        hydrate_top_n: 140
+        vdb:
+          collection_name: flow_mining_large
+        symbols:
+        - FCX
+        - SCCO
+        - BHP
+        - RIO
+        - VALE
+        - NEM
+      condition: always
+      inputs: []
+    - id: chat_answer
+      pipeline: chat
+      overrides:
+        question: Evaluate operational execution, jurisdiction risk, and margin sensitivity across this
+          mining basket under different commodity-price scenarios.
+        collections:
+        - flow_mining_large
+        top_k: 14
+        max_context_chunks: 12
+        context_token_budget: 7800
+        generation_token_cap: 896
+        symbols:
+        - FCX
+        - SCCO
+        - BHP
+        - RIO
+        - VALE
+        - NEM
+      condition: always
+      inputs:
+      - from_stage: retrieve_seed
+        artifact: retrieve_seed
+        target_field: seed_context
+    on_failure: stop
+  multi_jobs/30_mining_xlarge.yaml:
+    name: mining_xlarge_retrieve_chat
+    defaults:
+      email: you@example.com
+    stages:
+    - id: retrieve_seed
+      pipeline: retrieve
+      overrides:
+        queries:
+        - ore grade trends reserve replacement mine plan revisions smelter treatment charges disclosures
+          and trend changes
+        - royalty exposure permitting and ESG labor negotiations impacts on revenue visibility and risk
+          factors
+        - energy input costs transport logistics commodity price sensitivity commentary with quantified
+          impact where available
+        - hedging policy balance sheet leverage project development sensitivity and scenario planning
+        - water rights geopolitical jurisdiction risk production guidance variance execution milestones
+          and bottlenecks
+        - liquidity cash flow working capital revolving credit debt covenant compliance updates
+        - capital expenditure project timeline budget variance and return-on-investment assumptions
+        - major customer concentration contract renewal risk termination clauses and pricing resets
+        - inflation labor freight energy input costs and gross-margin pass-through dynamics
+        - foreign exchange volatility and hedging strategy implications for near-term guidance
+        - litigation environmental liabilities contingent reserves and remediation cost outlook
+        - inventory strategy lead-time management dual sourcing localization and continuity planning
+        - management outlook revisions, guidance confidence bands, and downside risk triggers
+        - board strategy for financing, partnership optionality, and portfolio optimization
+        efts_candidates: 700
+        hydrate_top_n: 200
+        vdb:
+          collection_name: flow_mining_xlarge
+        symbols:
+        - FCX
+        - SCCO
+        - BHP
+        - RIO
+        - VALE
+        - NEM
+      condition: always
+      inputs: []
+    - id: chat_answer
+      pipeline: chat
+      overrides:
+        question: Evaluate operational execution, jurisdiction risk, and margin sensitivity across this
+          mining basket under different commodity-price scenarios.
+        collections:
+        - flow_mining_xlarge
+        top_k: 18
+        context_token_budget: 9500
+        generation_token_cap: 1024
+        symbols:
+        - FCX
+        - SCCO
+        - BHP
+        - RIO
+        - VALE
+        - NEM
+      condition: always
+      inputs:
+      - from_stage: retrieve_seed
+        artifact: retrieve_seed
+        target_field: seed_context
+    on_failure: stop

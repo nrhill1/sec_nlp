@@ -11,11 +11,9 @@ from langchain_ollama.embeddings import OllamaEmbeddings
 from qdrant_client import QdrantClient
 from qdrant_client.models import Distance, PointStruct, VectorParams
 
-from sec_nlp.pipelines.vector import (
-    VectorConfig,
-    config as vector_config,
-)
+from sec_nlp.pipelines.vector import config as vector_config
 from sec_nlp.pipelines.vector.client import create_qdrant_client
+from sec_nlp.pipelines.vector.config import VectorConfig
 
 
 @pytest.fixture(autouse=True)
@@ -34,7 +32,7 @@ class TestVectorStoreCreation:
 
         mock_store = Mock()
         mock_store_cls = Mock(return_value=mock_store)
-        with patch.object(vector_config, "QdrantVectorStore", mock_store_cls):
+        with patch("langchain_qdrant.QdrantVectorStore", mock_store_cls):
             store = config.create_vector_store(fake_client, fake_embedder)
 
         assert store is mock_store
@@ -53,7 +51,7 @@ class TestVectorStoreCreation:
 
         mock_store = Mock()
         mock_store_cls = Mock(return_value=mock_store)
-        with patch.object(vector_config, "QdrantVectorStore", mock_store_cls):
+        with patch("langchain_qdrant.QdrantVectorStore", mock_store_cls):
             store = config.create_vector_store(
                 fake_client, fake_embedder, collection_name="override_name"
             )
@@ -73,7 +71,7 @@ class TestVectorStoreCreation:
         fake_embedder: OllamaEmbeddings = Mock(spec=OllamaEmbeddings)
 
         mock_store_cls = Mock()
-        with patch.object(vector_config, "QdrantVectorStore", mock_store_cls):
+        with patch("langchain_qdrant.QdrantVectorStore", mock_store_cls):
             _store = config.create_vector_store(fake_client, fake_embedder)
 
         collection_name = mock_store_cls.call_args.kwargs["collection_name"]
@@ -86,7 +84,9 @@ class TestVectorStoreCreation:
         mock_instance = mock_embedder_cls.return_value
         mock_instance.embed_query.return_value = [0.1, 0.2]
 
-        with patch.object(vector_config, "OllamaEmbeddings", mock_embedder_cls):
+        with patch(
+            "langchain_ollama.embeddings.OllamaEmbeddings", mock_embedder_cls
+        ):
             config = VectorConfig(embedding_model="custom-embedder")
             embedder, dim = config.setup_embedding_model()
 
@@ -105,7 +105,9 @@ class TestVectorStoreCreation:
         mock_instance.embed_query.return_value = [0.1, 0.2]
         mock_instance.embed_documents.return_value = [[0.1, 0.2]]
 
-        with patch.object(vector_config, "OllamaEmbeddings", mock_embedder_cls):
+        with patch(
+            "langchain_ollama.embeddings.OllamaEmbeddings", mock_embedder_cls
+        ):
             config = VectorConfig(embedding_model="cache-embedder")
             first_embedder, first_dim = config.setup_embedding_model()
             second_embedder, second_dim = config.setup_embedding_model()
@@ -118,8 +120,9 @@ class TestVectorStoreCreation:
         """Ensure URL-based clients are initialized correctly."""
         mock_client = Mock()
 
-        with patch.object(
-            vector_config, "create_qdrant_client", return_value=mock_client
+        with patch(
+            "sec_nlp.pipelines.vector.client.create_qdrant_client",
+            return_value=mock_client,
         ) as mock_factory:
             config = VectorConfig(
                 qdrant_url="http://qdrant.local:6333",
@@ -147,8 +150,9 @@ class TestVectorStoreCreation:
         """Ensure host/port settings are used when URL is absent."""
         mock_client = Mock()
 
-        with patch.object(
-            vector_config, "create_qdrant_client", return_value=mock_client
+        with patch(
+            "sec_nlp.pipelines.vector.client.create_qdrant_client",
+            return_value=mock_client,
         ) as mock_factory:
             config = VectorConfig(
                 qdrant_url=None,
@@ -181,8 +185,9 @@ class TestVectorStoreCreation:
         """Ensure embedded/location clients are initialized when provided."""
         mock_client = Mock()
 
-        with patch.object(
-            vector_config, "create_qdrant_client", return_value=mock_client
+        with patch(
+            "sec_nlp.pipelines.vector.client.create_qdrant_client",
+            return_value=mock_client,
         ) as mock_factory:
             config = VectorConfig(
                 qdrant_location=":memory:",
@@ -208,8 +213,9 @@ class TestVectorStoreCreation:
     def test_setup_qdrant_client_reuses_process_cache(self) -> None:
         mock_client = Mock()
 
-        with patch.object(
-            vector_config, "create_qdrant_client", return_value=mock_client
+        with patch(
+            "sec_nlp.pipelines.vector.client.create_qdrant_client",
+            return_value=mock_client,
         ) as mock_factory:
             config = VectorConfig(qdrant_url="http://cached-qdrant:6333")
             first_client = config.setup_qdrant_client()
@@ -258,10 +264,11 @@ class TestVectorStoreCreation:
             raise AssertionError(f"Unexpected location: {location}")
 
         with (
-            patch.object(vector_config, "create_qdrant_client", _factory),
-            patch.object(
-                vector_config,
-                "ensure_local_docker_qdrant",
+            patch(
+                "sec_nlp.pipelines.vector.client.create_qdrant_client", _factory
+            ),
+            patch(
+                "sec_nlp.core.infra.qdrant_runtime.ensure_local_docker_qdrant",
                 return_value=False,
             ) as mock_bootstrap,
         ):
@@ -271,7 +278,7 @@ class TestVectorStoreCreation:
         assert client is disk_client
         assert target == ".qdrant"
         assert calls == [None, ".qdrant"]
-        mock_bootstrap.assert_called_once_with(readiness_timeout=8)
+        mock_bootstrap.assert_not_called()
 
     def test_setup_qdrant_client_falls_back_to_memory(self) -> None:
         """Fallback to `:memory:` when remote and disk targets both fail."""
@@ -317,10 +324,11 @@ class TestVectorStoreCreation:
             raise AssertionError(f"Unexpected location: {location}")
 
         with (
-            patch.object(vector_config, "create_qdrant_client", _factory),
-            patch.object(
-                vector_config,
-                "ensure_local_docker_qdrant",
+            patch(
+                "sec_nlp.pipelines.vector.client.create_qdrant_client", _factory
+            ),
+            patch(
+                "sec_nlp.core.infra.qdrant_runtime.ensure_local_docker_qdrant",
                 return_value=False,
             ) as mock_bootstrap,
         ):
@@ -330,63 +338,7 @@ class TestVectorStoreCreation:
         assert client is memory_client
         assert target == ":memory:"
         assert calls == [None, ".qdrant", ":memory:"]
-        mock_bootstrap.assert_called_once_with(readiness_timeout=8)
-
-    def test_setup_qdrant_client_retries_remote_after_local_bootstrap(
-        self,
-    ) -> None:
-        """Reconnect to localhost after Docker bootstrap succeeds."""
-        failing_client = Mock()
-        failing_client.get_collections.side_effect = RuntimeError(
-            "Connection refused"
-        )
-        successful_client = Mock()
-        successful_client.get_collections.return_value = Mock(collections=[])
-        remote_clients = [failing_client, successful_client]
-        calls: list[str | None] = []
-
-        def _factory(
-            *,
-            location: str | None,
-            url: str | None,
-            host: str,
-            port: int,
-            grpc_port: int,
-            api_key: str | None,
-            timeout: int,
-            prefer_grpc: bool,
-            https: bool,
-        ) -> Mock:
-            _ = (
-                url,
-                host,
-                port,
-                grpc_port,
-                api_key,
-                timeout,
-                prefer_grpc,
-                https,
-            )
-            calls.append(location)
-            if location is not None:
-                raise AssertionError("Fallback targets should not be used")
-            return remote_clients.pop(0)
-
-        with (
-            patch.object(vector_config, "create_qdrant_client", _factory),
-            patch.object(
-                vector_config,
-                "ensure_local_docker_qdrant",
-                return_value=True,
-            ) as mock_bootstrap,
-        ):
-            config = VectorConfig(qdrant_location=None)
-            client, target = config.setup_qdrant_client_with_target()
-
-        assert target == "http://localhost:6333"
-        assert calls == [None, None]
-        assert client is successful_client
-        mock_bootstrap.assert_called_once_with(readiness_timeout=8)
+        mock_bootstrap.assert_not_called()
 
     def test_persistent_qdrant_location_keeps_points_between_clients(
         self,

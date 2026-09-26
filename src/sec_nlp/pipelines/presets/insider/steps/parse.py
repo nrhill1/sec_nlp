@@ -5,8 +5,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from langchain_core.documents import Document
-
+from sec_nlp.core.documents import DocumentRecord as Document
 from sec_nlp.core.edgar.insider_parser import InsiderParser
 from sec_nlp.types import JsonValue
 

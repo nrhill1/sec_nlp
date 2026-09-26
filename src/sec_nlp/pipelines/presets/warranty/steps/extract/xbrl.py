@@ -5,8 +5,7 @@ import re
 from pathlib import Path
 from typing import TypedDict
 
-from langchain_core.documents import Document
-
+from sec_nlp.core.documents import DocumentRecord as Document
 from sec_nlp.core.infra.logger import logger
 from sec_nlp.pipelines.types import SourceMetadata, WarrantyExtractionDict
 
@@ -359,7 +358,9 @@ def extract_from_xbrl_docs(
                 "warranty_liability": None,
                 "warranty_payout": None,
                 "net_revenue": None,
-                "period": fiscal_year,
+                "period": fiscal_year
+                if isinstance(fiscal_year, (str, int))
+                else None,
                 "period_end": period_end_val,
                 "accession_number": str(accession_number)
                 if accession_number is not None
@@ -393,9 +394,9 @@ def extract_from_xbrl_docs(
                 by_year[year_key],
                 field_key,
                 val,
-                meta.get("tag") or tag,
-                context_ref,
-                period_end,
+                str(meta.get("tag") or tag),
+                str(context_ref) if context_ref is not None else None,
+                str(period_end) if period_end is not None else None,
             )
 
     # Filter out entries with no numeric data and attach conflict metadata

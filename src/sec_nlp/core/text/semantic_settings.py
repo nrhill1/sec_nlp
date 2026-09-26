@@ -34,7 +34,7 @@ class SemanticChunkingSettings(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid", defer_build=True)
 
     enabled: bool = Field(
-        default=True,
+        default=False,
         description="Enable semantic chunking for chunk-producing stages.",
     )
     embedding_model: str = Field(

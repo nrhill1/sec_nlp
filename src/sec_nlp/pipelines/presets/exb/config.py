@@ -51,6 +51,11 @@ class ExhibitConfig(BasePipelineSettings):
         description="Vector database configuration for semantic search",
     )
 
+    index_results: bool = Field(
+        default=False,
+        description="Explicitly embed and index extracted exhibits.",
+    )
+
     dry_run: bool = Field(
         default=False,
         description="If True, run the pipeline without vector upload",

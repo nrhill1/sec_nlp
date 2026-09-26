@@ -7,8 +7,9 @@ import json
 from pathlib import Path
 
 from sec_nlp.core.stats.event_study import EventStudyResult
-from sec_nlp.pipelines.presets.events import EventsPipeline, EventsSettings
+from sec_nlp.pipelines.presets.events.config import EventsSettings
 from sec_nlp.pipelines.presets.events.models import DetectedEvent
+from sec_nlp.pipelines.presets.events.pipeline import EventsPipeline
 from sec_nlp.pipelines.presets.events.run_stages import (
     EventsRunState,
     build_events_stage_chain,

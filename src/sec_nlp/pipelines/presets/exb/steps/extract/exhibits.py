@@ -6,10 +6,10 @@ from __future__ import annotations
 from collections import Counter
 from collections.abc import Callable
 
-from langchain_core.documents import Document
 from pydantic import Field
 from pydantic.dataclasses import dataclass
 
+from sec_nlp.core.documents import DocumentRecord as Document
 from sec_nlp.core.infra.logger import logger
 from sec_nlp.core.ingest.exhibit_downloader import ExhibitDownloader
 from sec_nlp.core.ingest.loader import Loader
@@ -68,7 +68,7 @@ def collect_exhibit_documents(
     has_non_contract_exhibits = config.has_non_contract_exhibits()
 
     # Use disk-based downloader which fetches ALL files including separate exhibits
-    from sec_edgar_downloader import Downloader
+    from sec_nlp.core.ingest.downloader import FilingDownloader as Downloader
 
     work_folder = loader.downloads_folder
     downloader = Downloader(loader.company_name, loader.email, str(work_folder))
@@ -369,7 +369,7 @@ def collect_exhibit_documents(
                         meta["exhibit_category"] = (
                             config.classify_exhibit_number(section_number)
                         )
-                        chunk.metadata = meta
+                        chunk.metadata.update(meta)
                 exhibit_docs.extend(section_chunks)
                 section_numbers = {
                     chunk.metadata.get("section_number", "unknown")

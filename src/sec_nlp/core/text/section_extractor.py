@@ -4,8 +4,7 @@
 
 import re
 
-from langchain_core.documents import Document
-
+from sec_nlp.core.documents import DocumentRecord as Document
 from sec_nlp.core.infra.logger import logger
 from sec_nlp.core.text.chunking import SentenceSplitter
 from sec_nlp.core.text.filters import SectionFilter, SectionType

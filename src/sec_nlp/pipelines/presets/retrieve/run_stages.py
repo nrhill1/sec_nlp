@@ -1,5 +1,5 @@
 # src/sec_nlp/pipelines/presets/retrieve/run_stages.py
-"""Runnable stage helpers for retrieve pipeline execution."""
+"""Ordered specialist steps for retrieve pipeline execution."""
 
 from __future__ import annotations
 
@@ -9,17 +9,18 @@ from pathlib import Path
 from time import perf_counter
 from typing import TYPE_CHECKING
 
-from langchain_core.runnables import Runnable
 from pydantic import Field
 from rich.progress import Progress, TaskID
 
 from sec_nlp.core.edgar.efts_models import EFTSHit
-from sec_nlp.pipelines.base.stages import PipelineStageRunnable
+from sec_nlp.pipelines.base.stages import PipelineStage, StageSequence
+from sec_nlp.pipelines.presets.retrieve.steps.candidate_search import (
+    RetrieveCandidateSearcher,
+)
 from sec_nlp.types import JsonValue
 
 from .config import RetrieveSettings
 from .models import RetrievalHit
-from .steps import RetrieveCandidateSearcher
 
 if TYPE_CHECKING:
     from .pipeline import RetrievePipeline
@@ -93,7 +94,7 @@ class RetrieveStageContext:
     ]
 
 
-class CandidateSearchStage(PipelineStageRunnable[RetrieveRunState]):
+class CandidateSearchStage(PipelineStage[RetrieveRunState]):
     """Ingress stage that materializes per-query EFTS candidates for downstream ranking."""
 
     name: str = Field(default="candidate_search")
@@ -128,7 +129,7 @@ class CandidateSearchStage(PipelineStageRunnable[RetrieveRunState]):
         return state
 
 
-class RankHitsStage(PipelineStageRunnable[RetrieveRunState]):
+class RankHitsStage(PipelineStage[RetrieveRunState]):
     """Selection stage that scores, prunes, and partitions candidates for hydration."""
 
     name: str = Field(default="rank_hits")
@@ -159,7 +160,7 @@ class RankHitsStage(PipelineStageRunnable[RetrieveRunState]):
         return state
 
 
-class HydrateStage(PipelineStageRunnable[RetrieveRunState]):
+class HydrateStage(PipelineStage[RetrieveRunState]):
     """Acquisition stage that resolves top-ranked hits into hydrated chunk snippets."""
 
     name: str = Field(default="hydrate_hits")
@@ -176,7 +177,7 @@ class HydrateStage(PipelineStageRunnable[RetrieveRunState]):
         return state
 
 
-class EmbeddingRerankStage(PipelineStageRunnable[RetrieveRunState]):
+class EmbeddingRerankStage(PipelineStage[RetrieveRunState]):
     """Semantic refinement stage that reorders hydrated snippets by embedding relevance."""
 
     name: str = Field(default="embedding_rerank")
@@ -192,7 +193,7 @@ class EmbeddingRerankStage(PipelineStageRunnable[RetrieveRunState]):
         return state
 
 
-class IndexStage(PipelineStageRunnable[RetrieveRunState]):
+class IndexStage(PipelineStage[RetrieveRunState]):
     """Persistence stage that indexes reranked chunks and composes final hit ordering."""
 
     name: str = Field(default="index_hits")
@@ -218,7 +219,7 @@ class IndexStage(PipelineStageRunnable[RetrieveRunState]):
         return state
 
 
-class WriteOutputsStage(PipelineStageRunnable[RetrieveRunState]):
+class WriteOutputsStage(PipelineStage[RetrieveRunState]):
     """Egress stage that emits ranked hit artifacts and final stage timing metadata."""
 
     name: str = Field(default="write_outputs")
@@ -266,7 +267,7 @@ class WriteOutputsStage(PipelineStageRunnable[RetrieveRunState]):
 
 def build_retrieve_stage_chain(
     pipeline: RetrievePipeline,
-) -> Runnable[RetrieveRunState, RetrieveRunState]:
+) -> StageSequence[RetrieveRunState]:
     """Build deterministic retrieve stage chain."""
     context = RetrieveStageContext(
         config=pipeline.config,
@@ -316,7 +317,7 @@ def build_retrieve_stage_chain(
             )
         ),
     )
-    stages: tuple[PipelineStageRunnable[RetrieveRunState], ...] = (
+    stages: tuple[PipelineStage[RetrieveRunState], ...] = (
         CandidateSearchStage(context=context),
         RankHitsStage(context=context),
         HydrateStage(context=context),

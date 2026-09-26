@@ -6,24 +6,23 @@ from pathlib import Path
 from typing import ClassVar, Literal
 from unittest.mock import Mock
 
-from langchain_core.documents import Document
 from langchain_core.runnables import Runnable, RunnableConfig
 from rich.progress import Progress, TaskID
 
+from sec_nlp.core.documents import DocumentRecord as Document
 from sec_nlp.core.edgar.economic import EconomicSeries, MacroContext
-from sec_nlp.pipelines.presets.analyze import (
-    AnalysisInput,
-    AnalysisResult,
-    AnalyzeConfig,
-    AnalyzePipeline,
-    OutputFormatter,
-    SearchConfig,
-)
 from sec_nlp.pipelines.presets.analyze.builders import (
     build_analysis_runner,
     build_output_formatter,
     build_preprocessor,
 )
+from sec_nlp.pipelines.presets.analyze.config import AnalyzeConfig, SearchConfig
+from sec_nlp.pipelines.presets.analyze.io.outputs import OutputFormatter
+from sec_nlp.pipelines.presets.analyze.models import (
+    AnalysisInput,
+    AnalysisResult,
+)
+from sec_nlp.pipelines.presets.analyze.pipeline import AnalyzePipeline
 from sec_nlp.pipelines.presets.analyze.run_stages import (
     AnalyzeRunState,
     EnrichAndIndexStage,
@@ -37,7 +36,7 @@ from sec_nlp.pipelines.presets.analyze.types import (
     ChunkStats,
     PrefetchedSymbolData,
 )
-from sec_nlp.pipelines.runtime import ProcessingState
+from sec_nlp.pipelines.runtime.state import ProcessingState
 from sec_nlp.pipelines.types import (
     AnalysisResultDict,
     MetadataRecord,

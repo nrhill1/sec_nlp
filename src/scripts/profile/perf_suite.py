@@ -26,13 +26,13 @@ from scripts.utils import setup_import_path
 
 setup_import_path()
 
-from sec_nlp.app.flows.models import (  # noqa: E402
-    FlowDefaults,  # noqa: E402
-    FlowRunResult,  # noqa: E402
-    FlowSpec,  # noqa: E402
+from sec_nlp.app.workspace.recipes import (  # noqa: E402
+    RecipeDefaults,  # noqa: E402
+    RecipeRunResult,  # noqa: E402
+    ResearchRecipe,  # noqa: E402
+    load_recipe,  # noqa: E402
+    run_recipe,  # noqa: E402
 )
-from sec_nlp.app.flows.runner import FlowRunner  # noqa: E402
-from sec_nlp.app.flows.spec import load_flow_spec  # noqa: E402
 from sec_nlp.core.infra.logger import logger, setup_logging  # noqa: E402
 from sec_nlp.core.types import as_json_dict  # noqa: E402
 from sec_nlp.pipelines.observability.run_registry import (  # noqa: E402
@@ -181,7 +181,7 @@ def _safe_output_counts(
     return counts
 
 
-def _flow_stage_timings(result: FlowRunResult) -> dict[str, float]:
+def _flow_stage_timings(result: RecipeRunResult) -> dict[str, float]:
     """Build per-stage duration metrics from one flow result."""
     stage_timings: dict[str, float] = {}
     for stage_result in result.stage_results:
@@ -193,7 +193,7 @@ def _flow_stage_timings(result: FlowRunResult) -> dict[str, float]:
     return stage_timings
 
 
-def _flow_output_counts(result: FlowRunResult) -> dict[str, int]:
+def _flow_output_counts(result: RecipeRunResult) -> dict[str, int]:
     """Build normalized count metrics from one flow result."""
     metadata: dict[str, JsonValue] = {
         "stages_total": len(result.stage_results),
@@ -218,7 +218,7 @@ def _flow_output_counts(result: FlowRunResult) -> dict[str, int]:
     return _safe_output_counts("flow", metadata)
 
 
-def _flow_error_tail(result: FlowRunResult) -> str | None:
+def _flow_error_tail(result: RecipeRunResult) -> str | None:
     """Return one concise failure summary for a flow result."""
     for stage_result in result.stage_results:
         if stage_result.error:
@@ -227,7 +227,7 @@ def _flow_error_tail(result: FlowRunResult) -> str | None:
 
 
 def _flow_stage_timings_for_iteration(
-    result: FlowRunResult,
+    result: RecipeRunResult,
     *,
     elapsed_seconds: float,
 ) -> dict[str, float]:
@@ -263,7 +263,7 @@ def _benchmark_collection_name(
 
 
 def _collection_overrides_for_flow_case(
-    spec: FlowSpec,
+    spec: ResearchRecipe,
     *,
     case_name: str,
     iteration: int,
@@ -302,12 +302,12 @@ def _collection_overrides_for_flow_case(
 
 
 def _apply_flow_benchmark_overrides(
-    spec: FlowSpec,
+    spec: ResearchRecipe,
     *,
     email: str,
     case_name: str,
     iteration: int,
-) -> FlowSpec:
+) -> ResearchRecipe:
     """Clone a flow spec with benchmark-safe email and collection overrides."""
     collection_overrides = _collection_overrides_for_flow_case(
         spec,
@@ -340,7 +340,7 @@ def _apply_flow_benchmark_overrides(
         )
     return spec.model_copy(
         update={
-            "defaults": FlowDefaults(email=email),
+            "defaults": RecipeDefaults(email=email),
             "stages": stage_updates,
         }
     )
@@ -1134,7 +1134,18 @@ class PerfSuiteConfig(BaseSettings):
         """Run one retrieve/chat case through the CLI entrypoint."""
         run_id = str(uuid4())
         started = datetime.now(UTC).isoformat()
-        cmd = ["uv", "run", "sec-nlp", *case.args, "--run-id", run_id]
+        action, *arguments = case.args
+        capability = "ask" if action == "chat" else action
+        cmd = [
+            "uv",
+            "run",
+            "sec-nlp",
+            "research",
+            capability,
+            *arguments,
+            "--run-id",
+            run_id,
+        ]
         logger.info(
             "Running perf case %s (%d/%d)",
             case.name,
@@ -1197,14 +1208,14 @@ class PerfSuiteConfig(BaseSettings):
         )
         start = datetime.now(UTC)
         try:
-            spec = load_flow_spec(case.flow_spec)
+            spec = load_recipe(case.flow_spec)
             spec = _apply_flow_benchmark_overrides(
                 spec,
                 email=self.email,
                 case_name=case.name,
                 iteration=iteration,
             )
-            result = FlowRunner(spec=spec).run()
+            result = run_recipe(spec)
             elapsed_seconds = (datetime.now(UTC) - start).total_seconds()
             return PerfIteration(
                 case=case.name,

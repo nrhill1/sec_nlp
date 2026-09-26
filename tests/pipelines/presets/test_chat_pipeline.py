@@ -12,13 +12,12 @@ from types import SimpleNamespace
 import pytest
 from rich.progress import Progress
 
-from sec_nlp.pipelines.presets.chat import (
+from sec_nlp.pipelines.presets.chat.bridge import ChatSeedBundle, ChatSeedChunk
+from sec_nlp.pipelines.presets.chat.config import ChatSettings
+from sec_nlp.pipelines.presets.chat.pipeline import (
     ChatPipeline,
-    ChatSeedBundle,
-    ChatSeedChunk,
-    ChatSettings,
+    _RetrievedChunk,
 )
-from sec_nlp.pipelines.presets.chat.pipeline import _RetrievedChunk
 from sec_nlp.pipelines.presets.chat.run_stages import (
     ChatRunState,
     build_chat_stage_chain,

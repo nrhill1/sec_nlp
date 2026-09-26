@@ -7,9 +7,9 @@ from collections.abc import Iterable, Sequence
 from datetime import UTC, date, datetime, timedelta
 from enum import StrEnum
 
-from langchain_core.documents import Document
 from pydantic import BaseModel, ConfigDict, Field
 
+from sec_nlp.core.documents import DocumentRecord as Document
 from sec_nlp.core.infra.logger import logger
 from sec_nlp.core.market import (
     MarketExtensionError,

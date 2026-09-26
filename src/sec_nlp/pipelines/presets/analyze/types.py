@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, TypedDict
 from sec_nlp.types import JsonDict
 
 if TYPE_CHECKING:
-    from langchain_core.documents import Document
+    from sec_nlp.core.documents import DocumentRecord as Document
 
     from .steps.search.efts_search import EFTSSearchResult
 

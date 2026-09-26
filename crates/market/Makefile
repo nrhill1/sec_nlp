@@ -47,11 +47,11 @@ help:
 
 .PHONY: dev
 dev:
-	@cd $(REPO_ROOT) && RUSTFLAGS="$(RUSTFLAGS_DEV)" maturin develop -m $(CARGO_MANIFEST) $(MATURIN_FLAGS)
+	@cd $(REPO_ROOT) && RUSTFLAGS="$(RUSTFLAGS_DEV)" maturin develop $(MATURIN_FLAGS)
 
 .PHONY: build
 build:
-	@cd $(REPO_ROOT) && RUSTFLAGS="$(RUSTFLAGS_PROD)" maturin build -m $(CARGO_MANIFEST) $(MATURIN_BUILD_FLAGS)
+	@cd $(REPO_ROOT) && RUSTFLAGS="$(RUSTFLAGS_PROD)" maturin build $(MATURIN_BUILD_FLAGS)
 
 .PHONY: fmt
 fmt:

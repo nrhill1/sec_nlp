@@ -3,21 +3,21 @@
 
 from pathlib import Path
 
-from sec_nlp.pipelines.presets.analyze import AnalyzeConfig
-from sec_nlp.pipelines.presets.chat import ChatSettings
-from sec_nlp.pipelines.presets.events import EventsSettings
-from sec_nlp.pipelines.presets.exb import ExhibitConfig
-from sec_nlp.pipelines.presets.financials import FinancialsSettings
-from sec_nlp.pipelines.presets.holdings import HoldingsSettings
-from sec_nlp.pipelines.presets.insider import InsiderSettings
-from sec_nlp.pipelines.presets.news import NewsSettings
-from sec_nlp.pipelines.presets.retrieve import (
+from sec_nlp.pipelines.presets.analyze.config import AnalyzeConfig
+from sec_nlp.pipelines.presets.chat.config import ChatSettings
+from sec_nlp.pipelines.presets.events.config import EventsSettings
+from sec_nlp.pipelines.presets.exb.config import ExhibitConfig
+from sec_nlp.pipelines.presets.financials.config import FinancialsSettings
+from sec_nlp.pipelines.presets.holdings.config import HoldingsSettings
+from sec_nlp.pipelines.presets.insider.config import InsiderSettings
+from sec_nlp.pipelines.presets.news.config import NewsSettings
+from sec_nlp.pipelines.presets.retrieve.config import RetrieveSettings
+from sec_nlp.pipelines.presets.retrieve.defaults import (
     DEFAULT_RETRIEVE_COLLECTION_NAME,
     DEFAULT_RETRIEVE_EMBEDDING_MODEL,
     DEFAULT_RETRIEVE_VECTOR_SIZE,
-    RetrieveSettings,
 )
-from sec_nlp.pipelines.presets.warranty import WarrantyConfig
+from sec_nlp.pipelines.presets.warranty.config import WarrantyConfig
 
 
 def test_chat_partial_llm_override_preserves_pipeline_defaults(
@@ -135,6 +135,6 @@ def test_retrieve_partial_semantic_override_preserves_defaults(
         }
     )
 
-    assert config.semantic_chunking.enabled is True
+    assert config.semantic_chunking.enabled is False
     assert config.semantic_chunking.embedding_model == "qwen3-embedding:4b"
     assert config.semantic_chunking.breakpoint_threshold_type == "percentile"

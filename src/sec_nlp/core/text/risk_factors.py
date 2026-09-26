@@ -8,9 +8,9 @@ from collections import Counter, defaultdict
 from collections.abc import Sequence
 from dataclasses import dataclass
 
-from langchain_core.documents import Document
 from simhash import Simhash
 
+from sec_nlp.core.documents import DocumentRecord as Document
 from sec_nlp.core.text.deduplication import SimHashConfig, SimHashDeduplicator
 from sec_nlp.types import JsonDict, JsonValue
 

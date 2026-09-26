@@ -1,5 +1,5 @@
 # src/sec_nlp/pipelines/presets/analyze/run_stages.py
-"""Runnable stage helpers for analyze pipeline execution."""
+"""Ordered specialist steps for analyze pipeline execution."""
 
 from __future__ import annotations
 
@@ -7,14 +7,13 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from langchain_core.documents import Document
-from langchain_core.runnables import Runnable
 from pydantic import Field
 from rich.progress import Progress, TaskID
 
+from sec_nlp.core.documents import DocumentRecord as Document
 from sec_nlp.core.infra.logger import logger
-from sec_nlp.pipelines.base.stages import PipelineStageRunnable
-from sec_nlp.pipelines.runtime import get_accession_from_metadata
+from sec_nlp.pipelines.base.stages import PipelineStage, StageSequence
+from sec_nlp.pipelines.runtime.metadata import get_accession_from_metadata
 from sec_nlp.pipelines.types import AnalysisResultDict, MetadataRecord
 from sec_nlp.types import JsonDict
 
@@ -85,7 +84,7 @@ def _summarize_loaded_docs(
     )
 
 
-class LoadDocsStage(PipelineStageRunnable[AnalyzeRunState]):
+class LoadDocsStage(PipelineStage[AnalyzeRunState]):
     """Ingress stage that acquires candidate documents from prefetch or live retrieval."""
 
     name: str = Field(default="load_docs")
@@ -135,7 +134,7 @@ class LoadDocsStage(PipelineStageRunnable[AnalyzeRunState]):
         return state
 
 
-class PreprocessStage(PipelineStageRunnable[AnalyzeRunState]):
+class PreprocessStage(PipelineStage[AnalyzeRunState]):
     """Normalization stage that converts loaded filings into analysis-ready chunks."""
 
     name: str = Field(default="preprocess_docs")
@@ -165,7 +164,7 @@ class PreprocessStage(PipelineStageRunnable[AnalyzeRunState]):
         return state
 
 
-class EnrichAndIndexStage(PipelineStageRunnable[AnalyzeRunState]):
+class EnrichAndIndexStage(PipelineStage[AnalyzeRunState]):
     """Enrichment stage that adds market context and indexes chunks for retrieval."""
 
     name: str = Field(default="enrich_and_index")
@@ -196,7 +195,7 @@ class EnrichAndIndexStage(PipelineStageRunnable[AnalyzeRunState]):
         return state
 
 
-class SearchAndAnalyzeStage(PipelineStageRunnable[AnalyzeRunState]):
+class SearchAndAnalyzeStage(PipelineStage[AnalyzeRunState]):
     """Inference stage that executes search queries and optional LLM analysis."""
 
     name: str = Field(default="search_and_analyze")
@@ -226,7 +225,7 @@ class SearchAndAnalyzeStage(PipelineStageRunnable[AnalyzeRunState]):
         return state
 
 
-class PostprocessStage(PipelineStageRunnable[AnalyzeRunState]):
+class PostprocessStage(PipelineStage[AnalyzeRunState]):
     """Reduction stage that filters findings and computes market-correlation overlays."""
 
     name: str = Field(default="postprocess_results")
@@ -252,7 +251,7 @@ class PostprocessStage(PipelineStageRunnable[AnalyzeRunState]):
         return state
 
 
-class WriteOutputsStage(PipelineStageRunnable[AnalyzeRunState]):
+class WriteOutputsStage(PipelineStage[AnalyzeRunState]):
     """Egress stage that writes analysis artifacts and finalizes timing metadata."""
 
     name: str = Field(default="write_outputs")
@@ -301,7 +300,7 @@ class WriteOutputsStage(PipelineStageRunnable[AnalyzeRunState]):
         return state
 
 
-_ANALYZE_STAGES: tuple[PipelineStageRunnable[AnalyzeRunState], ...] = (
+_ANALYZE_STAGES: tuple[PipelineStage[AnalyzeRunState], ...] = (
     LoadDocsStage(),
     PreprocessStage(),
     EnrichAndIndexStage(),
@@ -313,6 +312,6 @@ _ANALYZE_STAGES: tuple[PipelineStageRunnable[AnalyzeRunState], ...] = (
 
 def build_analyze_stage_chain(
     pipeline: AnalyzePipeline,
-) -> Runnable[AnalyzeRunState, AnalyzeRunState]:
+) -> StageSequence[AnalyzeRunState]:
     """Build deterministic analyze stage chain."""
     return pipeline.build_configured_stage_chain(stages=_ANALYZE_STAGES)

@@ -1,8 +1,7 @@
 # tests/pipelines/presets/test_exhibit_bridge.py
 """Tests for EXB-to-flow bridge evidence conversion."""
 
-from langchain_core.documents import Document
-
+from sec_nlp.core.documents import DocumentRecord as Document
 from sec_nlp.pipelines.presets.exb.bridge import build_contract_evidence_bundle
 
 

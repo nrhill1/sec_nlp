@@ -15,6 +15,14 @@ mod tests {
     use serde_json::json;
 
     #[test]
+    fn missing_metadata_is_never_inferred_from_accession_or_current_date() {
+        let raw = json!({"_source": {"adsh": "0001234567-24-000001"}});
+        let hit = parse_hit(&raw);
+        assert_eq!(hit.cik, "0000000000");
+        assert!(hit.filed_date_str.is_empty());
+    }
+
+    #[test]
     fn parse_response_matches_sample() {
         let sample = json!({
             "query": {"from": 0, "size": 10, "q": "warranty accrual"},

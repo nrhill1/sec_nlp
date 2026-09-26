@@ -9,7 +9,7 @@ unresolved-global = "error"
 unsupported-base = "error"
 
 [environment]
-extra-paths = ["./src", "./tests", "./types"]
+extra-paths = ["./src", "./tests", "./crates/efts", "./crates/corr", "./crates/xbrl", "./crates/entity", "./crates/newswatch"]
 python-version = "3.13"
 
 [src]

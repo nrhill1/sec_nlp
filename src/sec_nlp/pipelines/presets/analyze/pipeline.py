@@ -8,18 +8,15 @@ compensation enrichment stages are applied when enabled. Outputs are
 written as per-accession YAML/JSON/CSV alongside an aggregate summary.
 """
 
-import signal
 from collections import defaultdict
 from concurrent.futures import Future, ThreadPoolExecutor
 from datetime import date
 from pathlib import Path
 from statistics import mean, median
 from time import perf_counter
-from types import FrameType
 from typing import ClassVar, Literal
 
 from langchain_core.callbacks.base import BaseCallbackHandler
-from langchain_core.documents import Document
 from langchain_core.language_models import BaseLanguageModel
 from langchain_core.prompts.base import BasePromptTemplate
 from langchain_core.runnables import Runnable
@@ -27,8 +24,6 @@ from langchain_ollama.embeddings import OllamaEmbeddings
 from langchain_qdrant import QdrantVectorStore
 from pydantic import PrivateAttr
 from qdrant_client.models import Distance, VectorParams
-from rich.align import Align
-from rich.panel import Panel
 from rich.progress import (
     BarColumn,
     Progress,
@@ -39,9 +34,8 @@ from rich.progress import (
     TimeElapsedColumn,
     TimeRemainingColumn,
 )
-from rich.table import Table
-from rich.text import Text
 
+from sec_nlp.core.documents import DocumentRecord as Document
 from sec_nlp.core.edgar.economic import (
     EconomicDataError,
     align_to_filings,
@@ -56,18 +50,16 @@ from sec_nlp.core.llm.chains import InputModelKeys, build_runnable
 from sec_nlp.core.text.deduplication import SimHashConfig, SimHashDeduplicator
 from sec_nlp.core.text.filters import SectionFilter
 from sec_nlp.core.text.section_extractor import SectionExtractor
-from sec_nlp.pipelines import BasePipeline
+from sec_nlp.pipelines.base.pipeline import BasePipeline
+from sec_nlp.pipelines.base.stages import StageSequence
 from sec_nlp.pipelines.observability.telemetry import log_chunk_length_stats
-from sec_nlp.pipelines.runtime import (
-    ProcessingState,
-    get_accession_from_metadata,
-    get_state_dir,
-)
+from sec_nlp.pipelines.runtime.metadata import get_accession_from_metadata
+from sec_nlp.pipelines.runtime.state import ProcessingState, get_state_dir
 from sec_nlp.pipelines.types import (
     AnalysisResultDict,
     MetadataRecord,
 )
-from sec_nlp.prompts import load_prompt_template
+from sec_nlp.prompts.loader import load_prompt_template
 from sec_nlp.types import JsonDict, ResultDict
 
 from . import efts as efts_utils
@@ -189,8 +181,8 @@ class AnalyzePipeline(BasePipeline):
     _symbol_profiles: dict[str, JsonDict] = PrivateAttr(default_factory=dict)
     _processing_state: ProcessingState | None = PrivateAttr(default=None)
     _phase_start: float = PrivateAttr(default=0.0)
-    _stage_chain: Runnable[AnalyzeRunState, AnalyzeRunState] | None = (
-        PrivateAttr(default=None)
+    _stage_chain: StageSequence[AnalyzeRunState] | None = PrivateAttr(
+        default=None
     )
 
     @classmethod
@@ -549,43 +541,13 @@ class AnalyzePipeline(BasePipeline):
 
     def run(self) -> AnalyzeResult:
         """Execute the semantic search pipeline."""
-        # Reset abort flag and install a signal handler so the first
-        # Ctrl+C triggers a graceful stop and the second force-kills.
+        self.config.start_run()
         _abort_event.clear()
-        prev_handler = signal.getsignal(signal.SIGINT)
-
-        def _sigint_handler(signum: int, frame: FrameType | None) -> None:
-            """Handle SIGINT and request graceful pipeline shutdown."""
-            if _abort_event.is_set():
-                # Second Ctrl+C — restore previous handler and re-raise.
-                signal.signal(signal.SIGINT, prev_handler)
-                raise KeyboardInterrupt
-            _abort_event.set()
-            logger.info("Interrupt received — finishing current work…")
-
-        signal.signal(signal.SIGINT, _sigint_handler)
 
         try:
             self.config.setup_paths()
 
-            # Rich Panel for run header (centered) — first visual after log path
             console = get_rich_console()
-            run_info = Text()
-            run_info.append(self.pipeline_type, style="bold #00d75f")
-            run_info.append("\n")
-            run_info.append("Run ", style="bold #00ff87")
-            run_info.append(
-                f"{self.config.short_id_display}", style="bold #00ff87"
-            )
-            run_info.append(" · ", style="dim")
-            run_info.append(f"{self.config.run_id}", style="dim #00d75f")
-            panel = Panel(
-                run_info,
-                title="[bold #00ff87]Pipeline Start[/bold #00ff87]",
-                border_style="#00d75f",
-                expand=False,
-            )
-            console.print(Align.center(panel))
 
             output_set: set[Path] = set()
             metadata: ResultDict = {
@@ -607,6 +569,7 @@ class AnalyzePipeline(BasePipeline):
                 TimeRemainingColumn(),
                 console=console,
                 transient=True,
+                disable=True,
             ) as progress:
                 overall_task = progress.add_task(
                     "Processing symbols",
@@ -751,7 +714,6 @@ class AnalyzePipeline(BasePipeline):
                 error=f"{type(e).__name__}: {e}",
             )
         finally:
-            signal.signal(signal.SIGINT, prev_handler)
             log_divider(logger, color="green")
 
     def _log_chunk_stats_by_accession(
@@ -1106,7 +1068,7 @@ class AnalyzePipeline(BasePipeline):
                 metadata["market_enrichment_context"] = combined_context
                 if macro_context:
                     metadata["macro_context"] = macro_context
-                doc.metadata = metadata
+                doc.metadata.update(metadata)
 
         self._log_chunk_stats_by_accession(docs, symbol=symbol, label=None)
         self._vector_indexer.index(symbol, docs, timings)
@@ -1236,68 +1198,9 @@ class AnalyzePipeline(BasePipeline):
             if confidence_scores
             else None
         )
-        median_confidence = (
-            median(confidence_scores) if confidence_scores else None
+        avg_conf_display = (
+            f"{avg_confidence:.2f}" if avg_confidence is not None else "N/A"
         )
-
-        # Determine color for relevant hits based on threshold
-        relevance_ratio = relevant_hits / total_hits if total_hits > 0 else 0
-        if relevant_hits == 0:
-            relevant_color = "red"
-            relevant_icon = "✗"
-        elif relevance_ratio >= 0.5:
-            relevant_color = "green"
-            relevant_icon = "✓"
-        else:
-            relevant_color = "yellow"
-            relevant_icon = "◐"
-
-        # Rich Table for analysis summary
-        console = get_rich_console()
-        table = Table(
-            title=f"[bold #00d75f]Analysis Summary: {symbol}[/bold #00d75f]",
-            show_header=False,
-            box=None,
-        )
-        table.add_column("Label", style="dim #00d75f", justify="right")
-        table.add_column("Value", style="white")
-
-        # Total chunks
-        table.add_row("Total Chunks", f"[dim]{total_hits}[/dim]")
-
-        # Relevant hits with icon and color
-        relevant_display = f"[{relevant_color} bold]{relevant_icon} {relevant_hits}[/{relevant_color} bold]"
-        if total_hits > 0:
-            relevant_display += f" [dim]({relevance_ratio:.0%})[/dim]"
-        table.add_row("Relevant", relevant_display)
-
-        # Confidence scores (avg and median)
-        avg_conf_display = "N/A"
-        if avg_confidence is not None:
-            avg_conf_display = f"{avg_confidence:.2f}"
-            table.add_row(
-                "Avg Confidence",
-                f"[#00ff87]{avg_conf_display}[/#00ff87]",
-            )
-        if median_confidence is not None:
-            table.add_row(
-                "Median Confidence",
-                f"[#00ff87]{median_confidence:.2f}[/#00ff87]",
-            )
-
-        # Threshold
-        table.add_row(
-            "Threshold",
-            f"[dim]{self.config.confidence_threshold:.2f}[/dim]",
-        )
-
-        # Errors (if any)
-        if error_results:
-            table.add_row(
-                "Errors", f"[red bold]✗ {len(error_results)}[/red bold]"
-            )
-
-        console.print(table)
 
         # Keep log for file output
         logger.debug(
@@ -1376,11 +1279,6 @@ class AnalyzePipeline(BasePipeline):
 
         if output_files:
             output_dir = self.config.get_symbol_output_dir(symbol)
-            # Rich-styled path output
-            console = get_rich_console()
-            console.print(
-                f"[dim #00d75f]→[/dim #00d75f] Wrote [bold #00ff87]{len(output_files)}[/bold #00ff87] files for [bold #00d75f]{symbol}[/bold #00d75f] → [link=file://{output_dir.resolve()}][#87d7af]{output_dir.resolve()}[/#87d7af][/link]"
-            )
             logger.debug(
                 "Wrote %d analysis files for %s -> %s",
                 len(output_files),
@@ -1418,7 +1316,7 @@ class AnalyzePipeline(BasePipeline):
             if isinstance(filed_date, str) and filed_date.strip():
                 metadata.setdefault("filing_date", filed_date)
                 metadata.setdefault("acceptance_date", filed_date)
-                doc.metadata = metadata
+                doc.metadata.update(metadata)
                 continue
             source = metadata.get("file_path") or metadata.get("source")
             if isinstance(source, str) and source.strip():
@@ -1435,7 +1333,7 @@ class AnalyzePipeline(BasePipeline):
                     iso_date = filing_date.isoformat()
                     metadata.setdefault("filing_date", iso_date)
                     metadata.setdefault("acceptance_date", iso_date)
-                    doc.metadata = metadata
+                    doc.metadata.update(metadata)
 
     def _prepare_documents(self, docs: list[Document]) -> list[Document]:
         """Expose preprocessing for tests and standalone use."""
