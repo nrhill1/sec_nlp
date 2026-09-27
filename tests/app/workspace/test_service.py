@@ -471,3 +471,107 @@ def test_full_index_coverage_supersedes_an_old_daily_gap(
     _, partial, _ = asyncio.run(_indexes(service))
     assert not partial
     assert listing.call_args.kwargs == {"year": 2026, "quarter": 3}
+
+
+@pytest.mark.parametrize("last_filing", ["2025-12-30", "2025-12-31"])
+def test_full_index_coverage_supersedes_an_old_listing_gap(
+    service: WorkspaceService,
+    monkeypatch: pytest.MonkeyPatch,
+    last_filing: str,
+) -> None:
+    """Fetch new daily evidence after a closed-quarter snapshot covers a listing gap."""
+    failed = SourceCheckpoint(
+        source="sec-index-listing",
+        scope="2025/QTR4",
+        cursor="2025-12-29",
+        status="error",
+    )
+    service.store.save_checkpoint(failed)
+    for year, quarter, cursor in (
+        (2025, 4, last_filing),
+        (2026, 3, "2026-09-25"),
+    ):
+        artifact = discovery.full_index_artifact(year=year, quarter=quarter)
+        service.store.save_checkpoint(
+            SourceCheckpoint(
+                source="sec-index",
+                scope=str(artifact.url),
+                artifact_url=str(artifact.url),
+                cursor=cursor,
+                status="complete",
+                processed_at=datetime.now(UTC),
+            )
+        )
+    latest = _daily(TODAY)
+    listing = AsyncMock(return_value=(latest,))
+    fetch = AsyncMock(return_value=(_filing(),))
+    monkeypatch.setattr(discovery, "list_daily_indexes", listing)
+    monkeypatch.setattr(discovery, "fetch_index", fetch)
+
+    filings, partial, errors = asyncio.run(_indexes(service))
+
+    assert not partial and not errors
+    listing.assert_awaited_once()
+    assert listing.call_args.kwargs == {"year": 2026, "quarter": 3}
+    assert fetch.call_args.args[1] == latest
+    assert filings == (_filing(),)
+    assert service.store.get_filing(_filing().accession_number) == _filing()
+    assert failed in service.store.list_checkpoints()
+
+
+@pytest.mark.parametrize("has_older_snapshot", [False, True])
+def test_uncovered_listing_gap_still_requires_catchup(
+    service: WorkspaceService,
+    monkeypatch: pytest.MonkeyPatch,
+    has_older_snapshot: bool,
+) -> None:
+    """Retain gaps without a full snapshot covering the failed listing interval."""
+    service.store.save_checkpoint(
+        SourceCheckpoint(
+            source="sec-index-listing",
+            scope="2025/QTR4",
+            cursor="2025-12-01",
+            status="error",
+        )
+    )
+    old_quarter = discovery.full_index_artifact(year=2025, quarter=4)
+    if has_older_snapshot:
+        service.store.save_checkpoint(
+            SourceCheckpoint(
+                source="sec-index",
+                scope=str(old_quarter.url),
+                artifact_url=str(old_quarter.url),
+                cursor="2025-12-15",
+                status="complete",
+                processed_at=datetime(2025, 12, 16, tzinfo=UTC),
+            )
+        )
+    current = discovery.full_index_artifact(year=2026, quarter=3)
+    service.store.save_checkpoint(
+        SourceCheckpoint(
+            source="sec-index",
+            scope=str(current.url),
+            artifact_url=str(current.url),
+            cursor="2026-09-25",
+            status="complete",
+            processed_at=datetime.now(UTC),
+        )
+    )
+    fetch = AsyncMock(side_effect=ValueError("Index still unavailable"))
+    listing = AsyncMock(return_value=())
+    monkeypatch.setattr(discovery, "fetch_index", fetch)
+    monkeypatch.setattr(discovery, "list_daily_indexes", listing)
+
+    _, partial, errors = asyncio.run(_indexes(service))
+
+    assert partial and errors
+    assert fetch.call_args_list[0].args[1] == old_quarter
+    listing.assert_not_awaited()
+    assert (
+        next(
+            item
+            for item in service.store.list_checkpoints()
+            if item.source == "sec-coverage"
+        ).status
+        == "partial"
+    )

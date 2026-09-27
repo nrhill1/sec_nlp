@@ -8,7 +8,7 @@ between its terminal interface and scriptable commands.
 
 | Check | Result |
 | --- | --- |
-| Offline Python suite, including headless terminal interaction | 833 passed in 38.14 seconds |
+| Offline Python suite, including headless terminal interaction | 852 passed in 38.94 seconds |
 | `ty check src tests` | Passed |
 | `ruff check src tests` | Passed |
 | `ruff format --check src tests` | 410 files already formatted |
@@ -19,8 +19,8 @@ between its terminal interface and scriptable commands.
 | Installed base wheels outside the checkout | Passed, with no AI/vector extras |
 
 The native build used the already synchronized development environment and skipped
-the Makefile's bootstrap and sync stamps. No commits or publication were performed
-as part of this implementation.
+the Makefile's bootstrap and sync stamps. Subsequent local checkpoints were made
+at the user's request; nothing was published remotely.
 
 Tests cover duplicate entity associations, exact amendment forms, moving feed
 pages, missing indexes, retry limits, cancellation and resumed coverage, quarterly
@@ -36,12 +36,21 @@ benchmark settings live in compact templates. Specialist tests cover retained
 serializers and analyze, EXB, warranty, deterministic research, and evidence handoff.
 Optional AI/vector paths are exercised with mocked external services.
 
+Follow-up regressions verify that completed quarterly coverage clears stale
+listing gaps, older snapshots preserve newer filing evidence, blank terminal
+fields retain advanced research settings, and partial scans expose source errors.
+Research preparation failures become failed jobs. Cancellation continues draining
+child-process output through termination, including a real subprocess emitting
+8 MiB and simulated termination races.
+
 ## Startup measurements
 
 Five fresh isolated Python processes were measured for each operation, using the
 installed wheels from outside the checkout. The cached workspace held 300 filings.
 Socket connections and DNS were blocked. Startup created zero jobs and loaded no
 AI, vector, parser, or native provider modules.
+These timings describe the initial base-install acceptance run; follow-up fixes
+retain the deterministic startup checks.
 
 | Operation | Median operation time | Median whole process time |
 | --- | ---: | ---: |
@@ -70,28 +79,28 @@ generated typing files, scripts, and tests are reported separately.
 
 | Category | Baseline | Current | Change |
 | --- | ---: | ---: | ---: |
-| Application runtime, including pre-existing investing work | 64,489 | 58,673 | -5,816 |
+| Application runtime, including pre-existing investing work | 64,489 | 58,758 | -5,731 |
 | Generated application stubs | 5,884 | 0 | -5,884 |
 | Developer scripts | 4,018 | 4,007 | -11 |
-| Test source | 26,922 | 25,667 | -1,255 |
+| Test source | 26,922 | 26,059 | -863 |
 | Direct base dependencies | 26 | 14 | -12 |
 
 The runtime baseline is the planning snapshot, which includes the existing
 uncommitted investing work. For a reproducible Git-only comparison, commit
-`8afab23` contains 61,867 runtime lines; the current runtime is 3,194 lines smaller
+`8afab23` contains 61,867 runtime lines; the current runtime is 3,109 lines smaller
 than that commit. Script, test, and generated-stub baselines use that commit.
 Native extension stubs remain packaged and are excluded from the removed-stub
 count. Enabling every optional extra yields 21 unique direct dependencies.
 
-New functionality included within the current runtime total comprises 3,783 lines
-in the shared workspace package, 753 lines in the terminal package, and 1,108 lines
+New functionality included within the current runtime total comprises 3,871 lines
+in the shared workspace package, 752 lines in the terminal package, and 1,108 lines
 in the shared SEC transport, filing/discovery models, and headline normalization
 modules. These are subsets of the runtime total, not additional lines to add to it.
 Authored job YAML shrank from 6,600 to 5,188 lines while preserving all 80 jobs.
 
 ## Installation and practical limits
 
-The final root wheel and five sibling native wheels were installed into a separate
+The initial root wheel and five sibling native wheels were installed into a separate
 virtual environment under `/private/tmp`, with the working directory outside the
 repository and isolated Python imports. The root wheel's Python sources matched
 the checkout byte for byte. Dependency consistency passed for all 86 installed

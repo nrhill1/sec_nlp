@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import os
 import sys
 from datetime import UTC, datetime
@@ -25,6 +26,8 @@ from sec_nlp.types import ConfigData, JsonDict
 if TYPE_CHECKING:
     from sec_nlp.pipelines.base.config import BasePipelineSettings
     from sec_nlp.pipelines.base.pipeline import BasePipeline
+
+logger = logging.getLogger(__name__)
 
 CAPABILITIES = (
     "analyze",
@@ -238,34 +241,42 @@ async def execute_research(
 
     Returns:
         The same typed specialist result used by the command line and terminal.
+
+    Raises:
+        ValueError: If the capability, stored profile, or result data is invalid.
+        OSError: If request preparation, process creation, or artifact I/O fails.
+        RuntimeError: If the research process cannot be managed.
+        asyncio.CancelledError: After an interrupted child has stopped and its
+            output pipes have been drained.
     """
     if capability not in CAPABILITIES:
         raise ValueError(f"Unknown research capability: {capability}")
     job = JobRecord(kind=f"research:{capability}", status="running")
     store.save_job(job)
-    folder = store.path / "research" / job.job_id
-    folder.mkdir(parents=True, exist_ok=True)
-    request = folder / "request.json"
-    result_path = folder / "result.json"
-    values = dict(settings)
-    if capability != "recipe":
-        contact = next(
-            (
-                part.strip("<>()[],;")
-                for part in store.load_settings().user_agent.split()
-                if "@" in part
-            ),
-            None,
-        )
-        if contact:
-            values.setdefault("email", contact)
-        values.setdefault("out_path", str(folder / "outputs"))
-        values.setdefault("dl_path", str(store.path / "downloads"))
-    request.write_text(json.dumps(values), encoding="utf-8")
-    environment = dict(os.environ)
-    environment["SEC_NLP_QUIET"] = "1"
     process: asyncio.subprocess.Process | None = None
+    communication: asyncio.Task[tuple[bytes, bytes]] | None = None
     try:
+        folder = store.path / "research" / job.job_id
+        folder.mkdir(parents=True, exist_ok=True)
+        request = folder / "request.json"
+        result_path = folder / "result.json"
+        values = dict(settings)
+        if capability != "recipe":
+            contact = next(
+                (
+                    part.strip("<>()[],;")
+                    for part in store.load_settings().user_agent.split()
+                    if "@" in part
+                ),
+                None,
+            )
+            if contact:
+                values.setdefault("email", contact)
+            values.setdefault("out_path", str(folder / "outputs"))
+            values.setdefault("dl_path", str(store.path / "downloads"))
+        request.write_text(json.dumps(values), encoding="utf-8")
+        environment = dict(os.environ)
+        environment["SEC_NLP_QUIET"] = "1"
         process = await asyncio.create_subprocess_exec(
             sys.executable,
             "-m",
@@ -277,7 +288,8 @@ async def execute_research(
             stderr=asyncio.subprocess.PIPE,
             env=environment,
         )
-        stdout, stderr = await process.communicate()
+        communication = asyncio.create_task(process.communicate())
+        stdout, stderr = await asyncio.shield(communication)
         (folder / "execution.log").write_bytes(stdout + stderr)
         if result_path.exists():
             result = ResearchResult.model_validate_json(
@@ -303,13 +315,26 @@ async def execute_research(
         )
         return result
     except asyncio.CancelledError:
-        if process is not None and process.returncode is None:
-            process.terminate()
+        if process is not None and communication is not None:
+            if process.returncode is None:
+                try:
+                    process.terminate()
+                except ProcessLookupError:
+                    logger.debug(
+                        "Research process exited before termination.",
+                        exc_info=True,
+                    )
             try:
-                await asyncio.wait_for(process.wait(), timeout=5)
+                await asyncio.wait_for(asyncio.shield(communication), timeout=5)
             except TimeoutError:
-                process.kill()
-                await process.wait()
+                try:
+                    process.kill()
+                except ProcessLookupError:
+                    logger.debug(
+                        "Research process exited before forced termination.",
+                        exc_info=True,
+                    )
+                await communication
         store.save_job(
             job.model_copy(
                 update={

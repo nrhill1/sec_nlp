@@ -86,6 +86,45 @@ def _index_digest(filings: tuple[FilingRecord, ...]) -> str:
     return digest.hexdigest()
 
 
+def _listing_gap_covered(
+    listing: SourceCheckpoint,
+    full_indexes: tuple[SourceCheckpoint, ...],
+    cutoff: date,
+) -> bool:
+    """Check whether a complete full index supersedes a failed listing interval.
+
+    Args:
+        listing: Failed or interrupted quarter-directory checkpoint.
+        full_indexes: Successfully committed, unfiltered quarterly snapshots.
+        cutoff: Inclusive end of the requested discovery interval.
+
+    Returns:
+        Whether the snapshot covers the listing through the quarter's end or
+        current cutoff. Closed-quarter snapshots fetched after quarter-end also
+        establish coverage when no filings occurred on the final calendar day.
+    """
+    if listing.cursor is None:
+        return False
+    year, quarter = _quarter(date.fromisoformat(listing.cursor))
+    next_quarter = (
+        date(year + 1, 1, 1) if quarter == 4 else date(year, quarter * 3 + 1, 1)
+    )
+    quarter_end = next_quarter - timedelta(days=1)
+    required_end = min(quarter_end, cutoff)
+    for snapshot in full_indexes:
+        if snapshot.cursor is None:
+            continue
+        watermark = date.fromisoformat(snapshot.cursor)
+        if _quarter(watermark) != (year, quarter):
+            continue
+        processed = snapshot.processed_at or snapshot.checked_at
+        if watermark >= required_end or (
+            required_end == quarter_end and processed.date() > quarter_end
+        ):
+            return True
+    return False
+
+
 class WorkspaceService:
     """Execute user-requested discovery and reading with durable progress.
 
@@ -379,15 +418,21 @@ class WorkspaceService:
         current_indexes = [
             item for item in indexed.values() if item.source == "sec-index"
         ]
-        full_coverage = {
-            _quarter(date.fromisoformat(item.cursor)): date.fromisoformat(
-                item.cursor
-            )
+        cutoff = min(end or today, today)
+        full_indexes = tuple(
+            item
             for item in current_indexes
             if item.status == "complete"
             and item.cursor
             and item.artifact_url
             and "/full-index/" in item.artifact_url
+        )
+        full_coverage = {
+            _quarter(date.fromisoformat(item.cursor)): date.fromisoformat(
+                item.cursor
+            )
+            for item in full_indexes
+            if item.cursor
         }
         unresolved_indexes = [
             item
@@ -416,6 +461,7 @@ class WorkspaceService:
                     item
                     for item in checkpoints
                     if item.source == "sec-index-listing"
+                    and not _listing_gap_covered(item, full_indexes, cutoff)
                 ),
             )
             if item.status != "complete" and item.cursor
@@ -440,7 +486,6 @@ class WorkspaceService:
                 )
         first_refresh = not current_indexes
         historical = start is not None or end is not None
-        cutoff = min(end or today, today)
         anchor = start or (
             cutoff - timedelta(days=30)
             if end is not None

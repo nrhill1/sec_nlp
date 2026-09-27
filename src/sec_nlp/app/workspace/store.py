@@ -13,7 +13,7 @@ import re
 import sqlite3
 from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 from urllib.parse import urlsplit
@@ -357,10 +357,16 @@ class WorkspaceStore:
         """Record index provenance and optionally identify withdrawn memberships."""
         if not checkpoint.artifact_url:
             return
+        watermark = (
+            date.fromisoformat(checkpoint.cursor)
+            if reconcile and checkpoint.cursor is not None
+            else None
+        )
         if reconcile:
+            covered_date = watermark.isoformat() if watermark else None
             connection.execute(
-                "UPDATE artifact_membership SET current=0 WHERE artifact_url=?",
-                (checkpoint.artifact_url,),
+                "UPDATE artifact_membership SET current=0 WHERE artifact_url=? AND (? IS NULL OR accession IN (SELECT accession FROM filings WHERE filed_date IS NULL OR filed_date<=?))",
+                (checkpoint.artifact_url, covered_date, covered_date),
             )
         connection.executemany(
             "INSERT INTO artifact_membership VALUES (?,?,1) ON CONFLICT(artifact_url,accession) DO UPDATE SET current=1",
@@ -377,10 +383,20 @@ class WorkspaceStore:
             )
             if address.hostname in {"www.sec.gov", "sec.gov"} and quarter:
                 for host in ("www.sec.gov", "sec.gov"):
-                    daily_prefix = f"https://{host}/Archives/edgar/daily-index/{quarter.group(1)}/{quarter.group(2)}/%"
+                    daily_prefix = f"https://{host}/Archives/edgar/daily-index/{quarter.group(1)}/{quarter.group(2)}/"
+                    daily_cutoff = (
+                        f"{daily_prefix}master.{watermark:%Y%m%d}.idx"
+                        if watermark is not None
+                        else None
+                    )
                     connection.execute(
-                        "UPDATE artifact_membership AS daily SET current=EXISTS(SELECT 1 FROM artifact_membership AS quarterly WHERE quarterly.artifact_url=? AND quarterly.accession=daily.accession AND quarterly.current=1) WHERE daily.artifact_url LIKE ?",
-                        (checkpoint.artifact_url, daily_prefix),
+                        "UPDATE artifact_membership AS daily SET current=EXISTS(SELECT 1 FROM artifact_membership AS quarterly WHERE quarterly.artifact_url=? AND quarterly.accession=daily.accession AND quarterly.current=1) WHERE daily.artifact_url LIKE ? AND (? IS NULL OR daily.artifact_url<=?)",
+                        (
+                            checkpoint.artifact_url,
+                            daily_prefix + "%",
+                            daily_cutoff,
+                            daily_cutoff,
+                        ),
                     )
 
     def reconcile_index(
@@ -395,6 +411,7 @@ class WorkspaceStore:
         Returns:
             Number of newly discovered accessions. Removed memberships become
             provenance warnings, while bookmarks, notes, and content remain.
+            Daily evidence after the full snapshot's watermark is preserved.
 
         Raises:
             ValueError: If complete artifact coverage was not supplied.

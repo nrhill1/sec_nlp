@@ -252,6 +252,68 @@ def test_first_full_index_reconciles_existing_daily_memberships(
     assert all(not item.source_withdrawn for item in store.list_filings())
 
 
+@pytest.mark.parametrize("host", ["sec.gov", "www.sec.gov"])
+def test_full_index_preserves_daily_evidence_after_its_watermark(
+    tmp_path: Path, host: str
+) -> None:
+    """Withdraw covered omissions while retaining newer daily evidence on repeat refresh."""
+    store = WorkspaceStore(tmp_path)
+    daily_filings = tuple(
+        filing().model_copy(
+            update={
+                "accession_number": f"0000000123-26-0000{day}",
+                "filed_date": date(2026, 9, day),
+            }
+        )
+        for day in (23, 24, 25)
+    )
+    for record in daily_filings:
+        assert record.filed_date is not None
+        artifact_url = f"https://{host}/Archives/edgar/daily-index/2026/QTR3/master.{record.filed_date:%Y%m%d}.idx"
+        store.ingest_filings(
+            (record,),
+            SourceCheckpoint(
+                source="sec-index",
+                scope=artifact_url,
+                artifact_url=artifact_url,
+                cursor=record.filed_date.isoformat(),
+                status="complete",
+            ),
+        )
+    checkpoint = SourceCheckpoint(
+        source="sec-index",
+        scope="quarter",
+        artifact_url="https://www.sec.gov/Archives/edgar/full-index/2026/QTR3/master.idx",
+        cursor="2026-09-24",
+        status="complete",
+    )
+    for _ in range(2):
+        store.reconcile_index((), checkpoint)
+        states = {
+            item.filing.filed_date: item.source_withdrawn
+            for item in WorkspaceStore(tmp_path).list_filings()
+        }
+        assert states == {
+            date(2026, 9, 23): True,
+            date(2026, 9, 24): True,
+            date(2026, 9, 25): False,
+        }
+    related = filing(cik="456", role="reporting owner").model_copy(
+        update={"accession_number": daily_filings[-1].accession_number}
+    )
+    store.reconcile_index(
+        (related,), checkpoint.model_copy(update={"cursor": "2026-09-25"})
+    )
+    current = store.list_filings(cik="456")[0]
+    assert not current.source_withdrawn
+    assert {entity.cik for entity in current.filing.entities} == {
+        "0000000123",
+        "0000000456",
+    }
+    store.reconcile_index((), checkpoint)
+    assert not store.list_filings(cik="456")[0].source_withdrawn
+
+
 def test_saved_scans_jobs_and_notes_retain_identity(tmp_path: Path) -> None:
     """Keep editable scans and immutable linked research across reopening."""
     store = WorkspaceStore(tmp_path)

@@ -468,7 +468,11 @@ class ResearchWorkspace(App[None]):
         self._status("Running saved scan… Escape cancels.")
         result = await self.service.run_scan(identifier)
         self._show_search(result.filings)
-        self._status(result.message)
+        self._status(
+            result.message
+            + (" Results are partial." if result.partial else "")
+            + (" " + "; ".join(result.errors) if result.errors else "")
+        )
 
     @work(exclusive=True, group="evidence", exit_on_error=False)
     async def _read_filing(
@@ -622,12 +626,14 @@ class ResearchWorkspace(App[None]):
                         values = TypeAdapter(JsonDict).validate_json(
                             self.query_one("#advanced-settings", TextArea).text
                         )
-                        values["symbols"] = (
+                        symbols = (
                             self.query_one("#research-symbols", Input)
                             .value.upper()
                             .replace(",", " ")
                             .split()
                         )
+                        if symbols:
+                            values["symbols"] = symbols
                         question = self.query_one(
                             "#research-question", Input
                         ).value
@@ -638,13 +644,6 @@ class ResearchWorkspace(App[None]):
                                 values["queries"] = [question]
                             else:
                                 values["topics"] = [question]
-                        identity = self.store.load_settings().user_agent
-                        email = next(
-                            (word for word in identity.split() if "@" in word),
-                            None,
-                        )
-                        if email:
-                            values.setdefault("email", email)
                         self._research(selected, values)
                 case "export-markdown" | "export-json":
                     from sec_nlp.app.workspace.export import export_workspace

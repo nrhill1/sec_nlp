@@ -8,8 +8,17 @@ from unittest.mock import AsyncMock
 
 import pytest
 from pydantic import HttpUrl
-from textual.widgets import DataTable, Input, Static, TabbedContent, TextArea
+from textual.widgets import (
+    Button,
+    DataTable,
+    Input,
+    Static,
+    TabbedContent,
+    TextArea,
+)
 
+from sec_nlp.app.workspace.research import ResearchResult
+from sec_nlp.app.workspace.service import ActionResult
 from sec_nlp.app.workspace.store import WorkspaceStore
 from sec_nlp.core.edgar.filing_models import (
     DocumentContent,
@@ -186,5 +195,94 @@ def test_failed_primary_keeps_document_choices(
             assert "Choose an HTML" in str(
                 app.query_one("#status", Static).content
             )
+
+    asyncio.run(scenario())
+
+
+@pytest.mark.parametrize("visible_symbols", ["", "msft, nvda"])
+@pytest.mark.parametrize("explicit_email", [False, True])
+def test_research_preserves_advanced_settings_and_shared_contact_handling(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    visible_symbols: str,
+    explicit_email: bool,
+) -> None:
+    """Override symbols only when supplied and leave contact defaults to the service."""
+    action = AsyncMock(
+        return_value=ResearchResult(capability="financials", success=True)
+    )
+    monkeypatch.setattr(
+        "sec_nlp.app.workspace.research.execute_research", action
+    )
+
+    async def scenario() -> None:
+        store = _store(tmp_path)
+        store.save_settings(
+            store.load_settings().model_copy(
+                update={"user_agent": "Jane Doe <jane@example.com>"}
+            )
+        )
+        app = ResearchWorkspace(store=store)
+        async with app.run_test(size=(120, 40)):
+            app.query_one("#research-symbols", Input).value = visible_symbols
+            app.query_one("#advanced-settings", TextArea).load_text(
+                '{"symbols":["AAPL"],"periods":2'
+                + (',"email":"explicit@example.com"' if explicit_email else "")
+                + "}"
+            )
+            app.press_button(
+                Button.Pressed(app.query_one("#research-run", Button))
+            )
+            await app.workers.wait_for_complete()
+            action.assert_awaited_once()
+            values = action.call_args.args[2]
+            assert values["symbols"] == (
+                ["MSFT", "NVDA"] if visible_symbols else ["AAPL"]
+            )
+            assert values["periods"] == 2
+            if explicit_email:
+                assert values["email"] == "explicit@example.com"
+            else:
+                assert "email" not in values
+
+    asyncio.run(scenario())
+
+
+@pytest.mark.parametrize(
+    "errors", [(), ("0000123456-26-000001: SEC rejected request (403)",)]
+)
+def test_scan_displays_partial_coverage_and_document_errors(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    errors: tuple[str, ...],
+) -> None:
+    """Keep discovered evidence visible while reporting incomplete scan results."""
+
+    async def scenario() -> None:
+        app = ResearchWorkspace(store=_store(tmp_path))
+        filing = app.store.list_filings()[0].filing
+        monkeypatch.setattr(
+            app.service,
+            "run_scan",
+            AsyncMock(
+                return_value=ActionResult(
+                    job_id="scan-test",
+                    message="Scan found 1 filings; cached 0 documents.",
+                    filings=(filing,),
+                    partial=True,
+                    errors=errors,
+                )
+            ),
+        )
+        async with app.run_test(size=(120, 40)) as pilot:
+            app._run_scan("saved-scan")
+            await app.workers.wait_for_complete()
+            await pilot.pause()
+            status = str(app.query_one("#status", Static).content)
+            assert "partial" in status
+            for error in errors:
+                assert error in status
+            assert app.query_one("#search-results", DataTable).row_count == 1
+            assert app.query_one("#inbox", DataTable).row_count == 1
 
     asyncio.run(scenario())
