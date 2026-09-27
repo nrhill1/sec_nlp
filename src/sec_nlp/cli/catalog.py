@@ -12,7 +12,7 @@ COMMANDS: tuple[tuple[str, str], ...] = (
     ("research", "Run specialist extraction or optional AI research."),
     ("journal", "Record and review observations and investment theses."),
     ("export", "Export saved evidence as Markdown or JSON."),
-    ("workspace", "Initialize, configure, or migrate a research workspace."),
+    ("workspace", "View Pulse, filings, watchlists, and workspace settings."),
 )
 
 RETIRED_COMMANDS: dict[str, str] = {

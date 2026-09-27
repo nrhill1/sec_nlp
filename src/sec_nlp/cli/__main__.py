@@ -2,8 +2,9 @@
 """Dispatch one terminal research action without loading unused capabilities.
 
 Help and version require neither application settings nor provider imports.
-The full-screen workspace is loaded only for an interactive launch; scripts
-use the same application actions through the selected command handler.
+Ordinary terminal commands print tables and text into shell scrollback. The
+optional full-screen workspace loads only through the explicit ``workspace ui``
+command; both interfaces call the same application actions.
 """
 
 import logging
@@ -28,8 +29,9 @@ def _show_help() -> None:
         catalog.add_row(name, description)
     console.print(catalog)
     console.print(
-        "\nRun without a command to open the workspace in a terminal."
+        "\nStart with: sec-nlp workspace open (cached terminal overview)."
     )
+    console.print("Optional full-screen view: sec-nlp workspace ui.")
     console.print("Use COMMAND --help for options; --version for the version.")
 
 
@@ -55,12 +57,7 @@ def main(argv: list[str] | None = None) -> int:
             _show_help()
             return 0
         if not arguments:
-            if not (sys.stdin.isatty() and sys.stdout.isatty()):
-                _show_help()
-                return 0
-            from sec_nlp.tui.app import launch_workspace
-
-            launch_workspace()
+            _show_help()
             return 0
         command, *remaining = arguments
         if command in RETIRED_COMMANDS:

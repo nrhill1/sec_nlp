@@ -20,7 +20,6 @@ from uuid import uuid4
 
 from pydantic import BaseModel, HttpUrl, TypeAdapter
 from rich.console import Console
-from rich.table import Table
 
 from sec_nlp.app.pulse.models import JournalEntry, WatchItem
 from sec_nlp.app.workspace.models import ScanSpec
@@ -34,6 +33,17 @@ from sec_nlp.cli.daily_review import (
     edit_watchlist,
     run_review,
     show_pulse,
+    show_watchlist,
+)
+from sec_nlp.cli.tables import (
+    filing_table,
+    show_inbox,
+    show_jobs,
+    show_migration,
+    show_notes,
+    show_scans,
+    show_status,
+    show_workspace,
 )
 from sec_nlp.types import ConfigData, JsonDict
 
@@ -89,6 +99,10 @@ class Options(DailyReviewOptions):
         sources: Source links attached to a journal entry.
         accession: Filing linked to a journal entry.
         settings: Saved specialist or recipe configuration file.
+        sections: Whether to list detected document headings.
+        section: Selected document heading or line number.
+        find: Local document search phrase.
+        raw: Whether to print only unformatted document text.
     """
 
     workspace: Path | None = None
@@ -121,6 +135,10 @@ class Options(DailyReviewOptions):
     sources: list[str] = field(default_factory=list)
     accession: str | None = None
     settings: Path | None = None
+    sections: bool = False
+    section: str | None = None
+    find: str | None = None
+    raw: bool = False
 
 
 def _query_options(parser: RichParser) -> None:
@@ -189,6 +207,25 @@ def _parser(command: str) -> RichParser:
             parser.add_argument(
                 "--bookmark", action="store_true", dest="bookmarked"
             )
+            views = parser.add_mutually_exclusive_group()
+            views.add_argument(
+                "--sections",
+                action="store_true",
+                help="List detected evidence headings with line numbers.",
+            )
+            views.add_argument(
+                "--section",
+                help="Read a heading or line number from --sections.",
+            )
+            views.add_argument(
+                "--find",
+                help="Find literal text in the selected document, with line references.",
+            )
+            views.add_argument(
+                "--raw",
+                action="store_true",
+                help="Print evidence text only, suitable for shell pipes.",
+            )
         case "journal":
             operations = parser.add_subparsers(
                 dest="action", required=True, parser_class=RichParser
@@ -225,7 +262,13 @@ def _parser(command: str) -> RichParser:
             configure.add_argument("--name", default="")
             configure.add_argument("--goal")
             configure.add_argument("--symbols", nargs="*", default=[])
-            operations.add_parser("open")
+            operations.add_parser(
+                "open",
+                help="Print a cached daily overview and return to the shell.",
+            )
+            operations.add_parser(
+                "ui", help="Launch the optional full-screen interface."
+            )
             operations.add_parser("status")
             operations.add_parser("jobs")
             add_pulse_options(operations.add_parser("pulse"))
@@ -241,7 +284,7 @@ def _parser(command: str) -> RichParser:
         case "research":
             parser.add_argument(
                 "identifier",
-                help="analyze, ask, index, retrieve, exb, warranty, financials, holdings, insider, events, recipe",
+                help="report, analyze, ask, index, retrieve, exb, warranty, financials, holdings, insider, events, recipe",
             )
             parser.add_argument(
                 "--settings",
@@ -291,27 +334,16 @@ def show_filings(
     unread: bool = False,
     bookmarked: bool = False,
     limit: int = 100,
+    as_json: bool = False,
 ) -> None:
     """Render a cached inbox without contacting a provider."""
-    table = Table("State", "Filed", "Form", "Company", "Accession")
-    for item in store.list_filings(
+    items = store.list_filings(
         unread_only=unread, bookmarked_only=bookmarked, limit=limit
-    ):
-        filing = item.filing
-        state = ("★ " if item.bookmarked else "") + (
-            "read" if item.is_read else "new"
-        )
-        company = "; ".join(
-            entity.name or entity.cik for entity in filing.entities
-        )
-        table.add_row(
-            state,
-            str(filing.filed_date or "—"),
-            filing.form_type,
-            company,
-            filing.accession_number,
-        )
-    Console(soft_wrap=True).print(table)
+    )
+    if as_json:
+        _show_records(items)
+    else:
+        show_inbox(items)
 
 
 def _show_records(records: Sequence[BaseModel]) -> None:
@@ -334,8 +366,20 @@ def _show_action(result: ActionResult, *, as_json: bool) -> int:
         )
     else:
         console.print(result.message, markup=False)
+        if result.partial:
+            console.print(
+                "Coverage is incomplete. Refresh again to continue outstanding discovery.",
+                style="yellow",
+            )
         for error in result.errors:
             console.print(error, style="yellow", markup=False)
+        if result.filings:
+            console.print(filing_table(result.filings))
+        console.print(
+            f"Job: {result.job_id} · Documents cached: {result.documents}",
+            markup=False,
+            style="dim",
+        )
     return 1 if result.errors else 0
 
 
@@ -348,6 +392,7 @@ def _research(
         specialist_types,
     )
     from sec_nlp.cli.arguments import _normalize_cli_args
+    from sec_nlp.cli.evidence import show_research
 
     if options.identifier == "recipe":
         from sec_nlp.app.workspace.recipes import load_recipe
@@ -358,9 +403,12 @@ def _research(
             load_recipe(options.settings).model_dump_json()
         )
         result = asyncio.run(execute_research(store, "recipe", payload))
-        Console(soft_wrap=True).print(
-            result.model_dump_json(indent=2), markup=False
-        )
+        if options.json_output:
+            Console(soft_wrap=True).print(
+                result.model_dump_json(indent=2), markup=False, highlight=False
+            )
+        else:
+            show_research(result)
         return 0 if result.success else 1
     config_type, _ = specialist_types(options.identifier)
     values = (
@@ -416,9 +464,12 @@ def _research(
         configuration.model_dump_json(exclude_unset=True)
     )
     result = asyncio.run(execute_research(store, options.identifier, payload))
-    Console(soft_wrap=True).print(
-        result.model_dump_json(indent=2), markup=False, highlight=False
-    )
+    if options.json_output:
+        Console(soft_wrap=True).print(
+            result.model_dump_json(indent=2), markup=False, highlight=False
+        )
+    else:
+        show_research(result)
     return 0 if result.success else 1
 
 
@@ -445,6 +496,18 @@ def run_command(command: str, arguments: list[str]) -> int:
     else:
         parser.parse_args(normalized, namespace=options)
         remaining = []
+    if command == "research" and options.identifier == "report":
+        from sec_nlp.cli.reports import show_report
+
+        report_parser = RichParser(prog="sec-nlp research report")
+        report_parser.add_argument(
+            "report_path",
+            type=Path,
+            help="Existing JSON or YAML specialist report.",
+        )
+        report_arguments = report_parser.parse_args(remaining)
+        show_report(report_arguments.report_path, as_json=options.json_output)
+        return 0
     if command == "research" and any(
         item in {"--help", "-h"} for item in remaining
     ):
@@ -464,6 +527,39 @@ def run_command(command: str, arguments: list[str]) -> int:
                 cli_parse_args=["--help"],
             )
         return 0
+    if command == "read":
+        if (options.find is not None and not options.find.strip()) or (
+            options.section is not None and not options.section.strip()
+        ):
+            parser.error(
+                "Document search and section selectors must not be empty"
+            )
+        if options.json_output and (
+            options.raw
+            or options.sections
+            or options.section is not None
+            or options.find is not None
+        ):
+            parser.error(
+                "--json returns the full document; choose a text view without --json"
+            )
+        if options.action == "manifest" and (
+            options.raw
+            or options.sections
+            or options.section is not None
+            or options.find is not None
+        ):
+            parser.error(
+                "--list-documents cannot be combined with document text views"
+            )
+    if (
+        command == "workspace"
+        and options.action == "ui"
+        and options.json_output
+    ):
+        parser.error(
+            "workspace ui does not produce JSON; use workspace open --json"
+        )
     store = WorkspaceStore(options.workspace)
     service = WorkspaceService(store)
     console = Console(soft_wrap=True)
@@ -482,19 +578,19 @@ def run_command(command: str, arguments: list[str]) -> int:
             return _show_action(result, as_json=options.json_output)
         case "search":
             result = asyncio.run(service.search(_scan(options)))
-            status = _show_action(result, as_json=options.json_output)
-            if not options.json_output:
-                for filing in result.filings:
-                    console.print(
-                        f"{filing.accession_number}  {filing.form_type}  {filing.filed_date}  {filing.filing_url}",
-                        markup=False,
-                    )
-            return status
+            return _show_action(result, as_json=options.json_output)
         case "scan":
             if options.action == "save":
                 spec = _scan(options)
                 store.save_scan(spec)
-                console.print(spec.model_dump_json(indent=2), markup=False)
+                if options.json_output:
+                    console.print(
+                        spec.model_dump_json(indent=2),
+                        markup=False,
+                        highlight=False,
+                    )
+                else:
+                    show_scans((spec,))
             elif options.action == "run":
                 return _show_action(
                     asyncio.run(service.run_scan(options.identifier)),
@@ -512,25 +608,67 @@ def run_command(command: str, arguments: list[str]) -> int:
                 if matched is None:
                     raise ValueError("Unknown saved scan")
                 store.delete_scan(matched.scan_id)
+                if options.json_output:
+                    console.print_json(data={"deleted": matched.scan_id})
+                else:
+                    console.print(f"Deleted scan: {matched.name}", markup=False)
             else:
-                _show_records(store.list_scans())
+                if options.json_output:
+                    _show_records(store.list_scans())
+                else:
+                    show_scans(store.list_scans())
         case "read":
+            from sec_nlp.cli.evidence import show_document, show_manifest
+
             if options.bookmarked:
                 store.set_bookmarked(options.identifier)
             if options.action == "manifest":
                 manifest = asyncio.run(service.manifest(options.identifier))
-                console.print(manifest.model_dump_json(indent=2), markup=False)
+                if options.json_output:
+                    console.print(
+                        manifest.model_dump_json(indent=2),
+                        markup=False,
+                        highlight=False,
+                    )
+                else:
+                    show_manifest(manifest)
             else:
                 content = asyncio.run(
                     service.read(options.identifier, filename=options.filename)
                 )
-                console.print(
-                    content.model_dump_json(indent=2)
-                    if options.json_output
-                    else content.text,
-                    markup=False,
-                    highlight=False,
-                )
+                if options.json_output:
+                    console.print(
+                        content.model_dump_json(indent=2),
+                        markup=False,
+                        highlight=False,
+                    )
+                else:
+                    from sec_nlp.app.workspace.headlines import (
+                        related_headlines,
+                    )
+
+                    filing = store.get_filing(options.identifier)
+                    headlines = (
+                        related_headlines(
+                            filing,
+                            store.list_news(),
+                            store.load_settings().watchlist,
+                        )
+                        if filing
+                        else ()
+                    )
+                    show_document(
+                        content,
+                        filing=filing,
+                        notes=store.list_notes(
+                            accession_number=options.identifier
+                        ),
+                        headlines=headlines,
+                        section=options.section,
+                        find=options.find,
+                        sections=options.sections,
+                        raw=options.raw,
+                    )
         case "journal":
             if options.action == "add":
                 entry = JournalEntry(
@@ -544,13 +682,22 @@ def run_command(command: str, arguments: list[str]) -> int:
                     sources=tuple(HttpUrl(value) for value in options.sources),
                 )
                 store.save_note(entry, related_accession=options.accession)
-                console.print(entry.model_dump_json(indent=2), markup=False)
+                if options.json_output:
+                    console.print(
+                        entry.model_dump_json(indent=2),
+                        markup=False,
+                        highlight=False,
+                    )
+                else:
+                    show_notes((entry,))
             elif options.action == "review":
-                run_review(store, options)
+                run_review(store, options, as_json=options.json_output)
             else:
-                _show_records(
-                    store.list_notes(accession_number=options.accession)
-                )
+                notes = store.list_notes(accession_number=options.accession)
+                if options.json_output:
+                    _show_records(notes)
+                else:
+                    show_notes(notes)
         case "workspace":
             if options.action in {"init", "configure"}:
                 profile = store.load_settings()
@@ -572,8 +719,26 @@ def run_command(command: str, arguments: list[str]) -> int:
                         for symbol in options.symbols
                     ]
                 store.save_settings(type(profile).model_validate(values))
-                console.print(f"Workspace: {store.path}", markup=False)
+                if options.json_output:
+                    console.print(
+                        store.load_settings().model_dump_json(indent=2),
+                        markup=False,
+                        highlight=False,
+                    )
+                else:
+                    show_status(store)
             elif options.action == "open":
+                if options.json_output:
+                    from sec_nlp.app.workspace.pulse import pulse_overview
+
+                    console.print(
+                        pulse_overview(store).model_dump_json(indent=2),
+                        markup=False,
+                        highlight=False,
+                    )
+                else:
+                    show_workspace(store)
+            elif options.action == "ui":
                 from sec_nlp.tui.app import launch_workspace
 
                 launch_workspace(store.path)
@@ -584,14 +749,20 @@ def run_command(command: str, arguments: list[str]) -> int:
                     raise ValueError(
                         "Provide the original workspace with --from"
                     )
-                console.print(
-                    migrate_workspace(options.origin, store).model_dump_json(
-                        indent=2
-                    ),
-                    markup=False,
-                )
+                migration = migrate_workspace(options.origin, store)
+                if options.json_output:
+                    console.print(
+                        migration.model_dump_json(indent=2),
+                        markup=False,
+                        highlight=False,
+                    )
+                else:
+                    show_migration(migration)
             elif options.action == "jobs":
-                _show_records(store.list_jobs())
+                if options.json_output:
+                    _show_records(store.list_jobs())
+                else:
+                    show_jobs(store.list_jobs())
             elif options.action == "pulse":
                 show_pulse(
                     store,
@@ -600,13 +771,14 @@ def run_command(command: str, arguments: list[str]) -> int:
                     as_json=options.json_output,
                 )
             elif options.action == "watchlist":
-                _show_records(
+                show_watchlist(
                     edit_watchlist(
                         store,
                         options,
                         symbol=options.symbol,
                         review_on=options.review_on,
-                    )
+                    ),
+                    as_json=options.json_output,
                 )
             elif options.action == "inbox":
                 show_filings(
@@ -614,17 +786,24 @@ def run_command(command: str, arguments: list[str]) -> int:
                     unread=options.unread,
                     bookmarked=options.bookmarked,
                     limit=options.limit,
+                    as_json=options.json_output,
                 )
             else:
-                console.print(f"Workspace: {store.path}", markup=False)
-                console.print(
-                    store.load_settings().model_dump_json(indent=2),
-                    markup=False,
-                )
-                for checkpoint in store.list_checkpoints():
-                    console.print(
-                        checkpoint.model_dump_json(indent=2), markup=False
+                if options.json_output:
+                    console.print_json(
+                        data={
+                            "workspace": str(store.path),
+                            "settings": store.load_settings().model_dump(
+                                mode="json"
+                            ),
+                            "checkpoints": [
+                                checkpoint.model_dump(mode="json")
+                                for checkpoint in store.list_checkpoints()
+                            ],
+                        }
                     )
+                else:
+                    show_status(store)
         case "research":
             return _research(store, options, remaining)
         case "export":
@@ -635,5 +814,8 @@ def run_command(command: str, arguments: list[str]) -> int:
             path = export_workspace(
                 store, options.destination, output_format=options.export_format
             )
-            console.print(f"Exported {path}", markup=False)
+            if options.json_output:
+                console.print_json(data={"path": str(path)})
+            else:
+                console.print(f"Exported {path}", markup=False)
     return 0

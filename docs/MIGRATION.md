@@ -1,34 +1,49 @@
 # Terminal workspace migration
 
-The workspace replaces the all-command Pydantic root, analyze wizard, generic flow compiler/runner, and HTML dashboard. CLI and terminal actions share typed application results. Original research data and specialist serializers remain available.
+The workspace replaces the all-command Pydantic root, analyze wizard, generic flow compiler/runner, and HTML dashboard. Ordinary terminal commands and the optional full-screen interface share typed application results. Original research data and specialist serializers remain available.
 
 ## Commands
 
 | Previous command | Current entry point |
 | --- | --- |
-| `sec-nlp` | Cached terminal workspace; help for non-interactive input |
+| `sec-nlp` | Command help in interactive and non-interactive terminals |
+| `workspace open` | Print a cached terminal overview and return to the shell |
+| Full-screen workspace | Explicit `workspace ui`; existing panes and shortcuts remain |
 | `analyze` | `research analyze` with existing presets/settings |
 | `chat` | `research ask` |
 | `retrieve` | `search` for metadata, `scan run` for bounded evidence, or `research retrieve` for the retained specialist |
 | `efts` | `search` |
 | `exb`, `warranty`, `financials`, `holdings`, `insider`, `events` | `research NAME` |
-| `news` | `refresh --source news`, terminal headlines, and exports |
-| `market` | `refresh --source market` and cached terminal market context |
+| `news` | `refresh --source news`, `workspace pulse`, and exports |
+| `market` | `refresh --source market` and `workspace pulse overview` |
 | `invest init` | `workspace init` / `workspace configure` |
 | `invest brief` | Explicit `refresh --source all` and `export` |
 | `invest note` / `invest review` | `journal add` / `journal review` |
 | `flow` | `research recipe --settings FILE.yaml` |
 | `runs` | `workspace jobs`; specialist run registry remains in the Python observability API |
+| Inspect saved specialist results | `research report PATH` renders existing JSON/YAML files in terminal sections and tables |
 | `qdrant` | Configure your own vector service; use `research index` explicitly |
 | `clean` | Inspect `workspace status`; manage chosen workspace directories yourself |
 | `version` | `--version` |
 
 Old command names return migration guidance rather than importing their former implementations. Ordinary specialist flags remain available after `research NAME`; positional ticker lists still work. Workspace paths and `--json` may follow the action. Help/version create no run or workspace.
 
+Command output now defaults to styled tables and readable text. Use `--json` for
+structured records in scripts, including watchlists, journal entries, document
+manifests, scans, jobs, and research results. Existing result schemas remain in
+use. Ordinary commands use terminal scrollback; launching the optional
+full-screen interface requires `workspace ui`. No data migration is needed for
+this presentation change.
+
+`research report PATH` reads an explicitly selected existing JSON or YAML file.
+It does not rerun a specialist, modify the report, or contact providers. Add
+`--json` to emit the parsed report's structured contents.
+
 Pulse daily review extends the existing groups: `workspace pulse` lists focused
 unreviewed evidence, `workspace pulse list` accepts filters and continuation
-cursors, and `workspace pulse mark`/`undo` explicitly change acknowledgement
-state. `workspace watchlist save` edits authored fields while preserving omitted
+cursors, `workspace pulse show ID` prints cached evidence details, and
+`workspace pulse mark`/`undo` explicitly change acknowledgement state.
+`workspace watchlist save` edits authored fields while preserving omitted
 values. Bare `journal review` now combines due watchlist and journal targets;
 `journal review complete` and `defer` append review actions. See [Pulse](PULSE.md)
 for the complete command examples.
@@ -79,7 +94,7 @@ Profiling callers now load recipes directly, and command benchmarks dispatch thr
 | Generated `types/sec_nlp/*.pyi` | Annotated application source plus `sec_nlp/py.typed` |
 | `types/<native>/__init__.pyi` | Native wheel-owned `.pyi` / `py.typed` files |
 
-Pulse is the new name for the investing module and the terminal's former News & market pane. Update imports directly; no compatibility package is retained. Saved JSON formats, workspace paths, and existing investing data directories are unchanged, so the rename requires no data migration.
+Pulse is the new name for the investing module and the optional full-screen interface's former News & market pane. Update imports directly; no compatibility package is retained. Saved JSON formats, workspace paths, and existing investing data directories are unchanged, so the rename requires no data migration.
 
 Unused async-support and StructuredTool wrappers, unwired analyze add-ons, unused flow contracts, duplicated warranty helpers, Questionary, and application-generated stubs are removed. Active asynchronous operations and statistical/native algorithms remain.
 

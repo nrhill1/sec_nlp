@@ -13,10 +13,17 @@ from typing import Literal
 
 from pydantic import BaseModel
 from rich.console import Console
-from rich.table import Table
 
 from sec_nlp.app.pulse.models import WatchItem, normalize_symbol
 from sec_nlp.app.workspace.store import WorkspaceStore
+from sec_nlp.cli.daily_tables import (
+    show_activity,
+    show_evidence,
+    show_overview,
+    show_review_action,
+    show_reviews,
+    show_watchlist as show_watchlist,
+)
 
 
 @dataclass
@@ -32,6 +39,7 @@ class DailyReviewOptions(argparse.Namespace):
         form: Exact filing form filter.
         cursor: Opaque continuation cursor from a previous Pulse page.
         identities: Stable evidence identities to acknowledge.
+        evidence_id: Stable identity to inspect without acknowledging.
         token: Acknowledgement token to undo.
         target_kind: Watchlist thesis or immutable journal target.
         target_id: Stable symbol or journal entry identifier.
@@ -52,6 +60,7 @@ class DailyReviewOptions(argparse.Namespace):
     form: str = ""
     cursor: str | None = None
     identities: list[str] | None = None
+    evidence_id: str = ""
     token: str = ""
     target_kind: Literal["watchlist", "journal"] = "journal"
     target_id: str = ""
@@ -82,6 +91,10 @@ def add_pulse_options(parser: argparse.ArgumentParser) -> None:
     operations.add_parser(
         "overview", help="Show cached market and review status."
     )
+    detail = operations.add_parser(
+        "show", help="Read one cached activity item's source and relevance."
+    )
+    detail.add_argument("evidence_id", metavar="ID")
     mark = operations.add_parser(
         "mark", help="Acknowledge explicit evidence identities."
     )
@@ -150,6 +163,7 @@ def show_pulse(
     """
     from sec_nlp.app.workspace.pulse import (
         acknowledge,
+        pulse_item,
         pulse_overview,
         pulse_page,
         undo_acknowledgement,
@@ -157,7 +171,13 @@ def show_pulse(
     from sec_nlp.app.workspace.pulse_models import PulseFilters
 
     if options.operation == "overview":
-        _show_model(pulse_overview(store))
+        show_overview(pulse_overview(store), as_json=as_json)
+    elif options.operation == "show":
+        item = pulse_item(store, options.evidence_id)
+        if as_json:
+            _show_model(item)
+        else:
+            show_evidence(item)
     elif options.operation == "mark":
         token = acknowledge(store, tuple(options.identities or ()))
         Console(soft_wrap=True).print(
@@ -189,28 +209,7 @@ def show_pulse(
         if as_json:
             _show_model(page)
             return
-        table = Table(
-            "State",
-            "Discovered",
-            "Source date",
-            "Source",
-            "Evidence",
-            "Identity",
-        )
-        for item in page.items:
-            table.add_row(
-                "reviewed" if item.reviewed else "new",
-                item.discovered_at.date().isoformat(),
-                str(item.published_at or item.filing_date or "unknown"),
-                item.source,
-                item.title,
-                item.identity,
-            )
-        Console(soft_wrap=True).print(table)
-        if page.next_cursor:
-            Console(soft_wrap=True).print(
-                f"Next page: --cursor {page.next_cursor}", markup=False
-            )
+        show_activity(page)
 
 
 def edit_watchlist(
@@ -273,12 +272,18 @@ def edit_watchlist(
     return store.load_settings().watchlist
 
 
-def run_review(store: WorkspaceStore, options: DailyReviewOptions) -> None:
+def run_review(
+    store: WorkspaceStore,
+    options: DailyReviewOptions,
+    *,
+    as_json: bool = False,
+) -> None:
     """List due reviews or append a completion/deferral without changing notes.
 
     Args:
         store: Open local workspace.
         options: Target, action, authored note, and replacement schedule.
+        as_json: Preserve typed review records for scripting.
     """
     from sec_nlp.app.workspace.pulse import record_review, review_due
     from sec_nlp.app.workspace.pulse_models import ReviewAction
@@ -294,13 +299,19 @@ def run_review(store: WorkspaceStore, options: DailyReviewOptions) -> None:
             next_review_on=options.next_review_on,
         )
         record_review(store, action)
-        _show_model(action)
+        if as_json:
+            _show_model(action)
+        else:
+            show_review_action(action)
     else:
         records = review_due(store)
-        Console(soft_wrap=True).print(
-            "["
-            + ",\n".join(item.model_dump_json(indent=2) for item in records)
-            + "]",
-            markup=False,
-            highlight=False,
-        )
+        if as_json:
+            Console(soft_wrap=True).print(
+                "["
+                + ",\n".join(item.model_dump_json(indent=2) for item in records)
+                + "]",
+                markup=False,
+                highlight=False,
+            )
+        else:
+            show_reviews(records)

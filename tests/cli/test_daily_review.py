@@ -8,7 +8,15 @@ from pathlib import Path
 import pytest
 from pydantic import HttpUrl
 
-from sec_nlp.app.pulse.models import Headline, JournalEntry, WatchItem
+from sec_nlp.app.pulse.models import (
+    Headline,
+    JournalEntry,
+    MarketObservation,
+    PulseSettings,
+    SourceStatus,
+    WatchItem,
+)
+from sec_nlp.app.workspace.pulse import pulse_page
 from sec_nlp.app.workspace.store import WorkspaceStore
 from sec_nlp.cli.__main__ import main
 
@@ -248,3 +256,151 @@ def test_nested_review_help_does_not_initialize_a_workspace(
         == 0
     )
     assert not workspace.exists()
+
+
+def test_pulse_tables_and_detail_preserve_literal_evidence_without_reviewing(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Keep source labels literal and expose cached evidence without dismissing it."""
+    monkeypatch.setenv("COLUMNS", "160")
+    store = WorkspaceStore(tmp_path)
+    store.save_settings(
+        PulseSettings(watchlist=(WatchItem(symbol="AAPL", name="Apple"),))
+    )
+    store.save_news(
+        (
+            Headline(
+                title="Apple [bold]earnings[/bold]",
+                url=HttpUrl("https://example.com/earnings"),
+                source="[red]Wire[/red]",
+            ),
+        )
+    )
+    initial = pulse_page(store)
+    identity = initial.items[0].identity
+    shared = ["--workspace", str(tmp_path)]
+    assert main(["workspace", "pulse", *shared]) == 0
+    output = capsys.readouterr().out
+    assert "Evidence · cached Pulse activity" in output
+    assert "[bold]earnings[/bold]" in output
+    assert "[red]Wire[/red]" in output
+    assert "Published/filed: unknown" in output
+    assert "Discovered:" in output and "Match:" in output
+    assert identity in output and "https://example.com/earnings" in output
+    assert main(["workspace", "pulse", "show", identity, *shared]) == 0
+    details = capsys.readouterr().out
+    assert "Source URL: https://example.com/earnings" in details
+    assert "Relevance" in details and "AAPL" in details
+    assert "unknown" in details and "new" in details
+    assert (
+        main(["workspace", "pulse", "show", identity, *shared, "--json"]) == 0
+    )
+    assert json.loads(capsys.readouterr().out) == initial.items[0].model_dump(
+        mode="json"
+    )
+    assert pulse_page(store) == initial
+    assert store.list_jobs() == ()
+
+
+def test_pulse_overview_separates_market_evidence_from_failed_attempts(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Show dated quotes, missing returns, and failed refresh details in separate tables."""
+    monkeypatch.setenv("COLUMNS", "160")
+    store = WorkspaceStore(tmp_path)
+    stamp = datetime(2020, 1, 2, 12, tzinfo=UTC)
+    quote = MarketObservation(
+        symbol="SPY",
+        quote_date=stamp.date(),
+        close=300,
+        change_1d_pct=1.25,
+        source_url=HttpUrl("https://finance.yahoo.com/quote/SPY"),
+    )
+    store.save_pulse_source(
+        SourceStatus(name="SPY", kind="market", status="ok"),
+        stamp,
+        market=(quote,),
+    )
+    store.save_source_outcome(
+        SourceStatus(
+            name="SPY",
+            kind="market",
+            status="error",
+            detail="[red]timeout[/red]",
+        ),
+        stamp + timedelta(hours=1),
+    )
+    shared = ["--workspace", str(tmp_path)]
+    assert main(["workspace", "pulse", "overview", *shared]) == 0
+    output = capsys.readouterr().out
+    assert "Evidence · latest successful market observations" in output
+    assert "300.00" in output and "+1.25" in output and "2020-01-02" in output
+    assert "stale" in output and "5 sessions %" in output and "—" in output
+    assert (
+        "Latest refresh outcomes" in output and "[red]timeout[/red]" in output
+    )
+    assert "Research reviews · 0 due" in output
+    assert "https://finance.yahoo.com/quote/SPY" in output
+    assert main(["workspace", "pulse", "overview", *shared, "--json"]) == 0
+    serialized = json.loads(capsys.readouterr().out)
+    assert serialized["market"][0]["close"] == 300
+    assert serialized["sources"][0]["status"]["status"] == "error"
+
+
+def test_watchlist_and_review_commands_show_authored_context_and_action_ids(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Keep research hypotheses literal and use effective schedules in the review queue."""
+    monkeypatch.setenv("COLUMNS", "160")
+    store = WorkspaceStore(tmp_path)
+    today = datetime.now(UTC).date()
+    watched = WatchItem(
+        symbol="AAPL",
+        name="[bold]Apple[/bold]",
+        aliases=("Apple Computer",),
+        thesis="Demand improves",
+        invalidation="Margins fall",
+        review_on=today,
+    )
+    store.save_settings(PulseSettings(watchlist=(watched,)))
+    shared = ["--workspace", str(tmp_path)]
+    assert main(["workspace", "watchlist", "list", *shared]) == 0
+    output = capsys.readouterr().out
+    assert "[bold]Apple[/bold]" in output
+    assert "Apple Computer" in output and "Demand improves" in output
+    assert "Margins fall" in output
+    assert main(["workspace", "watchlist", "list", *shared, "--json"]) == 0
+    assert json.loads(capsys.readouterr().out) == [
+        watched.model_dump(mode="json")
+    ]
+    assert main(["journal", "review", *shared]) == 0
+    due = capsys.readouterr().out
+    assert "Research reviews · 1 due" in due
+    assert "Target: watchlist AAPL" in due and "Margins fall" in due
+    assert (
+        main(
+            [
+                "journal",
+                "review",
+                "complete",
+                "watchlist",
+                "AAPL",
+                "--note",
+                "[red]Checked[/red]",
+                *shared,
+            ]
+        )
+        == 0
+    )
+    action = capsys.readouterr().out
+    assert "[red]Checked[/red]" in action and "Review ID:" in action
+    assert "Next review: Schedule completed" in action
+    assert main(["journal", "review", *shared]) == 0
+    assert "Research reviews · 0 due" in capsys.readouterr().out
+    assert store.load_settings().watchlist == (watched,)

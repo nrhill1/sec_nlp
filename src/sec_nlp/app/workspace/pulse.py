@@ -107,6 +107,34 @@ def _item(connection: sqlite3.Connection, row: sqlite3.Row) -> PulseItem:
     )
 
 
+def pulse_item(store: WorkspaceStore, identity: str) -> PulseItem:
+    """Return cached evidence with current relevance and review state.
+
+    Args:
+        store: Open local workspace.
+        identity: Stable evidence identity, including a retired deduplication alias.
+
+    Returns:
+        The canonical evidence item without fetching or acknowledging it.
+
+    Raises:
+        ValueError: If the identity is not in this workspace.
+    """
+    with store._connect() as connection:
+        redirect = connection.execute(
+            "SELECT canonical FROM pulse_identity_redirect WHERE identity=?",
+            (identity,),
+        ).fetchone()
+        if redirect is not None:
+            identity = text_field(redirect, "canonical")
+        row = connection.execute(
+            "SELECT * FROM pulse_activity WHERE identity=?", (identity,)
+        ).fetchone()
+        if row is None:
+            raise ValueError(f"Activity is not in this workspace: {identity}")
+        return _item(connection, row)
+
+
 def pulse_page(
     store: WorkspaceStore,
     filters: PulseFilters | None = None,

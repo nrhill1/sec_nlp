@@ -1,6 +1,6 @@
 # sec-nlp
 
-A terminal research workspace for SEC filings, related headlines, market observations, and investment research. Discover filings across the market, save topic scans, read source evidence, and keep watchlists and notes together. AI and vector research are optional.
+A terminal research workspace for SEC filings, related headlines, market observations, and investment research. Ordinary shell commands show styled tables and readable text, then return to your prompt. Discover filings across the market, save topic scans, read source evidence, and keep watchlists and notes together. AI and vector research are optional.
 
 Launching the workspace uses cached data. Refresh, search, evidence downloads, and research run only when requested.
 
@@ -26,7 +26,7 @@ The root maturin wheel contains `sec_nlp`, its prompts, and `market`. The instal
 
 Use the installed `sec-nlp` executable directly. An exact `uv sync` or ordinary `uv run` can remove the locally installed sibling wheels and unselected extras; use `uv run --no-sync` after building if you prefer that launcher. The repository Makefile's development sync includes extras and preserves sibling wheels.
 
-## Open your workspace
+## Start a terminal workspace
 
 ```shell
 .venv/bin/sec-nlp workspace init --workspace ./research \
@@ -34,18 +34,21 @@ Use the installed `sec-nlp` executable directly. An exact `uv sync` or ordinary 
 .venv/bin/sec-nlp workspace open --workspace ./research
 ```
 
-Bare `sec-nlp` opens the platform-default workspace when attached to a terminal; it displays help with non-interactive input. The default path follows `platformdirs`. Use `--workspace` to keep a project in a chosen directory.
+Bare `sec-nlp` displays command help. `workspace open` prints a cached overview in your terminal; it does not enter a full-screen interface. The default path follows `platformdirs`. Use `--workspace` to keep a project in a chosen directory.
 
-The terminal provides:
+The core workflow stays in ordinary terminal output:
 
-- **Inbox:** cached market-wide filings, unread and bookmark filters, source coverage, Refresh, and Continue SEC. `Ctrl+R` refreshes SEC; Enter reads a selected filing.
-- **Search & scans:** retrospective SEC keyword/form/date searches and saved scans with explicit evidence downloads.
-- **Reader:** document selection, section navigation, local text search, original source links, matched headlines, and attached notes.
-- **Pulse:** cached headlines and market observations with publisher, publication time, source links, and match reasons; explicit news and market refreshes.
-- **Research:** deterministic specialists and optional AI/vector actions with saved outputs.
-- **Journal and settings:** observations, theses, review dates, watchlist membership, contact identity, and profile settings.
+- `workspace inbox` lists cached market-wide filings with unread and bookmark filters.
+- `workspace pulse` lists new watchlist/topic evidence; `workspace pulse overview` shows market observations and source outcomes.
+- `search` and `scan` discover filings and explicitly download selected evidence.
+- `read` lists filing documents or prints readable evidence with its source link.
+- `workspace watchlist` and `journal` maintain theses, notes, and review schedules.
+- `research` runs deterministic specialists or optional AI/vector actions and reports saved output paths.
+- `workspace status`, `workspace jobs`, and `export` expose coverage, operation history, and portable reports.
 
-Escape cancels active work. Completed evidence remains available. Source failures and incomplete coverage remain visible; refresh time is not a claim that history is complete. A `!` marker means a later full index no longer lists a previously observed filing; its evidence and notes remain saved.
+Use `Ctrl+C` to interrupt active command work. Completed evidence remains available. Source failures and incomplete coverage remain visible; refresh time is not a claim that history is complete. A withdrawn-source state means a later full index no longer lists a previously observed filing; its evidence and notes remain saved.
+
+The existing keyboard-driven full-screen interface remains available explicitly with `sec-nlp workspace ui --workspace ./research`. It uses the same data and services. Ordinary commands do not launch it or open browser windows.
 
 ## Scriptable actions
 
@@ -54,6 +57,11 @@ sec-nlp refresh --workspace ./research
 sec-nlp refresh --workspace ./research --source news
 sec-nlp refresh --workspace ./research --source market
 sec-nlp refresh --workspace ./research --start 2026-01-01 --end 2026-03-31
+
+sec-nlp workspace pulse --workspace ./research
+sec-nlp workspace pulse overview --workspace ./research
+sec-nlp workspace pulse list --workspace ./research --scope all --all --form 8-K
+sec-nlp workspace watchlist list --workspace ./research
 
 sec-nlp search --workspace ./research --query 'supply agreement' --forms 8-K
 sec-nlp scan save 'Supplier changes' --workspace ./research \
@@ -69,7 +77,7 @@ sec-nlp export --workspace ./research --format markdown --destination ./review.m
 sec-nlp export --workspace ./research --format json --destination ./review.json
 ```
 
-Add `--json` to discovery/reading commands for machine-readable results. Inspect `workspace status`, `workspace inbox`, and `workspace jobs` offline. Exports preserve source provenance and do not overwrite existing files.
+Use the default tables and text for interactive work; add `--json` to result listings and actions for machine-readable output. For example, `sec-nlp workspace pulse --workspace ./research --json` returns evidence identities and a continuation cursor. Inspect `workspace status`, `workspace inbox`, and `workspace jobs` offline. Exports preserve source provenance and do not overwrite existing files.
 
 The first SEC refresh imports the latest feed and up to five published daily indexes. Each refresh is bounded to 1,000 feed entries and 20 daily indexes or two quarterly indexes. Subsequent refreshes resume gaps. Explicit history actions require a date range; rerun the same range to continue a capped import. Corrections are reconciled on later manual refreshes. The transport defaults to five SEC requests per second within an application process. See the SEC's [access guidance](https://www.sec.gov/about/developer-resources) and [filing index documentation](https://www.sec.gov/search-filings/edgar-search-assistance/accessing-edgar-data).
 
@@ -88,9 +96,12 @@ sec-nlp research ask --question 'What changed in liquidity risk?' --workspace ./
 sec-nlp research index AAPL --queries 'liquidity risk' --workspace ./research
 sec-nlp research recipe --settings jobs/benchmark_matrix_flows/01_rems_large_merged_aligned.yaml \
   --workspace ./research
+sec-nlp research report /path/to/saved/summary.json
 ```
 
 Run `research CAPABILITY --help` for its settings. `--settings FILE.json` supplies a saved specialist configuration; CLI flags override it. Existing specialist serializers remain in use. Exhibit extraction/export works without vector infrastructure.
+
+`research report PATH` reads an existing JSON or YAML report into terminal sections and tables. It uses the saved file without running research or fetching sources. Add `--json` to emit its structured contents.
 
 Install the `ai` extra for model execution and the `vector` extra for embeddings, Qdrant, and semantic chunking. Configure running model/vector services explicitly. Research does not start Docker or model services. The base reader works without either extra. Direct Unstructured parsing remains lazy; see the architecture guide for local parser resource requirements and fallback behavior.
 
@@ -112,6 +123,6 @@ make build-ext
 .venv/bin/ruff format --check src tests
 ```
 
-Tests block network access. Model calls and SEC responses are mocked. Headless Textual tests exercise cached startup, reader navigation, notes, and cancellation; fresh-process tests enforce import boundaries.
+Tests block network access. Model calls and SEC responses are mocked. CLI tests cover terminal reports and JSON output; headless Textual tests exercise the optional interface's reader navigation, notes, and cancellation. Fresh-process tests enforce import boundaries.
 
 Read [architecture](docs/ARCHITECTURE.md), [Pulse workflow](docs/PULSE.md), [migration](docs/MIGRATION.md), [validation results](docs/VALIDATION.md), and the [documentation index](docs/README.md).

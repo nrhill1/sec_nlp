@@ -28,6 +28,7 @@ from sec_nlp.app.workspace.models import ScanSpec
 from sec_nlp.app.workspace.pulse import (
     acknowledge,
     export_pulse_state,
+    pulse_item,
     pulse_overview,
     pulse_page,
     record_review,
@@ -118,6 +119,25 @@ def test_review_state_survives_refresh_restart_and_filing_read(
     assert store.list_filings()[0].is_read
 
 
+def test_cached_item_lookup_preserves_review_and_filing_read_state(
+    tmp_path: Path,
+) -> None:
+    """Inspect evidence through its stable identity without review or source work."""
+    store = workspace(tmp_path)
+    store.upsert_filings((filing(),), source="SEC", observed_at=STAMP)
+    store.save_symbol_mappings(
+        (SymbolMapping(symbol="ACME", cik="0000000123"),), STAMP
+    )
+    expected = pulse_page(store).items[0]
+    assert pulse_item(store, expected.identity) == expected
+    assert not store.list_filings()[0].is_read
+    assert store.list_jobs() == ()
+    acknowledge(store, (expected.identity,))
+    assert pulse_item(store, expected.identity).reviewed
+    with pytest.raises(ValueError, match="not in this workspace"):
+        pulse_item(store, "news:missing")
+
+
 def test_keyset_pagination_marks_only_visible_and_keeps_new_arrivals(
     tmp_path: Path,
 ) -> None:
@@ -173,6 +193,7 @@ def test_news_identity_bridge_preserves_both_acknowledgements_and_provenance(
     second = headline(2)
     store.save_news((first, second))
     page = pulse_page(store)
+    identities = tuple(item.identity for item in page.items)
     tokens = {
         item.url: acknowledge(store, (item.identity,)) for item in page.items
     }
@@ -183,6 +204,9 @@ def test_news_identity_bridge_preserves_both_acknowledgements_and_provenance(
     merged = pulse_page(store, PulseFilters(new_only=False)).items
     assert len(merged) == 1 and merged[0].reviewed
     assert "Wire" in merged[0].source and "Publisher" in merged[0].source
+    assert all(
+        pulse_item(store, identity) == merged[0] for identity in identities
+    )
     assert undo_acknowledgement(store, tokens[str(second.url)]) == 0
     assert not pulse_page(store).items
     store.save_news((bridge.model_copy(update={"published_at": None}),))

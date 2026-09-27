@@ -1,7 +1,7 @@
 # Pulse: markets and current events
 
 Pulse brings market observations, related headlines, and research notes into
-the terminal workspace alongside new SEC filings and saved searches. Its daily
+ordinary terminal tables alongside new SEC filings and saved searches. Its daily
 workflow is to refresh evidence, inspect a filing, follow relevant news, and
 record a hypothesis with evidence that could challenge it. The application does
 not place trades.
@@ -15,7 +15,7 @@ local base application with its native providers:
 uv venv --python 3.13
 make install-local
 .venv/bin/sec-nlp workspace init --user-agent "Your Name you@example.com"
-.venv/bin/sec-nlp
+.venv/bin/sec-nlp workspace open
 ```
 
 `install-local` builds the main application wheel with the market extension,
@@ -24,9 +24,15 @@ the older standalone market distribution before installing the bundled version.
 The base application does not require LangChain, Ollama, or Qdrant. Optional
 `ai`, `vector`, and `economic` extras enable those related research features.
 
-Without a command, an interactive terminal opens the workspace. Help and version
-remain fast and do not initialize providers. The workspace starts from saved
-local data; source refreshes happen only when explicitly requested.
+Without a command, `sec-nlp` displays help. `workspace open` prints a cached
+overview and returns to the shell. Listings and actions use styled tables and
+readable text by default; add `--json` when a script needs structured results.
+Help and version do not initialize providers. Cached reports do not fetch remote
+data; source refreshes happen only when explicitly requested.
+
+The existing full-screen interface remains available through the explicit
+`sec-nlp workspace ui` command. It shares the same workspace. Ordinary commands
+do not open it or launch a browser; source links appear as terminal text.
 
 The default location is the platform's user-data directory under
 `sec-nlp/workspace`. Use `--workspace /path/to/desk` on any workspace command to
@@ -50,8 +56,8 @@ for a news-only profile.
 
 Edit `config.json` inside the printed workspace path for detailed settings.
 Unknown fields and duplicate symbols, feed names, or themes are rejected.
-The terminal's Pulse watchlist editor and the following commands also edit all
-watchlist fields. Omitted command options preserve the existing field; use an
+The following commands edit all watchlist fields. Omitted command options
+preserve the existing field; use an
 empty string to clear text, `--aliases` without values to clear aliases, or
 `--clear-review` to remove the scheduled date.
 
@@ -91,9 +97,26 @@ sec-nlp read ACCESSION --bookmark
 ```
 
 Replace `ACCESSION` and `DOCUMENT.htm` with values from the inbox and filing
-manifest. Listing documents does not mark a filing read. Opening full document
-text explicitly marks it read, and complete text plus available original HTML
-is cached for later offline access. Discovery never downloads every filing body.
+manifest. Listing documents does not mark a filing read. Reading a document
+prints its source link, evidence text, attached notes, and cached related
+headlines. Reading explicitly marks the filing read, and complete text plus
+available original HTML is cached for later offline access. Discovery never
+downloads every filing body.
+
+Inspect a long document without a full-screen reader:
+
+```bash
+sec-nlp read ACCESSION --sections
+sec-nlp read ACCESSION --section 'Item 1A. Risk Factors'
+sec-nlp read ACCESSION --find 'customer concentration'
+sec-nlp read ACCESSION --raw > filing.txt
+sec-nlp journal list --accession ACCESSION
+```
+
+Copy a section heading or line number from `--sections`. `--find` searches the
+selected document locally after reading it; `--raw` prints only the complete
+document text for pipes or files. A first read may fetch the manifest and
+document; subsequent reads use the cache.
 
 The inbox merges records by accession and retains every observed entity role,
 including reporting owners and issuers. Refreshes preserve read and bookmark
@@ -115,31 +138,38 @@ sec-nlp refresh --source sec --start 2026-01-01 --end 2026-03-31
 Large requests can require additional explicit refreshes. Inspect coverage and
 job history with `workspace status` and `workspace jobs`.
 
-## Save a search and record research
+## Review daily activity
 
-Pulse opens to a focused activity feed containing watchlist matches, topic
-matches, and saved scan evidence. Switch to **All activity** for the market-wide
+`workspace pulse` prints a focused activity table containing watchlist matches,
+topic matches, and saved scan evidence. Use `list --scope all` for the market-wide
 cache. Activity is ordered by local discovery time; publication and filing dates
 remain separate, including unknown publication dates. Filters cover symbol,
 topic, source, form, and new/reviewed state. Each page contains at most 50 items.
 
-An item remains new until **Mark selected** or **Mark visible page** acknowledges
-it. Opening a source does not acknowledge it. **Undo** reverses the corresponding
-acknowledgement. This state survives refreshes and restarts and is independent of
-the reader's read/unread state.
+An item remains new until `workspace pulse mark` acknowledges its explicit
+identity. Reading evidence does not acknowledge it. `workspace pulse undo`
+reverses the corresponding acknowledgement. This state survives refreshes and
+restarts and is independent of the reader's read/unread state.
 
 ```bash
-sec-nlp workspace pulse --json
-sec-nlp workspace pulse list --scope all --all --form 8-K --json
-sec-nlp workspace pulse overview --json
+sec-nlp workspace pulse
+sec-nlp workspace pulse list --symbol AAPL
+sec-nlp workspace pulse list --scope all --all --form 8-K
+sec-nlp workspace pulse show EVIDENCE_ID
+sec-nlp workspace pulse overview
 sec-nlp workspace pulse mark EVIDENCE_ID
 sec-nlp workspace pulse undo ACKNOWLEDGEMENT_TOKEN
 ```
 
-Use evidence identities and the opaque `next_cursor` returned by the typed JSON
-page. Pass `--cursor CURSOR` to `workspace pulse list` for the next page. Marking
-explicit identities returns a token; it does not acknowledge evidence that
-arrived after the page was loaded.
+`show` prints the full source URL, dates, and relevance reasons from the cached
+record. Use the exact identity printed by the activity listing; the command
+does not open a browser or download evidence. Add `--json` to a Pulse command
+for its typed result. The page's opaque `next_cursor` is also shown in terminal
+output; pass `--cursor CURSOR` to `workspace pulse list` for the next page.
+Marking one or more explicit identities returns an undo token; it does not
+acknowledge evidence that arrived after the page was loaded.
+
+## Save a search and record research
 
 ```bash
 sec-nlp scan save "Demand changes" --query "demand outlook" \
@@ -157,8 +187,31 @@ sec-nlp journal review
 Use your own dates and exact evidence URLs. Saving a scan does not run it or
 create a schedule. Notes are immutable records; add a new note for a revision.
 An optional accession link survives ticker changes and keeps the note beside
-its source filing. The terminal's research actions use the same application
-service as `sec-nlp research`; specialist settings remain available there.
+its source filing. Run a specialist explicitly when the evidence needs deeper
+analysis:
+
+```bash
+sec-nlp research financials AAPL --periods 4
+sec-nlp research exb AAPL
+sec-nlp research analyze AAPL --preset quick
+```
+
+`research CAPABILITY --help` lists the specialist's settings. Analyze requires
+the optional model/vector capabilities; deterministic financial and exhibit
+workflows retain their existing output formats. The command prints the result
+and artifact paths in readable terminal form; `--json` returns the typed result.
+
+Inspect a saved specialist report directly in the terminal:
+
+```bash
+sec-nlp research report /path/to/saved/summary.json
+sec-nlp research report /path/to/saved/summary.yaml
+sec-nlp research report /path/to/saved/summary.json --json
+```
+
+The default view organizes saved fields into sections and tables. This command
+reads an explicit local report path without starting research, opening a window,
+or contacting providers. `--json` returns the report's structured contents.
 
 The due-review queue combines watchlist theses and journal observations.
 Completing or deferring a review appends an action with an authored note and an
@@ -171,8 +224,10 @@ sec-nlp journal review complete watchlist AAPL --note "Reviewed the evidence" \
 sec-nlp journal review defer journal ENTRY_ID --next-review-on 2026-10-20
 ```
 
-From a selected Pulse item, open its filing reader or article link, or prefill
-Journal, Search, or Research. Prefilling controls does not run a search or model.
+Carry an accession or symbol from Pulse into `read`, `journal add`, `search`,
+or `research`. Each command is an explicit action. Source URLs remain available
+in the evidence details and journal entries. In the optional full-screen UI,
+selection can still prefill these controls without running a provider request.
 
 ## Interpret observations
 
@@ -189,7 +244,8 @@ Pulse refreshes run at most four source operations concurrently. Each operation
 has a 20-second total deadline and at most two attempts for transient failures.
 News connections have a five-second connection timeout. Completed sources are
 saved as they finish; cancellation stops pending requests and retains completed
-evidence. SEC calls retain the shared five-requests-per-second budget.
+evidence. Use `Ctrl+C` to interrupt a running command. SEC calls retain the shared
+five-requests-per-second budget.
 
 An explicit SEC/all refresh also resolves watched symbols using the SEC ticker
 registry. Cached mappings carry retrieval provenance and expose stale lookup
@@ -249,7 +305,8 @@ version 2 to include Pulse acknowledgements, review history, and source state.
 ## Development
 
 `src/sec_nlp/app/workspace/` owns durable storage and shared actions;
-`src/sec_nlp/tui/` and `src/sec_nlp/cli/workspace.py` present those actions.
+`src/sec_nlp/cli/` presents the ordinary terminal commands, while
+`src/sec_nlp/tui/` retains the optional full-screen interface.
 `src/sec_nlp/app/pulse/` supplies typed profiles, deterministic market/news
 briefs, and Markdown rendering. Native stubs ship with their corresponding
 wheels. Prompt YAML files and the application typing marker ship in the main

@@ -2,13 +2,17 @@
 
 `sec-nlp` is a local terminal application for discovering SEC filings, reading
 source evidence, tracking related headlines, and running specialist research.
-The interactive terminal and explicit CLI commands call the same application
-services. Refreshing remote sources and starting research require a user action.
+Its primary interface is ordinary shell commands with Rich tables and readable
+text. An explicitly launched full-screen terminal interface calls the same
+application services. Refreshing remote sources and starting research require
+a user action.
 
 ## Application boundaries
 
-- `src/sec_nlp/cli/` parses the selected command without importing every specialist.
-- `src/sec_nlp/tui/` renders workspace panes and owns progress and cancellation.
+- `src/sec_nlp/cli/` parses the selected command without importing every specialist
+  and renders human-readable tables/text or explicit `--json` results.
+- `src/sec_nlp/tui/` retains the optional workspace panes, progress, and cancellation
+  behind `workspace ui`; ordinary command execution does not load it.
 - `src/sec_nlp/app/workspace/` stores filings, saved scans, jobs, source status,
   and journal entries; its services implement refresh, search, read, and export.
 - `app/workspace/research.py` imports the selected specialist and executes it in a
@@ -38,10 +42,19 @@ stored independently. Review completions and deferrals append records rather
 than rewriting immutable journal observations. Cached SEC symbol mappings retain
 source provenance and match declared entity roles.
 
-The terminal loads hidden panes on demand and performs database queries outside
-the UI event loop. Pulse combines a selectable activity table with evidence
-details, market status, watchlist editing, and due reviews. Prefilling another
-pane never starts a provider operation.
+Bare invocation prints help. `workspace open` prints a cached summary and returns
+to the shell. Pulse commands expose activity pages, evidence details, market
+status, watchlist editing, and due reviews without entering an alternate screen
+or opening browser windows. Source URLs are retained in text output. JSON output
+uses the shared result models so scripts do not depend on table layout.
+`research report PATH` renders an explicitly selected local JSON/YAML artifact
+without creating a workspace or invoking a specialist. Original output files
+and specialist schemas remain unchanged.
+
+The optional full-screen interface loads hidden panes on demand and performs
+database queries outside the UI event loop. Pulse combines a selectable activity
+table with evidence details, market status, watchlist editing, and due reviews.
+Prefilling another pane never starts a provider operation.
 
 ## SEC and headline providers
 
