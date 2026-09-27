@@ -299,8 +299,8 @@ class ExhibitPipeline(BasePipeline):
             else:
                 logger.info("Skipping chunking/indexing (search_only mode)")
 
-            # Run semantic search if queries are configured (or if search_only mode)
-            if self.config.search.queries or self.config.search_only:
+            # Search is part of the explicitly selected vector operation.
+            if self.config.index_results or self.config.search_only:
                 search_outputs = self._run_semantic_search()
                 all_outputs.extend(search_outputs)
                 metadata["search_results"] = len(search_outputs)

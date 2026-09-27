@@ -114,7 +114,15 @@ def index_retrieval_hits(
     market_signals: dict[str, JsonValue] | None = None,
     allow_setup_fallback: bool = True,
 ) -> list[RetrievalHit]:
-    """Upsert retrieval hits into Qdrant when indexing is enabled."""
+    """Upsert all new hits or propagate an explicit indexing failure.
+
+    Ordinary retrieval returns its hits unchanged. When indexing is requested,
+    unavailable components, missing vectors, and backend errors must reach the
+    pipeline's failed-result handler rather than claiming a successful index.
+
+    Raises:
+        RuntimeError: If required indexing components or embeddings are absent.
+    """
 
     if not settings.index_results:
         return hits
@@ -129,115 +137,105 @@ def index_retrieval_hits(
         logger.info("Skipping retrieve indexing in dry_run mode")
         return hits
 
-    try:
-        qdrant = qdrant_client
-        if qdrant is None:
-            if not allow_setup_fallback:
-                logger.warning(
-                    "Retrieve indexing skipped: Qdrant client unavailable"
-                )
-                return hits
-            qdrant = settings.vdb.setup_qdrant_client()
-        collection_name = _resolve_collection_name(settings)
-        has_collection = qdrant.collection_exists(collection_name)
-
-        keyed_hits: list[tuple[RetrievalHit, str]] = [
-            (hit, _point_id(symbol, hit)) for hit in hits
-        ]
-        if settings.incremental and has_collection:
-            existing_ids = _existing_point_ids(
-                qdrant=qdrant,
-                collection_name=collection_name,
-                point_ids=[point_id for _, point_id in keyed_hits],
+    qdrant = qdrant_client
+    if qdrant is None:
+        if not allow_setup_fallback:
+            raise RuntimeError(
+                "Requested indexing failed: Qdrant client unavailable"
             )
-            if existing_ids:
-                keyed_hits = [
-                    (hit, point_id)
-                    for hit, point_id in keyed_hits
-                    if point_id not in existing_ids
-                ]
-                logger.info(
-                    "Skipping %d already-indexed retrieve hits in '%s'",
-                    len(existing_ids),
-                    collection_name,
-                )
+        qdrant = settings.vdb.setup_qdrant_client()
+    collection_name = _resolve_collection_name(settings)
+    has_collection = qdrant.collection_exists(collection_name)
 
-        if not keyed_hits:
+    keyed_hits: list[tuple[RetrievalHit, str]] = [
+        (hit, _point_id(symbol, hit)) for hit in hits
+    ]
+    if settings.incremental and has_collection:
+        existing_ids = _existing_point_ids(
+            qdrant=qdrant,
+            collection_name=collection_name,
+            point_ids=[point_id for _, point_id in keyed_hits],
+        )
+        if existing_ids:
+            keyed_hits = [
+                (hit, point_id)
+                for hit, point_id in keyed_hits
+                if point_id not in existing_ids
+            ]
             logger.info(
-                "All retrieve hits already indexed in '%s'; nothing to upsert",
+                "Skipping %d already-indexed retrieve hits in '%s'",
+                len(existing_ids),
                 collection_name,
             )
-            return hits
 
-        active_embedder = embedder
-        active_embedding_dim = embedding_dim
-        if active_embedder is None or active_embedding_dim is None:
-            if not allow_setup_fallback:
-                logger.warning(
-                    "Retrieve indexing skipped: embedding components unavailable"
-                )
-                return hits
-            active_embedder, active_embedding_dim = (
-                settings.vdb.setup_embedding_model()
-            )
-        if not has_collection:
-            from qdrant_client.models import Distance, PointStruct, VectorParams
-
-            qdrant.create_collection(
-                collection_name=collection_name,
-                vectors_config=VectorParams(
-                    size=active_embedding_dim,
-                    distance=Distance.COSINE,
-                ),
-                replication_factor=settings.vdb.qdrant_replication_factor,
-                write_consistency_factor=settings.vdb.qdrant_write_consistency_factor,
-                on_disk_payload=settings.vdb.qdrant_on_disk_payload,
-            )
-
-        vectors = embed_texts_with_cache(
-            texts=[_snippet_for_index(hit) for hit, _ in keyed_hits],
-            settings=settings,
-            embedder=active_embedder,
-            cache_prefix="snippet",
-        )
-
-        points: list[PointStruct] = []
-        for (hit, point_id), vector in zip(keyed_hits, vectors, strict=False):
-            if not vector:
-                continue
-            from qdrant_client.models import Distance, PointStruct, VectorParams
-
-            points.append(
-                PointStruct(
-                    id=point_id,
-                    vector=list(vector),
-                    payload=_payload(
-                        symbol,
-                        hit,
-                        settings,
-                        market_signals=market_signals,
-                    ),
-                )
-            )
-
-        if not points:
-            logger.warning(
-                "Retrieve indexing warning for %s: no chunks indexed because no vectors were produced",
-                symbol,
-            )
-            return hits
-
-        qdrant.upsert(
-            collection_name=collection_name,
-            points=points,
-            wait=settings.qdrant_upsert_wait,
-        )
+    if not keyed_hits:
         logger.info(
-            "Indexed %d retrieve hits into '%s'",
-            len(points),
+            "All retrieve hits already indexed in '%s'; nothing to upsert",
             collection_name,
         )
         return hits
-    except Exception as exc:
-        logger.warning("Retrieve indexing skipped: %s", exc)
-        return hits
+
+    active_embedder = embedder
+    active_embedding_dim = embedding_dim
+    if active_embedder is None or active_embedding_dim is None:
+        if not allow_setup_fallback:
+            raise RuntimeError(
+                "Requested indexing failed: embedding components unavailable"
+            )
+        active_embedder, active_embedding_dim = (
+            settings.vdb.setup_embedding_model()
+        )
+    if not has_collection:
+        from qdrant_client.models import Distance, VectorParams
+
+        qdrant.create_collection(
+            collection_name=collection_name,
+            vectors_config=VectorParams(
+                size=active_embedding_dim,
+                distance=Distance.COSINE,
+            ),
+            replication_factor=settings.vdb.qdrant_replication_factor,
+            write_consistency_factor=settings.vdb.qdrant_write_consistency_factor,
+            on_disk_payload=settings.vdb.qdrant_on_disk_payload,
+        )
+
+    vectors = embed_texts_with_cache(
+        texts=[_snippet_for_index(hit) for hit, _ in keyed_hits],
+        settings=settings,
+        embedder=active_embedder,
+        cache_prefix="snippet",
+    )
+
+    if len(vectors) != len(keyed_hits) or any(not vector for vector in vectors):
+        raise RuntimeError(
+            "Requested indexing failed: embeddings are missing for one or more chunks"
+        )
+
+    from qdrant_client.models import PointStruct
+
+    points: list[PointStruct] = []
+    for (hit, point_id), vector in zip(keyed_hits, vectors, strict=True):
+        points.append(
+            PointStruct(
+                id=point_id,
+                vector=list(vector),
+                payload=_payload(
+                    symbol,
+                    hit,
+                    settings,
+                    market_signals=market_signals,
+                ),
+            )
+        )
+
+    qdrant.upsert(
+        collection_name=collection_name,
+        points=points,
+        wait=settings.qdrant_upsert_wait,
+    )
+    logger.info(
+        "Indexed %d retrieve hits into '%s'",
+        len(points),
+        collection_name,
+    )
+    return hits

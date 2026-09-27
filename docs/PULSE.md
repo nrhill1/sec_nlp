@@ -1,9 +1,10 @@
-# Pulse: investing and current events
+# Pulse: markets and current events
 
-The terminal workspace combines new SEC filings, related headlines, market
-observations, saved searches, and research notes. Its daily workflow is to
-refresh evidence, inspect a filing, follow relevant news, and record a hypothesis
-with evidence that could challenge it. The application does not place trades.
+Pulse brings market observations, related headlines, and research notes into
+the terminal workspace alongside new SEC filings and saved searches. Its daily
+workflow is to refresh evidence, inspect a filing, follow relevant news, and
+record a hypothesis with evidence that could challenge it. The application does
+not place trades.
 
 ## Install and open
 
@@ -151,8 +152,12 @@ source statuses, and journal snapshot.
 
 Migration validates the old `config.json`, individual journal files, and report
 manifests before importing. It initializes only an untouched starter profile,
-adds notes and briefs by stable identity, and records pointers to existing cache
-directories. It preserves every original file. Repeating migration adds only new
+adds notes and briefs by stable identity, and copies authored jobs into immutable
+recipes. SEC full-submission caches with complete headers become selectable
+documents for offline reading. Entity CIKs must be declared in the header; they
+are never inferred from an accession prefix or ticker folder. Ambiguous cache
+files remain external pointers with visible migration warnings. It preserves
+every original file. Repeating migration adds only new
 records; conflicting identities and corrupt records produce explicit errors.
 Legacy HTML files remain untouched but are no longer regenerated.
 
@@ -163,6 +168,7 @@ workspace/
   documents/<url-hash>.json
   scans/<scan-id>/<job-id>.json
   research/<job-id>/
+  recipes/<source-hash>/<recipe-hash>.json
 ```
 
 The SQLite ledger stores filings, entity roles, review state, source coverage,

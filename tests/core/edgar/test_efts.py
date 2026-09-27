@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from datetime import date
 from unittest.mock import AsyncMock
 
@@ -194,6 +195,46 @@ class TestEFTSClient:
         assert result.hits[0].company_name == "Test Co"
         assert result.start == 2 and result.limit == 1
         assert fetch.call_args.kwargs["params"]["q"] == "warranty"
+
+    def test_search_retains_every_explicit_entity_without_guessing_names(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from sec_nlp.core.edgar.discovery import filing_from_hit
+        from sec_nlp.core.edgar.transport import SecTransport
+
+        payload = {
+            "hits": {
+                "total": {"value": 1},
+                "hits": [
+                    {
+                        "_source": {
+                            "adsh": "0001234567-24-000001",
+                            "ciks": ["1234567", "9876543", "5555555", "0"],
+                            "display_names": [
+                                "Reporting Owner (CIK 0009876543)",
+                                "Issuer Corp (ISSR) (CIK 0001234567)",
+                                "Unmapped Company Name",
+                            ],
+                            "form": "4",
+                            "file_date": "2024-01-15",
+                        }
+                    }
+                ],
+            }
+        }
+        fetch = AsyncMock(return_value=json.dumps(payload).encode())
+        monkeypatch.setattr(SecTransport, "get_bytes", fetch)
+        response = asyncio.run(EFTSClient().search("ownership"))
+        hit = response.hits[0]
+        assert {
+            entity.cik: (entity.name, entity.role) for entity in hit.entities
+        } == {
+            "0001234567": ("Issuer Corp (ISSR)", "unknown"),
+            "0009876543": ("Reporting Owner", "unknown"),
+            "0005555555": ("", "unknown"),
+        }
+        assert filing_from_hit(hit).entities == hit.entities
+        fetch.assert_awaited_once()
 
     def test_batch_preserves_independent_error(
         self, monkeypatch: pytest.MonkeyPatch

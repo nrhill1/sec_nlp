@@ -62,7 +62,13 @@ from sec_nlp.pipelines.presets.holdings.pipeline import HoldingsPipeline
 from sec_nlp.pipelines.presets.insider.pipeline import InsiderPipeline
 from sec_nlp.pipelines.presets.retrieve.pipeline import RetrievePipeline
 from sec_nlp.core.text.semantic_settings import SemanticChunkingSettings
+from sec_nlp.pipelines.presets.exb.config import ExhibitConfig
+from sec_nlp.pipelines.presets.warranty.config import WarrantyConfig
 assert not SemanticChunkingSettings().enabled
+exhibit = ExhibitPipeline(config=ExhibitConfig(symbols=["AAPL"]))
+warranty = WarrantyPipeline(config=WarrantyConfig(symbols=["AAPL"]))
+assert exhibit._vector_store is None
+assert warranty._stage_chain is not None
 """
     completed = subprocess.run(
         [sys.executable, "-c", script],

@@ -79,6 +79,27 @@ def test_filter_literal_text_and_unknown_state_target(tmp_path: Path) -> None:
         store.set_read("missing")
 
 
+def test_batch_lookup_retains_order_across_sqlite_chunks(
+    tmp_path: Path,
+) -> None:
+    """Resolve more than one parameter batch and skip missing requested keys."""
+    store = WorkspaceStore(tmp_path)
+    records = tuple(
+        filing().model_copy(
+            update={"accession_number": f"0000000123-26-{index:06}"}
+        )
+        for index in range(1001)
+    )
+    store.upsert_filings(records)
+    requested = tuple(item.accession_number for item in reversed(records))
+    assert store.get_filings((*requested, "missing", requested[0])) == (
+        *reversed(records),
+        records[-1],
+    )
+    assert store.get_filings(()) == ()
+    assert len(store.list_filings(limit=None)) == len(records)
+
+
 def test_index_checkpoint_and_filings_roll_back_together(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -252,6 +273,10 @@ def test_saved_scans_jobs_and_notes_retain_identity(tmp_path: Path) -> None:
         store.save_note(entry.model_copy(update={"observation": "Overwrite"}))
     assert WorkspaceStore(tmp_path).list_scans() == (scan,)
     assert store.list_jobs() == (job,)
+    assert store.list_jobs(limit=None) == (job,)
+    assert store.list_note_links() == {
+        entry.entry_id: (filing().accession_number,)
+    }
     store.delete_scan(scan.scan_id)
     assert store.list_scans() == ()
     assert store.list_jobs() == (job,)
@@ -277,12 +302,61 @@ def test_news_identity_uses_ledger_and_retains_repeated_releases(
     store.save_news(
         (
             headline.model_copy(
-                update={"published_at": datetime(2026, 9, 26, tzinfo=UTC)}
+                update={
+                    "published_at": datetime(2026, 9, 26, tzinfo=UTC),
+                    "url": HttpUrl("https://example.com/policy-next-release"),
+                }
             ),
         )
     )
     assert len(store.list_news()) == 2
     assert store.list_news()[0].is_new
+
+
+def test_news_identity_preserves_url_and_dated_title_aliases(
+    tmp_path: Path,
+) -> None:
+    """Keep corrected and syndicated stories old without merging undated titles."""
+    store = WorkspaceStore(tmp_path)
+    original = Headline(
+        title="Policy: statement",
+        source="Fed",
+        url=HttpUrl("https://example.com/a"),
+        published_at=datetime(2026, 9, 25, 10, tzinfo=UTC),
+    )
+    assert store.save_news((original,))[0].is_new
+    corrected = original.model_copy(
+        update={
+            "title": "Corrected statement",
+            "published_at": datetime(2026, 9, 26, tzinfo=UTC),
+            "url": HttpUrl("http://EXAMPLE.com/a/"),
+        }
+    )
+    assert not store.save_news((corrected,))[0].is_new
+    syndicated = original.model_copy(
+        update={
+            "title": "POLICY statement!",
+            "url": HttpUrl("https://other.example/b"),
+            "published_at": datetime(2026, 9, 25, 22, tzinfo=UTC),
+        }
+    )
+    assert not WorkspaceStore(tmp_path).save_news((syndicated,))[0].is_new
+    assert len(store.list_news(limit=None)) == 1
+    undated = original.model_copy(
+        update={
+            "published_at": None,
+            "url": HttpUrl("https://example.com/undated"),
+        }
+    )
+    assert store.save_news((undated,))[0].is_new
+    assert store.save_news(
+        (
+            undated.model_copy(
+                update={"url": HttpUrl("https://example.com/another-undated")}
+            ),
+        )
+    )[0].is_new
+    assert len(store.list_news(limit=None)) == 3
 
 
 def test_brief_snapshot_is_immutable_and_default_profile_offline(
@@ -300,5 +374,8 @@ def test_brief_snapshot_is_immutable_and_default_profile_offline(
     assert store.save_brief(brief)
     assert not store.save_brief(brief)
     assert store.list_briefs() == (brief,)
+    assert store.list_briefs(limit=None) == (brief,)
+    assert store.latest_brief(store.load_settings()) == brief
+    assert store.latest_brief(demo=True) is None
     with pytest.raises(ValueError, match="Conflicting"):
         store.save_brief(brief.model_copy(update={"demo": True}))

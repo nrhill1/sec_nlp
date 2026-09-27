@@ -13,6 +13,7 @@ only parses downloaded responses and provides optional keyword ranking.
 from __future__ import annotations
 
 import logging
+import re
 from collections.abc import Sequence
 from datetime import date
 from functools import lru_cache
@@ -21,7 +22,7 @@ from types import ModuleType
 from typing import Final
 
 import httpx
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, JsonValue, TypeAdapter
 
 from .efts_models import (
     EFTSBatchResult,
@@ -32,6 +33,7 @@ from .efts_models import (
     EFTSSortField,
     EFTSSortOrder,
 )
+from .filing_models import FilingEntity
 from .transport import SecTransport
 
 logger = logging.getLogger(__name__)
@@ -39,6 +41,52 @@ logger = logging.getLogger(__name__)
 EFTS_BASE_URL: Final[str] = "https://efts.sec.gov/LATEST/search-index"
 DEFAULT_USER_AGENT: Final[str] = "SEC NLP Tool (contact@example.com)"
 MIN_REQUEST_INTERVAL: Final[float] = 0.2  # Shared app budget: 5 per second
+_JSON = TypeAdapter(JsonValue)
+_DISPLAY_CIK = re.compile(r"\(\s*CIK\s+(\d{1,10})\s*\)", re.IGNORECASE)
+
+
+def _source_entities(source: dict[str, JsonValue]) -> tuple[FilingEntity, ...]:
+    """Preserve explicit CIKs and names that identify their own matching CIK."""
+    ciks: dict[str, str] = {}
+    candidates = source.get("ciks")
+    values = list(candidates) if isinstance(candidates, list) else []
+    values.append(source.get("cik"))
+    for value in values:
+        if isinstance(value, (str, int)) and not isinstance(value, bool):
+            cleaned = str(value).strip()
+            if re.fullmatch(r"\d{1,10}", cleaned) and int(cleaned) > 0:
+                ciks.setdefault(cleaned.zfill(10), "")
+    display_names = source.get("display_names")
+    if isinstance(display_names, list):
+        for name in display_names:
+            if not isinstance(name, str):
+                continue
+            match = _DISPLAY_CIK.search(name)
+            if match and int(match.group(1)) > 0:
+                cik = match.group(1).zfill(10)
+                ciks[cik] = _DISPLAY_CIK.sub("", name).strip()
+    return tuple(FilingEntity(cik=cik, name=name) for cik, name in ciks.items())
+
+
+def _associate_entities(
+    response: EFTSSearchResponse, content: bytes
+) -> list[EFTSHit]:
+    """Attach raw source entity associations to the native parser's ordered hits."""
+    payload = _JSON.validate_json(content)
+    if not isinstance(payload, dict):
+        raise ValueError("EFTS response must contain an object")
+    hits_payload = payload.get("hits")
+    if not isinstance(hits_payload, dict):
+        raise ValueError("EFTS response must contain hits metadata")
+    raw_hits = hits_payload.get("hits")
+    if not isinstance(raw_hits, list) or len(raw_hits) != len(response.hits):
+        raise ValueError("EFTS source and parsed result counts do not match")
+    result: list[EFTSHit] = []
+    for hit, raw in zip(response.hits, raw_hits, strict=True):
+        source = raw.get("_source") if isinstance(raw, dict) else None
+        entities = _source_entities(source) if isinstance(source, dict) else ()
+        result.append(hit.model_copy(update={"entities": entities}))
+    return result
 
 
 @lru_cache(maxsize=1)
@@ -294,7 +342,11 @@ class EFTSClient(BaseModel):
             )
             response = EFTSSearchResponse.model_validate_json(parsed)
             return response.model_copy(
-                update={"start": params.start, "limit": params.limit}
+                update={
+                    "start": params.start,
+                    "limit": params.limit,
+                    "hits": _associate_entities(response, content),
+                }
             )
         except httpx.HTTPStatusError as exc:
             logger.debug("EFTS status failure", exc_info=True)

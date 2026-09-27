@@ -1,5 +1,6 @@
 # src/scripts/profile/memory.py
 """Profile memory usage of pipelines."""
+# ruff: noqa: E402
 
 import signal
 import sys
@@ -10,26 +11,32 @@ from typing import Literal
 # Add src to path before other imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from scripts.utils import setup_import_path  # noqa: E402
+from scripts.utils import setup_import_path
 
 # Setup import path securely
 setup_import_path()
 
-from pydantic import Field  # noqa: E402
-from pydantic_settings import (  # noqa: E402
+from pydantic import Field
+from pydantic_settings import (
     BaseSettings,
     CliApp,
     SettingsConfigDict,
 )
 
-from sec_nlp.core.infra.logger import logger, setup_logging  # noqa: E402
-from sec_nlp.pipelines.base.result import BasePipelineResult  # noqa: E402
+from sec_nlp.core.infra.logger import logger, setup_logging
+from sec_nlp.pipelines.base.result import BasePipelineResult
 from sec_nlp.pipelines.presets.analyze.config import AnalyzeConfig
-from sec_nlp.pipelines.presets.analyze.pipeline import AnalyzePipeline
+from sec_nlp.pipelines.presets.analyze.pipeline import (
+    AnalyzePipeline,
+)
 from sec_nlp.pipelines.presets.exb.config import ExhibitConfig
 from sec_nlp.pipelines.presets.exb.pipeline import ExhibitPipeline
-from sec_nlp.pipelines.presets.warranty.config import WarrantyConfig
-from sec_nlp.pipelines.presets.warranty.pipeline import WarrantyPipeline
+from sec_nlp.pipelines.presets.warranty.config import (
+    WarrantyConfig,
+)
+from sec_nlp.pipelines.presets.warranty.pipeline import (
+    WarrantyPipeline,
+)
 
 try:
     from memory_profiler import (

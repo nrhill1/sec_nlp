@@ -39,7 +39,7 @@ type FlowArtifactName = Literal["retrieve_seed", "contract_evidence"]
 
 
 class RecipeDefaults(BaseModel):
-    """Flow-level defaults merged into every stage's settings at compile time."""
+    """Shared contact settings merged into each explicit research step."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -49,7 +49,7 @@ class RecipeDefaults(BaseModel):
 
 
 class RecipeStep(BaseModel):
-    """One stage entry in a flow spec, identifying a pipeline and its overrides."""
+    """A research step identifying its specialist and explicit setting overrides."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -112,11 +112,10 @@ class EvidenceInput(BaseModel):
 
 
 class ResearchRecipe(BaseModel):
-    """Top-level flow specification parsed from user-authored YAML or JSON.
+    """An explicit research recipe parsed from user-authored YAML or JSON.
 
     The model validates stage ordering, unique IDs, and input-binding
-    constraints at construction time so that the compile/run layers can
-    operate without redundant checks.
+    constraints at construction time before any specialist work begins.
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
@@ -304,6 +303,14 @@ def _merge_settings(base: JsonDict, updates: JsonDict) -> JsonDict:
 
 
 def run_recipe(spec: ResearchRecipe) -> RecipeRunResult:
+    """Run explicit research steps with shared SEC connections and evidence handoff."""
+    from sec_nlp.core.edgar.transport import sec_sync_session
+
+    with sec_sync_session():
+        return _run_recipe(spec)
+
+
+def _run_recipe(spec: ResearchRecipe) -> RecipeRunResult:
     """Execute a fixed ordered research recipe with direct typed evidence handoff.
 
     Args:

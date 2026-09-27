@@ -77,12 +77,13 @@ def _quarters(start: date, end: date) -> list[tuple[int, int]]:
     return result
 
 
-def _quarter_end(year: int, quarter: int) -> date:
-    """Return the last calendar date in a SEC index quarter."""
-    following = (
-        date(year + 1, 1, 1) if quarter == 4 else date(year, quarter * 3 + 1, 1)
-    )
-    return following - timedelta(days=1)
+def _index_digest(filings: tuple[FilingRecord, ...]) -> str:
+    """Hash parsed source evidence without building a second full-index string."""
+    digest = hashlib.sha256()
+    for filing in filings:
+        digest.update(filing.model_dump_json().encode())
+        digest.update(b"\n")
+    return digest.hexdigest()
 
 
 class WorkspaceService:
@@ -156,7 +157,7 @@ class WorkspaceService:
         if start_date and start_date > (end_date or current):
             raise ValueError("History start must not follow its end date")
         identity = self._identity() if source in {"sec", "all"} else ""
-        job = self._start(f"refresh:{source}")
+        job = await asyncio.to_thread(self._start, f"refresh:{source}")
         records: dict[str, FilingRecord] = {}
         errors: list[str] = []
         partial = False
@@ -186,15 +187,18 @@ class WorkspaceService:
             if source in {"news", "market", "all"}:
                 from sec_nlp.app.pulse.service import build_brief
 
+                profile = self.store.load_settings()
                 brief = await asyncio.to_thread(
                     build_brief,
-                    self.store.load_settings(),
+                    profile,
                     journal=self.store.list_notes(),
+                    previous=self.store.latest_brief(profile),
                     include_market=source in {"market", "all"},
                     include_news=source in {"news", "all"},
                 )
+                normalized = self.store.save_news(brief.headlines)
+                brief = brief.model_copy(update={"headlines": normalized})
                 self.store.save_brief(brief)
-                self.store.save_news(brief.headlines)
                 for status in brief.sources:
                     failed = status.status == "error"
                     self.store.save_checkpoint(
@@ -213,23 +217,32 @@ class WorkspaceService:
                 if partial
                 else "Requested sources refreshed."
             )
-            self._finish(job, "error" if errors else "complete", message)
+            if partial and (start_date is not None or end_date is not None):
+                history_start = start_date or min(
+                    end_date or current, current
+                ) - timedelta(days=30)
+                history_end = min(end_date or current, current)
+                message += f" Continue this explicit range with refresh --start {history_start} --end {history_end}."
+            await asyncio.to_thread(
+                self._finish, job, "error" if errors else "complete", message
+            )
             return ActionResult(
                 job_id=job.job_id,
                 message=message,
-                filings=self._stored_filings(records),
+                filings=await asyncio.to_thread(self._stored_filings, records),
                 partial=partial,
                 errors=tuple(errors),
             )
         except asyncio.CancelledError:
-            self._finish(
+            await asyncio.to_thread(
+                self._finish,
                 job,
                 "cancelled",
                 "Cancelled; committed pages and documents were retained.",
             )
             raise
         except (httpx.HTTPError, OSError, ValueError, RuntimeError) as exc:
-            self._finish(job, "error", str(exc))
+            await asyncio.to_thread(self._finish, job, "error", str(exc))
             raise
 
     async def _refresh_feed(
@@ -286,7 +299,9 @@ class WorkspaceService:
                         "detail": "Parsed feed page committed; snapshot refresh is still in progress.",
                     }
                 )
-                self.store.ingest_filings(page.filings, checkpoint)
+                await asyncio.to_thread(
+                    self.store.ingest_filings, page.filings, checkpoint
+                )
                 if page.next_start is None:
                     partial = not records
                     break
@@ -325,14 +340,19 @@ class WorkspaceService:
                 }
             )
         )
-        return self._stored_filings(records), partial, (error,) if error else ()
+        merged = await asyncio.to_thread(self._stored_filings, records)
+        return merged, partial, (error,) if error else ()
 
     def _stored_filings(
         self, records: dict[str, FilingRecord]
     ) -> tuple[FilingRecord, ...]:
         """Return one accession with all entity associations committed so far."""
+        merged = {
+            item.accession_number: item
+            for item in self.store.get_filings(tuple(records))
+        }
         return tuple(
-            self.store.get_filing(accession) or filing
+            merged.get(accession, filing)
             for accession, filing in records.items()
         )
 
@@ -359,6 +379,30 @@ class WorkspaceService:
         current_indexes = [
             item for item in indexed.values() if item.source == "sec-index"
         ]
+        full_coverage = {
+            _quarter(date.fromisoformat(item.cursor)): date.fromisoformat(
+                item.cursor
+            )
+            for item in current_indexes
+            if item.status == "complete"
+            and item.cursor
+            and item.artifact_url
+            and "/full-index/" in item.artifact_url
+        }
+        unresolved_indexes = [
+            item
+            for item in current_indexes
+            if not (
+                item.status != "complete"
+                and item.cursor
+                and item.artifact_url
+                and "/daily-index/" in item.artifact_url
+                and full_coverage.get(
+                    _quarter(date.fromisoformat(item.cursor)), date.min
+                )
+                >= date.fromisoformat(item.cursor)
+            )
+        ]
         completed_dates = [
             date.fromisoformat(item.cursor)
             for item in current_indexes
@@ -367,7 +411,7 @@ class WorkspaceService:
         failed_dates = [
             date.fromisoformat(item.cursor)
             for item in (
-                *current_indexes,
+                *unresolved_indexes,
                 *(
                     item
                     for item in checkpoints
@@ -437,6 +481,14 @@ class WorkspaceService:
         artifacts: list[IndexArtifact] = []
         errors: list[str] = []
         listing_failed = False
+        coverage = SourceCheckpoint(
+            source="sec-coverage",
+            scope=f"{anchor}:{cutoff}" if historical else "",
+            status="partial",
+            cursor=anchor.isoformat(),
+            detail="Index refresh started; coverage is not committed yet.",
+        )
+        self.store.save_checkpoint(coverage)
         if full_mode:
             requested_quarters = sorted({*quarters, *due_quarters})
             artifacts = [
@@ -512,13 +564,6 @@ class WorkspaceService:
             or (not artifacts and not completed_dates)
         )
         records: dict[str, FilingRecord] = {}
-        coverage = SourceCheckpoint(
-            source="sec-coverage",
-            status="partial",
-            cursor=anchor.isoformat(),
-            detail="Index refresh started; coverage is not committed yet.",
-        )
-        self.store.save_checkpoint(coverage)
         for artifact in pending[:budget]:
             scope = scope_prefix + str(artifact.url)
             previous = indexed.get((source_name, scope))
@@ -556,11 +601,7 @@ class WorkspaceService:
                     if historical
                     else source_filings
                 )
-                digest = hashlib.sha256(
-                    "\n".join(
-                        item.model_dump_json() for item in source_filings
-                    ).encode()
-                ).hexdigest()
+                digest = await asyncio.to_thread(_index_digest, source_filings)
                 complete = artifact.kind == "daily" or cursor_date is not None
                 checkpoint = checkpoint.model_copy(
                     update={
@@ -580,9 +621,13 @@ class WorkspaceService:
                     }
                 )
                 if artifact.kind == "full" and not historical and complete:
-                    self.store.reconcile_index(source_filings, checkpoint)
+                    await asyncio.to_thread(
+                        self.store.reconcile_index, source_filings, checkpoint
+                    )
                 else:
-                    self.store.ingest_filings(filings, checkpoint)
+                    await asyncio.to_thread(
+                        self.store.ingest_filings, filings, checkpoint
+                    )
                 partial = partial or not complete
                 records.update(
                     (item.accession_number, item) for item in filings
@@ -612,7 +657,8 @@ class WorkspaceService:
                 }
             )
         )
-        return self._stored_filings(records), partial, tuple(errors)
+        merged = await asyncio.to_thread(self._stored_filings, records)
+        return merged, partial, tuple(errors)
 
     async def search(self, spec: ScanSpec) -> ActionResult:
         """Search retrospective SEC metadata without downloading filing text."""
@@ -624,7 +670,9 @@ class WorkspaceService:
         )
 
         identity = self._identity()
-        job = self._start("search", scan_id=spec.scan_id)
+        job = await asyncio.to_thread(
+            self._start, "search", scan_id=spec.scan_id
+        )
         try:
             client = EFTSClient(config=EFTSClientConfig(user_agent=identity))
             hits = await client.search_all(
@@ -637,9 +685,12 @@ class WorkspaceService:
                 max_results=spec.limit,
             )
             filings = tuple(filing_from_hit(hit) for hit in hits)
-            self.store.upsert_filings(filings, source="efts")
-            filings = self._stored_filings(
-                {item.accession_number: item for item in filings}
+            await asyncio.to_thread(
+                self.store.upsert_filings, filings, source="efts"
+            )
+            filings = await asyncio.to_thread(
+                self._stored_filings,
+                {item.accession_number: item for item in filings},
             )
             partial = len(hits) >= spec.limit
             message = f"Found {len(filings)} filings." + (
@@ -647,7 +698,7 @@ class WorkspaceService:
                 if partial
                 else ""
             )
-            self._finish(job, "complete", message)
+            await asyncio.to_thread(self._finish, job, "complete", message)
             return ActionResult(
                 job_id=job.job_id,
                 message=message,
@@ -655,14 +706,16 @@ class WorkspaceService:
                 partial=partial,
             )
         except asyncio.CancelledError:
-            self._finish(job, "cancelled", "Search cancelled.")
+            await asyncio.to_thread(
+                self._finish, job, "cancelled", "Search cancelled."
+            )
             raise
         except EFTSAPIError as exc:
             logger.debug("SEC search failed", exc_info=True)
-            self._finish(job, "error", str(exc))
+            await asyncio.to_thread(self._finish, job, "error", str(exc))
             raise RuntimeError(f"SEC search failed: {exc.message}") from exc
         except (httpx.HTTPError, OSError, ValueError, RuntimeError) as exc:
-            self._finish(job, "error", str(exc))
+            await asyncio.to_thread(self._finish, job, "error", str(exc))
             raise
 
     async def manifest(self, accession: str) -> FilingManifest:
@@ -727,7 +780,7 @@ class WorkspaceService:
         if content is None:
             async with SecTransport(self._identity()) as transport:
                 content = await read_filing_document(transport, selected)
-            self.store.cache_document(content)
+            await asyncio.to_thread(self.store.cache_document, content)
         if mark_read:
             self.store.set_read(accession)
         return content
@@ -746,7 +799,7 @@ class WorkspaceService:
             raise ValueError("Unknown scan; use scan list to see saved names")
         if not spec.enabled:
             raise ValueError("This scan is disabled; enable it before running")
-        job = self._start("scan", scan_id=spec.scan_id)
+        job = await asyncio.to_thread(self._start, "scan", scan_id=spec.scan_id)
         downloaded = 0
         errors: list[str] = []
         try:
@@ -785,15 +838,18 @@ class WorkspaceService:
                 encoding="utf-8",
             )
             temporary.replace(payload)
-            self._finish(job, "error" if errors else "complete", message)
+            await asyncio.to_thread(
+                self._finish, job, "error" if errors else "complete", message
+            )
             return result
         except asyncio.CancelledError:
-            self._finish(
+            await asyncio.to_thread(
+                self._finish,
                 job,
                 "cancelled",
                 "Scan cancelled; cached evidence remains available.",
             )
             raise
         except (httpx.HTTPError, OSError, ValueError, RuntimeError) as exc:
-            self._finish(job, "error", str(exc))
+            await asyncio.to_thread(self._finish, job, "error", str(exc))
             raise

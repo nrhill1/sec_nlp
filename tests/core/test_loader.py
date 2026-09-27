@@ -383,6 +383,9 @@ class TestTransformHtml:
             )
 
         monkeypatch.setattr(
+            "sec_nlp.core.ingest.parser._require_local_html_model", lambda: None
+        )
+        monkeypatch.setattr(
             "unstructured.partition.html.partition_html",
             _raise_spacy_download_error,
         )
@@ -421,6 +424,9 @@ class TestTransformHtml:
             )
 
         monkeypatch.setattr(
+            "sec_nlp.core.ingest.parser._require_local_html_model", lambda: None
+        )
+        monkeypatch.setattr(
             "unstructured.partition.html.partition_html",
             _raise_spacy_download_error,
         )
@@ -453,6 +459,9 @@ class TestTransformHtml:
         ) -> list[Document]:
             raise RuntimeError("A test tried to use socket.socket.")
 
+        monkeypatch.setattr(
+            "sec_nlp.core.ingest.parser._require_local_html_model", lambda: None
+        )
         monkeypatch.setattr(
             "unstructured.partition.html.partition_html",
             _raise_socket_blocked,

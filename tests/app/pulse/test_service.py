@@ -4,6 +4,7 @@
 from datetime import UTC, date, datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
 
+import httpx
 import pytest
 from pydantic import HttpUrl
 
@@ -747,3 +748,20 @@ def test_two_letter_tickers_need_explicit_context_or_company_aliases() -> None:
         for item in brief.headlines
         if item.title != "AI investment lifts IT sector spending"
     )
+
+
+def test_httpx_news_failure_is_a_source_error() -> None:
+    response = httpx.Response(
+        403, request=httpx.Request("GET", "https://www.sec.gov/news.rss")
+    )
+    error = httpx.HTTPStatusError(
+        "SEC source unavailable", request=response.request, response=response
+    )
+    with patch.object(service, "create_news_retriever", side_effect=error):
+        brief = service.build_brief(
+            _settings().model_copy(update={"watchlist": (), "benchmarks": ()}),
+            now=_NOW,
+        )
+    assert brief.headlines == ()
+    assert brief.sources[0].status == "error"
+    assert "HTTPStatusError" in brief.sources[0].detail

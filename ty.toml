@@ -13,4 +13,5 @@ extra-paths = ["./src", "./tests", "./crates/efts", "./crates/corr", "./crates/x
 python-version = "3.13"
 
 [src]
+include = ["src", "tests"]
 respect-ignore-files = false

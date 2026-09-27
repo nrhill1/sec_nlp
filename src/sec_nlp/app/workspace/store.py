@@ -41,6 +41,7 @@ from sec_nlp.core.edgar.filing_models import (
     FilingManifest,
     FilingRecord,
 )
+from sec_nlp.core.news.normalization import dated_title_key, url_key
 
 type SqlValue = str | int | None
 
@@ -72,6 +73,9 @@ CREATE TABLE IF NOT EXISTS jobs (key TEXT PRIMARY KEY, timestamp TEXT NOT NULL, 
 CREATE TABLE IF NOT EXISTS manifests (key TEXT PRIMARY KEY, payload TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS cache_pointers (key TEXT PRIMARY KEY, payload TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS news (key TEXT PRIMARY KEY, timestamp TEXT NOT NULL, payload TEXT NOT NULL, first_seen_at TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS news_aliases (
+ identity TEXT PRIMARY KEY, news_key TEXT NOT NULL REFERENCES news(key)
+);
 CREATE TABLE IF NOT EXISTS notes (key TEXT PRIMARY KEY, timestamp TEXT NOT NULL, payload TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS note_filings (
  note_id TEXT NOT NULL REFERENCES notes(key) ON DELETE CASCADE,
@@ -119,6 +123,13 @@ def _row_limit(value: int | None) -> int:
     if value < 1:
         raise ValueError("limit must be positive or None")
     return value
+
+
+def _news_identities(headline: Headline) -> tuple[str, ...]:
+    """Build shared URL and optional UTC-date/title aliases for one headline."""
+    identities = (f"url:{url_key(headline.url)}",)
+    dated = dated_title_key(headline.title, headline.published_at)
+    return (*identities, f"title:{dated}") if dated else identities
 
 
 class WorkspaceStore:
@@ -411,6 +422,30 @@ class WorkspaceStore:
         )
         return records[0] if records else None
 
+    def get_filings(
+        self, accessions: Sequence[str]
+    ) -> tuple[FilingRecord, ...]:
+        """Return existing filings in input order using one bounded-query connection.
+
+        Missing accessions are skipped and repeated requested accessions are
+        retained. Batches respect SQLite builds with small variable limits.
+        """
+        found: dict[str, FilingRecord] = {}
+        unique = tuple(dict.fromkeys(accessions))
+        with self._connect() as connection:
+            for start in range(0, len(unique), 900):
+                batch = unique[start : start + 900]
+                placeholders = ",".join("?" for _ in batch)
+                for row in connection.execute(
+                    f"SELECT payload FROM filings WHERE accession IN ({placeholders})",
+                    batch,
+                ):
+                    filing = FilingRecord.model_validate_json(
+                        _text(row, "payload")
+                    )
+                    found[filing.accession_number] = filing
+        return tuple(found[key] for key in accessions if key in found)
+
     def list_filings(
         self,
         *,
@@ -656,21 +691,51 @@ class WorkspaceStore:
         return content
 
     def save_news(self, headlines: Sequence[Headline]) -> tuple[Headline, ...]:
-        """Merge dated headlines and return their durable ledger-derived newness."""
+        """Merge URL and dated-title identities and return durable newness.
+
+        Keep identity aliases when publishers edit titles or timestamps.
+        Undated items have URL identity only, preserving recurring releases.
+        """
         normalized: list[Headline] = []
         with self._connect() as connection:
+            indexed = connection.execute(
+                "SELECT value FROM metadata WHERE key='news_identity_version'"
+            ).fetchone()
+            if indexed is None:
+                for row in connection.execute(
+                    "SELECT key,payload FROM news ORDER BY first_seen_at,key"
+                ):
+                    previous = Headline.model_validate_json(
+                        _text(row, "payload")
+                    )
+                    for identity in _news_identities(previous):
+                        connection.execute(
+                            "INSERT OR IGNORE INTO news_aliases VALUES (?,?)",
+                            (identity, _text(row, "key")),
+                        )
+                connection.execute(
+                    "INSERT INTO metadata VALUES ('news_identity_version','1')"
+                )
             for headline in headlines:
                 stamp = (
                     _timestamp(headline.published_at)
                     if headline.published_at
                     else ""
                 )
-                key = hashlib.sha256(
-                    f"{headline.url}\n{stamp}\n{headline.title}".encode()
-                ).hexdigest()
-                row = connection.execute(
-                    "SELECT first_seen_at FROM news WHERE key=?", (key,)
-                ).fetchone()
+                identities = _news_identities(headline)
+                row = None
+                for identity in identities:
+                    row = connection.execute(
+                        "SELECT news.key,first_seen_at FROM news JOIN news_aliases ON news.key=news_aliases.news_key WHERE identity=?",
+                        (identity,),
+                    ).fetchone()
+                    if row is not None:
+                        break
+                key = (
+                    _text(row, "key")
+                    if row is not None
+                    else hashlib.sha256(identities[0].encode()).hexdigest()
+                )
                 first_seen = (
                     _text(row, "first_seen_at")
                     if row is not None
@@ -678,9 +743,14 @@ class WorkspaceStore:
                 )
                 headline = headline.model_copy(update={"is_new": row is None})
                 connection.execute(
-                    "INSERT OR REPLACE INTO news VALUES (?,?,?,?)",
+                    "INSERT INTO news VALUES (?,?,?,?) ON CONFLICT(key) DO UPDATE SET timestamp=excluded.timestamp,payload=excluded.payload",
                     (key, stamp, headline.model_dump_json(), first_seen),
                 )
+                for identity in identities:
+                    connection.execute(
+                        "INSERT OR IGNORE INTO news_aliases VALUES (?,?)",
+                        (identity, key),
+                    )
                 normalized.append(headline)
         return tuple(normalized)
 

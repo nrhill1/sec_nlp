@@ -159,6 +159,22 @@ def specialist_types(
 
 
 def run_specialist(capability: str, settings: JsonDict) -> ResearchResult:
+    """Run a selected capability with one owned SEC connection session.
+
+    Args:
+        capability: Selected specialist or explicit recipe action.
+        settings: JSON settings passed to that capability.
+
+    Returns:
+        Preserved specialist outputs and its typed completion summary.
+    """
+    from sec_nlp.core.edgar.transport import sec_sync_session
+
+    with sec_sync_session():
+        return _run_specialist(capability, settings)
+
+
+def _run_specialist(capability: str, settings: JsonDict) -> ResearchResult:
     """Execute one selected specialist and preserve its existing output contract.
 
     Args:
@@ -233,6 +249,16 @@ async def execute_research(
     result_path = folder / "result.json"
     values = dict(settings)
     if capability != "recipe":
+        contact = next(
+            (
+                part.strip("<>()[],;")
+                for part in store.load_settings().user_agent.split()
+                if "@" in part
+            ),
+            None,
+        )
+        if contact:
+            values.setdefault("email", contact)
         values.setdefault("out_path", str(folder / "outputs"))
         values.setdefault("dl_path", str(store.path / "downloads"))
     request.write_text(json.dumps(values), encoding="utf-8")

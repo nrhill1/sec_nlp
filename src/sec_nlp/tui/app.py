@@ -112,7 +112,9 @@ class ResearchWorkspace(App[None]):
                     yield Checkbox("Unread", id="unread-filter")
                     yield Checkbox("Saved", id="saved-filter")
                     yield Button("Refresh", id="refresh-sec", variant="primary")
-                    yield Button("Continue", id="continue-sec", disabled=True)
+                    yield Button(
+                        "Continue SEC", id="continue-sec", disabled=True
+                    )
                 yield DataTable(
                     id="inbox", cursor_type="row", zebra_stripes=True
                 )
@@ -333,7 +335,9 @@ class ResearchWorkspace(App[None]):
             )
         checkpoints = self.store.list_checkpoints()
         self.query_one("#continue-sec", Button).disabled = not any(
-            item.source.startswith("sec-") and item.status != "complete"
+            item.source in {"sec-atom", "sec-coverage"}
+            and not item.scope
+            and item.status != "complete"
             for item in checkpoints
         )
         coverage = "\n".join(
@@ -472,16 +476,27 @@ class ResearchWorkspace(App[None]):
     ) -> None:
         """Load a cached or explicitly selected filing document into the reader."""
         self._status("Opening filing evidence…")
-        manifest = await self.service.manifest(accession)
-        content = await self.service.read(accession, filename=filename)
         self.accession = accession
-        self._source_url = str(content.document.url)
+        self._source_url = ""
+        self._find_position = 0
+        self.query_one("#reader-text", TextArea).load_text("")
+        self.query_one("#reader-related", RichLog).clear()
+        self.query_one("#reader-section", Select).set_options([])
+        self.query_one("#reader-document", Select).set_options([])
+        self.query_one("#workspace-tabs", TabbedContent).active = "reader-tab"
+        manifest = await self.service.manifest(accession)
+        self._source_url = str(manifest.filing.filing_url)
         self.query_one("#reader-document", Select).set_options(
             [
                 (f"{item.document_type}: {item.filename}", item.filename)
                 for item in manifest.documents
             ]
         )
+        self.query_one("#reader-heading", Static).update(
+            f"{accession} · {manifest.filing.form_type} · Choose a document"
+        )
+        content = await self.service.read(accession, filename=filename)
+        self._source_url = str(content.document.url)
         self.query_one(
             "#reader-document", Select
         ).value = content.document.filename
@@ -547,8 +562,10 @@ class ResearchWorkspace(App[None]):
     def on_worker_state_changed(self, event: Worker.StateChanged) -> None:
         """Surface errors and cancellation without closing the workspace."""
         if event.state == WorkerState.ERROR:
+            self._reload_inbox()
             self._status(f"Action failed: {event.worker.error}")
         elif event.state == WorkerState.CANCELLED:
+            self._reload_inbox()
             self._status(
                 "Cancelled. Previously saved evidence remains available."
             )

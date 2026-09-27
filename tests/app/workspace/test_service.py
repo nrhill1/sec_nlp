@@ -2,6 +2,7 @@
 """Tests for manual discovery progress, bounded catch-up, and cached reading."""
 
 import asyncio
+import threading
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from unittest.mock import AsyncMock, Mock
@@ -274,6 +275,13 @@ def test_history_boundaries_and_two_full_budget(
         )
     )
     assert result.partial and fetch_mock.await_count == 2
+    assert "--start 2026-01-15 --end 2026-09-01" in result.message
+    coverage = next(
+        item
+        for item in service.store.list_checkpoints()
+        if item.source == "sec-coverage"
+    )
+    assert coverage.scope == "2026-01-15:2026-09-01"
     assert all(
         item.filed_date
         and date(2026, 1, 15) <= item.filed_date <= date(2026, 9, 1)
@@ -345,3 +353,121 @@ def test_selected_document_cache_avoids_refetch(
     manifest.assert_awaited_once()
     read.assert_awaited_once()
     assert service.store.list_filings()[0].is_read
+
+
+def test_cancelled_index_listing_marks_main_coverage_partial(
+    service: WorkspaceService, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(
+        discovery,
+        "fetch_latest_filings",
+        AsyncMock(return_value=FilingPage(filings=(_filing(),), raw_entries=1)),
+    )
+    monkeypatch.setattr(
+        discovery,
+        "list_daily_indexes",
+        AsyncMock(side_effect=asyncio.CancelledError()),
+    )
+    with pytest.raises(asyncio.CancelledError):
+        asyncio.run(service.refresh(today=TODAY))
+    coverage = next(
+        item
+        for item in service.store.list_checkpoints()
+        if item.source == "sec-coverage"
+    )
+    assert coverage.status == "partial" and not coverage.scope
+    assert service.store.list_jobs()[0].status == "cancelled"
+
+
+def test_index_ingest_runs_outside_event_loop(
+    service: WorkspaceService, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    main_thread = threading.get_ident()
+    observed: list[int] = []
+    original = service.store.ingest_filings
+
+    def ingest(
+        filings: tuple[FilingRecord, ...], checkpoint: SourceCheckpoint
+    ) -> int:
+        observed.append(threading.get_ident())
+        return original(filings, checkpoint)
+
+    monkeypatch.setattr(service.store, "ingest_filings", ingest)
+    monkeypatch.setattr(
+        discovery,
+        "list_daily_indexes",
+        AsyncMock(return_value=(_daily(TODAY),)),
+    )
+    monkeypatch.setattr(
+        discovery, "fetch_index", AsyncMock(return_value=(_filing(),))
+    )
+    asyncio.run(_indexes(service))
+    assert observed and all(thread != main_thread for thread in observed)
+
+
+def test_news_snapshot_uses_ledger_new_flags(
+    service: WorkspaceService, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from sec_nlp.app.pulse import service as briefs
+
+    profile = service.store.load_settings()
+    first = briefs.build_demo_brief(profile).model_copy(update={"demo": False})
+    second = first.model_copy(
+        update={
+            "brief_id": "b" * 32,
+            "generated_at": first.generated_at + timedelta(seconds=1),
+        }
+    )
+    build = Mock(side_effect=[first, second])
+    monkeypatch.setattr(briefs, "build_brief", build)
+    asyncio.run(service.refresh(source="news"))
+    asyncio.run(service.refresh(source="news"))
+    snapshot = service.store.latest_brief(profile)
+    assert snapshot is not None and snapshot.headlines
+    assert all(not item.is_new for item in snapshot.headlines)
+    assert build.call_args.kwargs["previous"].brief_id == first.brief_id
+
+
+def test_full_index_coverage_supersedes_an_old_daily_gap(
+    service: WorkspaceService, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Continue recent daily discovery after a full snapshot covers an older failed day."""
+    failed = _daily(date(2025, 12, 29))
+    service.store.save_checkpoint(
+        SourceCheckpoint(
+            source="sec-index",
+            scope=str(failed.url),
+            artifact_url=str(failed.url),
+            cursor="2025-12-29",
+            status="error",
+        )
+    )
+    for year, quarter, cursor in (
+        (2025, 4, "2025-12-31"),
+        (2026, 3, "2026-09-25"),
+    ):
+        artifact = discovery.full_index_artifact(year=year, quarter=quarter)
+        service.store.save_checkpoint(
+            SourceCheckpoint(
+                source="sec-index",
+                scope=str(artifact.url),
+                artifact_url=str(artifact.url),
+                cursor=cursor,
+                status="complete",
+                processed_at=datetime.now(UTC),
+            )
+        )
+    listing = AsyncMock(return_value=())
+    monkeypatch.setattr(discovery, "list_daily_indexes", listing)
+    monkeypatch.setattr(
+        discovery,
+        "fetch_index",
+        AsyncMock(
+            side_effect=AssertionError(
+                "Old covered gap must not force full-index catchup"
+            )
+        ),
+    )
+    _, partial, _ = asyncio.run(_indexes(service))
+    assert not partial
+    assert listing.call_args.kwargs == {"year": 2026, "quarter": 3}

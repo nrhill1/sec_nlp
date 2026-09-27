@@ -1,349 +1,117 @@
 # sec-nlp
 
-[![codecov](https://codecov.io/gh/nrhill1/sec_nlp/graph/badge.svg)](https://codecov.io/gh/nrhill1/sec_nlp)
+A terminal research workspace for SEC filings, related headlines, market observations, and investment research. Discover filings across the market, save topic scans, read source evidence, and keep watchlists and notes together. AI and vector research are optional.
 
-SEC/market intelligence toolkit with Python pipeline orchestration and Rust-backed extensions. It supports local LLM analysis, deterministic extraction pipelines, filing retrieval, and timeline/correlation workflows from a single CLI.
+Launching the workspace uses cached data. Refresh, search, evidence downloads, and research run only when requested.
 
-## Pulse: investing and current events
+## Install locally
 
-Use `sec-nlp invest` for a daily observation workflow: one editable watchlist,
-dated market moves, current-events sources, thesis review prompts, and a local
-research journal. Each brief saves an interactive HTML report, Markdown, and
-the exact JSON evidence snapshot. It does not require Ollama or Qdrant services.
+Requires Python 3.13+, `uv`, and Rust with `maturin` when building from source.
 
-```bash
-uv run sec-nlp invest init
-# Edit investing/config.json to set your goal, watchlist, and sources.
-uv run sec-nlp invest brief --demo   # Synthetic data, entirely offline
-uv run sec-nlp invest brief          # Refresh configured news and market sources
-uv run sec-nlp invest review         # Review your saved research offline
-```
-
-The starter profile observes macro releases and uses SPY as a reference asset;
-its company watchlist is empty until you choose symbols. For example,
-`invest init --workspace my-desk --symbols AAPL --symbols MSFT` creates a
-separate workspace for those explicitly selected assets.
-
-See [the Pulse workflow guide](docs/PULSE.md) for configuration,
-research notes, offline replay, data limits, and SEC research follow-ups.
-
-## Highlights
-
-- Local-first filing analysis with Ollama-backed models
-- Deterministic pipelines for XBRL, 13F, insider, news, and event workflows
-- EFTS-first retrieval and optional Qdrant vector indexing/search
-- Rust extensions for EFTS and market data access
-- Run-scoped outputs with run registry metadata
-
-## Requirements
-
-- Python 3.13+
-- `uv` (recommended) or `pip`
-- Ollama for LLM/embedding flows (`analyze`, `chat`, and embedding-indexed workflows)
-- Docker (optional) for `sec-nlp qdrant up`
-- Rust toolchain + `maturin` when building extensions from source
-
-## Pipeline Commands
-
-| Command | Purpose | LLM Required |
-| --- | --- | --- |
-| `analyze` | Topic/query-driven filing analysis with optional market correlation | Yes |
-| `exb` | Exhibit extraction, indexing, and semantic search | No (embeddings only) |
-| `warranty` | Warranty extraction from XBRL and normalized period outputs | No |
-| `financials` | Structured financial statement extraction from filing XBRL | No |
-| `holdings` | 13F holdings snapshots and quarter-over-quarter diffs | No |
-| `insider` | Form 3/4/5 transaction analysis and alerting | No |
-| `news` | Headline ingestion + filing/market correlation timeline | No |
-| `events` | 8-K/6-K event detection with optional news/market context | No |
-| `retrieve` | EFTS-first ranked retrieval and optional vector indexing | No (unless embedding rerank/index enabled) |
-| `chat` | Retrieval-augmented Q&A over indexed filing chunks | Yes |
-
-## Utility Commands
-
-- `sec-nlp efts` - direct SEC EDGAR Full-Text Search queries
-- `sec-nlp market` - Yahoo-backed market extension lookups (latest/range)
-- `sec-nlp invest` - daily market briefs, current events, thesis reviews, and research notes
-- `sec-nlp qdrant` - Qdrant container + collection management
-- `sec-nlp runs` - run registry inspection/pruning
-- `sec-nlp clean` - remove downloads/outputs/logs
-- `sec-nlp flow` - run multi-stage flow specs (for example `retrieve -> chat`)
-- `sec-nlp version` - current package version
-
-## Quickstart
-
-### 1) Install
-
-Using `uv`:
-
-```bash
-uv sync
-uv run sec-nlp --help
-```
-
-Using `pip`:
-
-```bash
-python -m venv .venv
-source .venv/bin/activate
-pip install -e .
-```
-
-### 2) Build Rust extensions (source checkout)
-
-```bash
+```shell
+uv sync --all-extras --group dev
 make build-ext
+.venv/bin/sec-nlp --help
 ```
 
-### 3) Set SEC contact email(s)
+For a complete base installation into a separate virtual environment, without AI/vector extras:
 
-At minimum, set email for whichever pipeline(s) you run.
-
-```bash
-# .env examples
-SEC_NLP_OLLAMA_BASE_URL=http://localhost:11434
-SEC_NLP_ANALYZE_EMAIL=you@example.com
-SEC_NLP_EXB_EMAIL=you@example.com
-SEC_NLP_WARRANTY_EMAIL=you@example.com
-SEC_NLP_FINANCIALS_EMAIL=you@example.com
-SEC_NLP_HOLDINGS_EMAIL=you@example.com
-SEC_NLP_INSIDER_EMAIL=you@example.com
-SEC_NLP_NEWS_EMAIL=you@example.com
-SEC_NLP_EVENTS_EMAIL=you@example.com
-SEC_NLP_RETRIEVE_EMAIL=you@example.com
-SEC_NLP_CHAT_EMAIL=you@example.com
+```shell
+uv venv /path/to/environment --python 3.13
+make install-local PYTHON_BIN=/path/to/environment/bin/python
+/path/to/environment/bin/sec-nlp --help
 ```
 
-### 4) Start local services as needed
+The root maturin wheel contains `sec_nlp`, its prompts, and `market`. The installation target also builds and installs the `efts`, `corr`, `xbrl`, `entity`, and `newswatch` wheels. Native typing files ship with their owning wheel.
 
-```bash
-ollama serve
-ollama pull llama3.2:1b
-ollama pull bge-m3
-ollama pull mxbai-embed-large
+Use the installed `sec-nlp` executable directly. An exact `uv sync` or ordinary `uv run` can remove the locally installed sibling wheels and unselected extras; use `uv run --no-sync` after building if you prefer that launcher. The repository Makefile's development sync includes extras and preserves sibling wheels.
+
+## Open your workspace
+
+```shell
+.venv/bin/sec-nlp workspace init --workspace ./research \
+  --user-agent 'Your Name your-email@example.com' --symbols AAPL MSFT
+.venv/bin/sec-nlp workspace open --workspace ./research
 ```
 
-Optional persistent Qdrant:
+Bare `sec-nlp` opens the platform-default workspace when attached to a terminal; it displays help with non-interactive input. The default path follows `platformdirs`. Use `--workspace` to keep a project in a chosen directory.
 
-```bash
-sec-nlp qdrant up
+The terminal provides:
+
+- **Inbox:** cached market-wide filings, unread and bookmark filters, source coverage, Refresh, and Continue SEC. `Ctrl+R` refreshes SEC; Enter reads a selected filing.
+- **Search & scans:** retrospective SEC keyword/form/date searches and saved scans with explicit evidence downloads.
+- **Reader:** document selection, section navigation, local text search, original source links, matched headlines, and attached notes.
+- **Pulse:** cached headlines and market observations with publisher, publication time, source links, and match reasons; explicit news and market refreshes.
+- **Research:** deterministic specialists and optional AI/vector actions with saved outputs.
+- **Journal and settings:** observations, theses, review dates, watchlist membership, contact identity, and profile settings.
+
+Escape cancels active work. Completed evidence remains available. Source failures and incomplete coverage remain visible; refresh time is not a claim that history is complete. A `!` marker means a later full index no longer lists a previously observed filing; its evidence and notes remain saved.
+
+## Scriptable actions
+
+```shell
+sec-nlp refresh --workspace ./research
+sec-nlp refresh --workspace ./research --source news
+sec-nlp refresh --workspace ./research --source market
+sec-nlp refresh --workspace ./research --start 2026-01-01 --end 2026-03-31
+
+sec-nlp search --workspace ./research --query 'supply agreement' --forms 8-K
+sec-nlp scan save 'Supplier changes' --workspace ./research \
+  --query 'supply agreement' --forms 8-K --max-documents 10
+sec-nlp scan run 'Supplier changes' --workspace ./research
+sec-nlp read ACCESSION --workspace ./research --list-documents
+sec-nlp read ACCESSION --workspace ./research --filename DOCUMENT.html
+
+sec-nlp journal add 'Review customer concentration' --workspace ./research \
+  --symbol AAPL --thesis 'Demand remains durable' --review-on 2026-10-15
+sec-nlp journal review --workspace ./research
+sec-nlp export --workspace ./research --format markdown --destination ./review.md
+sec-nlp export --workspace ./research --format json --destination ./review.json
 ```
 
-### 4b) Run the local Docker stack
+Add `--json` to discovery/reading commands for machine-readable results. Inspect `workspace status`, `workspace inbox`, and `workspace jobs` offline. Exports preserve source provenance and do not overwrite existing files.
 
-This repo now includes a background-friendly Docker Compose stack with:
+The first SEC refresh imports the latest feed and up to five published daily indexes. Each refresh is bounded to 1,000 feed entries and 20 daily indexes or two quarterly indexes. Subsequent refreshes resume gaps. Explicit history actions require a date range; rerun the same range to continue a capped import. Corrections are reconciled on later manual refreshes. The transport defaults to five SEC requests per second within an application process. See the SEC's [access guidance](https://www.sec.gov/about/developer-resources) and [filing index documentation](https://www.sec.gov/search-filings/edgar-search-assistance/accessing-edgar-data).
 
-- `benchmark-runner`: repo-mounted app container that idles after syncing
-  dependencies and building Rust extensions when needed
-- `qdrant`: local Qdrant sidecar exposed on `localhost:6335` by default
+## Deeper research
 
-Start it with one command:
-
-```bash
-docker compose up -d --build
+```shell
+sec-nlp research financials AAPL --periods 4 --workspace ./research
+sec-nlp research insider AAPL --workspace ./research
+sec-nlp research holdings AAPL --workspace ./research
+sec-nlp research warranty AAPL --workspace ./research
+sec-nlp research exb AAPL --workspace ./research
+sec-nlp research events AAPL --workspace ./research
+sec-nlp research retrieve AAPL --queries 'supply agreement' --workspace ./research
+sec-nlp research analyze AAPL --preset quick --workspace ./research
+sec-nlp research ask --question 'What changed in liquidity risk?' --workspace ./research
+sec-nlp research index AAPL --queries 'liquidity risk' --workspace ./research
+sec-nlp research recipe --settings jobs/benchmark_matrix_flows/01_rems_large_merged_aligned.yaml \
+  --workspace ./research
 ```
 
-Or via make:
+Run `research CAPABILITY --help` for its settings. `--settings FILE.json` supplies a saved specialist configuration; CLI flags override it. Existing specialist serializers remain in use. Exhibit extraction/export works without vector infrastructure.
 
-```bash
-make docker-up
+Install the `ai` extra for model execution and the `vector` extra for embeddings, Qdrant, and semantic chunking. Configure running model/vector services explicitly. Research does not start Docker or model services. The base reader works without either extra. Direct Unstructured parsing remains lazy; see the architecture guide for local parser resource requirements and fallback behavior.
+
+## Migrate existing work
+
+```shell
+sec-nlp workspace migrate --workspace ./research --from ./investing
 ```
 
-Then exec into the app container:
+Migration preserves original profiles, journals, brief snapshots, filing caches, authored jobs, and specialist output files. It is repeatable and rejects conflicting identities. See [the migration map](docs/MIGRATION.md) for command/import replacements and cache handling.
 
-```bash
-docker compose exec benchmark-runner bash
-```
+## Development checks
 
-Inside the container, run the usual commands:
-
-```bash
-uv run sec-nlp --help
-uv run pytest tests/benchmarks -q
-```
-
-Notes:
-
-- The app container defaults `SEC_NLP_OLLAMA_BASE_URL` to
-  `http://host.docker.internal:11434`, so Ollama can stay on the host.
-- The runner image and startup metadata carry the current git commit hash when
-  you start the stack with `make docker-up`. The entrypoint also writes
-  `logs/container/benchmark-runner/metadata.json` and
-  `logs/container/benchmark-runner/bootstrap.log` inside the Docker-backed log
-  volume.
-- Rust extensions are now prebuilt into the image in a dedicated Docker build
-  stage and installed into the container venv during startup, so readiness only
-  goes green after the extension import check passes.
-- The Compose-managed Qdrant sidecar uses `localhost:6335` and `localhost:6336`
-  by default so it does not collide with an existing `sec-nlp qdrant up`
-  container on `6333/6334`. Override with
-  `SEC_NLP_DOCKER_QDRANT_HTTP_PORT` and `SEC_NLP_DOCKER_QDRANT_GRPC_PORT`
-  if you want different host bindings.
-- Runtime state (`.venv`, `.cache`, `outputs`, `downloads`, `logs`, `.qdrant`,
-  and `target`) is kept in Docker volumes so the background container can run
-  without churning host-owned files in the repo checkout, and the bootstrap
-  logs stay isolated under `logs/container/benchmark-runner/`.
-- Stop the stack with `docker compose down` or `make docker-down`.
-
-### 4c) Refresh the benchmark branch report
-
-Use a pinned baseline commit for reproducible performance comparisons:
-
-```bash
-make -C src benchmark-report \
-  BENCHMARK_EMAIL=you@example.com \
-  BENCHMARK_BASELINE_REF=5dadf05a96dfc94456e142e962d111b93c6fb81a
-```
-
-The stable report artifacts are written under `docs/benchmarks/conflict_monopoly/`.
-
-### 5) Run examples
-
-```bash
-sec-nlp analyze AAPL --preset quick
-sec-nlp exb DE --exhibit-categories subsidiaries consents
-sec-nlp warranty AAPL
-sec-nlp financials AAPL --periods 4
-sec-nlp holdings AAPL --quarters 4
-sec-nlp insider AAPL --lookback-months 12
-sec-nlp news AAPL --topics tariffs supply_chain
-sec-nlp events AAPL --event-types merger restatement
-sec-nlp retrieve AAPL --queries "supply chain" "pricing pressure"
-sec-nlp chat AAPL --question "What did management say about warranty risk?"
-```
-
-### 6) Run a single multi-pipeline flow (retrieve -> chat)
-
-Create a flow spec (YAML or JSON), then validate/run it:
-
-```bash
-cat > flow_retrieve_chat.yaml <<'YAML'
-name: retrieve_chat
-defaults:
-  email: you@example.com
-  symbols: [AAPL]
-stages:
-  - id: retrieve_seed
-    pipeline: retrieve
-    overrides:
-      queries: ["supply chain risk", "pricing pressure"]
-      output_format: json
-  - id: chat_answer
-    pipeline: chat
-    inputs:
-    - from_stage: retrieve_seed
-      artifact: retrieve_seed
-      target_field: seed_context
-    overrides:
-      question: "Summarize supply-chain and pricing risks with citations."
-      interactive: false
-      output_format: json
-YAML
-
-sec-nlp flow validate --spec flow_retrieve_chat.yaml
-sec-nlp flow run --spec flow_retrieve_chat.yaml
-```
-
-Prebuilt flow packs:
-
-- `/Users/nicolashill/Projects/sec/jobs/multi_jobs`:
-  30 retrieve->chat specs across baskets and size tiers.
-- `/Users/nicolashill/Projects/sec/jobs/merged_basket_high_models`:
-  higher-parameter specs that merge runs into one shared collection per basket
-  (`qwen3-embedding:4b` + `qwen3:8b`).
-- `/Users/nicolashill/Projects/sec/jobs/industry_tier_jobs`:
-  mixed retrieve/chat/flow presets with standardized industry collections split
-  by low/medium/high model tiers.
-- `/Users/nicolashill/Projects/sec/jobs/conflict_monopoly_flows`:
-  two multi-stage large flows for REMs and quantum, each spanning simple terms,
-  geopolitical-conflict retrieval, monopoly/concentration retrieval, and
-  complex synthesis queries over filings from March 12, 2023 through the run
-  date.
-
-## Analyze Presets
-
-Use `--preset <name>` with `sec-nlp analyze`.
-
-- `quick`
-- `laptop`
-- `thorough`
-- `comprehensive`
-- `rare_earths`
-
-Run `sec-nlp analyze --help` for full preset effects.
-
-## Configuration
-
-Config precedence:
-
-1. CLI args
-2. Environment variables
-3. `.env`
-
-Pipeline env prefixes:
-
-- `SEC_NLP_ANALYZE_`
-- `SEC_NLP_EXB_`
-- `SEC_NLP_WARRANTY_`
-- `SEC_NLP_FINANCIALS_`
-- `SEC_NLP_HOLDINGS_`
-- `SEC_NLP_INSIDER_`
-- `SEC_NLP_NEWS_`
-- `SEC_NLP_EVENTS_`
-- `SEC_NLP_RETRIEVE_`
-- `SEC_NLP_CHAT_`
-
-Global runtime environment variables:
-
-- `SEC_NLP_OLLAMA_BASE_URL` (preferred)
-- `OLLAMA_BASE_URL` (legacy fallback)
-
-Nested fields:
-
-- Env: `__` delimiters, e.g. `SEC_NLP_ANALYZE_LLM__MODEL_NAME=llama3.2:1b`
-- CLI: dot notation, e.g. `--llm.model-name`, `--search.queries`, `--vdb.collection-name`
-
-## Outputs and Run Layout
-
-Run-scoped outputs are written under:
-
-```text
-outputs/<run_timestamp>/<pipeline_type>/<SYMBOL>/...
-```
-
-Representative artifacts:
-
-- Analyze: `<accession>/analysis.{yaml,json,csv}`, `analysis_summary.yaml`, `search/summary.yaml`
-- Exhibit: `<symbol>_exhibit_index_<run_id>.{yaml,json,csv}`, `<symbol>_exhibit_summary_<run_id>.{yaml,json}`
-- Warranty: `<symbol>_warranty_<accession>_<run_id>.json`, `<symbol>_warranty_combined_<run_id>.csv`
-- Financials: `<symbol>_financials_<run_id>.{csv,json,yaml}`
-- Holdings: `<symbol>_holdings_<run_id>_snapshot.csv`, `_summary.{json,yaml}`, `_diff.{json,yaml}`
-- Insider: `<symbol>_insider_<run_id>_ledger.csv`, `_summary.{json,yaml}`, `_alerts.{json,yaml}`
-- News/Events/Retrieve/Chat: timeline or summary files with run_id-stamped stems in each symbol directory
-
-Run registry database:
-
-- `.cache/sec-nlp/runs.db`
-- Inspect with `sec-nlp runs ls`, `sec-nlp runs info`, `sec-nlp runs stats`
-
-## Development
-
-```bash
-make dev
-make lint
-make test
+```shell
 make build-ext
-make stubs
+.venv/bin/pytest -x
+.venv/bin/ty check src tests
+.venv/bin/ruff check src tests
+.venv/bin/ruff format --check src tests
 ```
 
-## Additional Docs
+Tests block network access. Model calls and SEC responses are mocked. Headless Textual tests exercise cached startup, reader navigation, notes, and cancellation; fresh-process tests enforce import boundaries.
 
-- [docs/README.md](docs/README.md)
-- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
-- [src/sec_nlp/pipelines/presets/README.md](src/sec_nlp/pipelines/presets/README.md)
-- [src/sec_nlp/pipelines/presets/analyze/README.md](src/sec_nlp/pipelines/presets/analyze/README.md)
-- [crates/README.md](crates/README.md)
-- [docs/PROJECT_STATE.md](docs/PROJECT_STATE.md)
-
-## License
-
-MIT
+Read [architecture](docs/ARCHITECTURE.md), [Pulse workflow](docs/PULSE.md), [migration](docs/MIGRATION.md), [validation results](docs/VALIDATION.md), and the [documentation index](docs/README.md).

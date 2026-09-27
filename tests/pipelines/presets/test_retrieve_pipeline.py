@@ -11,6 +11,8 @@ from datetime import date
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
+
 from sec_nlp.core.documents import DocumentRecord as Document
 from sec_nlp.core.edgar.efts_models import EFTSBatchResult, EFTSHit
 from sec_nlp.core.edgar.filing_mode import FilingMode
@@ -2074,7 +2076,7 @@ def test_index_retrieval_hits_warns_when_ranked_hits_empty(
     assert "no chunks indexed because ranked hits are empty" in caplog.text
 
 
-def test_index_retrieval_hits_warns_when_no_vectors_produced(
+def test_index_retrieval_hits_fails_when_no_vectors_produced(
     tmp_path: Path,
     monkeypatch,
     caplog,
@@ -2136,14 +2138,8 @@ def test_index_retrieval_hits_warns_when_no_vectors_produced(
     )
 
     caplog.set_level(logging.WARNING, logger="sec_nlp")
-    indexed = index_retrieval_hits(
-        symbol="ABC",
-        hits=hits,
-        settings=settings,
-    )
-
-    assert indexed == hits
-    assert "no chunks indexed because no vectors were produced" in caplog.text
+    with pytest.raises(RuntimeError, match="embeddings are missing"):
+        index_retrieval_hits(symbol="ABC", hits=hits, settings=settings)
 
 
 def test_index_retrieval_hits_skips_existing_points_in_incremental_mode(
@@ -2498,7 +2494,12 @@ def test_retrieve_pipeline_limits_failed_vector_setup_retries(
     pipeline = RetrievePipeline(config=config)
     result = pipeline.run()
 
-    assert result.success is True
+    assert result.success is False
+    assert (
+        result.error is not None
+        and "embedding components are unavailable" in result.error
+    )
+    assert result.outputs == []
     # One prewarm attempt in _build_components + one runtime retry.
     assert setup_calls["embedder"] == 2
     assert setup_calls["qdrant"] == 2

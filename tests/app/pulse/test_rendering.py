@@ -344,6 +344,6 @@ def test_sec_drilldowns_quote_symbols_with_shell_metacharacters(
     parser.feed(renderer(brief))
     visible = " ".join(parser.prose)
 
-    assert "sec-nlp events '^GSPC'" in visible
-    assert "sec-nlp retrieve '^GSPC' --queries 'risk factors'" in visible
-    assert "sec-nlp financials '^GSPC' --periods 4" in visible
+    assert "sec-nlp research events '^GSPC'" in visible
+    assert "sec-nlp search --symbols '^GSPC' --query 'risk factors'" in visible
+    assert "sec-nlp research financials '^GSPC' --periods 4" in visible

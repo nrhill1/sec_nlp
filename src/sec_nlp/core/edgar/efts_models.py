@@ -8,6 +8,8 @@ from enum import StrEnum
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from .filing_models import FilingEntity
+
 
 class EFTSSortField(StrEnum):
     """Available sort fields for EFTS search."""
@@ -121,6 +123,10 @@ class EFTSHit(BaseModel):
     )
     company_name: str = Field(
         description="Company name from filing",
+    )
+    entities: tuple[FilingEntity, ...] = Field(
+        default=(),
+        description="All explicit source entity associations, without inferred roles.",
     )
     tickers: list[str] = Field(
         default_factory=list,

@@ -16,7 +16,9 @@ if TYPE_CHECKING:
 import asyncio
 import re
 from collections.abc import Sequence
+from functools import lru_cache
 from html.parser import HTMLParser
+from importlib.util import find_spec
 from pathlib import Path
 
 from sec_nlp.core.documents import DocumentRecord as Document
@@ -32,6 +34,33 @@ from sec_nlp.core.text.section_extractor import SectionExtractor
 from sec_nlp.core.text.semantic_settings import SemanticChunkingSettings
 from sec_nlp.core.types import as_json_dict
 from sec_nlp.types import JsonDict
+
+
+@lru_cache(maxsize=1)
+def _require_local_html_model() -> None:
+    """Require a usable local spaCy model before Unstructured can parse HTML.
+
+    Unstructured 0.21.5 installs en_core_web_sm automatically when loading it
+    fails. Checking both package presence and local loading first keeps model
+    installation outside filing extraction. Successful checks are cached.
+
+    Raises:
+        RuntimeError: If the model is absent or cannot be loaded locally.
+    """
+    if find_spec("en_core_web_sm") is None:
+        raise RuntimeError(
+            "spaCy model en_core_web_sm is not installed locally; "
+            "automatic model downloads are disabled"
+        )
+    try:
+        import spacy
+
+        spacy.load("en_core_web_sm")
+    except (ImportError, OSError, ValueError) as exc:
+        raise RuntimeError(
+            "spaCy model en_core_web_sm could not be loaded locally; "
+            "automatic model downloads are disabled"
+        ) from exc
 
 
 class _HTMLTextExtractor(HTMLParser):
@@ -138,10 +167,6 @@ class HtmlProcessor:
             semantic_config = SemanticChunkerConfig.from_settings(
                 self.semantic_chunking
             )
-            from sec_nlp.core.text.semantic_chunking import (
-                SemanticChunkerConfig,
-            )
-
             return SemanticChunker(embedder=embedder, config=semantic_config)
         except Exception as exc:
             logger.warning(
@@ -491,9 +516,10 @@ class HtmlProcessor:
     ) -> Sequence[Document]:
         if not html_path.exists():
             raise FileNotFoundError(str(html_path))
-        from unstructured.partition.html import partition_html
-
         try:
+            _require_local_html_model()
+            from unstructured.partition.html import partition_html
+
             elements = partition_html(filename=str(html_path))
             docs = [
                 Document(
@@ -560,6 +586,7 @@ class HtmlProcessor:
         section_filter: SectionFilter | None = None,
     ) -> Sequence[Document]:
         try:
+            _require_local_html_model()
             from unstructured.partition.html import partition_html
 
             elements = partition_html(text=html)

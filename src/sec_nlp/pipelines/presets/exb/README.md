@@ -1,12 +1,22 @@
 # Exhibit Pipeline (`exb`)
 
-`exb` extracts and indexes exhibit content by category/number with optional semantic search.
+`exb` extracts exhibit content by category/number and exports source evidence.
+Extraction works in the base installation without LangChain, embeddings, or Qdrant.
+Indexing and semantic search are explicit options requiring the `vector` extra.
+HTML extraction uses structured parsing when its local spaCy model is available,
+and a logged local text fallback otherwise; it never installs model files.
 
 ## Command
 
 ```bash
-sec-nlp exb DE --exhibit-categories contracts subsidiaries consents
+sec-nlp research exb DE --exhibit-categories contracts subsidiaries consents
 ```
+
+## Execution
+
+Typed extraction steps execute sequentially through ordinary Python calls with
+shared run identifiers. The terminal owns progress and cancellation. Settings
+validation is separate from execution and does not create run records.
 
 ## Core Flow
 
@@ -23,7 +33,8 @@ sec-nlp exb DE --exhibit-categories contracts subsidiaries consents
 - `exhibit_categories` / `exhibit_numbers`
 - `contract_categories` and `search_terms`
 - `search_only` to skip indexing and query existing vectors
-- `dry_run` to skip vector upload
+- `index_results` (default `false`) to explicitly enable vector indexing
+- `dry_run` to skip vector upload after indexing is selected
 - `export_format` (`yaml`, `json`, `csv`, `both`; default `yaml`)
 - `candidate_first` to reuse retrieve EFTS/ranking logic for accession narrowing
 - `candidate_queries`, `candidate_top_k`, `efts_candidates`
@@ -32,6 +43,8 @@ sec-nlp exb DE --exhibit-categories contracts subsidiaries consents
 ## Shared Semantic Chunking
 
 All presets expose `semantic_chunking.*` nested settings from `BasePipelineSettings`.
+Semantic chunking defaults to disabled; explicitly enable it only with the `vector`
+extra and an available embedding model. Local sentence/section chunking requires no AI service.
 
 Common CLI overrides:
 - `--semantic-chunking.enabled true`
@@ -39,7 +52,7 @@ Common CLI overrides:
 - `--semantic-chunking.breakpoint-threshold-type gradient`
 - `--semantic-chunking.max-chunk-tokens 384`
 
-Pipelines that chunk filing text directly (`retrieve`, `exb`, `warranty`, and loader-backed `analyze`) apply these settings during chunk generation. Other presets keep the same config surface for CLI/flow consistency.
+Pipelines that chunk filing text directly (`retrieve`, `exb`, `warranty`, and loader-backed `analyze`) apply these settings during chunk generation. Other presets keep the same config surface for research configuration consistency.
 
 ## Outputs
 

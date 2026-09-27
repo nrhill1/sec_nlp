@@ -5,7 +5,6 @@ from pathlib import Path
 
 import pytest
 
-
 from sec_nlp.app.workspace.evidence import ContractEvidenceBundle
 from sec_nlp.app.workspace.recipes import (
     EvidenceInput,

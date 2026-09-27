@@ -7,11 +7,13 @@ instances own their connections, while request policy remains centralized.
 """
 
 import asyncio
-import json
 import logging
 import threading
 import time
-from collections.abc import Mapping
+from collections.abc import Iterator, Mapping
+from concurrent.futures import ThreadPoolExecutor
+from contextlib import contextmanager
+from contextvars import ContextVar
 from datetime import UTC, datetime
 from email.utils import parsedate_to_datetime
 from types import TracebackType
@@ -186,10 +188,100 @@ class SecTransport:
         return _JSON.validate_json(await self.get_bytes(url, params=params))
 
 
+class _SyncSession:
+    """Own a scoped event loop and reusable async clients on one worker thread."""
+
+    def __init__(self) -> None:
+        """Allocate a lazy worker without opening any network connections."""
+        self._worker = ThreadPoolExecutor(
+            max_workers=1, thread_name_prefix="sec-http"
+        )
+        self._runner: asyncio.Runner | None = None
+        self._clients: dict[tuple[str, float, int], SecTransport] = {}
+
+    async def _fetch(
+        self, url: str, user_agent: str, timeout: float, retries: int
+    ) -> bytes:
+        """Reuse an asynchronous transport for this session's request configuration."""
+        key = (user_agent, timeout, retries)
+        client = self._clients.get(key)
+        if client is None:
+            client = SecTransport(user_agent, timeout=timeout, retries=retries)
+            self._clients[key] = client
+        return await client.get_bytes(url)
+
+    def _run(
+        self, url: str, user_agent: str, timeout: float, retries: int
+    ) -> bytes:
+        """Run the single shared HTTP implementation on its owned event loop."""
+        if self._runner is None:
+            self._runner = asyncio.Runner()
+        return self._runner.run(self._fetch(url, user_agent, timeout, retries))
+
+    def fetch(
+        self, url: str, user_agent: str, timeout: float, retries: int
+    ) -> bytes:
+        """Wait for a request on the scoped worker, even from an async caller."""
+        return self._worker.submit(
+            self._run, url, user_agent, timeout, retries
+        ).result()
+
+    async def _close_clients(self) -> None:
+        """Close every connection before its owning event loop is destroyed."""
+        await asyncio.gather(
+            *(client.aclose() for client in self._clients.values())
+        )
+        self._clients.clear()
+
+    def _close_loop(self) -> None:
+        """Release clients and loop resources on their original worker thread."""
+        if self._runner is not None:
+            try:
+                self._runner.run(self._close_clients())
+            finally:
+                self._runner.close()
+
+    def close(self) -> None:
+        """Finish cleanup and stop this explicit session's worker."""
+        try:
+            self._worker.submit(self._close_loop).result()
+        finally:
+            self._worker.shutdown(wait=True, cancel_futures=True)
+
+
+_SYNC_SESSION: ContextVar[_SyncSession | None] = ContextVar(
+    "sec_sync_session", default=None
+)
+
+
+@contextmanager
+def sec_sync_session() -> Iterator[None]:
+    """Reuse asynchronous SEC connections throughout explicit specialist work.
+
+    Wrap a synchronous research action in this context. Nested scopes reuse the
+    active session, and each outer scope closes its worker, event loop, and
+    connections. All requests still execute ``SecTransport.get_bytes``; there
+    is no separate synchronous HTTP implementation or retry policy.
+
+    The synchronous adapter blocks its caller. Async applications should await
+    ``SecTransport`` directly or run specialist work outside their event loop.
+    """
+    if _SYNC_SESSION.get() is not None:
+        yield
+        return
+    session = _SyncSession()
+    token = _SYNC_SESSION.set(session)
+    try:
+        yield
+    finally:
+        _SYNC_SESSION.reset(token)
+        session.close()
+
+
 def fetch_sec_bytes(
     url: str, user_agent: str, *, timeout: float = 30.0, retries: int = 3
 ) -> bytes:
-    """Serve synchronous specialist callers using the same HTTPX request policy.
+    """Bridge synchronous specialist calls to the sole async SEC HTTP client.
 
     Args:
         url: HTTPS SEC endpoint.
@@ -198,35 +290,18 @@ def fetch_sec_bytes(
         retries: Maximum number of transient retries.
 
     Returns:
-        Successful response bytes.
+        Successful bytes using the active scoped session or a temporary scope.
 
     Raises:
         ValueError: If request arguments or payload size are invalid.
         httpx.HTTPError: If retrieval fails after bounded retries.
     """
     _validate_url(url)
-    if not user_agent.strip() or timeout <= 0 or not 0 <= retries <= 10:
-        raise ValueError("Invalid SEC transport configuration")
-    with httpx.Client(
-        headers={"User-Agent": user_agent},
-        timeout=timeout,
-        follow_redirects=False,
-    ) as client:
-        for attempt in range(retries + 1):
-            time.sleep(_reserve_delay())
-            response: httpx.Response | None = None
-            try:
-                response = client.get(url)
-                if response.status_code != 429 and response.status_code < 500:
-                    return _check_response(response)
-                if attempt == retries:
-                    return _check_response(response)
-            except httpx.TransportError:
-                logger.debug("Transient synchronous SEC failure", exc_info=True)
-                if attempt == retries:
-                    raise
-            time.sleep(_retry_delay(response, attempt))
-    raise RuntimeError("Unreachable SEC request state")
+    with sec_sync_session():
+        session = _SYNC_SESSION.get()
+        if session is None:
+            raise RuntimeError("SEC synchronous session did not initialize")
+        return session.fetch(url, user_agent, timeout, retries)
 
 
 def fetch_sec_json(url: str, user_agent: str) -> JsonValue:
@@ -239,4 +314,4 @@ def fetch_sec_json(url: str, user_agent: str) -> JsonValue:
     Returns:
         Validated JSON data; malformed responses raise a validation error.
     """
-    return _JSON.validate_python(json.loads(fetch_sec_bytes(url, user_agent)))
+    return _JSON.validate_json(fetch_sec_bytes(url, user_agent))

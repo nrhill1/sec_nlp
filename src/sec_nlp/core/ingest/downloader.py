@@ -16,7 +16,11 @@ from pathlib import Path
 import httpx
 
 from sec_nlp.core.edgar.filing_mode import FilingMode
-from sec_nlp.core.edgar.transport import fetch_sec_bytes, fetch_sec_json
+from sec_nlp.core.edgar.transport import (
+    fetch_sec_bytes,
+    fetch_sec_json,
+    sec_sync_session,
+)
 from sec_nlp.core.infra.logger import logger
 from sec_nlp.core.ingest.filings import get_cik_for_ticker
 from sec_nlp.core.ingest.types import DownloadResult, DownloadResults
@@ -47,6 +51,7 @@ def _error_download_result(error: str) -> DownloadResult:
     }
 
 
+@sec_sync_session()
 def download_filings(
     *,
     symbols: Iterable[str],
@@ -192,6 +197,7 @@ def _submission_rows(
     return rows
 
 
+@sec_sync_session()
 def download_accessions(
     *,
     symbol: str,

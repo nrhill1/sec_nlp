@@ -1,5 +1,4 @@
 pub mod client;
-pub mod dedup;
 pub mod error;
 pub mod feeds;
 pub mod filter;

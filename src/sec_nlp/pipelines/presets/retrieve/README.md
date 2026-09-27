@@ -5,7 +5,7 @@
 ## Command
 
 ```bash
-sec-nlp retrieve AAPL --queries "pricing pressure" "supply chain"
+sec-nlp research index AAPL --queries "pricing pressure" "supply chain"
 ```
 
 You must provide at least one query.
@@ -48,6 +48,8 @@ You must provide at least one query.
 ## Shared Semantic Chunking
 
 All presets expose `semantic_chunking.*` nested settings from `BasePipelineSettings`.
+Semantic chunking defaults to disabled; explicitly enable it only with the `vector`
+extra and an available embedding model. Local sentence/section chunking requires no AI service.
 
 Common CLI overrides:
 - `--semantic-chunking.enabled true`
@@ -55,7 +57,7 @@ Common CLI overrides:
 - `--semantic-chunking.breakpoint-threshold-type gradient`
 - `--semantic-chunking.max-chunk-tokens 384`
 
-Pipelines that chunk filing text directly (`retrieve`, `exb`, `warranty`, and loader-backed `analyze`) apply these settings during chunk generation. Other presets keep the same config surface for CLI/flow consistency.
+Pipelines that chunk filing text directly (`retrieve`, `exb`, `warranty`, and loader-backed `analyze`) apply these settings during chunk generation. Other presets keep the same config surface for research configuration consistency.
 
 ## Outputs
 
@@ -74,3 +76,11 @@ Files:
 - Config: `src/sec_nlp/pipelines/presets/retrieve/config.py`
 - Pipeline: `src/sec_nlp/pipelines/presets/retrieve/pipeline.py`
 - Steps: `src/sec_nlp/pipelines/presets/retrieve/steps/`
+
+## Explicit indexing failures
+
+`research index` and `index_results=true` require usable embedding and vector
+components before collection starts. Missing components, missing chunk vectors,
+and backend lookup/upsert errors produce a failed result. Ordinary lexical
+retrieval remains available without optional vector packages. An empty search
+or an incrementally indexed set of existing points can complete without new writes.

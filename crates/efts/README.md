@@ -18,7 +18,9 @@ hits = await client.search_all("warranty accrual", forms=["10-K"], max_results=1
 The offline native parser is `efts.parse_response_json(content, query)`. It
 returns normalized JSON and retains unknown CIK/date metadata without deriving
 an issuer from the accession prefix or inserting the current date. The Python
-facade validates the parsed response before returning typed records.
+facade validates the parsed response and preserves every explicit source CIK
+association before returning typed records. Entity names are attached only when
+their display text explicitly identifies the matching CIK; roles remain unknown.
 
 Ranking functions and classes retain their existing APIs:
 `rank_documents_by_keywords`, `score_document_keywords`, `YakeExtractor`,

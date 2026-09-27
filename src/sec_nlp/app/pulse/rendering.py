@@ -121,11 +121,20 @@ def _quote_status(observation: MarketObservation | None) -> str:
 def _commands(symbol: str) -> tuple[str, ...]:
     """Build copyable SEC drilldowns with each shell argument quoted."""
     return (
-        shlex.join(("sec-nlp", "events", symbol)),
+        shlex.join(("sec-nlp", "research", "events", symbol)),
         shlex.join(
-            ("sec-nlp", "retrieve", symbol, "--queries", "risk factors")
+            (
+                "sec-nlp",
+                "search",
+                "--symbols",
+                symbol,
+                "--query",
+                "risk factors",
+            )
         ),
-        shlex.join(("sec-nlp", "financials", symbol, "--periods", "4")),
+        shlex.join(
+            ("sec-nlp", "research", "financials", symbol, "--periods", "4")
+        ),
     )
 
 

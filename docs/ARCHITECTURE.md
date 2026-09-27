@@ -1,174 +1,130 @@
 # Architecture Overview
 
-`sec-nlp` is a Python-first orchestration system with Rust extensions for performance-critical integration points (EFTS and market data). It supports both LLM-driven and deterministic SEC/market workflows behind one CLI.
+`sec-nlp` is a local terminal application for discovering SEC filings, reading
+source evidence, tracking related headlines, and running specialist research.
+The interactive terminal and explicit CLI commands call the same application
+services. Refreshing remote sources and starting research require a user action.
 
-## Code Layout
+## Application boundaries
 
-- `src/sec_nlp/cli/` - command models, argument normalization, and command dispatch.
-- `src/sec_nlp/app/flows/` - typed multi-stage flow specs, in-memory artifacts, and runnable adapters.
-- `src/sec_nlp/app/pulse/` - portable investing profiles, sourced daily briefs, offline reports, and research journals.
-- `src/sec_nlp/pipelines/base/` - shared pipeline lifecycle, config, validation, and result models.
-- `src/sec_nlp/pipelines/presets/` - production pipeline implementations (`analyze`, `exb`, `warranty`, `financials`, `holdings`, `insider`, `news`, `events`, `retrieve`, `chat`).
-- `src/sec_nlp/pipelines/tools/` - reusable LangChain `StructuredTool` wrappers (`market_context_tool`, `retrieve_hits_tool`, `qdrant_search_tool`, `news_context_tool`).
-- `src/sec_nlp/core/` - EDGAR ingestion, text processing, stats, market/news helpers, and infra services.
-- `src/sec_nlp/pipelines/observability/` - run registry + metrics/profiling.
-- `crates/` - Rust crates (`efts`, `market`, `xbrl`, `corr`, `entity`, `newswatch`).
+- `src/sec_nlp/cli/` parses the selected command without importing every specialist.
+- `src/sec_nlp/tui/` renders workspace panes and owns progress and cancellation.
+- `src/sec_nlp/app/workspace/` stores filings, saved scans, jobs, source status,
+  and journal entries; its services implement refresh, search, read, and export.
+- `app/workspace/research.py` imports the selected specialist and executes it in a
+  cancellable child process. Specialist result files keep their existing schemas.
+- `app/workspace/recipes.py` validates saved recipes and directly invokes supported
+  specialists. `app/workspace/evidence/` contains the retained retrieval seeds and
+  exhibit evidence contracts. There is no separate compiled graph executor.
+- `src/sec_nlp/app/pulse/` provides Pulse's portable profile, observation, and
+  report models used by workspace market context and migration of prior investing
+  data. The terminal's Pulse pane presents cached headlines and market context.
 
-## Runtime Layers
+Workspace persistence and migrations live in `app/workspace/store.py` and
+`migrate.py`. Historical evidence is kept separate from newly requested refresh
+results so a failed provider cannot silently replace prior observations with
+fresh-looking empty data. The default filing feed covers the market; saved scans
+and explicit symbol filters narrow it.
 
-1. CLI layer: parses/normalizes args and instantiates command config.
-2. Flow orchestration layer (optional): executes multi-stage specs and passes typed in-memory artifacts between stages.
-3. Pipeline config layer: immutable Pydantic settings merged from CLI/env/.env.
-   Every preset now exposes a shared `semantic_chunking` nested config.
-4. Pipeline execution layer: per-symbol phase execution with run metadata.
-5. IO/export layer: run-scoped artifacts written in CSV/JSON/YAML.
-6. Observability layer: run registry (SQLite) + optional metrics/tracing.
+## SEC and headline providers
 
-## Pipeline Families
+`core/edgar/transport.py` owns the Python HTTPX transport and shared SEC request
+budget. Filing discovery, EFTS requests, downloads, and document reads use this
+boundary. `core/ingest/downloader.py` adapts the retained specialist download calls
+to it. Source metadata and document URLs remain available for review.
 
-The `invest` command is a separate application workflow, outside the pipeline
-lifecycle. It uses an independent frozen profile so a daily brief does not need
-SEC contact settings, filing downloads, embeddings, or model configuration.
-Existing filing pipelines remain the deeper research entry points.
+`core/news/normalization.py` handles common headline normalization. Provider
+statuses distinguish successful, partial, and failed refreshes. Retrieval does
+not execute instructions found in news articles or filing text.
 
-- LLM-centric: `analyze`, `chat`
-- Retrieval/indexing: `retrieve`, `exb`
-- Deterministic SEC extraction: `warranty`, `financials`, `holdings`, `insider`
-- Timeline/correlation: `news`, `events`
+Six native capabilities remain: market data, EFTS ranking, XBRL parsing,
+correlation, entity extraction, and news retrieval. The `efts` extension no longer
+owns SEC HTTP requests. Python callers use its retained ranking functions.
 
-`retrieve` is EFTS-first and uses lexical ranking/pruning (stopword-aware by default) with selective chunk hydration before optional embedding rerank/index.
+## Deterministic records and optional AI
 
-## Investing Workspace
+`core/documents.py` defines `DocumentRecord`: source text, JSON metadata, and an
+optional identifier. Attributes are frozen, and each record owns its metadata
+dictionary for explicit enrichment. Parsing, lexical ranking, deduplication,
+financial extraction, and specialist serializers use this internal model.
 
-`invest init/brief/note/review` provides a daily observation path alongside the
-SEC pipelines. The CLI reads a frozen `PulseSettings` profile, and the
-application service calls `core.market` once per symbol and `core.news` once
-per feed. Retrieval failures are recorded independently. Dates, phrase matches,
-deduplication, adjusted-session returns, and research prompts are computed in
-Python without an LLM, filing downloads, or vector infrastructure.
+`adapters/documents.py` converts records only where optional LangChain/vector
+operations are requested. LangChain document and Runnable types are confined to
+those integrations. Package `__init__.py` modules remain lightweight; consumers
+import a symbol from its defining module.
 
-Each report stores the exact profile, dated observations, source statuses, and
-journal entries in `brief.json`, plus Markdown and a self-contained HTML view.
-These files live under the chosen investing workspace rather than the pipeline
-output root or SQLite run registry. Notes are immutable individual JSON files;
-configuration remains explicitly editable. Files are published atomically
-without overwriting existing records, and report JSON is published last.
+The base application includes deterministic ingestion and lazy direct
+`unstructured` HTML parsing. The pinned parser is invoked only after its existing
+local spaCy model loads successfully; absent or broken models use a logged local
+text fallback that retains source metadata. Filing extraction never downloads or
+installs NLP models. The base does not require LangChain/vector packages. Optional
+extras are:
 
-Offline snapshot rendering writes separate exports and does not enter live
-history. Synthetic demos are flagged throughout their artifacts. Only an earlier
-live report with an identical profile is eligible for headline comparisons.
-No news article or document content is interpreted as executable instructions.
+- `ai`: model integration through LangChain Core and Ollama, plus NumPy helpers.
+- `vector`: embeddings, Qdrant integration, and semantic chunking.
+- `economic`: FRED economic context.
 
-Reference: [Pulse workflow](PULSE.md)
+Semantic chunking defaults to disabled. Sentence/section chunking works without
+embedding services; users explicitly enable semantic chunking when the `vector`
+extra and embedding model are available. EXB extraction and exports likewise run
+without vectors; `index_results` explicitly enables indexing. Analyze and chat
+require their optional model/vector capabilities.
 
-## Retrieve->Chat Flow Runtime
+The library never starts Docker, Colima, Qdrant, or a model daemon. Optional
+Qdrant clients can fall back from their configured endpoint to a local store and
+then an in-memory store, with the chosen target reported in diagnostic logs.
 
-The `flow` CLI command supports deterministic single-run multi-stage execution.
+## Specialist execution
 
-Current phase supports `retrieve -> chat` with typed handoff:
+Retained specialists live under `pipelines/presets/`: analyze, exb, warranty,
+financials, holdings, insider, news, events, retrieve, and chat. The terminal
+selects these behind `research`, `search`, and refresh actions.
 
-- Retrieve stage emits `RetrieveChatSeedBundle` in memory.
-- Chat stage can accept `seed_context` and skip Qdrant collection search.
-- Artifact handoff avoids JSON round-trip serialization loops.
+`BasePipelineSettings` is a frozen Pydantic configuration. Parsing, displaying,
+and serializing settings does not register a run or create output directories.
+An explicitly constructed execution service starts registry bookkeeping and
+builds its components. `run()` performs the selected operation.
 
-References:
+`pipelines/base/stages.py` uses an ordinary ordered loop over typed extraction
+steps. `RunContext` supplies identifiers for diagnostic logging, while each
+specialist keeps its typed state and existing extraction/export routines. The
+application owns interruption and console rendering. This replaces generic
+Runnable stage composition without duplicating the specialist implementations.
 
-- `src/sec_nlp/app/flows/models.py`
-- `src/sec_nlp/app/flows/artifacts.py`
-- `src/sec_nlp/app/flows/runner.py`
-- `src/sec_nlp/app/flows/compiled.py`
-- `src/sec_nlp/app/flows/contracts/`
+Typical deterministic execution downloads selected filings, parses facts or text,
+computes aggregates/diffs, and exports evidence. Analyze additionally retrieves
+relevant chunks and invokes optional model analysis. Saved recipes hand retained
+evidence records directly from one selected specialist to the next.
 
-## Analyze Flow
+## Outputs and installed paths
 
-1. Load filings (optionally with EFTS expansion).
-2. Chunk/filter/dedupe content (semantic mode uses LangChain Experimental `SemanticChunker` plus local sentence/token caps).
-3. Optional vector indexing/search retrieval.
-4. LLM analysis for retrieved chunks.
-5. Aggregate, enrich (market correlation optional), and export.
-
-Reference: `src/sec_nlp/pipelines/presets/analyze/README.md`
-
-## Deterministic Pipeline Pattern
-
-Most non-LLM presets follow:
-
-1. Download filings or external source records.
-2. Parse/normalize structured entities.
-3. Compute diffs, clusters, correlations, or timeline rollups.
-4. Export symbol-scoped run artifacts.
-
-## Output Conventions
-
-All pipelines use run-scoped output roots:
+Specialist artifacts retain their existing layout:
 
 ```text
-outputs/<run_timestamp>/<pipeline_type>/<SYMBOL>/...
+<out_path>/<run_timestamp>/<pipeline_type>/<SYMBOL>/...
 ```
 
-File names usually include `<run_id>` and pipeline-specific suffixes (for example: `_summary`, `_timeline`, `_ledger`, `_snapshot`, `_ranked`).
+Analyze retains per-accession `analysis.{yaml,json,csv}` and symbol-level
+`search/summary.yaml`. EXB, warranty, financials, holdings, and insider retain their
+existing summary, fact, ledger, and snapshot serializers.
 
-Analyze keeps per-accession directories:
+`core/infra/settings.py` obtains application cache/data locations from
+`platformdirs`, with `SEC_NLP_CACHE_DIR` and `SEC_NLP_DATA_DIR` overrides. Importing
+settings does not create directories. The specialist run registry lives at
+`<cache_dir>/runs.db`; user workspace storage is selected separately. Developer
+scripts discover the checkout only when needed, so installed runtime code does
+not require a repository root.
 
-```text
-outputs/<run_timestamp>/analyze/<SYMBOL>/<accession>/analysis.{yaml,json,csv}
-outputs/<run_timestamp>/analyze/<SYMBOL>/search/summary.yaml
-```
+## Local packaging and verification
 
-## Run Registry
+The root maturin distribution includes the Python application and `market`.
+`make build-wheels` builds it plus the five sibling extension wheels;
+`make install-local` installs that complete local base into the selected Python
+environment. Native capability stubs ship beside their corresponding modules.
+No second Python application distribution or permanent compatibility package is
+maintained.
 
-- SQLite registry path: `.cache/sec-nlp/runs.db`
-- Tracks run id, short id, pipeline type, status, timestamps, and metadata
-- Managed via `sec-nlp runs ...`
-
-## Design Priorities
-
-- Repeatable run-scoped outputs with provenance fields.
-- Clear separation between config, execution, and serialization.
-- Fast-path native integrations through Rust extensions.
-- Optional infrastructure dependencies (Qdrant, Docker) instead of mandatory services.
-- Vector connectivity fallback for pipelines: configured endpoint → best-effort `colima start` + `sec-nlp qdrant up` for localhost Docker → local `.qdrant` path → embedded `:memory:` when Docker/Qdrant remains unavailable.
-
-## Tool Wrappers (LangChain)
-
-The wrappers-first tool package exposes deterministic helpers without enabling autonomous tool-calling in `chat`.
-
-- `market_context_tool`: derive market metrics bundle for symbols.
-- `retrieve_hits_tool`: run deterministic EFTS candidate search + ranking.
-- `qdrant_search_tool`: direct semantic query against a Qdrant collection.
-- `news_context_tool`: recent deduped headline retrieval.
-
-Example LCEL composition:
-
-```python
-from langchain_core.runnables import RunnableParallel, RunnableLambda
-from sec_nlp.pipelines.tools import (
-    market_context_tool,
-    qdrant_search_tool,
-)
-
-chain = RunnableParallel(
-    market=RunnableLambda(
-        lambda x: market_context_tool.invoke(
-            {
-                "symbols": x["symbols"],
-                "start_date": x["start_date"],
-                "end_date": x["end_date"],
-                "benchmark": "SPY",
-                "profile": "compact",
-            }
-        )
-    ),
-    filings=RunnableLambda(
-        lambda x: qdrant_search_tool.invoke(
-            {
-                "collection": x["collection"],
-                "query": x["query"],
-                "top_k": 20,
-                "symbols": x["symbols"],
-                "forms": ["10-K", "10-Q", "8-K", "6-K"],
-            }
-        )
-    ),
-)
-```
+Offline tests mock remote providers. Import-boundary tests run deterministic
+specialists with AI/vector modules blocked, and adapter tests preserve filing
+provenance. Use `ty check src tests` for the full source/type check. Native edits
+require `make build-ext` before Python tests.

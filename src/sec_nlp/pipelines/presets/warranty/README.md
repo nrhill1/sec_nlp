@@ -5,8 +5,14 @@
 ## Command
 
 ```bash
-sec-nlp warranty AAPL
+sec-nlp research warranty AAPL
 ```
+
+## Execution
+
+This deterministic specialist uses internal document records and native XBRL
+parsing. The base installation needs no AI/vector packages. Typed steps run in
+order with shared run identifiers, and the terminal owns progress and cancellation.
 
 ## Core Flow
 
@@ -27,6 +33,8 @@ sec-nlp warranty AAPL
 ## Shared Semantic Chunking
 
 All presets expose `semantic_chunking.*` nested settings from `BasePipelineSettings`.
+Semantic chunking defaults to disabled; explicitly enable it only with the `vector`
+extra and an available embedding model. Local sentence/section chunking requires no AI service.
 
 Common CLI overrides:
 - `--semantic-chunking.enabled true`
@@ -34,7 +42,7 @@ Common CLI overrides:
 - `--semantic-chunking.breakpoint-threshold-type gradient`
 - `--semantic-chunking.max-chunk-tokens 384`
 
-Pipelines that chunk filing text directly (`retrieve`, `exb`, `warranty`, and loader-backed `analyze`) apply these settings during chunk generation. Other presets keep the same config surface for CLI/flow consistency.
+Pipelines that chunk filing text directly (`retrieve`, `exb`, `warranty`, and loader-backed `analyze`) apply these settings during chunk generation. Other presets keep the same config surface for research configuration consistency.
 
 ## Outputs
 

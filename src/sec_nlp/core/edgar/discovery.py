@@ -7,6 +7,7 @@ only after these parsers finish successfully; neither empty feeds nor missing
 HTTP resources imply complete historical coverage.
 """
 
+import asyncio
 import re
 from datetime import date, datetime
 from html import unescape
@@ -354,7 +355,8 @@ async def fetch_index(
     Returns:
         Parsed metadata; HTTP and parse failures propagate without false emptiness.
     """
-    return parse_master_index(await transport.get_bytes(str(artifact.url)))
+    content = await transport.get_bytes(str(artifact.url))
+    return await asyncio.to_thread(parse_master_index, content)
 
 
 def parse_filing_manifest(
@@ -434,9 +436,8 @@ async def fetch_filing_manifest(
     Returns:
         All selectable document-table entries with original links.
     """
-    return parse_filing_manifest(
-        await transport.get_bytes(str(filing.filing_url)), filing
-    )
+    content = await transport.get_bytes(str(filing.filing_url))
+    return await asyncio.to_thread(parse_filing_manifest, content, filing)
 
 
 async def read_filing_document(
@@ -455,6 +456,13 @@ async def read_filing_document(
         ValueError: If the selected resource is binary rather than readable text.
     """
     content = await transport.get_bytes(str(document.url))
+    return await asyncio.to_thread(_document_content, content, document)
+
+
+def _document_content(
+    content: bytes, document: FilingDocument
+) -> DocumentContent:
+    """Extract document text away from the terminal event loop."""
     if content.startswith(b"%PDF") or b"\x00" in content[:4096]:
         raise ValueError(
             "This binary document must be opened through its source link"
@@ -479,7 +487,7 @@ def filing_from_hit(hit: EFTSHit) -> FilingRecord:
         hit: Validated EFTS hit with source-provided company identity and URL.
 
     Returns:
-        An accession record with the explicitly identified entity, if known.
+        An accession record with every explicitly identified entity, if known.
 
     Raises:
         ValueError: If neither an explicit CIK nor an SEC archive URL is usable.
@@ -487,7 +495,7 @@ def filing_from_hit(hit: EFTSHit) -> FilingRecord:
     accession = hit.accession_number
     if hit.filing_url:
         _sec_url(hit.filing_url)
-    entities = (
+    entities = hit.entities or (
         (FilingEntity(cik=hit.cik, name=hit.company_name),)
         if re.fullmatch(r"\d{1,10}", hit.cik) and int(hit.cik) > 0
         else ()

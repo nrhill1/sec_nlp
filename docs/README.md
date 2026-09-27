@@ -5,8 +5,10 @@ This directory is organized by scope.
 ## Root docs (cross-cutting)
 
 - `ARCHITECTURE.md` - system architecture and runtime design
-- `PROJECT_STATE.md` - current command/pipeline/output snapshot
-- `PULSE.md` - daily market briefs, current-events sources, and local research journal
+- `PROJECT_STATE.md` - retained specialist output conventions
+- `MIGRATION.md` - command, import, cache, and authored-job migration map
+- `VALIDATION.md` - consolidation measurements and verification evidence
+- `PULSE.md` - Pulse market briefs, current-events sources, and local research journal
 
 ## Pipeline docs
 

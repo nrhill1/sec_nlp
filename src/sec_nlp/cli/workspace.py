@@ -11,13 +11,14 @@ from __future__ import annotations
 import argparse
 import asyncio
 import sys
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal
 from uuid import uuid4
 
-from pydantic import HttpUrl, TypeAdapter
+from pydantic import BaseModel, HttpUrl, TypeAdapter
 from rich.console import Console
 from rich.table import Table
 
@@ -25,7 +26,7 @@ from sec_nlp.app.pulse.models import JournalEntry, WatchItem
 from sec_nlp.app.workspace.models import ScanSpec
 from sec_nlp.app.workspace.service import ActionResult, WorkspaceService
 from sec_nlp.app.workspace.store import WorkspaceStore
-from sec_nlp.types import JsonDict
+from sec_nlp.types import ConfigData, JsonDict
 
 if TYPE_CHECKING:
     from _typeshed import SupportsWrite
@@ -54,6 +55,31 @@ class Options(argparse.Namespace):
         query: User-authored keyword expression or research question.
         name: User-facing scan or workspace label.
         identifier: Saved scan, filing accession, or capability identifier.
+        source: Requested source family.
+        start: Inclusive historical or query start date.
+        end: Inclusive historical or query cutoff.
+        filename: Selected manifest document name.
+        forms: Exact SEC form filters.
+        symbols: Explicit ticker filters or watchlist membership.
+        ciks: Explicit SEC entity filters.
+        limit: Maximum metadata records requested.
+        max_documents: Maximum evidence downloads per scan.
+        json_output: Whether to render machine-readable results.
+        unread: Whether to filter for unread filings.
+        bookmarked: Whether to filter or mark bookmarked evidence.
+        contact: Declared SEC contact identity.
+        goal: User-authored research objective.
+        origin: Legacy workspace to import.
+        destination: New report file path.
+        export_format: Markdown or JSON export selection.
+        observation: User-authored journal observation.
+        thesis: Thesis attached to an observation.
+        invalidation: Conditions that challenge a thesis.
+        review_on: Journal review date.
+        symbol: Asset associated with a journal entry.
+        sources: Source links attached to a journal entry.
+        accession: Filing linked to a journal entry.
+        settings: Saved specialist or recipe configuration file.
     """
 
     workspace: Path | None = None
@@ -274,12 +300,23 @@ def show_filings(
             company,
             filing.accession_number,
         )
-    Console().print(table)
+    Console(soft_wrap=True).print(table)
+
+
+def _show_records(records: Sequence[BaseModel]) -> None:
+    """Render a single JSON array without terminal-width line wrapping."""
+    Console(soft_wrap=True).print(
+        "["
+        + ",\n".join(record.model_dump_json(indent=2) for record in records)
+        + "]",
+        markup=False,
+        highlight=False,
+    )
 
 
 def _show_action(result: ActionResult, *, as_json: bool) -> int:
     """Render one typed action result and return an informative exit status."""
-    console = Console()
+    console = Console(soft_wrap=True)
     if as_json:
         console.print(
             result.model_dump_json(indent=2), markup=False, highlight=False
@@ -310,7 +347,9 @@ def _research(
             load_recipe(options.settings).model_dump_json()
         )
         result = asyncio.run(execute_research(store, "recipe", payload))
-        Console().print(result.model_dump_json(indent=2), markup=False)
+        Console(soft_wrap=True).print(
+            result.model_dump_json(indent=2), markup=False
+        )
         return 0 if result.success else 1
     config_type, _ = specialist_types(options.identifier)
     values = (
@@ -326,6 +365,27 @@ def _research(
         positional.append(normalized.pop(0).strip('"'))
     if positional:
         normalized[:0] = ["--symbols", ",".join(positional)]
+    if options.identifier == "analyze":
+        preset_name = values.get("preset")
+        for position, token in enumerate(normalized):
+            if token == "--preset" and position + 1 < len(normalized):
+                preset_name = normalized[position + 1]
+            elif token.startswith("--preset="):
+                preset_name = token.split("=", 1)[1]
+        if isinstance(preset_name, str):
+            from sec_nlp.pipelines.presets.analyze.profiles import (
+                AnalyzePreset,
+                get_preset_config,
+            )
+
+            defaults = TypeAdapter(JsonDict).validate_json(
+                TypeAdapter(ConfigData).dump_json(
+                    get_preset_config(
+                        AnalyzePreset(preset_name.replace("-", "_"))
+                    )
+                )
+            )
+            values = {**defaults, **values}
     from pydantic_settings import CliApp, CliSettingsSource
 
     source = CliSettingsSource(
@@ -345,7 +405,7 @@ def _research(
         configuration.model_dump_json(exclude_unset=True)
     )
     result = asyncio.run(execute_research(store, options.identifier, payload))
-    Console().print(
+    Console(soft_wrap=True).print(
         result.model_dump_json(indent=2), markup=False, highlight=False
     )
     return 0 if result.success else 1
@@ -395,7 +455,7 @@ def run_command(command: str, arguments: list[str]) -> int:
         return 0
     store = WorkspaceStore(options.workspace)
     service = WorkspaceService(store)
-    console = Console()
+    console = Console(soft_wrap=True)
     match command:
         case "refresh":
             source = options.source
@@ -442,8 +502,7 @@ def run_command(command: str, arguments: list[str]) -> int:
                     raise ValueError("Unknown saved scan")
                 store.delete_scan(matched.scan_id)
             else:
-                for spec in store.list_scans():
-                    console.print(spec.model_dump_json(indent=2), markup=False)
+                _show_records(store.list_scans())
         case "read":
             if options.bookmarked:
                 store.set_bookmarked(options.identifier)
@@ -476,15 +535,16 @@ def run_command(command: str, arguments: list[str]) -> int:
                 store.save_note(entry, related_accession=options.accession)
                 console.print(entry.model_dump_json(indent=2), markup=False)
             else:
-                for entry in store.list_notes(
-                    accession_number=options.accession
-                ):
-                    if options.action == "review" and (
-                        entry.review_on is None
-                        or entry.review_on > datetime.now(UTC).date()
-                    ):
-                        continue
-                    console.print(entry.model_dump_json(indent=2), markup=False)
+                entries = tuple(
+                    entry
+                    for entry in store.list_notes(
+                        accession_number=options.accession
+                    )
+                    if options.action != "review"
+                    or entry.review_on is not None
+                    and entry.review_on <= datetime.now(UTC).date()
+                )
+                _show_records(entries)
         case "workspace":
             if options.action in {"init", "configure"}:
                 profile = store.load_settings()
@@ -525,8 +585,7 @@ def run_command(command: str, arguments: list[str]) -> int:
                     markup=False,
                 )
             elif options.action == "jobs":
-                for job in store.list_jobs():
-                    console.print(job.model_dump_json(indent=2), markup=False)
+                _show_records(store.list_jobs())
             elif options.action == "inbox":
                 show_filings(
                     store,

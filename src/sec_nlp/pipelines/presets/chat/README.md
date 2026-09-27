@@ -5,7 +5,7 @@
 ## Command
 
 ```bash
-sec-nlp chat [SYMBOL ...] --question "What changed in risk factors?"
+sec-nlp research ask [SYMBOL ...] --question "What changed in risk factors?"
 ```
 
 If `--question` is omitted and `--interactive` is enabled (default), it starts an interactive terminal session.
@@ -32,13 +32,15 @@ If `--question` is omitted and `--interactive` is enabled (default), it starts a
 ## Shared Semantic Chunking
 
 All presets expose `semantic_chunking.*` nested settings from `BasePipelineSettings`.
+Semantic chunking defaults to disabled; explicitly enable it only with the `vector`
+extra and an available embedding model. Local sentence/section chunking requires no AI service.
 
 Common CLI overrides:
 - `--semantic-chunking.enabled true`
 - `--semantic-chunking.embedding-model qwen3-embedding:4b`
 - `--semantic-chunking.breakpoint-threshold-type gradient`
 
-Pipelines that chunk filing text directly (`retrieve`, `exb`, `warranty`, and loader-backed `analyze`) apply these settings during chunk generation. Other presets keep the same config surface for CLI/flow consistency.
+Pipelines that chunk filing text directly (`retrieve`, `exb`, `warranty`, and loader-backed `analyze`) apply these settings during chunk generation. Other presets keep the same config surface for research configuration consistency.
 
 ## Outputs
 

@@ -176,3 +176,61 @@ def test_legacy_commands_explain_their_replacements(
     """Point retired public commands to the supported workspace entry points."""
     assert main(["analyze", "AAPL"]) == 2
     assert "research analyze" in capsys.readouterr().err
+
+
+def test_analyze_preset_keeps_explicit_cli_overrides(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Carry the selected preset into research while preserving explicit limit choices."""
+    worker = AsyncMock(
+        return_value=ResearchResult(capability="analyze", success=True)
+    )
+    monkeypatch.setattr(
+        "sec_nlp.app.workspace.research.execute_research", worker
+    )
+    assert (
+        main(
+            [
+                "research",
+                "analyze",
+                "AAPL",
+                "--preset",
+                "quick",
+                "--limit",
+                "4",
+                "--workspace",
+                str(tmp_path),
+            ]
+        )
+        == 0
+    )
+    settings = worker.call_args.args[2]
+    assert settings["limit"] == 4
+    assert settings["vector_mode"] == "off"
+    assert settings["top_k_chunks"] == 30
+
+
+def test_json_output_never_wraps_inside_strings(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Produce parseable machine output even when observations exceed terminal width."""
+    observation = "source-evidence-" * 30
+    assert (
+        main(
+            [
+                "journal",
+                "add",
+                observation,
+                "--workspace",
+                str(tmp_path),
+                "--json",
+            ]
+        )
+        == 0
+    )
+    entry = json.loads(capsys.readouterr().out)
+    assert entry["observation"] == observation
+    assert (
+        main(["journal", "list", "--workspace", str(tmp_path), "--json"]) == 0
+    )
+    assert json.loads(capsys.readouterr().out)[0]["observation"] == observation

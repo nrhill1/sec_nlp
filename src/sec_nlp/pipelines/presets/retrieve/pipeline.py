@@ -344,6 +344,19 @@ class RetrievePipeline(BasePipeline):
                     "Retrieve pipeline requires at least one --queries value"
                 )
 
+            if self.config.index_results and not self.config.dry_run:
+                self._ensure_embedding_components()
+                self._ensure_qdrant_client()
+                if self._embedder is None or self._embedding_dim is None:
+                    raise RuntimeError(
+                        "Requested indexing cannot start: embedding components are unavailable. "
+                        "Install the vector extra and configure an available embedding model."
+                    )
+                if self._qdrant_client is None:
+                    raise RuntimeError(
+                        "Requested indexing cannot start: the vector backend is unavailable."
+                    )
+
             outputs: list[Path] = []
             metadata: ResultDict = {}
             total_queries = 0

@@ -25,7 +25,8 @@ flowchart TD
 
 Implementation layout:
 
-- `runnables/` contains the execution units (analysis, search, EFTS, market correlation).
+- `run_stages.py` orders typed specialist steps through normal Python calls.
+- `runnables/` retains the optional analysis/search integration helpers.
 - `steps/` groups pipeline stages (preprocess, indexing, search, analysis).
 - `io/` holds output formatting/export helpers.
 
@@ -35,20 +36,21 @@ Prereqs:
 
 - Set `SEC_NLP_ANALYZE_EMAIL` (required by SEC EDGAR).
 - Env prefix: `SEC_NLP_ANALYZE_`.
-- Start Ollama and pull the LLM/embedding models you plan to use.
+- Install the `ai` and `vector` extras.
+- Start Ollama and pull the LLM/embedding models you plan to use. The application does not start model or container services.
 
 Examples:
 
 ```bash
-sec-nlp analyze
-sec-nlp analyze AAPL --preset quick
-sec-nlp analyze AAPL --preset deep
-sec-nlp analyze AAPL --topics warranty --topics recall
-sec-nlp analyze AAPL --section-type item --section-numbers 1A
-sec-nlp analyze AAPL --search.queries "supply chain disruption"
+sec-nlp research analyze
+sec-nlp research analyze AAPL --preset quick
+sec-nlp research analyze AAPL --preset deep
+sec-nlp research analyze AAPL --topics warranty --topics recall
+sec-nlp research analyze AAPL --section-type item --section-numbers 1A
+sec-nlp research analyze AAPL --search.queries "supply chain disruption"
 ```
 
-Run `sec-nlp analyze --help` for full options.
+Run `sec-nlp research analyze --help` for full options.
 
 By default, analyze emits a compact signal-pack result set (relevance, confidence, sentiment/impact, excerpts, and query-match terms). Use `--preset deep` for full-field extraction output.
 For a stable one-click production profile, use `--preset sentiment`.
@@ -56,7 +58,7 @@ For a stable one-click production profile, use `--preset sentiment`.
 Production baseline example:
 
 ```bash
-sec-nlp analyze MP LAC UUUU --preset sentiment
+sec-nlp research analyze MP LAC UUUU --preset sentiment
 ```
 
 Search runs automatically when `--search.queries` is provided. If it is omitted, the pipeline falls back to `--topics` as search queries.
@@ -80,7 +82,7 @@ Code: `src/sec_nlp/pipelines/presets/analyze/pipeline.py`
 
 ### 2) Run setup and symbol loop
 
-`run()` creates output directories, logs run metadata, then processes each symbol sequentially with a progress bar. Per-symbol outputs and stats are collected into the run metadata. While one symbol is running, the pipeline can prefetch the next `symbol_prefetch_window` symbols with isolated loader/EFTS workers so document loading and chunk preparation overlap with the active symbol.
+`run()` creates output directories, logs run metadata, then processes each symbol through an ordinary ordered step sequence. The terminal owns progress and cancellation; the specialist does not install signal handlers or print its own panels. Per-symbol outputs and stats are collected into the run metadata. While one symbol is running, the pipeline can prefetch the next `symbol_prefetch_window` symbols with isolated loader/EFTS workers so document loading and chunk preparation overlap with the active symbol.
 
 Code: `src/sec_nlp/pipelines/presets/analyze/pipeline.py`
 
@@ -147,6 +149,8 @@ Code: `src/sec_nlp/pipelines/presets/analyze/runnables/market_correlation.py`
 ## Shared Semantic Chunking
 
 All presets expose `semantic_chunking.*` nested settings from `BasePipelineSettings`.
+Semantic chunking defaults to disabled; explicitly enable it only with the `vector`
+extra and an available embedding model. Local sentence/section chunking requires no AI service.
 
 Common CLI overrides:
 
@@ -155,7 +159,7 @@ Common CLI overrides:
 - `--semantic-chunking.breakpoint-threshold-type gradient`
 - `--semantic-chunking.max-chunk-tokens 384`
 
-Pipelines that chunk filing text directly (`retrieve`, `exb`, `warranty`, and loader-backed `analyze`) apply these settings during chunk generation. Other presets keep the same config surface for CLI/flow consistency.
+Pipelines that chunk filing text directly (`retrieve`, `exb`, `warranty`, and loader-backed `analyze`) apply these settings during chunk generation. Other presets keep the same config surface for research configuration consistency.
 
 ## Output Files
 

@@ -158,3 +158,33 @@ def test_cancel_worker_keeps_workspace_open(
             assert "Cancelled" in str(app.query_one("#status", Static).render())
 
     asyncio.run(scenario())
+
+
+def test_failed_primary_keeps_document_choices(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Keep the new manifest and source visible when its selected document is unreadable."""
+
+    async def scenario() -> None:
+        app = ResearchWorkspace(store=_store(tmp_path))
+        monkeypatch.setattr(
+            app.service,
+            "read",
+            AsyncMock(side_effect=ValueError("Choose an HTML document")),
+        )
+        async with app.run_test(size=(120, 40)) as pilot:
+            app._source_url = "https://example.com/previous-filing"
+            await pilot.press("enter")
+            await app.workers.wait_for_complete()
+            await pilot.pause()
+            assert (
+                app.query_one("#workspace-tabs", TabbedContent).active
+                == "reader-tab"
+            )
+            assert app.query_one("#reader-text", TextArea).text == ""
+            assert "sec.gov/Archives" in app._source_url
+            assert "Choose an HTML" in str(
+                app.query_one("#status", Static).content
+            )
+
+    asyncio.run(scenario())

@@ -7,7 +7,7 @@ from pathlib import Path
 import httpx
 from rich.progress import track
 
-from sec_nlp.core.edgar.transport import fetch_sec_bytes
+from sec_nlp.core.edgar.transport import fetch_sec_bytes, sec_sync_session
 from sec_nlp.core.infra.logger import format_size, logger
 
 
@@ -191,6 +191,7 @@ class ExhibitDownloader:
         )
         return exhibits
 
+    @sec_sync_session()
     def download_exhibits_from_index(
         self,
         accession_number: str,

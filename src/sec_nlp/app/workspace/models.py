@@ -53,7 +53,8 @@ class ScanSpec(BaseModel):
         default=None, description="Inclusive latest filing date."
     )
     enabled: bool = Field(
-        default=True, description="Whether this scan participates in refreshes."
+        default=True,
+        description="Whether explicit execution of this scan is enabled.",
     )
     limit: int = Field(
         default=100,
@@ -239,4 +240,27 @@ class MigrationResult(BaseModel):
         default=0,
         ge=0,
         description="New references to preserved download caches.",
+    )
+    recipes_imported: int = Field(
+        default=0,
+        ge=0,
+        description="New validated copies of authored research jobs.",
+    )
+    recipe_paths: tuple[Path, ...] = Field(
+        default=(),
+        description="Imported recipe files usable with the research command.",
+    )
+    filings_imported: int = Field(
+        default=0,
+        ge=0,
+        description="New SEC filings identified in legacy caches.",
+    )
+    documents_imported: int = Field(
+        default=0,
+        ge=0,
+        description="New cached documents available for offline reading.",
+    )
+    warnings: tuple[str, ...] = Field(
+        default=(),
+        description="Preserved cache files that could not be identified safely.",
     )

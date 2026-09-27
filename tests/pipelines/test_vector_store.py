@@ -268,7 +268,7 @@ class TestVectorStoreCreation:
                 "sec_nlp.pipelines.vector.client.create_qdrant_client", _factory
             ),
             patch(
-                "sec_nlp.core.infra.qdrant_runtime.ensure_local_docker_qdrant",
+                "subprocess.run",
                 return_value=False,
             ) as mock_bootstrap,
         ):
@@ -328,7 +328,7 @@ class TestVectorStoreCreation:
                 "sec_nlp.pipelines.vector.client.create_qdrant_client", _factory
             ),
             patch(
-                "sec_nlp.core.infra.qdrant_runtime.ensure_local_docker_qdrant",
+                "subprocess.run",
                 return_value=False,
             ) as mock_bootstrap,
         ):

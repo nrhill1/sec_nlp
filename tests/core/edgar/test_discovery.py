@@ -2,6 +2,7 @@
 """Tests for SEC Atom/index identities and on-demand document selection."""
 
 import asyncio
+import threading
 from datetime import date
 from unittest.mock import AsyncMock
 
@@ -113,3 +114,33 @@ def test_document_reader_fetches_only_selected_document(
     content = asyncio.run(read())
     assert content.text == "Full selected evidence"
     fetch.assert_awaited_once_with(str(document.url))
+
+
+def test_index_parse_runs_outside_event_loop(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    main_thread = threading.get_ident()
+    observed: list[int] = []
+    original = discovery.parse_master_index
+
+    def parse(content: bytes):
+        observed.append(threading.get_ident())
+        return original(content)
+
+    monkeypatch.setattr(discovery, "parse_master_index", parse)
+    monkeypatch.setattr(
+        SecTransport,
+        "get_bytes",
+        AsyncMock(
+            return_value=b"CIK|Company Name|Form Type|Date Filed|Filename\n"
+        ),
+    )
+
+    async def run():
+        async with SecTransport("Tests test@example.com") as transport:
+            return await discovery.fetch_index(
+                transport, discovery.full_index_artifact(year=2026, quarter=3)
+            )
+
+    assert asyncio.run(run()) == ()
+    assert observed and all(thread != main_thread for thread in observed)

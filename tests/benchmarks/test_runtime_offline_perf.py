@@ -11,15 +11,19 @@ from pathlib import Path
 from uuid import UUID, uuid4
 
 import pytest
-from sec_nlp.core.documents import DocumentRecord as Document
 
-from sec_nlp.pipelines.runtime.state import ProcessingState
-from sec_nlp.pipelines.runtime.metadata import build_metadata_filter
-from sec_nlp.pipelines.runtime.state import get_state_dir
-from sec_nlp.pipelines.runtime.metadata import group_results_by_accession
-from sec_nlp.pipelines.runtime.state import load_state
-from sec_nlp.pipelines.runtime.metadata import normalize_metadata_for_output
-from sec_nlp.pipelines.runtime.metadata import prepare_vector_docs
+from sec_nlp.core.documents import DocumentRecord as Document
+from sec_nlp.pipelines.runtime.metadata import (
+    build_metadata_filter,
+    group_results_by_accession,
+    normalize_metadata_for_output,
+    prepare_vector_docs,
+)
+from sec_nlp.pipelines.runtime.state import (
+    ProcessingState,
+    get_state_dir,
+    load_state,
+)
 from sec_nlp.pipelines.types import AnalysisResultDict, MetadataRecord
 from tests.utils.performance import measure_duration
 from tests.utils.typing import Benchmark, MemoryTracker
