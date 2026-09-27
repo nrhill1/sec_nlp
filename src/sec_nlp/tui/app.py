@@ -37,7 +37,7 @@ from textual.widgets import (
 )
 from textual.worker import Worker, WorkerState
 
-from sec_nlp.app.investing.models import JournalEntry, WatchItem
+from sec_nlp.app.pulse.models import JournalEntry, WatchItem
 from sec_nlp.app.workspace.models import ScanSpec
 from sec_nlp.app.workspace.service import WorkspaceService
 from sec_nlp.app.workspace.store import WorkspaceStore
@@ -173,7 +173,7 @@ class ResearchWorkspace(App[None]):
                     read_only=True, id="reader-text", show_line_numbers=False
                 )
                 yield RichLog(id="reader-related", wrap=True, markup=False)
-            with TabPane("News & market", id="news-tab"):
+            with TabPane("Pulse", id="news-tab"):
                 with Horizontal(classes="controls"):
                     yield Button(
                         "Refresh headlines",

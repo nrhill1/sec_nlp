@@ -21,13 +21,13 @@ from urllib.parse import urlsplit
 from platformdirs import user_data_path
 from pydantic import BaseModel
 
-from sec_nlp.app.investing.models import (
+from sec_nlp.app.pulse.models import (
     Brief,
     Headline,
-    InvestingSettings,
     JournalEntry,
+    PulseSettings,
 )
-from sec_nlp.app.investing.storage import starter_settings
+from sec_nlp.app.pulse.storage import starter_settings
 from sec_nlp.app.workspace.models import (
     CachePointer,
     InboxItem,
@@ -188,13 +188,13 @@ class WorkspaceStore:
                 for row in connection.execute(sql, parameters)
             )
 
-    def load_settings(self) -> InvestingSettings:
+    def load_settings(self) -> PulseSettings:
         """Return the editable profile without initiating refresh jobs."""
-        return InvestingSettings.model_validate_json(
+        return PulseSettings.model_validate_json(
             (self.path / "config.json").read_text(encoding="utf-8")
         )
 
-    def save_settings(self, settings: InvestingSettings) -> None:
+    def save_settings(self, settings: PulseSettings) -> None:
         """Atomically save an explicitly edited profile without fetching sources."""
         _atomic_write(
             self.path / "config.json", settings.model_dump_json(indent=2) + "\n"
@@ -204,7 +204,7 @@ class WorkspaceStore:
                 "INSERT OR REPLACE INTO metadata VALUES ('profile_origin','user')"
             )
 
-    def import_settings(self, settings: InvestingSettings) -> bool:
+    def import_settings(self, settings: PulseSettings) -> bool:
         """Initialize untouched starter settings once from a migrated profile."""
         with self._connect() as connection:
             row = connection.execute(
@@ -779,7 +779,7 @@ class WorkspaceStore:
         return links
 
     def latest_brief(
-        self, settings: InvestingSettings | None = None, *, demo: bool = False
+        self, settings: PulseSettings | None = None, *, demo: bool = False
     ) -> Brief | None:
         """Return the newest snapshot compatible with the requested profile and mode.
 

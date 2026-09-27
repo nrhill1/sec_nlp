@@ -4,7 +4,7 @@
 
 SEC/market intelligence toolkit with Python pipeline orchestration and Rust-backed extensions. It supports local LLM analysis, deterministic extraction pipelines, filing retrieval, and timeline/correlation workflows from a single CLI.
 
-## Investing and current events
+## Pulse: investing and current events
 
 Use `sec-nlp invest` for a daily observation workflow: one editable watchlist,
 dated market moves, current-events sources, thesis review prompts, and a local
@@ -24,7 +24,7 @@ its company watchlist is empty until you choose symbols. For example,
 `invest init --workspace my-desk --symbols AAPL --symbols MSFT` creates a
 separate workspace for those explicitly selected assets.
 
-See [the investing workflow guide](docs/INVESTING.md) for configuration,
+See [the Pulse workflow guide](docs/PULSE.md) for configuration,
 research notes, offline replay, data limits, and SEC research follow-ups.
 
 ## Highlights

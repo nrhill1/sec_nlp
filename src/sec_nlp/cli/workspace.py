@@ -21,7 +21,7 @@ from pydantic import HttpUrl, TypeAdapter
 from rich.console import Console
 from rich.table import Table
 
-from sec_nlp.app.investing.models import JournalEntry, WatchItem
+from sec_nlp.app.pulse.models import JournalEntry, WatchItem
 from sec_nlp.app.workspace.models import ScanSpec
 from sec_nlp.app.workspace.service import ActionResult, WorkspaceService
 from sec_nlp.app.workspace.store import WorkspaceStore

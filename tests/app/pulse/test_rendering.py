@@ -1,5 +1,5 @@
-# tests/app/investing/test_rendering.py
-"""Tests for investing report content, provenance, and safe local rendering."""
+# tests/app/pulse/test_rendering.py
+"""Tests for Pulse report content, provenance, and safe local rendering."""
 
 from collections.abc import Callable
 from datetime import UTC, date, datetime
@@ -8,17 +8,17 @@ from html.parser import HTMLParser
 import pytest
 from pydantic import HttpUrl
 
-from sec_nlp.app.investing.models import (
+from sec_nlp.app.pulse.models import (
     Brief,
     Headline,
-    InvestingSettings,
     JournalEntry,
     MarketObservation,
+    PulseSettings,
     SourceStatus,
     Theme,
     WatchItem,
 )
-from sec_nlp.app.investing.rendering import render_markdown
+from sec_nlp.app.pulse.rendering import render_markdown
 
 
 class _DocumentParser(HTMLParser):
@@ -52,7 +52,7 @@ def brief() -> Brief:
     return Brief(
         brief_id="a" * 32,
         generated_at=datetime(2026, 9, 26, 12, 0, tzinfo=UTC),
-        settings=InvestingSettings(
+        settings=PulseSettings(
             name="Research desk",
             goal="Understand chip demand and revisit my own thesis.",
             watchlist=(
@@ -214,7 +214,7 @@ def test_untrusted_text_cannot_add_tags_attributes_or_scripts() -> None:
     malicious = Brief(
         brief_id="c" * 32,
         generated_at=datetime(2026, 9, 26, tzinfo=UTC),
-        settings=InvestingSettings(
+        settings=PulseSettings(
             name=payload,
             goal=payload,
             watchlist=(
@@ -271,7 +271,7 @@ def test_markdown_escapes_formatting_and_line_injection() -> None:
     brief = Brief(
         brief_id="e" * 32,
         generated_at=datetime(2026, 9, 26, tzinfo=UTC),
-        settings=InvestingSettings(
+        settings=PulseSettings(
             name="**Fake heading**",
             goal="[click](javascript:bad)\n# heading | `code` <b>bold</b>",
             benchmarks=(),
@@ -293,7 +293,7 @@ def test_demo_and_empty_states_are_unambiguous(
     brief = Brief(
         brief_id="f" * 32,
         generated_at=datetime(2026, 9, 26, tzinfo=UTC),
-        settings=InvestingSettings(benchmarks=()),
+        settings=PulseSettings(benchmarks=()),
         demo=True,
     )
     report = renderer(brief)
@@ -311,7 +311,7 @@ def test_review_count_includes_only_due_watchlist_and_journal_entries() -> None:
     brief = Brief(
         brief_id="1" * 32,
         generated_at=datetime(2026, 9, 26, tzinfo=UTC),
-        settings=InvestingSettings(
+        settings=PulseSettings(
             watchlist=(
                 WatchItem(symbol="ACME", review_on=date(2026, 9, 26)),
                 WatchItem(symbol="FUTURE", review_on=date(2026, 9, 27)),
@@ -338,7 +338,7 @@ def test_sec_drilldowns_quote_symbols_with_shell_metacharacters(
     brief = Brief(
         brief_id="3" * 32,
         generated_at=datetime(2026, 9, 26, tzinfo=UTC),
-        settings=InvestingSettings(watchlist=(WatchItem(symbol="^GSPC"),)),
+        settings=PulseSettings(watchlist=(WatchItem(symbol="^GSPC"),)),
     )
     parser = _DocumentParser()
     parser.feed(renderer(brief))

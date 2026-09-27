@@ -1,4 +1,4 @@
-# Investing and current events
+# Pulse: investing and current events
 
 The terminal workspace combines new SEC filings, related headlines, market
 observations, saved searches, and research notes. Its daily workflow is to
@@ -173,14 +173,14 @@ specialist artifacts remain ordinary files alongside it.
 
 `src/sec_nlp/app/workspace/` owns durable storage and shared actions;
 `src/sec_nlp/tui/` and `src/sec_nlp/cli/workspace.py` present those actions.
-`src/sec_nlp/app/investing/` supplies typed profiles, deterministic market/news
+`src/sec_nlp/app/pulse/` supplies typed profiles, deterministic market/news
 briefs, and Markdown rendering. Native stubs ship with their corresponding
 wheels. Prompt YAML files and the application typing marker ship in the main
 wheel.
 
 ```bash
 make build-ext
-uv run --all-extras pytest -q tests/app/workspace tests/app/investing
+uv run --all-extras pytest -q tests/app/workspace tests/app/pulse
 uv run --all-extras ty check src tests
 ```
 

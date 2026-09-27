@@ -1,5 +1,5 @@
-# src/sec_nlp/app/investing/rendering.py
-"""Render reproducible investing evidence as a portable Markdown report.
+# src/sec_nlp/app/pulse/rendering.py
+"""Render reproducible Pulse evidence as a portable Markdown report.
 
 Exports preserve source health, observation dates, and the distinction between
 retrieved evidence and user-authored research. Provider text is escaped so it
@@ -14,7 +14,7 @@ from urllib.parse import quote
 
 from pydantic import HttpUrl
 
-from sec_nlp.app.investing.models import (
+from sec_nlp.app.pulse.models import (
     Brief,
     MarketObservation,
 )

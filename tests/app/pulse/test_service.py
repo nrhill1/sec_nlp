@@ -1,5 +1,5 @@
-# tests/app/investing/test_service.py
-"""Tests for investing brief dates, source isolation, matching, and synthetic data."""
+# tests/app/pulse/test_service.py
+"""Tests for Pulse brief dates, source isolation, matching, and synthetic data."""
 
 from datetime import UTC, date, datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
@@ -7,13 +7,13 @@ from unittest.mock import MagicMock, patch
 import pytest
 from pydantic import HttpUrl
 
-from sec_nlp.app.investing import service
-from sec_nlp.app.investing.models import (
+from sec_nlp.app.pulse import service
+from sec_nlp.app.pulse.models import (
     Brief,
     Feed,
     Headline,
-    InvestingSettings,
     JournalEntry,
+    PulseSettings,
     Theme,
     WatchItem,
 )
@@ -23,9 +23,9 @@ from sec_nlp.core.news.client import NewsItem, NewsRetriever
 _NOW = datetime(2026, 9, 26, 12, tzinfo=UTC)
 
 
-def _settings() -> InvestingSettings:
+def _settings() -> PulseSettings:
     """Return a small workspace with no implicit company sources."""
-    return InvestingSettings(
+    return PulseSettings(
         watchlist=(
             WatchItem(
                 symbol="AAPL", name="Apple", aliases=("Cupertino company",)
@@ -72,7 +72,7 @@ def _news(
 
 
 def _brief(
-    settings: InvestingSettings, headlines: tuple[Headline, ...] = ()
+    settings: PulseSettings, headlines: tuple[Headline, ...] = ()
 ) -> Brief:
     """Return a prior live snapshot compatible with the fixed report time."""
     return Brief(
@@ -502,7 +502,7 @@ def test_demo_is_deterministic_synthetic_and_never_loads_adapters() -> None:
 
 def test_empty_workspace_does_not_construct_retrievers() -> None:
     """Allow a local workspace without sources or symbols to return an empty brief."""
-    settings = InvestingSettings(benchmarks=(), company_feeds=False)
+    settings = PulseSettings(benchmarks=(), company_feeds=False)
     with (
         patch.object(service, "create_market_retriever") as market,
         patch.object(service, "create_news_retriever") as news,

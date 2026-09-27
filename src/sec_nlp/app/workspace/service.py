@@ -184,7 +184,7 @@ class WorkspaceService:
                     partial = feed_partial or index_partial
                     errors.extend((*feed_errors, *index_errors))
             if source in {"news", "market", "all"}:
-                from sec_nlp.app.investing.service import build_brief
+                from sec_nlp.app.pulse.service import build_brief
 
                 brief = await asyncio.to_thread(
                     build_brief,

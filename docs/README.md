@@ -6,7 +6,7 @@ This directory is organized by scope.
 
 - `ARCHITECTURE.md` - system architecture and runtime design
 - `PROJECT_STATE.md` - current command/pipeline/output snapshot
-- `INVESTING.md` - daily market briefs, current-events sources, and local research journal
+- `PULSE.md` - daily market briefs, current-events sources, and local research journal
 
 ## Pipeline docs
 

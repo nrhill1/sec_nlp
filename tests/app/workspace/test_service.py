@@ -9,7 +9,7 @@ from unittest.mock import AsyncMock, Mock
 import pytest
 from pydantic import HttpUrl
 
-from sec_nlp.app.investing.models import InvestingSettings
+from sec_nlp.app.pulse.models import PulseSettings
 from sec_nlp.app.workspace.models import ScanSpec, SourceCheckpoint
 from sec_nlp.app.workspace.service import WorkspaceService
 from sec_nlp.app.workspace.store import WorkspaceStore
@@ -61,7 +61,7 @@ def _daily(published: date) -> IndexArtifact:
 def service(tmp_path: Path) -> WorkspaceService:
     """Build an isolated ledger with a valid SEC contact identity."""
     store = WorkspaceStore(tmp_path)
-    store.save_settings(InvestingSettings(user_agent="Tests test@example.com"))
+    store.save_settings(PulseSettings(user_agent="Tests test@example.com"))
     return WorkspaceService(store)
 
 

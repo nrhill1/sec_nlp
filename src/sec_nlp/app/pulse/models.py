@@ -1,5 +1,5 @@
-# src/sec_nlp/app/investing/models.py
-"""Typed configuration, evidence, and journal records for investing workspaces.
+# src/sec_nlp/app/pulse/models.py
+"""Typed configuration, evidence, and journal records for Pulse workspaces.
 
 The workspace keeps user-authored hypotheses separate from retrieved market
 observations. Frozen records support reproducible reports and offline review
@@ -116,7 +116,7 @@ class Feed(BaseModel):
         return tuple(dict.fromkeys(normalize_symbol(value) for value in values))
 
 
-class InvestingSettings(BaseModel):
+class PulseSettings(BaseModel):
     """Configure a portable, local market observation workspace.
 
     The configuration defines research goals, sources, and refresh windows.
@@ -131,7 +131,7 @@ class InvestingSettings(BaseModel):
         default=1, description="Workspace format version."
     )
     name: str = Field(
-        default="Investing desk", min_length=1, description="Workspace title."
+        default="Pulse", min_length=1, description="Workspace title."
     )
     goal: str = Field(
         default="Observe market changes and revisit investment theses using evidence.",
@@ -187,7 +187,7 @@ class InvestingSettings(BaseModel):
         description="Absolute one-session move that prompts research.",
     )
     user_agent: str = Field(
-        default="sec-nlp investing observer",
+        default="sec-nlp pulse observer",
         min_length=1,
         description="HTTP identity; add your contact email for SEC feeds.",
     )
@@ -355,7 +355,7 @@ class JournalEntry(BaseModel):
 
 
 class Brief(BaseModel):
-    """Capture a reproducible investing report and its exact configuration.
+    """Capture a reproducible Pulse report and its exact configuration.
 
     The snapshot supports offline rendering and comparing successive
     reports without refetching sources or running an LLM.
@@ -370,7 +370,7 @@ class Brief(BaseModel):
         pattern=r"^[a-f0-9]{32}$", description="Unique report identifier."
     )
     generated_at: AwareDatetime = Field(description="UTC report creation time.")
-    settings: InvestingSettings = Field(
+    settings: PulseSettings = Field(
         description="Configuration used for this report."
     )
     demo: bool = Field(

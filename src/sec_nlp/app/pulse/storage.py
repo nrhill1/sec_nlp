@@ -1,5 +1,5 @@
-# src/sec_nlp/app/investing/storage.py
-"""Persist portable investing workspaces, immutable briefs, and research notes.
+# src/sec_nlp/app/pulse/storage.py
+"""Persist portable Pulse workspaces, immutable briefs, and research notes.
 
 Configuration is human-editable JSON. Notes and reports are written as new
 records rather than overwriting earlier research. Report JSON is published
@@ -14,11 +14,11 @@ from uuid import uuid4
 
 from pydantic import HttpUrl
 
-from sec_nlp.app.investing.models import (
+from sec_nlp.app.pulse.models import (
     Brief,
     Feed,
-    InvestingSettings,
     JournalEntry,
+    PulseSettings,
     Theme,
     WatchItem,
 )
@@ -26,7 +26,7 @@ from sec_nlp.app.investing.models import (
 logger = logging.getLogger(__name__)
 
 
-def starter_settings(symbols: tuple[str, ...] = ()) -> InvestingSettings:
+def starter_settings(symbols: tuple[str, ...] = ()) -> PulseSettings:
     """Build an editable profile with primary macro sources and explicit symbols.
 
     Args:
@@ -35,7 +35,7 @@ def starter_settings(symbols: tuple[str, ...] = ()) -> InvestingSettings:
     Returns:
         Frozen starter settings with a benchmark and research questions.
     """
-    return InvestingSettings(
+    return PulseSettings(
         watchlist=tuple(WatchItem(symbol=symbol) for symbol in symbols),
         themes=(
             Theme(
@@ -103,7 +103,7 @@ def _write_new(path: Path, content: str) -> None:
 
 def initialize_workspace(
     workspace: Path,
-    settings: InvestingSettings | None = None,
+    settings: PulseSettings | None = None,
 ) -> Path:
     """Create a workspace configuration without overwriting an existing one.
 
@@ -125,20 +125,20 @@ def initialize_workspace(
     return config_path
 
 
-def load_settings(workspace: Path) -> InvestingSettings:
+def load_settings(workspace: Path) -> PulseSettings:
     """Read and validate a workspace's editable profile.
 
     Raises:
-        FileNotFoundError: If ``invest init`` has not created this workspace.
+        FileNotFoundError: If ``workspace init`` has not created this workspace.
         ValueError: If configuration does not match the supported schema.
         OSError: If the file cannot be read.
     """
     config_path = workspace / "config.json"
     if not config_path.is_file():
         raise FileNotFoundError(
-            f"No investing config at {config_path}; run sec-nlp invest init --workspace {workspace}"
+            f"No Pulse config at {config_path}; run sec-nlp workspace init --workspace {workspace}"
         )
-    return InvestingSettings.model_validate_json(
+    return PulseSettings.model_validate_json(
         config_path.read_text(encoding="utf-8")
     )
 
@@ -147,7 +147,7 @@ def save_note(workspace: Path, entry: JournalEntry) -> Path:
     """Append a journal entry as an immutable individual JSON file.
 
     Args:
-        workspace: Initialized investing workspace.
+        workspace: Initialized Pulse workspace.
         entry: Validated observation and its research context.
 
     Returns:
@@ -212,16 +212,14 @@ def load_brief(path: Path) -> Brief:
         return Brief.model_validate_json(manifest.read_text(encoding="utf-8"))
     except ValueError as exc:
         logger.debug("Invalid report file %s", manifest, exc_info=True)
-        raise ValueError(
-            f"Invalid investing report at {manifest}: {exc}"
-        ) from exc
+        raise ValueError(f"Invalid Pulse report at {manifest}: {exc}") from exc
 
 
 def latest_brief(workspace: Path, *, demo: bool = False) -> Brief | None:
     """Find the newest saved report of the requested evidence kind.
 
     Args:
-        workspace: Local investing directory.
+        workspace: Local Pulse directory.
         demo: Whether to select synthetic reports instead of live reports.
 
     Returns:
@@ -246,7 +244,7 @@ def save_brief(workspace: Path, brief: Brief) -> Path:
     """Export a unique report directory with JSON and Markdown.
 
     Args:
-        workspace: Initialized local investing directory.
+        workspace: Initialized local Pulse directory.
         brief: Complete report to persist with immutable evidence.
 
     Returns:
@@ -257,7 +255,7 @@ def save_brief(workspace: Path, brief: Brief) -> Path:
         ValueError: If the workspace profile is invalid.
         OSError: If report files cannot be written.
     """
-    from sec_nlp.app.investing.rendering import render_markdown
+    from sec_nlp.app.pulse.rendering import render_markdown
 
     load_settings(workspace)
     markdown = render_markdown(brief)
@@ -287,7 +285,7 @@ def export_snapshot(workspace: Path, brief: Brief) -> Path:
     Raises:
         OSError: If export files cannot be written.
     """
-    from sec_nlp.app.investing.rendering import render_markdown
+    from sec_nlp.app.pulse.rendering import render_markdown
 
     markdown = render_markdown(brief)
     export_path = workspace / "exports" / uuid4().hex

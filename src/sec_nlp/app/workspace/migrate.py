@@ -8,7 +8,7 @@ referenced instead of copied or claimed as newly downloaded evidence.
 
 from pathlib import Path
 
-from sec_nlp.app.investing.storage import (
+from sec_nlp.app.pulse.storage import (
     load_brief,
     load_journal,
     load_settings,

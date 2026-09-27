@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from sec_nlp.app.investing.models import WatchItem
+from sec_nlp.app.pulse.models import WatchItem
 from sec_nlp.app.workspace.research import ResearchResult
 from sec_nlp.app.workspace.store import WorkspaceStore
 from sec_nlp.cli.__main__ import main

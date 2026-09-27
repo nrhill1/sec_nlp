@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 from pydantic import HttpUrl
 
-from sec_nlp.app.investing.models import Brief, Headline, JournalEntry
+from sec_nlp.app.pulse.models import Brief, Headline, JournalEntry
 from sec_nlp.app.workspace.models import JobRecord, ScanSpec, SourceCheckpoint
 from sec_nlp.app.workspace.store import WorkspaceStore
 from sec_nlp.core.edgar.filing_models import (

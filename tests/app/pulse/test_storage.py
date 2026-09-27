@@ -1,5 +1,5 @@
-# tests/app/investing/test_storage.py
-"""Tests for investing profile validation and immutable local research storage."""
+# tests/app/pulse/test_storage.py
+"""Tests for Pulse profile validation and immutable local research storage."""
 
 from datetime import UTC, datetime
 from pathlib import Path
@@ -7,13 +7,13 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from sec_nlp.app.investing.models import (
+from sec_nlp.app.pulse.models import (
     Brief,
-    InvestingSettings,
     JournalEntry,
+    PulseSettings,
     WatchItem,
 )
-from sec_nlp.app.investing.storage import (
+from sec_nlp.app.pulse.storage import (
     export_snapshot,
     initialize_workspace,
     latest_brief,
@@ -35,7 +35,7 @@ def test_initialize_preserves_existing_config_and_empty_watchlist(
     assert load_settings(tmp_path).watchlist == ()
     assert len(load_settings(tmp_path).feeds) == 2
     with pytest.raises(FileExistsError):
-        initialize_workspace(tmp_path, InvestingSettings(name="Replacement"))
+        initialize_workspace(tmp_path, PulseSettings(name="Replacement"))
     assert config_path.read_text() == before
 
 
@@ -64,7 +64,7 @@ def test_duplicate_symbols_and_unknown_config_keys_are_rejected() -> None:
     with pytest.raises(ValidationError, match="Duplicate watchlist symbol"):
         starter_settings(("AAPL", "aapl"))
     with pytest.raises(ValidationError, match="extra_forbidden"):
-        InvestingSettings.model_validate_json('{"lookbak_days": 7}')
+        PulseSettings.model_validate_json('{"lookbak_days": 7}')
 
 
 def test_notes_round_trip_without_overwrite(tmp_path: Path) -> None:
@@ -96,11 +96,11 @@ def test_missing_profile_and_unsupported_schema_are_actionable(
     tmp_path: Path,
 ) -> None:
     """Report missing initialization and reject unknown report versions."""
-    with pytest.raises(FileNotFoundError, match="invest init"):
+    with pytest.raises(FileNotFoundError, match="workspace init"):
         load_settings(tmp_path)
     path = tmp_path / "brief.json"
     path.write_text('{"schema_version": 2}')
-    with pytest.raises(ValueError, match="Invalid investing report"):
+    with pytest.raises(ValueError, match="Invalid Pulse report"):
         load_brief(path)
 
 

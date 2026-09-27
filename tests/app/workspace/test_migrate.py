@@ -6,8 +6,8 @@ from pathlib import Path
 
 import pytest
 
-from sec_nlp.app.investing.models import Brief, JournalEntry
-from sec_nlp.app.investing.storage import (
+from sec_nlp.app.pulse.models import Brief, JournalEntry
+from sec_nlp.app.pulse.storage import (
     initialize_workspace,
     save_brief,
     save_note,

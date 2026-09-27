@@ -12,11 +12,11 @@ from tempfile import NamedTemporaryFile
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from sec_nlp.app.investing.models import (
+from sec_nlp.app.pulse.models import (
     Brief,
     Headline,
-    InvestingSettings,
     JournalEntry,
+    PulseSettings,
 )
 from sec_nlp.app.workspace.models import (
     InboxItem,
@@ -39,7 +39,7 @@ class WorkspaceExport(BaseModel):
         default=1, description="Portable workspace export version."
     )
     generated_at: datetime = Field(description="UTC export time.")
-    settings: InvestingSettings = Field(
+    settings: PulseSettings = Field(
         description="User-authored workspace profile."
     )
     filings: tuple[InboxItem, ...] = Field(

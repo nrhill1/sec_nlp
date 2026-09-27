@@ -1,5 +1,5 @@
-# src/sec_nlp/app/investing/service.py
-"""Build investing briefs from independently retrieved market and news evidence.
+# src/sec_nlp/app/pulse/service.py
+"""Build Pulse briefs from independently retrieved market and news evidence.
 
 This service reuses the optional market and newswatch adapters without entering
 filing pipelines, resolving SEC aliases, or calling a model. Date normalization,
@@ -17,13 +17,13 @@ from uuid import NAMESPACE_URL, uuid4, uuid5
 import httpx
 from pydantic import HttpUrl
 
-from sec_nlp.app.investing.models import (
+from sec_nlp.app.pulse.models import (
     Brief,
     Feed,
     Headline,
-    InvestingSettings,
     JournalEntry,
     MarketObservation,
+    PulseSettings,
     SourceStatus,
 )
 from sec_nlp.core.market import MarketQuote, create_market_retriever
@@ -48,7 +48,7 @@ def _utc_now(now: datetime | None) -> datetime:
     return now.astimezone(UTC)
 
 
-def _symbols(settings: InvestingSettings) -> tuple[str, ...]:
+def _symbols(settings: PulseSettings) -> tuple[str, ...]:
     """Return watched and reference symbols once in configured order."""
     return tuple(
         dict.fromkeys(
@@ -113,7 +113,7 @@ def _change(quotes: list[MarketQuote], sessions: int) -> float | None:
 
 
 def _fetch_market(
-    settings: InvestingSettings, now: datetime
+    settings: PulseSettings, now: datetime
 ) -> tuple[tuple[MarketObservation, ...], tuple[SourceStatus, ...]]:
     """Fetch each unique symbol independently and report missing history."""
     symbols = _symbols(settings)
@@ -269,7 +269,7 @@ def _phrase_matches(text: str, phrase: str, *, ticker: bool = False) -> bool:
 
 
 def _headline(
-    item: NewsItem, feed: Feed, settings: InvestingSettings, now: datetime
+    item: NewsItem, feed: Feed, settings: PulseSettings, now: datetime
 ) -> Headline | None:
     """Normalize one headline and attach phrase and explicit-source labels."""
     title = " ".join(item.title.split())
@@ -307,7 +307,7 @@ def _headline(
     )
 
 
-def _feeds(settings: InvestingSettings) -> tuple[Feed, ...]:
+def _feeds(settings: PulseSettings) -> tuple[Feed, ...]:
     """Combine general sources with explicitly scoped Yahoo company feeds.
 
     Yahoo may rate-limit or disable an RSS response. The normal independent
@@ -332,7 +332,7 @@ def _feeds(settings: InvestingSettings) -> tuple[Feed, ...]:
 
 
 def _fetch_news(
-    settings: InvestingSettings, now: datetime
+    settings: PulseSettings, now: datetime
 ) -> tuple[list[Headline], tuple[SourceStatus, ...]]:
     """Retrieve every feed separately so one failure cannot erase other evidence."""
     headlines: list[Headline] = []
@@ -469,7 +469,7 @@ def _deduplicate(
 
 
 def _prompts(
-    settings: InvestingSettings,
+    settings: PulseSettings,
     market: tuple[MarketObservation, ...],
     headlines: tuple[Headline, ...],
     journal: tuple[JournalEntry, ...],
@@ -517,7 +517,7 @@ def _prompts(
 
 
 def build_brief(
-    settings: InvestingSettings,
+    settings: PulseSettings,
     *,
     journal: tuple[JournalEntry, ...] = (),
     previous: Brief | None = None,
@@ -525,7 +525,7 @@ def build_brief(
     include_market: bool = True,
     include_news: bool = True,
 ) -> Brief:
-    """Build a current-events and investing report with explicit source coverage.
+    """Build a Pulse report with explicit source coverage.
 
     Args:
         settings: Immutable watchlist, themes, source definitions, and windows.
@@ -574,7 +574,7 @@ def build_brief(
 
 
 def build_demo_brief(
-    settings: InvestingSettings,
+    settings: PulseSettings,
     *,
     journal: tuple[JournalEntry, ...] = (),
     now: datetime | None = None,

@@ -9,7 +9,7 @@ lookup when the reader is opened.
 import re
 from collections.abc import Sequence
 
-from sec_nlp.app.investing.models import Headline, WatchItem
+from sec_nlp.app.pulse.models import Headline, WatchItem
 from sec_nlp.core.edgar.filing_models import FilingRecord
 from sec_nlp.core.news.normalization import title_key
 
