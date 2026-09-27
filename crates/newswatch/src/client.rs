@@ -10,7 +10,7 @@ use crate::filter::apply_keyword_filter;
 use crate::http::HttpClient;
 use crate::models::{FeedConfig, FeedType, NewsItem};
 
-const DEFAULT_MAX_RETRIES: u32 = 2;
+const DEFAULT_MAX_RETRIES: u32 = 1;
 const DEFAULT_RETRY_DELAY_SECS: f64 = 0.5;
 const MAX_FEED_CONCURRENCY: usize = 4;
 static RUNTIME: OnceLock<Runtime> = OnceLock::new();

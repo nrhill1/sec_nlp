@@ -166,3 +166,90 @@ def test_sec_feed_requests_use_shared_transport(
     )
     items = retriever.fetch([])
     assert len(items) == 1 and items[0].source == "SEC"
+
+
+def test_async_sec_feed_reuses_supplied_transport(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Keep asynchronous SEC news on the existing connection and rate budget."""
+    import asyncio
+    from unittest.mock import AsyncMock
+
+    async def exercise() -> None:
+        """Use a mock byte response while retaining the real transport interface."""
+        async with client.SecTransport(
+            "Tests test@example.com", retries=1
+        ) as transport:
+            fetch = AsyncMock(
+                return_value=b"<rss><channel><item><title>SEC update</title><link>https://www.sec.gov/news/example</link></item></channel></rss>"
+            )
+            monkeypatch.setattr(transport, "get_bytes", fetch)
+            retriever = client.NewsRetriever(
+                [("https://www.sec.gov/news/pressreleases.rss", "rss", "SEC")],
+                "Tests test@example.com",
+                module=ModuleType("no_native_calls"),
+            )
+            items = await retriever.fetch_async([], sec_transport=transport)
+            assert items[0].source == "SEC"
+            fetch.assert_awaited_once_with(
+                "https://www.sec.gov/news/pressreleases.rss"
+            )
+
+    asyncio.run(exercise())
+
+
+def test_async_native_cancellation_reaches_client(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Forward cancellation through the adapter to the awaited native future."""
+    import asyncio
+    from unittest.mock import Mock
+
+    async def exercise() -> None:
+        """Observe cleanup inside the fake native client's pending request."""
+        started = asyncio.Event()
+        stopped = asyncio.Event()
+        drained = asyncio.Event()
+
+        async def fetch(
+            keywords: list[str], max_results: int
+        ) -> list[client.NewsItem]:
+            """Wait indefinitely until the actual client awaitable is cancelled."""
+            started.set()
+            try:
+                await asyncio.Event().wait()
+            finally:
+                stopped.set()
+            return []
+
+        async def wait_idle() -> None:
+            """Acknowledge cleanup separately from the cancelled Python future."""
+            assert stopped.is_set()
+            await asyncio.sleep(0)
+            drained.set()
+
+        monkeypatch.setattr(
+            client,
+            "_load_newswatch_module",
+            Mock(
+                return_value=Mock(
+                    NewsClient=Mock(
+                        return_value=Mock(
+                            fetch_async=fetch, wait_idle_async=wait_idle
+                        )
+                    )
+                )
+            ),
+        )
+        retriever = client.NewsRetriever(
+            [("https://example.com/news", "rss", "Example")],
+            "Tests test@example.com",
+        )
+        task = asyncio.create_task(retriever.fetch_async([]))
+        await asyncio.wait_for(started.wait(), 1)
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+        assert stopped.is_set() and drained.is_set()
+
+    asyncio.run(exercise())

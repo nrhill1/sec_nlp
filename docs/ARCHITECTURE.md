@@ -18,13 +18,30 @@ services. Refreshing remote sources and starting research require a user action.
   exhibit evidence contracts. There is no separate compiled graph executor.
 - `src/sec_nlp/app/pulse/` provides Pulse's portable profile, observation, and
   report models used by workspace market context and migration of prior investing
-  data. The terminal's Pulse pane presents cached headlines and market context.
+  data. Its asynchronous retrieval service bounds source concurrency and emits
+  typed progress; completed source evidence is saved before notifying the UI.
+- `app/workspace/pulse.py` and `pulse_models.py` provide cached activity pages,
+  acknowledgements, watchlist edits, due reviews, and market/source summaries to
+  both front ends. Pulse review state is separate from filing reading state.
 
 Workspace persistence and migrations live in `app/workspace/store.py` and
 `migrate.py`. Historical evidence is kept separate from newly requested refresh
 results so a failed provider cannot silently replace prior observations with
 fresh-looking empty data. The default filing feed covers the market; saved scans
 and explicit symbol filters narrow it.
+
+Ledger version 2 adds transactional migration and compact indexed projections for
+Pulse. Historical briefs retain their original version 1 payloads and are
+backfilled once. Activity uses stable identities and discovery-time keyset
+pagination. Latest successful market observations and latest source outcomes are
+stored independently. Review completions and deferrals append records rather
+than rewriting immutable journal observations. Cached SEC symbol mappings retain
+source provenance and match declared entity roles.
+
+The terminal loads hidden panes on demand and performs database queries outside
+the UI event loop. Pulse combines a selectable activity table with evidence
+details, market status, watchlist editing, and due reviews. Prefilling another
+pane never starts a provider operation.
 
 ## SEC and headline providers
 
@@ -40,6 +57,13 @@ not execute instructions found in news articles or filing text.
 Six native capabilities remain: market data, EFTS ranking, XBRL parsing,
 correlation, entity extraction, and news retrieval. The `efts` extension no longer
 owns SEC HTTP requests. Python callers use its retained ranking functions.
+The market extension exposes a reusable asynchronous session with a shared Yahoo
+connector. News uses its asynchronous native client, with SEC feeds routed through
+the Python SEC transport. Cancellation propagates to native futures; synchronous
+specialist APIs remain available and release the interpreter lock while waiting.
+Pulse bounds concurrent source operations at four, with a 20-second deadline
+including at most two transient attempts, and saves completed results before
+recording cancellation of outstanding work.
 
 ## Deterministic records and optional AI
 

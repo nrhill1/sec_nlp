@@ -50,6 +50,21 @@ for a news-only profile.
 
 Edit `config.json` inside the printed workspace path for detailed settings.
 Unknown fields and duplicate symbols, feed names, or themes are rejected.
+The terminal's Pulse watchlist editor and the following commands also edit all
+watchlist fields. Omitted command options preserve the existing field; use an
+empty string to clear text, `--aliases` without values to clear aliases, or
+`--clear-review` to remove the scheduled date.
+
+```bash
+sec-nlp workspace watchlist save AAPL --name "Apple" --aliases "Apple Inc." \
+  --thesis "My hypothesis" --invalidation "Evidence that would challenge it" \
+  --review-on 2026-10-15
+sec-nlp workspace watchlist list
+sec-nlp workspace watchlist remove AAPL
+```
+
+Removing a watched symbol preserves its historical evidence and journal notes.
+Themes and feed configuration remain in `config.json`.
 
 | Setting | Purpose |
 | --- | --- |
@@ -102,6 +117,30 @@ job history with `workspace status` and `workspace jobs`.
 
 ## Save a search and record research
 
+Pulse opens to a focused activity feed containing watchlist matches, topic
+matches, and saved scan evidence. Switch to **All activity** for the market-wide
+cache. Activity is ordered by local discovery time; publication and filing dates
+remain separate, including unknown publication dates. Filters cover symbol,
+topic, source, form, and new/reviewed state. Each page contains at most 50 items.
+
+An item remains new until **Mark selected** or **Mark visible page** acknowledges
+it. Opening a source does not acknowledge it. **Undo** reverses the corresponding
+acknowledgement. This state survives refreshes and restarts and is independent of
+the reader's read/unread state.
+
+```bash
+sec-nlp workspace pulse --json
+sec-nlp workspace pulse list --scope all --all --form 8-K --json
+sec-nlp workspace pulse overview --json
+sec-nlp workspace pulse mark EVIDENCE_ID
+sec-nlp workspace pulse undo ACKNOWLEDGEMENT_TOKEN
+```
+
+Use evidence identities and the opaque `next_cursor` returned by the typed JSON
+page. Pass `--cursor CURSOR` to `workspace pulse list` for the next page. Marking
+explicit identities returns a token; it does not acknowledge evidence that
+arrived after the page was loaded.
+
 ```bash
 sec-nlp scan save "Demand changes" --query "demand outlook" \
   --forms 10-K 10-Q --limit 50 --max-documents 10
@@ -121,6 +160,20 @@ An optional accession link survives ticker changes and keeps the note beside
 its source filing. The terminal's research actions use the same application
 service as `sec-nlp research`; specialist settings remain available there.
 
+The due-review queue combines watchlist theses and journal observations.
+Completing or deferring a review appends an action with an authored note and an
+optional next date; it never changes the original journal entry. Completion
+without a next date clears the schedule. Deferral requires a future date.
+
+```bash
+sec-nlp journal review complete watchlist AAPL --note "Reviewed the evidence" \
+  --next-review-on 2026-11-15
+sec-nlp journal review defer journal ENTRY_ID --next-review-on 2026-10-20
+```
+
+From a selected Pulse item, open its filing reader or article link, or prefill
+Journal, Search, or Research. Prefilling controls does not run a search or model.
+
 ## Interpret observations
 
 Market changes compare adjusted closes across one or five observed sessions;
@@ -128,6 +181,20 @@ five-session returns require six quotes. The displayed provider close is
 unadjusted and denominated in the asset's unspecified listing currency. A
 current-session daily bar may still be provisional. Observation dates, missing
 history, source failures, and stale quotes remain explicit.
+The market view keeps one latest successful observation per watched or benchmark
+symbol. Refresh outcomes are displayed separately, so failed or news-only
+refreshes cannot erase a usable quote or give it a new observation date.
+
+Pulse refreshes run at most four source operations concurrently. Each operation
+has a 20-second total deadline and at most two attempts for transient failures.
+News connections have a five-second connection timeout. Completed sources are
+saved as they finish; cancellation stops pending requests and retains completed
+evidence. SEC calls retain the shared five-requests-per-second budget.
+
+An explicit SEC/all refresh also resolves watched symbols using the SEC ticker
+registry. Cached mappings carry retrieval provenance and expose stale lookup
+failures. Filings match declared entity CIKs and roles, never accession prefixes.
+Assets without a registry entry still work for market and news observation.
 
 Headline labels are phrase matches or explicit feed scope, not evidence of
 causation. Missing publication dates remain unknown. Future-dated and
@@ -174,6 +241,10 @@ workspace/
 The SQLite ledger stores filings, entity roles, review state, source coverage,
 news, notes, brief snapshots, and operation history. Document snapshots and
 specialist artifacts remain ordinary files alongside it.
+Opening a version 1 ledger upgrades it transactionally to version 2, backfilling
+indexed Pulse views once. Corrupt history or an interrupted upgrade rolls back.
+Portable profiles and briefs retain schema version 1; workspace JSON exports use
+version 2 to include Pulse acknowledgements, review history, and source state.
 
 ## Development
 
@@ -186,9 +257,11 @@ wheel.
 
 ```bash
 make build-ext
-uv run --all-extras pytest -q tests/app/workspace tests/app/pulse
-uv run --all-extras ty check src tests
+.venv/bin/pytest -q tests/app/workspace tests/app/pulse
+.venv/bin/ty check src tests
 ```
 
 Tests use local fixtures and mocked providers; they do not contact external
 services. Rebuild all native extensions before Python tests after Rust changes.
+See [daily review validation](PULSE_VALIDATION.md) for verified behavior,
+installation checks, performance measurements, and code-size accounting.

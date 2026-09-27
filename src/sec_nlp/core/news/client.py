@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from collections.abc import Mapping
 from datetime import UTC, datetime
@@ -14,7 +15,7 @@ from xml.etree import ElementTree
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from sec_nlp.core.edgar.transport import fetch_sec_bytes
+from sec_nlp.core.edgar.transport import SecTransport, fetch_sec_bytes
 from sec_nlp.core.news.normalization import (
     dated_title_key,
     parse_timestamp,
@@ -271,6 +272,62 @@ class NewsRetriever:
             if max_results > 0
             else normalize_news_items(items)
         )
+
+    async def fetch_async(
+        self,
+        keywords: list[str],
+        max_results: int = 100,
+        *,
+        sec_transport: SecTransport | None = None,
+    ) -> list[NewsItem]:
+        """Retrieve native and SEC feeds without blocking the event loop.
+
+        Args:
+            keywords: Optional case-insensitive title and snippet filters.
+            max_results: Maximum returned headlines; zero disables truncation.
+            sec_transport: Existing application SEC client to share connections.
+
+        Returns:
+            Safe, normalized headlines with their source metadata preserved.
+        """
+        items: list[NewsItem] = []
+        if self._client is not None:
+            try:
+                raw_items = await self._client.fetch_async(
+                    list(keywords), max(500, int(max_results))
+                )
+            except asyncio.CancelledError:
+                await self._client.wait_idle_async()
+                raise
+            items.extend(_to_news_item(item) for item in raw_items)
+        if self._sec_feeds and sec_transport is None:
+            async with SecTransport(
+                self._user_agent, timeout=20.0, retries=1
+            ) as owned:
+                items.extend(await self._fetch_sec_async(owned))
+        elif sec_transport is not None:
+            items.extend(await self._fetch_sec_async(sec_transport))
+        if keywords:
+            items = [
+                item
+                for item in items
+                if any(
+                    keyword.casefold()
+                    in f"{item.title} {item.snippet or ''}".casefold()
+                    for keyword in keywords
+                )
+            ]
+        normalized = normalize_news_items(items)
+        return normalized[:max_results] if max_results > 0 else normalized
+
+    async def _fetch_sec_async(self, transport: SecTransport) -> list[NewsItem]:
+        """Parse SEC feeds through the application's shared request budget."""
+        items: list[NewsItem] = []
+        for url, feed_type, name in self._sec_feeds:
+            if feed_type not in {"rss", "atom"}:
+                raise ValueError("SEC news feeds must use RSS or Atom")
+            items.extend(_sec_rss_items(await transport.get_bytes(url), name))
+        return items
 
 
 _DEFAULT_RSS_FEEDS: tuple[tuple[str, str, str], ...] = (

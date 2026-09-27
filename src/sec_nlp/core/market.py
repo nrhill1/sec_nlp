@@ -1,6 +1,7 @@
 # src/sec_nlp/core/market.py
 """Market data retrieval helpers backed by the Rust `market` extension."""
 
+import asyncio
 from collections import OrderedDict
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
@@ -93,7 +94,12 @@ def _normalize_quote(raw: dict[str, float | int]) -> MarketQuote:
 
 
 class MarketRetriever:
-    """Small retrieval helper for Yahoo-backed market data."""
+    """Adapt Yahoo-backed market data for synchronous research and async refresh.
+
+    Synchronous specialist calls retain bounded retries and local caching.
+    Explicit async refreshes share a lazily created native session, bypass
+    cache reads, and leave retry policy to the application service.
+    """
 
     def __init__(
         self,
@@ -105,7 +111,16 @@ class MarketRetriever:
         retry_backoff_seconds: float | None = None,
         retry_backoff_multiplier: float | None = None,
     ) -> None:
-        """Initialize the object."""
+        """Configure local cache and synchronous retries without retrieving data.
+
+        Args:
+            module: Optional native adapter module, primarily for offline tests.
+            cache_ttl_seconds: Local quote lifetime; defaults to application settings.
+            cache_max_entries: Local quote capacity; zero disables caching.
+            retry_attempts: Maximum synchronous provider attempts.
+            retry_backoff_seconds: Initial synchronous retry delay.
+            retry_backoff_multiplier: Growth factor for subsequent retry delays.
+        """
         self._market = module or _load_market_module()
         self._cache_ttl_seconds = (
             MARKET_CACHE_TTL_SECONDS
@@ -131,6 +146,8 @@ class MarketRetriever:
             else retry_backoff_multiplier
         )
         self._cache: OrderedDict[CacheKey, MarketCacheEntry] = OrderedDict()
+        self._async_session = None
+        self._draining: asyncio.Future[None] | None = None
 
     def _log(
         self,
@@ -311,6 +328,67 @@ class MarketRetriever:
             if quotes is not None:
                 ordered[ticker] = quotes
         return ordered
+
+    async def retrieve_range_async(
+        self,
+        ticker: str,
+        date_range: Sequence[date | datetime],
+    ) -> list[MarketQuote]:
+        """Fetch fresh quotes through a shared cancellable native session.
+
+        Explicit refreshes bypass both cache reads. Retry and deadline policy
+        belong to the calling application so concurrent sources share a budget.
+
+        Args:
+            ticker: Provider asset symbol.
+            date_range: Inclusive start and end dates accepted by the provider.
+
+        Returns:
+            Normalized quotes, also saved for subsequent specialist cache reads.
+        """
+        start_date, end_date = _coerce_date_range(date_range)
+        date_range_text = f"{start_date.isoformat()}..{end_date.isoformat()}"
+        if self._draining is not None:
+            # A timed-out source must be able to finish native cleanup without
+            # newly admitted requests extending the shared session's busy period.
+            await asyncio.shield(self._draining)
+        if self._async_session is None:
+            self._async_session = self._market.MarketSession()
+        try:
+            raw_quotes = await self._async_session.retrieve_range_async(
+                ticker, date_range_text
+            )
+        except asyncio.CancelledError:
+            await self._drain_session()
+            raise
+        quotes = [_normalize_quote(raw_quote) for raw_quote in raw_quotes]
+        self._set_cached_quotes(
+            (ticker, date_range_text), monotonic(), tuple(quotes)
+        )
+        return quotes
+
+    async def _drain_session(self) -> None:
+        """Block new requests until native cleanup acknowledges cancellation."""
+        if self._async_session is None:
+            return
+        if self._draining is None:
+            self._draining = asyncio.ensure_future(
+                self._async_session.wait_idle_async()
+            )
+        cleanup = self._draining
+        try:
+            while not cleanup.done():
+                try:
+                    await asyncio.shield(cleanup)
+                except asyncio.CancelledError:
+                    logger.debug(
+                        "Waiting for market cleanup after repeated cancellation",
+                        exc_info=True,
+                    )
+            cleanup.result()
+        finally:
+            if self._draining is cleanup:
+                self._draining = None
 
 
 def create_market_retriever() -> MarketRetriever:

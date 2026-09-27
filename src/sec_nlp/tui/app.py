@@ -6,6 +6,7 @@ shared application services only after the user requests refresh, search,
 reading an uncached document, or specialist research.
 """
 
+import asyncio
 import re
 import webbrowser
 from collections.abc import Sequence
@@ -14,7 +15,7 @@ from pathlib import Path
 from typing import Literal
 from uuid import uuid4
 
-from pydantic import TypeAdapter
+from pydantic import HttpUrl, TypeAdapter
 from rich.text import Text
 from textual import on, work
 from textual.app import App, ComposeResult
@@ -39,14 +40,20 @@ from textual.worker import Worker, WorkerState
 
 from sec_nlp.app.pulse.models import JournalEntry, WatchItem
 from sec_nlp.app.workspace.models import ScanSpec
+from sec_nlp.app.workspace.pulse_models import RefreshProgress
 from sec_nlp.app.workspace.service import WorkspaceService
 from sec_nlp.app.workspace.store import WorkspaceStore
 from sec_nlp.core.edgar.filing_models import FilingRecord
+from sec_nlp.tui.pulse import PulsePane
 from sec_nlp.types import JsonDict
 
 
 class ResearchWorkspace(App[None]):
     """Own terminal presentation while shared services own persistent research.
+
+    Provider and specialist work starts only after an explicit action. Cached
+    panes load independently in workers, and Pulse messages prepare evidence
+    handoff without changing review state or starting research implicitly.
 
     Attributes:
         store: Durable metadata, reading state, source coverage, and notes.
@@ -90,7 +97,12 @@ class ResearchWorkspace(App[None]):
         *,
         store: WorkspaceStore | None = None,
     ) -> None:
-        """Bind the terminal to a local store without contacting providers."""
+        """Bind the terminal to a local store without contacting providers.
+
+        Args:
+            workspace: Optional directory used when constructing a new ledger.
+            store: Existing ledger to reuse instead of opening ``workspace``.
+        """
         super().__init__()
         self.store = store if store is not None else WorkspaceStore(workspace)
         self.service = WorkspaceService(self.store)
@@ -98,9 +110,16 @@ class ResearchWorkspace(App[None]):
         self._source_url = ""
         self._sections: dict[str, int] = {}
         self._find_position = 0
+        self._loaded_panes: set[str] = set()
+        self._note_sources: tuple[HttpUrl, ...] = ()
 
     def compose(self) -> ComposeResult:
-        """Compose inbox, search, reader, research, journal, and settings panes."""
+        """Compose inbox, search, reader, research, journal, and settings panes.
+
+        Yields:
+            The workspace header, cached evidence and editing panes, shared
+            status line, and keyboard shortcut footer.
+        """
         yield Header()
         with TabbedContent(initial="inbox-tab", id="workspace-tabs"):
             with TabPane("Inbox", id="inbox-tab"):
@@ -176,14 +195,7 @@ class ResearchWorkspace(App[None]):
                 )
                 yield RichLog(id="reader-related", wrap=True, markup=False)
             with TabPane("Pulse", id="news-tab"):
-                with Horizontal(classes="controls"):
-                    yield Button(
-                        "Refresh headlines",
-                        id="refresh-news",
-                        variant="primary",
-                    )
-                    yield Button("Refresh market", id="refresh-market")
-                yield RichLog(id="news-log", wrap=True, markup=False)
+                yield PulsePane(self.store)
             with TabPane("Research", id="research-tab"):
                 with Horizontal(classes="controls"):
                     yield Select[str](
@@ -288,10 +300,27 @@ class ResearchWorkspace(App[None]):
             table = self.query_one(identifier, DataTable)
             table.add_columns("State", "Filed", "Form", "Company", "Accession")
         self._reload_inbox()
-        self._reload_scans()
-        self._reload_journal()
-        self._reload_news()
-        profile = self.store.load_settings()
+        self.query_one("#inbox", DataTable).focus()
+
+    @on(TabbedContent.TabActivated, "#workspace-tabs")
+    def activate_pane(self, event: TabbedContent.TabActivated) -> None:
+        """Load cached state only when its workspace pane becomes visible."""
+        identifier = event.pane.id or ""
+        if identifier == "news-tab":
+            self.query_one(PulsePane).activate()
+        elif identifier not in self._loaded_panes:
+            if identifier == "search-tab":
+                self._reload_scans()
+            elif identifier == "journal-tab":
+                self._reload_journal()
+            elif identifier == "settings-tab":
+                self._reload_profile()
+            self._loaded_panes.add(identifier)
+
+    @work(exclusive=True, group="profile-cache", exit_on_error=False)
+    async def _reload_profile(self) -> None:
+        """Populate editable profile controls without blocking terminal interaction."""
+        profile = await asyncio.to_thread(self.store.load_settings)
         for selector, value in (
             ("#profile-name", profile.name),
             ("#profile-contact", profile.user_agent),
@@ -302,22 +331,76 @@ class ResearchWorkspace(App[None]):
             ),
         ):
             self.query_one(selector, Input).value = value
-        self.query_one("#inbox", DataTable).focus()
+
+    @on(PulsePane.Status)
+    def pulse_status(self, event: PulsePane.Status) -> None:
+        """Display shared Pulse action results in the workspace status line."""
+        self._status(event.text)
+
+    @on(PulsePane.Refresh)
+    def pulse_refresh(self, event: PulsePane.Refresh) -> None:
+        """Run a provider operation explicitly requested from Pulse."""
+        self._refresh(event.source)
+
+    @on(PulsePane.ProfileChanged)
+    def pulse_profile_changed(self) -> None:
+        """Invalidate hidden profile controls after an authored watchlist edit."""
+        self._loaded_panes.discard("settings-tab")
+
+    @on(PulsePane.Navigate)
+    def pulse_navigate(self, event: PulsePane.Navigate) -> None:
+        """Open evidence or prepare a note or research action without auto-running it."""
+        item = event.item
+        tabs = self.query_one("#workspace-tabs", TabbedContent)
+        symbols = ", ".join(item.symbols)
+        match event.action:
+            case "open":
+                if item.accession_number:
+                    self._read_filing(item.accession_number)
+                else:
+                    webbrowser.open(item.url)
+            case "journal":
+                self.accession = item.accession_number
+                self._note_sources = (HttpUrl(item.url),)
+                self.query_one("#note-symbol", Input).value = (
+                    item.symbols[0] if item.symbols else ""
+                )
+                self.query_one("#note-link", Checkbox).value = (
+                    item.accession_number is not None
+                )
+                self.query_one("#observation", TextArea).load_text(
+                    f"Evidence: {item.title}\nSource: {item.url}\nObservation: "
+                )
+                tabs.active = "journal-tab"
+                self.query_one("#observation", TextArea).focus()
+            case "search":
+                self.query_one("#search-query", Input).value = item.title
+                self.query_one("#search-symbols", Input).value = symbols
+                tabs.active = "search-tab"
+                self.query_one("#search-query", Input).focus()
+            case "research":
+                self.query_one("#research-symbols", Input).value = symbols
+                self.query_one("#research-question", Input).value = item.title
+                tabs.active = "research-tab"
+                self.query_one("#research-question", Input).focus()
 
     def _status(self, message: str) -> None:
         """Display plain text status without interpreting retrieved markup."""
-        self.query_one("#status", Static).update(message)
+        if self.query("#status"):
+            self.query_one("#status", Static).update(message)
 
-    def _reload_inbox(self) -> None:
+    @work(exclusive=True, group="inbox-cache", exit_on_error=False)
+    async def _reload_inbox(self) -> None:
         """Populate the table and coverage indicator from local storage."""
         table = self.query_one("#inbox", DataTable)
-        table.clear()
-        items = self.store.list_filings(
+        items = await asyncio.to_thread(
+            self.store.list_filings,
             query=self.query_one("#inbox-filter", Input).value,
             unread_only=self.query_one("#unread-filter", Checkbox).value,
             bookmarked_only=self.query_one("#saved-filter", Checkbox).value,
             limit=500,
         )
+        table.clear()
         for item in items:
             filing = item.filing
             table.add_row(
@@ -333,7 +416,7 @@ class ResearchWorkspace(App[None]):
                 filing.accession_number,
                 key=filing.accession_number,
             )
-        checkpoints = self.store.list_checkpoints()
+        checkpoints = await asyncio.to_thread(self.store.list_checkpoints)
         self.query_one("#continue-sec", Button).disabled = not any(
             item.source in {"sec-atom", "sec-coverage"}
             and not item.scope
@@ -350,39 +433,36 @@ class ResearchWorkspace(App[None]):
             or "No filings fetched yet. Refresh explicitly to discover current filings."
         )
 
-    def _reload_scans(self) -> None:
+    @work(exclusive=True, group="scan-cache", exit_on_error=False)
+    async def _reload_scans(self) -> None:
         """Populate saved scan choices from their durable identifiers."""
         self.query_one("#scan-select", Select).set_options(
-            [(item.name, item.scan_id) for item in self.store.list_scans()]
+            [
+                (item.name, item.scan_id)
+                for item in await asyncio.to_thread(self.store.list_scans)
+            ]
         )
 
-    def _reload_journal(self, *, due_only: bool = False) -> None:
+    @work(exclusive=True, group="journal-cache", exit_on_error=False)
+    async def _reload_journal(self) -> None:
         """Display saved observations and review dates without model interpretation."""
         log = self.query_one("#journal-log", RichLog)
         log.clear()
-        for entry in self.store.list_notes():
-            if due_only and (
-                entry.review_on is None
-                or entry.review_on > datetime.now(UTC).date()
-            ):
-                continue
+        for entry in await asyncio.to_thread(self.store.list_notes, limit=100):
             log.write(
                 f"{entry.created_at.date()} · {entry.symbol or 'General'} · Review {entry.review_on or 'unscheduled'}\n{entry.observation}\nThesis: {entry.thesis}\nInvalidation: {entry.invalidation}\n"
             )
 
     def _reload_news(self) -> None:
-        """Render cached source-dated headlines and market snapshots."""
-        log = self.query_one("#news-log", RichLog)
-        log.clear()
-        for brief in self.store.list_briefs()[:2]:
-            for quote in brief.market:
-                log.write(
-                    f"{quote.symbol} · {quote.quote_date or 'unknown date'} · close {quote.close} · 1-session change {quote.change_1d_pct}%"
-                )
-        for item in self.store.list_news():
-            log.write(
-                f"\n{item.published_at or 'Publication time unavailable'} · {item.source}\n{item.title}\n{item.url}\nMatches: {', '.join((*item.symbols, *item.themes)) or 'Configured source'}"
-            )
+        """Invalidate Pulse projections after explicit evidence changes."""
+        pane = self.query_one(PulsePane)
+        if (
+            self.query_one("#workspace-tabs", TabbedContent).active
+            == "news-tab"
+        ):
+            pane.activate(changed=True)
+        else:
+            pane.invalidate()
 
     def _scan_spec(self) -> ScanSpec:
         """Validate the explicit query controls as one shared scan definition."""
@@ -431,12 +511,20 @@ class ResearchWorkspace(App[None]):
         self._status(
             f"Refreshing {source}… Escape cancels; completed pages are retained."
         )
-        result = await self.service.refresh(source=source)
+        result = await self.service.refresh(
+            source=source, on_progress=self._refresh_progress
+        )
         self._reload_inbox()
         self._reload_news()
         self._status(
             result.message
             + (" " + "; ".join(result.errors) if result.errors else "")
+        )
+
+    async def _refresh_progress(self, progress: RefreshProgress) -> None:
+        """Render durable source progress without interpreting provider content."""
+        self._status(
+            f"Refresh {progress.completed}/{progress.total} · {progress.source}: {progress.status} · Escape cancels"
         )
 
     @work(exclusive=True, group="evidence", exit_on_error=False)
@@ -524,15 +612,22 @@ class ResearchWorkspace(App[None]):
         related.clear()
         from sec_nlp.app.workspace.headlines import related_headlines
 
+        headlines, settings, notes = await asyncio.gather(
+            asyncio.to_thread(self.store.list_news),
+            asyncio.to_thread(self.store.load_settings),
+            asyncio.to_thread(
+                self.store.list_notes, accession_number=accession
+            ),
+        )
         for headline, reason in related_headlines(
             manifest.filing,
-            self.store.list_news(),
-            self.store.load_settings().watchlist,
+            headlines,
+            settings.watchlist,
         ):
             related.write(
                 f"{headline.published_at or 'Undated'} · {headline.source} · {headline.title}\n{headline.url}\n{reason}"
             )
-        for note in self.store.list_notes(accession_number=accession):
+        for note in notes:
             related.write(f"Note: {note.observation}")
         self.query_one("#workspace-tabs", TabbedContent).active = "reader-tab"
         self._reload_inbox()
@@ -566,10 +661,16 @@ class ResearchWorkspace(App[None]):
     def on_worker_state_changed(self, event: Worker.StateChanged) -> None:
         """Surface errors and cancellation without closing the workspace."""
         if event.state == WorkerState.ERROR:
-            self._reload_inbox()
+            if event.worker.group == "evidence":
+                self._reload_inbox()
+                self._reload_news()
             self._status(f"Action failed: {event.worker.error}")
-        elif event.state == WorkerState.CANCELLED:
+        elif (
+            event.state == WorkerState.CANCELLED
+            and event.worker.group == "evidence"
+        ):
             self._reload_inbox()
+            self._reload_news()
             self._status(
                 "Cancelled. Previously saved evidence remains available."
             )
@@ -589,11 +690,7 @@ class ResearchWorkspace(App[None]):
                 case "search-submit":
                     self._search(self._scan_spec())
                 case "scan-save":
-                    self.store.save_scan(self._scan_spec())
-                    self._reload_scans()
-                    self._status(
-                        "Scan saved. Run it explicitly when you want new evidence."
-                    )
+                    self._save_scan(self._scan_spec())
                 case "scan-run":
                     selected = self.query_one("#scan-select", Select).value
                     if isinstance(selected, str):
@@ -604,9 +701,7 @@ class ResearchWorkspace(App[None]):
                         self._read_filing(self.accession, selected)
                 case "reader-bookmark":
                     if self.accession:
-                        self.store.set_bookmarked(self.accession)
-                        self._reload_inbox()
-                        self._status("Filing bookmarked.")
+                        self._bookmark(self.accession)
                 case "reader-source":
                     if self._source_url:
                         webbrowser.open(self._source_url)
@@ -615,7 +710,12 @@ class ResearchWorkspace(App[None]):
                 case "note-save":
                     self._save_note()
                 case "note-due":
-                    self._reload_journal(due_only=True)
+                    self.query_one(
+                        "#workspace-tabs", TabbedContent
+                    ).active = "news-tab"
+                    self.query_one(PulsePane).query_one(
+                        "#pulse-tabs", TabbedContent
+                    ).active = "pulse-reviews-tab"
                 case "note-all":
                     self._reload_journal()
                 case "profile-save":
@@ -646,24 +746,46 @@ class ResearchWorkspace(App[None]):
                                 values["topics"] = [question]
                         self._research(selected, values)
                 case "export-markdown" | "export-json":
-                    from sec_nlp.app.workspace.export import export_workspace
-
-                    extension = "json" if identifier == "export-json" else "md"
-                    destination = (
-                        self.store.path
-                        / "exports"
-                        / f"workspace-{datetime.now(UTC).strftime('%Y%m%d-%H%M%S')}.{extension}"
+                    self._export(
+                        "json" if identifier == "export-json" else "markdown"
                     )
-                    export_workspace(
-                        self.store,
-                        destination,
-                        output_format="json"
-                        if extension == "json"
-                        else "markdown",
-                    )
-                    self._status(f"Exported {destination}")
         except (ValueError, OSError) as exc:
             self._status(str(exc))
+
+    @work(exclusive=True, group="scan-save", exit_on_error=False)
+    async def _save_scan(self, spec: ScanSpec) -> None:
+        """Save explicitly authored scan settings without blocking keyboard input."""
+        await asyncio.to_thread(self.store.save_scan, spec)
+        self._reload_scans()
+        self._status(
+            "Scan saved. Run it explicitly when you want new evidence."
+        )
+
+    @work(exclusive=True, group="bookmark-save", exit_on_error=False)
+    async def _bookmark(self, accession: str) -> None:
+        """Persist a selected bookmark independently from review acknowledgement."""
+        await asyncio.to_thread(self.store.set_bookmarked, accession)
+        self._reload_inbox()
+        self._status("Filing bookmarked.")
+
+    @work(exclusive=True, group="export", exit_on_error=False)
+    async def _export(self, output_format: Literal["json", "markdown"]) -> None:
+        """Export cached evidence outside the UI event loop after an explicit action."""
+        from sec_nlp.app.workspace.export import export_workspace
+
+        extension = "json" if output_format == "json" else "md"
+        destination = (
+            self.store.path
+            / "exports"
+            / f"workspace-{datetime.now(UTC).strftime('%Y%m%d-%H%M%S')}.{extension}"
+        )
+        await asyncio.to_thread(
+            export_workspace,
+            self.store,
+            destination,
+            output_format=output_format,
+        )
+        self._status(f"Exported {destination}")
 
     def _find_next(self) -> None:
         """Select the next case-insensitive occurrence in the full document."""
@@ -682,7 +804,8 @@ class ResearchWorkspace(App[None]):
         self._find_position = position + len(query)
         self._status("Match found; Find next wraps to the beginning.")
 
-    def _save_note(self) -> None:
+    @work(exclusive=True, group="journal-save", exit_on_error=False)
+    async def _save_note(self) -> None:
         """Append an authored note with optional filing and review links."""
         review = self.query_one("#note-review", Input).value.strip()
         entry = JournalEntry(
@@ -693,20 +816,28 @@ class ResearchWorkspace(App[None]):
             thesis=self.query_one("#note-thesis", Input).value,
             invalidation=self.query_one("#note-invalidation", Input).value,
             review_on=date.fromisoformat(review) if review else None,
+            sources=self._note_sources,
         )
-        self.store.save_note(
+        await asyncio.to_thread(
+            self.store.save_note,
             entry,
             related_accession=self.accession
             if self.query_one("#note-link", Checkbox).value
             else None,
         )
-        self.query_one("#observation", TextArea).load_text("")
+        observation = self.query_one("#observation", TextArea)
+        if observation.text == entry.observation:
+            observation.load_text("")
+        if self._note_sources == entry.sources:
+            self._note_sources = ()
+        self._reload_news()
         self._reload_journal()
         self._status("Research note saved.")
 
-    def _save_profile(self) -> None:
+    @work(exclusive=True, group="profile-save", exit_on_error=False)
+    async def _save_profile(self) -> None:
         """Save user preferences while preserving existing thesis and feed details."""
-        profile = self.store.load_settings()
+        profile = await asyncio.to_thread(self.store.load_settings)
         existing = {item.symbol: item for item in profile.watchlist}
         symbols = (
             self.query_one("#profile-symbols", Input)
@@ -726,9 +857,11 @@ class ResearchWorkspace(App[None]):
                 "watchlist": watchlist,
             }
         )
-        self.store.save_settings(
-            type(profile).model_validate_json(updated.model_dump_json())
+        await asyncio.to_thread(
+            self.store.save_settings,
+            type(profile).model_validate_json(updated.model_dump_json()),
         )
+        self._reload_news()
         self._status("Settings saved. Refresh remains manual.")
 
     def action_refresh(self) -> None:

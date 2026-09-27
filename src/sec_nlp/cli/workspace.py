@@ -26,6 +26,15 @@ from sec_nlp.app.pulse.models import JournalEntry, WatchItem
 from sec_nlp.app.workspace.models import ScanSpec
 from sec_nlp.app.workspace.service import ActionResult, WorkspaceService
 from sec_nlp.app.workspace.store import WorkspaceStore
+from sec_nlp.cli.daily_review import (
+    DailyReviewOptions,
+    add_pulse_options,
+    add_review_options,
+    add_watchlist_options,
+    edit_watchlist,
+    run_review,
+    show_pulse,
+)
 from sec_nlp.types import ConfigData, JsonDict
 
 if TYPE_CHECKING:
@@ -46,7 +55,7 @@ class RichParser(argparse.ArgumentParser):
 
 
 @dataclass
-class Options(argparse.Namespace):
+class Options(DailyReviewOptions):
     """Hold typed values populated by the selected argparse command.
 
     Attributes:
@@ -194,7 +203,7 @@ def _parser(command: str) -> RichParser:
             note.add_argument("--sources", nargs="*", default=[])
             listing = operations.add_parser("list")
             listing.add_argument("--accession")
-            operations.add_parser("review")
+            add_review_options(operations.add_parser("review"))
         case "export":
             parser.add_argument(
                 "--format",
@@ -219,6 +228,8 @@ def _parser(command: str) -> RichParser:
             operations.add_parser("open")
             operations.add_parser("status")
             operations.add_parser("jobs")
+            add_pulse_options(operations.add_parser("pulse"))
+            add_watchlist_options(operations.add_parser("watchlist"))
             inbox = operations.add_parser("inbox")
             inbox.add_argument("--unread", action="store_true")
             inbox.add_argument("--bookmarked", action="store_true")
@@ -534,17 +545,12 @@ def run_command(command: str, arguments: list[str]) -> int:
                 )
                 store.save_note(entry, related_accession=options.accession)
                 console.print(entry.model_dump_json(indent=2), markup=False)
+            elif options.action == "review":
+                run_review(store, options)
             else:
-                entries = tuple(
-                    entry
-                    for entry in store.list_notes(
-                        accession_number=options.accession
-                    )
-                    if options.action != "review"
-                    or entry.review_on is not None
-                    and entry.review_on <= datetime.now(UTC).date()
+                _show_records(
+                    store.list_notes(accession_number=options.accession)
                 )
-                _show_records(entries)
         case "workspace":
             if options.action in {"init", "configure"}:
                 profile = store.load_settings()
@@ -586,6 +592,22 @@ def run_command(command: str, arguments: list[str]) -> int:
                 )
             elif options.action == "jobs":
                 _show_records(store.list_jobs())
+            elif options.action == "pulse":
+                show_pulse(
+                    store,
+                    options,
+                    symbol=options.symbol,
+                    as_json=options.json_output,
+                )
+            elif options.action == "watchlist":
+                _show_records(
+                    edit_watchlist(
+                        store,
+                        options,
+                        symbol=options.symbol,
+                        review_on=options.review_on,
+                    )
+                )
             elif options.action == "inbox":
                 show_filings(
                     store,

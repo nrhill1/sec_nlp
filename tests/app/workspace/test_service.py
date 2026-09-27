@@ -418,8 +418,8 @@ def test_news_snapshot_uses_ledger_new_flags(
             "generated_at": first.generated_at + timedelta(seconds=1),
         }
     )
-    build = Mock(side_effect=[first, second])
-    monkeypatch.setattr(briefs, "build_brief", build)
+    build = AsyncMock(side_effect=[first, second])
+    monkeypatch.setattr(briefs, "build_brief_async", build)
     asyncio.run(service.refresh(source="news"))
     asyncio.run(service.refresh(source="news"))
     snapshot = service.store.latest_brief(profile)

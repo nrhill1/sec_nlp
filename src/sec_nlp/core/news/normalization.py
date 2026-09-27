@@ -122,3 +122,40 @@ def dated_title_key(title: str, published_at: datetime | None) -> str | None:
     if published_at is None or not normalized:
         return None
     return f"{published_at.astimezone(UTC).date().isoformat()}:{normalized}"
+
+
+def phrase_matches(text: str, phrase: str, *, ticker: bool = False) -> bool:
+    """Match uppercase tickers or case-insensitive company and topic phrases.
+
+    Tickers of one or two letters require a cashtag, parentheses, or exchange
+    label to distinguish them from articles, pronouns, and sector initials.
+    Longer tickers remain case-sensitive to avoid ordinary common words.
+
+    Args:
+        text: Source headline or other evidence text.
+        phrase: Literal phrase, with flexible whitespace between words.
+        ticker: Apply ticker case and short-symbol disambiguation rules.
+
+    Returns:
+        Whether the source contains a boundary-delimited match.
+    """
+    cleaned = " ".join(phrase.split())
+    if not cleaned:
+        return False
+    pattern = (
+        r"(?<!\w)"
+        + r"\s+".join(re.escape(part) for part in cleaned.split())
+        + r"(?!\w)"
+    )
+    if ticker and len(cleaned) <= 2:
+        pattern = (
+            r"(?:\$"
+            + re.escape(cleaned)
+            + r"(?!\w)|\("
+            + re.escape(cleaned)
+            + r"\)|(?<!\w)(?:NYSE|NASDAQ|AMEX):\s*"
+            + re.escape(cleaned)
+            + r"(?!\w))"
+        )
+    flags = 0 if ticker else re.IGNORECASE
+    return re.search(pattern, text, flags) is not None

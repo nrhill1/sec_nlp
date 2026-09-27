@@ -6,6 +6,7 @@
 mod api;
 mod cache;
 mod runtime;
+mod session;
 mod types;
 
 use pyo3::prelude::*;
@@ -17,8 +18,8 @@ use api::{get_price, get_prices, get_range, get_ranges};
 ///
 /// Results are cached for 5 minutes to reduce API calls.
 #[pyfunction]
-fn fetch_price(ticker: &str) -> PyResult<f64> {
-    get_price(ticker)
+fn fetch_price(py: Python<'_>, ticker: &str) -> PyResult<f64> {
+    py.detach(|| get_price(ticker))
 }
 
 /// Fetch latest prices for multiple tickers.
@@ -27,7 +28,7 @@ fn fetch_price(ticker: &str) -> PyResult<f64> {
 /// Results are cached for 5 minutes.
 #[pyfunction]
 fn fetch_prices<'py>(py: Python<'py>, tickers: Vec<String>) -> PyResult<Bound<'py, PyDict>> {
-    let prices = get_prices(tickers)?;
+    let prices = py.detach(|| get_prices(tickers))?;
     let dict = PyDict::new(py);
     for (ticker, price) in prices {
         dict.set_item(ticker, price)?;
@@ -49,7 +50,7 @@ fn retrieve_range<'py>(
     ticker: &str,
     date_range: &str,
 ) -> PyResult<Bound<'py, PyList>> {
-    let quotes = get_range(ticker, date_range)?;
+    let quotes = py.detach(|| get_range(ticker, date_range))?;
     let list = PyList::empty(py);
     for quote in quotes {
         list.append(quote.to_py_dict(py)?)?;
@@ -66,7 +67,7 @@ fn retrieve_ranges<'py>(
     tickers: Vec<String>,
     date_range: &str,
 ) -> PyResult<Bound<'py, PyDict>> {
-    let ranges = get_ranges(tickers, date_range)?;
+    let ranges = py.detach(|| get_ranges(tickers, date_range))?;
     let dict = PyDict::new(py);
     for (ticker, quotes) in ranges {
         let list = PyList::empty(py);
@@ -87,6 +88,7 @@ fn clear_cache() {
 
 #[pymodule]
 fn market(_py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
+    m.add_class::<session::MarketSession>()?;
     m.add_function(wrap_pyfunction!(fetch_price, m)?)?;
     m.add_function(wrap_pyfunction!(fetch_prices, m)?)?;
     m.add_function(wrap_pyfunction!(retrieve_range, m)?)?;

@@ -4,11 +4,13 @@
 from __future__ import annotations
 
 import re
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from datetime import date
 from functools import lru_cache
 from pathlib import Path
 from typing import TypedDict
+
+from pydantic import JsonValue, TypeAdapter
 
 from sec_nlp.core.documents import DocumentRecord as Document
 from sec_nlp.core.edgar.filing_mode import FilingMode
@@ -111,29 +113,49 @@ class _TickerEntry(TypedDict):
 def _load_ticker_registry(
     company_name: str, email: str
 ) -> dict[str, _TickerEntry]:
-    """Load cached ticker registry mapping from disk."""
+    """Retrieve the ticker registry once per specialist contact configuration."""
     logger.debug("Fetching ticker-to-CIK mapping from SEC...")
     url = "https://www.sec.gov/files/company_tickers.json"
     data = fetch_sec_json(url, f"{company_name} {email}")
-    if not isinstance(data, dict):
+    return parse_ticker_registry(data)
+
+
+def parse_ticker_registry(data: JsonValue) -> dict[str, _TickerEntry]:
+    """Normalize declared SEC symbol associations for workspace and specialists.
+
+    Args:
+        data: JSON mapping returned by the SEC company ticker registry.
+
+    Returns:
+        Uppercase symbols mapped to validated, zero-padded CIKs and names.
+
+    Raises:
+        ValueError: If the registry is not a mapping or has no usable entries.
+    """
+    if not isinstance(data, Mapping):
         raise ValueError("SEC ticker registry is not a JSON mapping")
 
     registry: dict[str, _TickerEntry] = {}
+    entry_adapter = TypeAdapter(dict[str, JsonValue])
     for entry in data.values():
-        if not isinstance(entry, dict):
+        if not isinstance(entry, Mapping):
             continue
-        raw_ticker = entry.get("ticker")
+        payload = entry_adapter.validate_python(entry)
+        raw_ticker = payload.get("ticker")
         ticker_symbol = (
             raw_ticker.upper() if isinstance(raw_ticker, str) else ""
         )
-        cik_num = entry.get("cik_str")
-        company_title = str(entry.get("title", "")).strip()
-        if ticker_symbol and cik_num:
+        cik_num = payload.get("cik_str")
+        company_title = str(payload.get("title", "")).strip()
+        cik = str(cik_num)
+        if ticker_symbol and cik.isdigit() and 0 < len(cik) <= 10 and int(cik):
             registry[ticker_symbol] = _TickerEntry(
-                cik=str(cik_num).zfill(10),
+                cik=cik.zfill(10),
                 company_name=company_title,
             )
 
+    if not registry:
+        raise ValueError("SEC ticker registry contains no usable associations")
     logger.debug("Loaded %d ticker registry entries", len(registry))
     return registry
 

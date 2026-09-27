@@ -7,15 +7,19 @@ headline matching, and review prompts remain deterministic and expose missing
 coverage. Synthetic demonstration records never invoke either adapter.
 """
 
+import asyncio
 import logging
 import math
 import re
+from collections.abc import Awaitable, Callable
 from datetime import UTC, date, datetime, timedelta
+from functools import partial
+from typing import Literal
 from urllib.parse import quote
 from uuid import NAMESPACE_URL, uuid4, uuid5
 
 import httpx
-from pydantic import HttpUrl
+from pydantic import BaseModel, ConfigDict, Field, HttpUrl
 
 from sec_nlp.app.pulse.models import (
     Brief,
@@ -26,10 +30,16 @@ from sec_nlp.app.pulse.models import (
     PulseSettings,
     SourceStatus,
 )
-from sec_nlp.core.market import MarketQuote, create_market_retriever
+from sec_nlp.core.edgar.transport import SecTransport
+from sec_nlp.core.market import (
+    MarketQuote,
+    MarketRetriever,
+    create_market_retriever,
+)
 from sec_nlp.core.news.client import NewsItem, create_news_retriever
 from sec_nlp.core.news.normalization import (
     parse_timestamp as _parse_timestamp,
+    phrase_matches as _phrase_matches,
     safe_url as _safe_url,
     title_key as _title_key,
     url_key as _url_key,
@@ -37,6 +47,30 @@ from sec_nlp.core.news.normalization import (
 
 logger = logging.getLogger(__name__)
 _NEWS_LIMIT = 500
+_SOURCE_TIMEOUT = 20.0
+_SOURCE_CONCURRENCY = 4
+
+
+class SourceResult(BaseModel):
+    """Carry one completed source operation to the workspace persistence owner.
+
+    Incremental results retain usable evidence when another source is slow,
+    fails, or is cancelled. A final brief remains a portable report snapshot.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+    status: SourceStatus = Field(description="Outcome of this source attempt.")
+    observed_at: datetime = Field(description="UTC time this attempt finished.")
+    market: tuple[MarketObservation, ...] = Field(
+        default=(), description="Market observations from this source."
+    )
+    headlines: tuple[Headline, ...] = Field(
+        default=(),
+        description="Normalized headlines before cross-source merging.",
+    )
+
+
+type SourceCallback = Callable[[SourceResult, int, int], Awaitable[None]]
 
 
 def _utc_now(now: datetime | None) -> datetime:
@@ -153,7 +187,6 @@ def _fetch_market(
             raw = retriever.retrieve_range(
                 symbol, (start_date, now.date() + timedelta(days=1))
             )
-            quotes = _valid_quotes(raw, start_date, now)
         except (
             RuntimeError,
             ValueError,
@@ -178,50 +211,56 @@ def _fetch_market(
                 )
             )
             continue
-        if not quotes:
-            observations.append(
-                MarketObservation(symbol=symbol, source_url=_market_url(symbol))
-            )
-            statuses.append(
-                SourceStatus(
-                    name=symbol,
-                    kind="market",
-                    status="empty",
-                    detail=f"No usable quotes in the requested window; {len(raw)} returned.",
-                )
-            )
-            continue
-        latest = quotes[-1]
-        quote_date = datetime.fromtimestamp(latest.timestamp, UTC).date()
-        age = (now.date() - quote_date).days
-        stale = age > settings.stale_after_days
-        observations.append(
-            MarketObservation(
-                symbol=symbol,
-                quote_date=quote_date,
-                close=latest.close,
-                change_1d_pct=_change(quotes, 1),
-                change_5d_pct=_change(quotes, 5),
-                observations=len(quotes),
-                stale=stale,
-                source_url=_market_url(symbol),
-            )
-        )
-        detail = f"{len(quotes)} usable UTC sessions; {len(raw) - len(quotes)} invalid, outside-window, future, or duplicate records omitted."
-        if len(quotes) < 6:
-            detail += " Five-session change needs at least six sessions."
-        if stale:
-            detail += f" Latest quote is stale ({age} calendar days old)."
-        statuses.append(
-            SourceStatus(
-                name=symbol,
-                kind="market",
-                status="ok",
-                records=len(quotes),
-                detail=detail,
-            )
-        )
+        observation, status = _market_result(symbol, raw, settings, now)
+        observations.append(observation)
+        statuses.append(status)
     return tuple(observations), tuple(statuses)
+
+
+def _market_result(
+    symbol: str, raw: list[MarketQuote], settings: PulseSettings, now: datetime
+) -> tuple[MarketObservation, SourceStatus]:
+    """Describe usable sessions without replacing absent history with estimates."""
+    start_date = now.date() - timedelta(days=settings.market_days)
+    quotes = _valid_quotes(raw, start_date, now)
+    if not quotes:
+        observation = MarketObservation(
+            symbol=symbol, source_url=_market_url(symbol)
+        )
+        status = SourceStatus(
+            name=symbol,
+            kind="market",
+            status="empty",
+            detail=f"No usable quotes in the requested window; {len(raw)} returned.",
+        )
+        return observation, status
+    latest = quotes[-1]
+    quote_date = datetime.fromtimestamp(latest.timestamp, UTC).date()
+    age = (now.date() - quote_date).days
+    stale = age > settings.stale_after_days
+    observation = MarketObservation(
+        symbol=symbol,
+        quote_date=quote_date,
+        close=latest.close,
+        change_1d_pct=_change(quotes, 1),
+        change_5d_pct=_change(quotes, 5),
+        observations=len(quotes),
+        stale=stale,
+        source_url=_market_url(symbol),
+    )
+    detail = f"{len(quotes)} usable UTC sessions; {len(raw) - len(quotes)} invalid, outside-window, future, or duplicate records omitted."
+    if len(quotes) < 6:
+        detail += " Five-session change needs at least six sessions."
+    if stale:
+        detail += f" Latest quote is stale ({age} calendar days old)."
+    status = SourceStatus(
+        name=symbol,
+        kind="market",
+        status="ok",
+        records=len(quotes),
+        detail=detail,
+    )
+    return observation, status
 
 
 def _dated_title_key(headline: Headline) -> str | None:
@@ -237,35 +276,6 @@ def _dated_title_key(headline: Headline) -> str | None:
         return None
     published_date = headline.published_at.astimezone(UTC).date()
     return f"{published_date.isoformat()}:{title}"
-
-
-def _phrase_matches(text: str, phrase: str, *, ticker: bool = False) -> bool:
-    """Match uppercase tickers or case-insensitive company and topic phrases.
-
-    Tickers of one or two letters require a cashtag, parentheses, or exchange
-    label to distinguish them from articles, pronouns, and sector initials.
-    Longer tickers remain case-sensitive to avoid ordinary common words.
-    """
-    cleaned = " ".join(phrase.split())
-    if not cleaned:
-        return False
-    pattern = (
-        r"(?<!\w)"
-        + r"\s+".join(re.escape(part) for part in cleaned.split())
-        + r"(?!\w)"
-    )
-    if ticker and len(cleaned) <= 2:
-        pattern = (
-            r"(?:\$"
-            + re.escape(cleaned)
-            + r"(?!\w)|\("
-            + re.escape(cleaned)
-            + r"\)|(?<!\w)(?:NYSE|NASDAQ|AMEX):\s*"
-            + re.escape(cleaned)
-            + r"(?!\w))"
-        )
-    flags = 0 if ticker else re.IGNORECASE
-    return re.search(pattern, text, flags) is not None
 
 
 def _headline(
@@ -425,6 +435,7 @@ def _deduplicate(
     )
     groups: dict[int, Headline] = {}
     identities: dict[tuple[str, str], int] = {}
+    group_keys: dict[int, set[tuple[str, str]]] = {}
     minimum = datetime.min.replace(tzinfo=UTC)
     ordered = sorted(
         headlines,
@@ -448,16 +459,18 @@ def _deduplicate(
             keys = (*keys, ("title", title_key))
         matches = {identities[key] for key in keys if key in identities}
         group = min(matches) if matches else sequence
+        merged_keys = group_keys.setdefault(group, set())
         for matched in sorted(matches, reverse=True):
             item = _merge_headlines(groups.pop(matched), item)
+            if matched != group:
+                moved_keys = group_keys.pop(matched)
+                merged_keys.update(moved_keys)
+                for key in moved_keys:
+                    identities[key] = group
         groups[group] = item
-        if matches:
-            identities = {
-                key: group if value in matches else value
-                for key, value in identities.items()
-            }
         for key in keys:
             identities[key] = group
+            merged_keys.add(key)
     return sorted(
         groups.values(),
         key=lambda item: (
@@ -568,6 +581,289 @@ def build_brief(
         market=market,
         headlines=headlines,
         sources=(*market_statuses, *news_statuses),
+        journal=journal,
+        prompts=_prompts(settings, market, headlines, journal, generated_at),
+    )
+
+
+def _transient_market_error(error: BaseException) -> bool:
+    """Recognize retryable transport errors without retrying invalid symbols."""
+    if isinstance(error, (TimeoutError, ConnectionError, httpx.TransportError)):
+        return True
+    if isinstance(error, httpx.HTTPStatusError):
+        return (
+            error.response.status_code == 429
+            or error.response.status_code >= 500
+        )
+    message = str(error).casefold()
+    status = re.search(r"(?:status|http)[^0-9]{0,20}(\d{3})\b", message)
+    if status:
+        code = int(status.group(1))
+        return code == 429 or 500 <= code <= 599
+    return any(
+        marker in message
+        for marker in (
+            "timed out",
+            "timeout",
+            "connection reset",
+            "connection refused",
+            "error sending request",
+            "error decoding response body",
+        )
+    )
+
+
+async def _async_market(
+    retriever: MarketRetriever,
+    symbol: str,
+    settings: PulseSettings,
+    now: datetime,
+) -> SourceResult:
+    """Fetch a symbol with one transient retry inside its source deadline."""
+    start = now.date() - timedelta(days=settings.market_days)
+    for attempt in range(2):
+        try:
+            raw = await retriever.retrieve_range_async(
+                symbol, (start, now.date() + timedelta(days=1))
+            )
+            observation, status = _market_result(symbol, raw, settings, now)
+            return SourceResult(
+                status=status,
+                observed_at=datetime.now(UTC),
+                market=(observation,),
+            )
+        except (RuntimeError, ValueError, OSError, httpx.HTTPError) as error:
+            if attempt or not _transient_market_error(error):
+                raise
+            logger.debug(
+                "Retrying transient market source %s", symbol, exc_info=True
+            )
+            await asyncio.sleep(0.5)
+    raise RuntimeError("Unreachable market retry state")
+
+
+async def _async_news(
+    feed: Feed, settings: PulseSettings, now: datetime, transport: SecTransport
+) -> SourceResult:
+    """Await the existing native or shared SEC feed adapter and normalize it."""
+    retriever = create_news_retriever(
+        user_agent=settings.user_agent,
+        feeds=[(str(feed.url), feed.feed_type, feed.name)],
+    )
+    raw = await retriever.fetch_async(
+        keywords=[], max_results=_NEWS_LIMIT, sec_transport=transport
+    )
+    usable = tuple(
+        headline
+        for item in raw[:_NEWS_LIMIT]
+        if (headline := _headline(item, feed, settings, now)) is not None
+    )
+    undated = sum(item.published_at is None for item in usable)
+    return SourceResult(
+        status=SourceStatus(
+            name=feed.name,
+            kind="news",
+            status="ok" if usable else "empty",
+            records=len(usable),
+            detail=f"{len(usable)} usable headlines before cross-source deduplication; {undated} with unknown dates. Requested up to {_NEWS_LIMIT} source records; feeds may retain less history.",
+        ),
+        observed_at=datetime.now(UTC),
+        headlines=usable,
+    )
+
+
+async def _source_operation(
+    name: str,
+    kind: Literal["market", "news"],
+    operation: Callable[[], Awaitable[SourceResult]],
+    semaphore: asyncio.Semaphore,
+) -> SourceResult:
+    """Bound active requests and convert source errors to visible outcomes."""
+    async with semaphore:
+        try:
+            async with asyncio.timeout(_SOURCE_TIMEOUT):
+                return await operation()
+        except (
+            ImportError,
+            RuntimeError,
+            ValueError,
+            OSError,
+            TypeError,
+            KeyError,
+            AttributeError,
+            OverflowError,
+            httpx.HTTPError,
+        ) as error:
+            logger.debug("Pulse source failed: %s", name, exc_info=True)
+            return SourceResult(
+                status=SourceStatus(
+                    name=name,
+                    kind=kind,
+                    status="error",
+                    detail=_error_detail(error),
+                ),
+                observed_at=datetime.now(UTC),
+            )
+
+
+async def _collect_sources(
+    operations: list[Callable[[], Awaitable[SourceResult]]],
+    on_source: SourceCallback | None,
+) -> tuple[SourceResult, ...]:
+    """Commit completed source evidence and drain request tasks on cancellation."""
+
+    async def run(
+        operation: Callable[[], Awaitable[SourceResult]],
+    ) -> SourceResult:
+        """Adapt an awaitable provider result to an owned coroutine task."""
+        return await operation()
+
+    tasks = [asyncio.create_task(run(operation)) for operation in operations]
+    delivered: set[int] = set()
+    results: list[SourceResult] = []
+
+    async def deliver(result: SourceResult) -> None:
+        """Await persistence before announcing a durable source completion."""
+        if on_source is not None:
+            await on_source(result, len(results) + 1, len(tasks))
+        results.append(result)
+        delivered.add(id(result))
+
+    try:
+        for completed in asyncio.as_completed(tasks):
+            await deliver(await completed)
+    finally:
+        for pending in tasks:
+            if not pending.done():
+                pending.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
+        # Requests that completed concurrently with cancellation still supplied
+        # evidence. Only callbacks that finished count as durably delivered.
+        for finished in tasks:
+            if not finished.cancelled() and finished.exception() is None:
+                result = finished.result()
+                if id(result) not in delivered:
+                    await deliver(result)
+    return tuple(results)
+
+
+async def build_brief_async(
+    settings: PulseSettings,
+    *,
+    journal: tuple[JournalEntry, ...] = (),
+    previous: Brief | None = None,
+    now: datetime | None = None,
+    include_market: bool = True,
+    include_news: bool = True,
+    on_source: SourceCallback | None = None,
+    sec_transport: SecTransport | None = None,
+) -> Brief:
+    """Build an explicitly refreshed brief from cancellable concurrent sources.
+
+    Args:
+        settings: Immutable watchlist and source settings.
+        journal: Authored entries included in the resulting snapshot.
+        previous: Compatible previous snapshot for ingestion novelty.
+        now: Aware UTC-compatible report time.
+        include_market: Retrieve market observations when true.
+        include_news: Retrieve configured headlines when true.
+        on_source: Awaited callback for each completed source and progress count.
+        sec_transport: Shared application SEC connection pool, if already open.
+
+    Returns:
+        A portable brief with per-source outcomes and all successfully fetched data.
+    """
+    if sec_transport is None:
+        async with SecTransport(
+            settings.user_agent, timeout=_SOURCE_TIMEOUT, retries=1
+        ) as transport:
+            return await build_brief_async(
+                settings,
+                journal=journal,
+                previous=previous,
+                now=now,
+                include_market=include_market,
+                include_news=include_news,
+                on_source=on_source,
+                sec_transport=transport,
+            )
+    generated_at = _utc_now(now)
+    compatible = (
+        previous
+        if previous is not None
+        and not previous.demo
+        and previous.settings == settings
+        and previous.generated_at < generated_at
+        else None
+    )
+    semaphore = asyncio.Semaphore(_SOURCE_CONCURRENCY)
+    operations: list[Callable[[], Awaitable[SourceResult]]] = []
+    retriever: MarketRetriever | None = None
+
+    async def market_source(symbol: str) -> SourceResult:
+        """Construct one shared market session lazily within error handling."""
+        nonlocal retriever
+        if retriever is None:
+            retriever = create_market_retriever()
+        return await _async_market(retriever, symbol, settings, generated_at)
+
+    for symbol in _symbols(settings) if include_market else ():
+        operations.append(
+            partial(
+                _source_operation,
+                symbol,
+                "market",
+                partial(market_source, symbol),
+                semaphore,
+            )
+        )
+    for feed in _feeds(settings) if include_news else ():
+        operations.append(
+            partial(
+                _source_operation,
+                feed.name,
+                "news",
+                partial(
+                    _async_news, feed, settings, generated_at, sec_transport
+                ),
+                semaphore,
+            )
+        )
+    results = await _collect_sources(operations, on_source)
+    market_by_symbol = {
+        item.symbol: item for result in results for item in result.market
+    }
+    market = tuple(
+        market_by_symbol[symbol]
+        for symbol in _symbols(settings)
+        if symbol in market_by_symbol
+    )
+    headlines = tuple(
+        _deduplicate(
+            [item for result in results for item in result.headlines],
+            compatible,
+        )[: settings.max_headlines]
+    )
+    statuses = {
+        (result.status.kind, result.status.name): result.status
+        for result in results
+    }
+    source_order = [
+        *(
+            ("market", symbol)
+            for symbol in _symbols(settings)
+            if include_market
+        ),
+        *(("news", feed.name) for feed in _feeds(settings) if include_news),
+    ]
+    return Brief(
+        brief_id=uuid4().hex,
+        generated_at=generated_at,
+        settings=settings,
+        previous_brief_id=compatible.brief_id if compatible else None,
+        market=market,
+        headlines=headlines,
+        sources=tuple(statuses[key] for key in source_order),
         journal=journal,
         prompts=_prompts(settings, market, headlines, journal, generated_at),
     )

@@ -9,6 +9,7 @@ import os
 from datetime import UTC, datetime
 from pathlib import Path
 from tempfile import NamedTemporaryFile
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -24,6 +25,8 @@ from sec_nlp.app.workspace.models import (
     ScanSpec,
     SourceCheckpoint,
 )
+from sec_nlp.app.workspace.pulse import export_pulse_state
+from sec_nlp.app.workspace.pulse_models import PulseState
 from sec_nlp.app.workspace.store import WorkspaceStore
 
 
@@ -35,8 +38,8 @@ class WorkspaceExport(BaseModel):
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
-    schema_version: int = Field(
-        default=1, description="Portable workspace export version."
+    schema_version: Literal[2] = Field(
+        default=2, description="Portable workspace export version."
     )
     generated_at: datetime = Field(description="UTC export time.")
     settings: PulseSettings = Field(
@@ -65,6 +68,9 @@ class WorkspaceExport(BaseModel):
     )
     briefs: tuple[Brief, ...] = Field(
         description="Preserved investing snapshots."
+    )
+    pulse: PulseState = Field(
+        description="Activity acknowledgement, review history, and latest provider evidence."
     )
 
 
@@ -109,6 +115,7 @@ def export_workspace(
         coverage=store.list_checkpoints(),
         jobs=store.list_jobs(limit=None),
         briefs=store.list_briefs(limit=None),
+        pulse=export_pulse_state(store),
     )
     if output_format == "json":
         content = snapshot.model_dump_json(indent=2) + "\n"
@@ -132,11 +139,30 @@ def export_workspace(
             lines.append(
                 f"- {_plain(watched.symbol)} · {_plain(watched.name)} · Thesis: {_plain(watched.thesis)}"
             )
-        if snapshot.briefs:
-            for quote in snapshot.briefs[0].market:
+        current_symbols = {
+            *snapshot.settings.benchmarks,
+            *(watched.symbol for watched in snapshot.settings.watchlist),
+        }
+        for quote in snapshot.pulse.market:
+            if quote.symbol in current_symbols:
                 lines.append(
-                    f"- {_plain(quote.symbol)} · {quote.quote_date or 'date unavailable'} · Close: {quote.close} · 1-session change: {quote.change_1d_pct}%"
+                    f"- {_plain(quote.symbol)} · {quote.quote_date or 'date unavailable'} · Close: {quote.close} · 1-session change: {quote.change_1d_pct}% · 5-session change: {quote.change_5d_pct}%"
                 )
+        lines.extend(["", "## Latest source outcomes", ""])
+        for outcome in snapshot.pulse.sources:
+            lines.append(
+                f"- {_plain(outcome.status.name)} · {outcome.status.status} · {outcome.observed_at.isoformat()} · {_plain(outcome.status.detail)}"
+            )
+        lines.extend(["", "## Pulse review state", ""])
+        for activity in snapshot.pulse.activity:
+            lines.append(
+                f"- {_plain(activity.identity)} · {'reviewed' if activity.reviewed else 'new'} · [{_plain(activity.title)}]({activity.url})"
+            )
+        lines.extend(["", "## Research review history", ""])
+        for review in snapshot.pulse.reviews:
+            lines.append(
+                f"- {review.created_at.isoformat()} · {review.target_kind} {_plain(review.target_id)} · {review.action} · {_plain(review.note)} · Next: {review.next_review_on or 'unscheduled'}"
+            )
         lines.extend(["", "## Filings", ""])
         for item in snapshot.filings:
             filing = item.filing

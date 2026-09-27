@@ -13,6 +13,8 @@ import asyncio
 import hashlib
 import logging
 import re
+from collections.abc import Awaitable, Callable
+from contextlib import AsyncExitStack
 from datetime import UTC, date, datetime, timedelta
 from typing import TYPE_CHECKING, Literal
 
@@ -20,6 +22,7 @@ import httpx
 from pydantic import BaseModel, ConfigDict, Field
 
 from sec_nlp.app.workspace.models import JobRecord, ScanSpec, SourceCheckpoint
+from sec_nlp.app.workspace.pulse_models import RefreshProgress, SymbolMapping
 from sec_nlp.app.workspace.store import WorkspaceStore
 from sec_nlp.core.edgar.filing_models import (
     DocumentContent,
@@ -178,6 +181,7 @@ class WorkspaceService:
         start_date: date | None = None,
         end_date: date | None = None,
         today: date | None = None,
+        on_progress: Callable[[RefreshProgress], Awaitable[None]] | None = None,
     ) -> ActionResult:
         """Refresh selected sources only after an explicit user action.
 
@@ -186,6 +190,7 @@ class WorkspaceService:
             start_date: Optional earliest date for an explicit historical import.
             end_date: Optional inclusive historical cutoff.
             today: Fixed current date for deterministic callers and tests.
+            on_progress: Awaited notification after each durable Pulse source outcome.
 
         Returns:
             Available evidence with source errors and partial coverage exposed.
@@ -201,8 +206,17 @@ class WorkspaceService:
         errors: list[str] = []
         partial = False
         try:
-            if source in {"sec", "all"}:
-                async with SecTransport(identity) as transport:
+            async with AsyncExitStack() as clients:
+                transport: SecTransport | None = None
+                if source in {"sec", "all"}:
+                    transport = await clients.enter_async_context(
+                        SecTransport(identity, retries=1)
+                    )
+                    mapping_error = await self._refresh_symbol_mappings(
+                        transport
+                    )
+                    if mapping_error:
+                        errors.append(mapping_error)
                     feed, feed_partial, feed_errors = (
                         await self._refresh_feed(transport)
                         if start_date is None and end_date is None
@@ -223,33 +237,12 @@ class WorkspaceService:
                     )
                     partial = feed_partial or index_partial
                     errors.extend((*feed_errors, *index_errors))
-            if source in {"news", "market", "all"}:
-                from sec_nlp.app.pulse.service import build_brief
-
-                profile = self.store.load_settings()
-                brief = await asyncio.to_thread(
-                    build_brief,
-                    profile,
-                    journal=self.store.list_notes(),
-                    previous=self.store.latest_brief(profile),
-                    include_market=source in {"market", "all"},
-                    include_news=source in {"news", "all"},
-                )
-                normalized = self.store.save_news(brief.headlines)
-                brief = brief.model_copy(update={"headlines": normalized})
-                self.store.save_brief(brief)
-                for status in brief.sources:
-                    failed = status.status == "error"
-                    self.store.save_checkpoint(
-                        SourceCheckpoint(
-                            source=status.name,
-                            scope=source,
-                            status="error" if failed else "complete",
-                            detail=status.detail,
+                if source != "sec":
+                    errors.extend(
+                        await self._refresh_pulse(
+                            source, transport, on_progress
                         )
                     )
-                    if failed:
-                        errors.append(f"{status.name}: {status.detail}")
             partial = partial or bool(errors)
             message = f"Observed {len(records)} filings. " + (
                 "Coverage is partial; inspect source status and refresh to continue."
@@ -283,6 +276,162 @@ class WorkspaceService:
         except (httpx.HTTPError, OSError, ValueError, RuntimeError) as exc:
             await asyncio.to_thread(self._finish, job, "error", str(exc))
             raise
+
+    async def _refresh_symbol_mappings(
+        self, transport: SecTransport
+    ) -> str | None:
+        """Persist SEC-declared mappings once per explicit SEC refresh."""
+        from sec_nlp.core.ingest.filings import parse_ticker_registry
+
+        profile = await asyncio.to_thread(self.store.load_settings)
+        if not profile.watchlist:
+            return None
+        checked = datetime.now(UTC)
+        previous = next(
+            (
+                checkpoint
+                for checkpoint in await asyncio.to_thread(
+                    self.store.list_checkpoints
+                )
+                if checkpoint.source == "sec-symbol-registry"
+            ),
+            None,
+        )
+        checkpoint = SourceCheckpoint(
+            source="sec-symbol-registry",
+            status="partial",
+            checked_at=checked,
+            last_success_at=previous.last_success_at if previous else None,
+            detail="Checking SEC ticker associations for the current watchlist.",
+        )
+        await asyncio.to_thread(self.store.save_checkpoint, checkpoint)
+        try:
+            async with asyncio.timeout(20.0):
+                data = await transport.get_json(
+                    "https://www.sec.gov/files/company_tickers.json"
+                )
+            registry = parse_ticker_registry(data)
+            mappings = tuple(
+                SymbolMapping(
+                    symbol=watched.symbol,
+                    cik=entry["cik"],
+                    name=entry["company_name"],
+                    checked_at=checked,
+                )
+                for watched in profile.watchlist
+                if (entry := registry.get(watched.symbol)) is not None
+            )
+            await asyncio.to_thread(
+                self.store.save_symbol_mappings, mappings, checked
+            )
+            await asyncio.to_thread(
+                self.store.save_checkpoint,
+                checkpoint.model_copy(
+                    update={
+                        "status": "complete",
+                        "last_success_at": datetime.now(UTC),
+                        "records": len(mappings),
+                        "detail": f"SEC registry confirmed {len(mappings)} of {len(profile.watchlist)} watched symbols. Unmatched assets remain available for market and news research.",
+                    }
+                ),
+            )
+            return None
+        except (httpx.HTTPError, OSError, ValueError) as error:
+            logger.debug("SEC ticker registry refresh failed", exc_info=True)
+            await asyncio.to_thread(
+                self.store.save_symbol_mappings, (), checked, error=str(error)
+            )
+            await asyncio.to_thread(
+                self.store.save_checkpoint,
+                checkpoint.model_copy(
+                    update={"status": "error", "detail": str(error)}
+                ),
+            )
+            return f"SEC symbol registry: {error}"
+
+    async def _refresh_pulse(
+        self,
+        source: Literal["news", "market", "all"],
+        transport: SecTransport | None,
+        on_progress: Callable[[RefreshProgress], Awaitable[None]] | None,
+    ) -> tuple[str, ...]:
+        """Persist independent source completions before the final brief."""
+        from sec_nlp.app.pulse.service import SourceResult, build_brief_async
+
+        profile = await asyncio.to_thread(self.store.load_settings)
+        journal = await asyncio.to_thread(self.store.list_notes)
+        previous = await asyncio.to_thread(self.store.latest_brief, profile)
+        started = datetime.now(UTC)
+        streamed = False
+
+        def persist(result: SourceResult) -> None:
+            """Commit evidence and the source checkpoint off the event loop."""
+            self.store.save_pulse_source(
+                result.status,
+                result.observed_at,
+                market=result.market,
+                headlines=result.headlines,
+            )
+            self.store.save_checkpoint(
+                SourceCheckpoint(
+                    source=result.status.name,
+                    scope=source,
+                    status="error"
+                    if result.status.status == "error"
+                    else "complete",
+                    detail=result.status.detail,
+                )
+            )
+
+        async def completed(
+            result: SourceResult, count: int, total: int
+        ) -> None:
+            """Publish progress only after the source outcome has been saved."""
+            nonlocal streamed
+            # Shield disk writes so cancellation cannot leave a background
+            # writer racing the cancelled job's completion record.
+            writing = asyncio.create_task(asyncio.to_thread(persist, result))
+            try:
+                await asyncio.shield(writing)
+            except asyncio.CancelledError:
+                await writing
+                raise
+            streamed = True
+            if on_progress is not None:
+                await on_progress(
+                    RefreshProgress(
+                        completed=count,
+                        total=total,
+                        source=result.status.name,
+                        status=result.status.status,
+                    )
+                )
+
+        brief = await build_brief_async(
+            profile,
+            journal=journal,
+            previous=previous,
+            include_market=source in {"market", "all"},
+            include_news=source in {"news", "all"},
+            on_source=completed,
+            sec_transport=transport,
+        )
+        normalized = (
+            await asyncio.to_thread(
+                self.store.news_novelty, brief.headlines, started
+            )
+            if streamed
+            else await asyncio.to_thread(self.store.save_news, brief.headlines)
+        )
+        await asyncio.to_thread(
+            self.store.save_brief,
+            brief.model_copy(update={"headlines": normalized}),
+        )
+        return tuple(
+            f"{status.name}: {status.detail}"
+            for status in brief.sources
+            if status.status == "error"
+        )
 
     async def _refresh_feed(
         self, transport: SecTransport
@@ -849,6 +998,11 @@ class WorkspaceService:
         errors: list[str] = []
         try:
             results = await self.search(spec)
+            await asyncio.to_thread(
+                self.store.save_scan_matches,
+                spec.scan_id,
+                tuple(filing.accession_number for filing in results.filings),
+            )
             for filing in results.filings[: spec.max_documents]:
                 try:
                     await self.read(filing.accession_number, mark_read=False)

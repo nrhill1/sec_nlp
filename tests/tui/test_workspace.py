@@ -256,7 +256,13 @@ def test_scan_displays_partial_coverage_and_document_errors(
     monkeypatch: pytest.MonkeyPatch,
     errors: tuple[str, ...],
 ) -> None:
-    """Keep discovered evidence visible while reporting incomplete scan results."""
+    """Keep discovered evidence visible while reporting incomplete scan results.
+
+    Args:
+        tmp_path: Isolated workspace directory for the scan fixture.
+        monkeypatch: Scoped replacement of the explicit scan provider action.
+        errors: Source failures that must remain visible in terminal status.
+    """
 
     async def scenario() -> None:
         app = ResearchWorkspace(store=_store(tmp_path))
@@ -275,6 +281,7 @@ def test_scan_displays_partial_coverage_and_document_errors(
             ),
         )
         async with app.run_test(size=(120, 40)) as pilot:
+            await app.workers.wait_for_complete()
             app._run_scan("saved-scan")
             await app.workers.wait_for_complete()
             await pilot.pause()

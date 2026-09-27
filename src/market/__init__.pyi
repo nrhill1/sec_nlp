@@ -3,7 +3,21 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterable
+from collections.abc import Awaitable, Iterable
+
+class MarketSession:
+    """Share a connection pool across cancellable, explicitly fresh requests."""
+
+    def __init__(self) -> None:
+        """Create a session without contacting Yahoo."""
+
+    def retrieve_range_async(
+        self, ticker: str, date_range: str
+    ) -> Awaitable[list[dict[str, float | int]]]:
+        """Fetch fresh quotes and propagate cancellation to the native request."""
+
+    def wait_idle_async(self) -> Awaitable[None]:
+        """Acknowledge completion or cancellation of active native requests."""
 
 def fetch_price(ticker: str) -> float:
     """Fetch latest price for a single ticker (cached for 5 min)."""

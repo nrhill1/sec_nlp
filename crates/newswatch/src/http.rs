@@ -20,7 +20,10 @@ impl HttpClient {
         max_retries: u32,
         retry_delay_secs: f64,
     ) -> Result<Self, NewswatchError> {
-        let client = reqwest::Client::builder().build()?;
+        let client = reqwest::Client::builder()
+            .connect_timeout(Duration::from_secs(5))
+            .timeout(Duration::from_secs(20))
+            .build()?;
         Ok(Self {
             client,
             user_agent,
@@ -31,6 +34,12 @@ impl HttpClient {
     }
 
     pub async fn fetch_text(&self, url: &str) -> Result<String, NewswatchError> {
+        tokio::time::timeout(Duration::from_secs(20), self.fetch_with_retry(url))
+            .await
+            .map_err(|_| NewswatchError::new("news request exceeded 20 seconds"))?
+    }
+
+    async fn fetch_with_retry(&self, url: &str) -> Result<String, NewswatchError> {
         let mut attempt: u32 = 0;
         loop {
             if self.rate_limit_secs > 0.0 {
@@ -46,17 +55,30 @@ impl HttpClient {
             {
                 Ok(response) => {
                     if response.status().is_success() {
-                        return response.text().await.map_err(NewswatchError::from);
-                    }
-                    let status = response.status();
-                    let body = response.text().await.unwrap_or_default();
-                    let message = format!("news fetch failed (status {}): {}", status, body.trim());
-                    if attempt >= self.max_retries {
-                        return Err(NewswatchError::new(message));
+                        match response.text().await {
+                            Ok(body) => return Ok(body),
+                            Err(err) => {
+                                if attempt >= self.max_retries
+                                    || !(err.is_timeout() || err.is_body())
+                                {
+                                    return Err(err.into());
+                                }
+                            }
+                        }
+                    } else {
+                        let status = response.status();
+                        let message = format!("news fetch failed (status {})", status);
+                        if attempt >= self.max_retries
+                            || !(status.as_u16() == 429 || status.is_server_error())
+                        {
+                            return Err(NewswatchError::new(message));
+                        }
                     }
                 }
                 Err(err) => {
-                    if attempt >= self.max_retries {
+                    if attempt >= self.max_retries
+                        || !(err.is_connect() || err.is_timeout() || err.is_body())
+                    {
                         return Err(NewswatchError::new(err.to_string()));
                     }
                 }

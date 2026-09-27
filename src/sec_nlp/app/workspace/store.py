@@ -25,9 +25,12 @@ from sec_nlp.app.pulse.models import (
     Brief,
     Headline,
     JournalEntry,
+    MarketObservation,
     PulseSettings,
+    SourceStatus,
 )
 from sec_nlp.app.pulse.storage import starter_settings
+from sec_nlp.app.workspace import pulse_schema
 from sec_nlp.app.workspace.models import (
     CachePointer,
     InboxItem,
@@ -35,6 +38,7 @@ from sec_nlp.app.workspace.models import (
     ScanSpec,
     SourceCheckpoint,
 )
+from sec_nlp.app.workspace.pulse_models import PulseSource, SymbolMapping
 from sec_nlp.core.edgar.filing_models import (
     DocumentContent,
     FilingDocument,
@@ -158,17 +162,42 @@ class WorkspaceStore:
         self.database_path = self.path / "ledger.sqlite3"
         with self._connect() as connection:
             version = connection.execute("PRAGMA user_version").fetchone()[0]
-            if version not in (0, 1):
+            if version not in (0, 1, 2):
                 raise ValueError(
                     f"Unsupported workspace ledger version: {version}"
                 )
-            connection.executescript(_SCHEMA)
-            connection.execute("PRAGMA user_version = 1")
             config = self.path / "config.json"
-            if not config.exists():
-                _atomic_write(
-                    config, starter_settings().model_dump_json(indent=2) + "\n"
+            settings = (
+                self.load_settings() if config.exists() else starter_settings()
+            )
+            if version < 2:
+                connection.execute("BEGIN IMMEDIATE")
+                for statement in _SCHEMA.split(";"):
+                    if statement.strip():
+                        connection.execute(statement)
+                pulse_schema.upgrade(
+                    connection,
+                    settings,
+                    self.path,
+                    lambda headlines, stamp: self._save_news(
+                        connection,
+                        headlines,
+                        settings=settings,
+                        observed_at=stamp,
+                        preserve_existing=True,
+                    ),
                 )
+            else:
+                projection = connection.execute(
+                    "SELECT value FROM metadata WHERE key='pulse_profile'"
+                ).fetchone()
+                if projection is None or _text(
+                    projection, "value"
+                ) != pulse_schema.profile_fingerprint(settings):
+                    connection.execute("BEGIN IMMEDIATE")
+                    pulse_schema.refresh_profile(connection, settings)
+            if not config.exists():
+                _atomic_write(config, settings.model_dump_json(indent=2) + "\n")
                 connection.execute(
                     "INSERT OR IGNORE INTO metadata VALUES ('profile_origin','default')"
                 )
@@ -207,12 +236,15 @@ class WorkspaceStore:
 
     def save_settings(self, settings: PulseSettings) -> None:
         """Atomically save an explicitly edited profile without fetching sources."""
-        _atomic_write(
-            self.path / "config.json", settings.model_dump_json(indent=2) + "\n"
-        )
         with self._connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            pulse_schema.refresh_profile(connection, settings)
             connection.execute(
                 "INSERT OR REPLACE INTO metadata VALUES ('profile_origin','user')"
+            )
+            _atomic_write(
+                self.path / "config.json",
+                settings.model_dump_json(indent=2) + "\n",
             )
 
     def import_settings(self, settings: PulseSettings) -> bool:
@@ -227,6 +259,7 @@ class WorkspaceStore:
                 or self.load_settings() != starter_settings()
             ):
                 return False
+            pulse_schema.refresh_profile(connection, settings)
             _atomic_write(
                 self.path / "config.json",
                 settings.model_dump_json(indent=2) + "\n",
@@ -244,11 +277,13 @@ class WorkspaceStore:
         observed_at: datetime,
     ) -> int:
         """Merge accession evidence while preserving user state and entity roles."""
+        if not connection.in_transaction:
+            connection.execute("BEGIN IMMEDIATE")
         stamp = _timestamp(observed_at)
         inserted = 0
         for filing in filings:
             row = connection.execute(
-                "SELECT payload FROM filings WHERE accession=?",
+                "SELECT payload,first_seen_at FROM filings WHERE accession=?",
                 (filing.accession_number,),
             ).fetchone()
             if row is not None:
@@ -302,6 +337,12 @@ class WorkspaceStore:
                     )
                     for entity in filing.entities
                 ),
+            )
+            pulse_schema.project_filing(
+                connection,
+                filing,
+                source,
+                _text(row, "first_seen_at") if row is not None else stamp,
             )
         return inserted
 
@@ -713,62 +754,339 @@ class WorkspaceStore:
         Keep identity aliases when publishers edit titles or timestamps.
         Undated items have URL identity only, preserving recurring releases.
         """
-        normalized: list[Headline] = []
         with self._connect() as connection:
-            indexed = connection.execute(
-                "SELECT value FROM metadata WHERE key='news_identity_version'"
-            ).fetchone()
-            if indexed is None:
-                for row in connection.execute(
-                    "SELECT key,payload FROM news ORDER BY first_seen_at,key"
-                ):
-                    previous = Headline.model_validate_json(
-                        _text(row, "payload")
+            return self._save_news(connection, headlines)
+
+    def _save_news(
+        self,
+        connection: sqlite3.Connection,
+        headlines: Sequence[Headline],
+        *,
+        settings: PulseSettings | None = None,
+        observed_at: datetime | None = None,
+        preserve_existing: bool = False,
+    ) -> tuple[Headline, ...]:
+        """Merge news identities and projections in the caller's transaction."""
+        if not connection.in_transaction:
+            connection.execute("BEGIN IMMEDIATE")
+        settings = settings or self.load_settings()
+        normalized: list[Headline] = []
+        indexed = connection.execute(
+            "SELECT value FROM metadata WHERE key='news_identity_version'"
+        ).fetchone()
+        if indexed is None:
+            for previous_row in connection.execute(
+                "SELECT key,payload FROM news ORDER BY first_seen_at,key"
+            ).fetchall():
+                previous = Headline.model_validate_json(
+                    _text(previous_row, "payload")
+                )
+                for identity in _news_identities(previous):
+                    connection.execute(
+                        "INSERT OR IGNORE INTO news_aliases VALUES (?,?)",
+                        (identity, _text(previous_row, "key")),
                     )
-                    for identity in _news_identities(previous):
-                        connection.execute(
-                            "INSERT OR IGNORE INTO news_aliases VALUES (?,?)",
-                            (identity, _text(row, "key")),
-                        )
-                connection.execute(
-                    "INSERT INTO metadata VALUES ('news_identity_version','1')"
-                )
-            for headline in headlines:
-                stamp = (
-                    _timestamp(headline.published_at)
-                    if headline.published_at
-                    else ""
-                )
-                identities = _news_identities(headline)
-                row = None
-                for identity in identities:
-                    row = connection.execute(
-                        "SELECT news.key,first_seen_at FROM news JOIN news_aliases ON news.key=news_aliases.news_key WHERE identity=?",
-                        (identity,),
-                    ).fetchone()
-                    if row is not None:
-                        break
-                key = (
-                    _text(row, "key")
-                    if row is not None
-                    else hashlib.sha256(identities[0].encode()).hexdigest()
-                )
-                first_seen = (
-                    _text(row, "first_seen_at")
-                    if row is not None
-                    else _timestamp(datetime.now(UTC))
-                )
-                headline = headline.model_copy(update={"is_new": row is None})
-                connection.execute(
-                    "INSERT INTO news VALUES (?,?,?,?) ON CONFLICT(key) DO UPDATE SET timestamp=excluded.timestamp,payload=excluded.payload",
-                    (key, stamp, headline.model_dump_json(), first_seen),
-                )
+            connection.execute(
+                "INSERT INTO metadata VALUES ('news_identity_version','1')"
+            )
+        for headline in headlines:
+            identities = _news_identities(headline)
+            placeholders = ",".join("?" for _ in identities)
+            rows = connection.execute(
+                "SELECT DISTINCT n.* FROM news n JOIN news_aliases a ON n.key=a.news_key WHERE a.identity IN ("
+                + placeholders
+                + ") ORDER BY first_seen_at,n.key",
+                identities,
+            ).fetchall()
+            key = (
+                _text(rows[0], "key")
+                if rows
+                else hashlib.sha256(identities[0].encode()).hexdigest()
+            )
+            if rows and preserve_existing:
                 for identity in identities:
                     connection.execute(
                         "INSERT OR IGNORE INTO news_aliases VALUES (?,?)",
                         (identity, key),
                     )
-                normalized.append(headline)
+                normalized.append(
+                    Headline.model_validate_json(_text(rows[0], "payload"))
+                )
+                continue
+            first_seen = (
+                _text(rows[0], "first_seen_at")
+                if rows
+                else _timestamp(observed_at or datetime.now(UTC))
+            )
+            canonical = f"news:{key}"
+            sources = list(dict.fromkeys(headline.source.split(" | ")))
+            symbols = list(headline.symbols)
+            themes = list(headline.themes)
+            for previous_row in rows:
+                previous = Headline.model_validate_json(
+                    _text(previous_row, "payload")
+                )
+                if (
+                    headline.published_at is None
+                    and previous.published_at is not None
+                ):
+                    headline = headline.model_copy(
+                        update={"published_at": previous.published_at}
+                    )
+                sources.extend(
+                    part
+                    for part in previous.source.split(" | ")
+                    if part not in sources
+                )
+                symbols.extend(
+                    part for part in previous.symbols if part not in symbols
+                )
+                themes.extend(
+                    part for part in previous.themes if part not in themes
+                )
+                old_key = _text(previous_row, "key")
+                if old_key == key:
+                    continue
+                old_identity = f"news:{old_key}"
+                old_state = connection.execute(
+                    "SELECT reviewed,review_token FROM pulse_activity WHERE identity=?",
+                    (old_identity,),
+                ).fetchone()
+                if old_state is not None and old_state["reviewed"]:
+                    connection.execute(
+                        "UPDATE pulse_activity SET reviewed=1,review_token=? WHERE identity=? AND reviewed=0",
+                        (_text(old_state, "review_token"), canonical),
+                    )
+                connection.execute(
+                    "UPDATE news_aliases SET news_key=? WHERE news_key=?",
+                    (key, old_key),
+                )
+                connection.execute(
+                    "INSERT OR IGNORE INTO pulse_acknowledgements SELECT token,?,previous,previous_token FROM pulse_acknowledgements WHERE identity=?",
+                    (canonical, old_identity),
+                )
+                connection.execute(
+                    "DELETE FROM pulse_acknowledgements WHERE identity=?",
+                    (old_identity,),
+                )
+                connection.execute(
+                    "INSERT OR REPLACE INTO pulse_identity_redirect VALUES (?,?)",
+                    (old_identity, canonical),
+                )
+                connection.execute(
+                    "UPDATE pulse_identity_redirect SET canonical=? WHERE canonical=?",
+                    (canonical, old_identity),
+                )
+                connection.execute(
+                    "DELETE FROM pulse_activity WHERE identity=?",
+                    (old_identity,),
+                )
+                connection.execute("DELETE FROM news WHERE key=?", (old_key,))
+            headline = headline.model_copy(
+                update={
+                    "is_new": not rows,
+                    "source": " | ".join(sources),
+                    "symbols": tuple(symbols),
+                    "themes": tuple(themes),
+                }
+            )
+            stamp = (
+                _timestamp(headline.published_at)
+                if headline.published_at
+                else ""
+            )
+            connection.execute(
+                "INSERT INTO news VALUES (?,?,?,?) ON CONFLICT(key) DO UPDATE SET timestamp=excluded.timestamp,payload=excluded.payload",
+                (key, stamp, headline.model_dump_json(), first_seen),
+            )
+            for identity in identities:
+                connection.execute(
+                    "INSERT OR IGNORE INTO news_aliases VALUES (?,?)",
+                    (identity, key),
+                )
+            pulse_schema.project_news(
+                connection, key, headline, first_seen, settings
+            )
+            normalized.append(headline)
+        return tuple(normalized)
+
+    def save_source_outcome(
+        self, status: SourceStatus, observed_at: datetime
+    ) -> None:
+        """Save a provider attempt separately from its latest usable evidence.
+
+        Args:
+            status: Independent provider outcome.
+            observed_at: Aware time when the source attempt completed.
+        """
+        self.save_pulse_source(status, observed_at)
+
+    def save_market_observations(
+        self,
+        observations: Sequence[MarketObservation],
+        observed_at: datetime,
+        *,
+        demo: bool = False,
+    ) -> None:
+        """Save valid live quotes without erasing history after empty results.
+
+        Args:
+            observations: Dated market evidence; empty or missing quotes are skipped.
+            observed_at: Aware time when source retrieval completed.
+            demo: Exclude synthetic evidence from live projections.
+        """
+        if demo:
+            return
+        with self._connect() as connection:
+            self._save_market(connection, observations, observed_at)
+
+    def _save_market(
+        self,
+        connection: sqlite3.Connection,
+        observations: Sequence[MarketObservation],
+        observed_at: datetime,
+    ) -> None:
+        """Project successful quote evidence inside the caller's transaction."""
+        stamp = _timestamp(observed_at)
+        for observation in observations:
+            if (
+                observation.close is not None
+                and observation.quote_date is not None
+            ):
+                connection.execute(
+                    "INSERT INTO pulse_market VALUES (?,?,?) ON CONFLICT(symbol) DO UPDATE SET timestamp=excluded.timestamp,payload=excluded.payload WHERE json_extract(excluded.payload,'$.quote_date')>=json_extract(pulse_market.payload,'$.quote_date') AND excluded.timestamp>=pulse_market.timestamp",
+                    (observation.symbol, stamp, observation.model_dump_json()),
+                )
+
+    def save_pulse_source(
+        self,
+        status: SourceStatus,
+        observed_at: datetime,
+        *,
+        market: Sequence[MarketObservation] = (),
+        headlines: Sequence[Headline] = (),
+        demo: bool = False,
+    ) -> None:
+        """Atomically persist a completed source and its usable live evidence.
+
+        Args:
+            status: Provider's independent outcome.
+            observed_at: Aware source completion time.
+            market: Successful dated market observations.
+            headlines: Normalized provider evidence.
+            demo: Exclude synthetic evidence from live projections.
+        """
+        if demo:
+            return
+        stamp = _timestamp(observed_at)
+        outcome = PulseSource(status=status, observed_at=observed_at)
+        with self._connect() as connection:
+            self._save_news(connection, headlines)
+            self._save_market(connection, market, observed_at)
+            connection.execute(
+                "INSERT INTO pulse_sources VALUES (?,?,?,?) ON CONFLICT(kind,name) DO UPDATE SET timestamp=excluded.timestamp,payload=excluded.payload WHERE excluded.timestamp>=pulse_sources.timestamp",
+                (status.kind, status.name, stamp, outcome.model_dump_json()),
+            )
+
+    def save_symbol_mappings(
+        self,
+        mappings: Sequence[SymbolMapping],
+        checked_at: datetime,
+        *,
+        error: str = "",
+    ) -> None:
+        """Preserve registry provenance and mark unconfirmed prior mappings stale.
+
+        Args:
+            mappings: Successfully resolved watchlist symbols.
+            checked_at: Aware time of the registry attempt.
+            error: Failure detail when registry retrieval did not complete.
+        """
+        watched = {item.symbol for item in self.load_settings().watchlist}
+        confirmed = {item.symbol for item in mappings}
+        with self._connect() as connection:
+            for row in connection.execute(
+                "SELECT payload FROM pulse_symbols"
+            ).fetchall():
+                mapping = SymbolMapping.model_validate_json(
+                    _text(row, "payload")
+                )
+                if mapping.symbol in watched and (
+                    error or mapping.symbol not in confirmed
+                ):
+                    stale = mapping.model_copy(
+                        update={
+                            "stale": True,
+                            "detail": error
+                            or "Symbol missing from the latest SEC registry",
+                            "checked_at": checked_at,
+                        }
+                    )
+                    connection.execute(
+                        "UPDATE pulse_symbols SET payload=? WHERE symbol=?",
+                        (stale.model_dump_json(), mapping.symbol),
+                    )
+            if not error:
+                for mapping in mappings:
+                    connection.execute(
+                        "INSERT INTO pulse_symbols VALUES (?,?,?) ON CONFLICT(symbol) DO UPDATE SET cik=excluded.cik,payload=excluded.payload",
+                        (
+                            mapping.symbol,
+                            mapping.cik,
+                            mapping.model_copy(
+                                update={"checked_at": checked_at}
+                            ).model_dump_json(),
+                        ),
+                    )
+
+    def save_scan_matches(
+        self, scan_id: str, accessions: Sequence[str]
+    ) -> None:
+        """Retain saved-scan evidence associations across subsequent scan runs.
+
+        Args:
+            scan_id: Stable authored scan identity.
+            accessions: Canonical filing identities explicitly found by that scan.
+        """
+        with self._connect() as connection:
+            connection.executemany(
+                "INSERT OR IGNORE INTO pulse_scan_matches VALUES (?,?)",
+                ((scan_id, accession) for accession in accessions),
+            )
+
+    def news_novelty(
+        self, headlines: Sequence[Headline], discovered_since: datetime
+    ) -> tuple[Headline, ...]:
+        """Annotate brief ingestion novelty without changing explicit review state.
+
+        Args:
+            headlines: Final deduplicated report evidence.
+            discovered_since: Aware refresh start used to identify first discoveries.
+
+        Returns:
+            Headline copies whose legacy ``is_new`` describes this refresh only.
+            Pulse acknowledgement remains independent in the activity ledger.
+        """
+        stamp = _timestamp(discovered_since)
+        normalized: list[Headline] = []
+        with self._connect() as connection:
+            for headline in headlines:
+                identities = _news_identities(headline)
+                placeholders = ",".join("?" for _ in identities)
+                row = connection.execute(
+                    "SELECT MIN(n.first_seen_at) AS first_seen FROM news n JOIN news_aliases a ON a.news_key=n.key WHERE a.identity IN ("
+                    + placeholders
+                    + ")",
+                    identities,
+                ).fetchone()
+                is_new = (
+                    row is None
+                    or row["first_seen"] is None
+                    or _text(row, "first_seen") >= stamp
+                )
+                normalized.append(
+                    headline.model_copy(update={"is_new": is_new})
+                )
         return tuple(normalized)
 
     def list_news(self, *, limit: int | None = 100) -> tuple[Headline, ...]:
@@ -830,29 +1148,42 @@ class WorkspaceStore:
             return inserted
 
     def list_notes(
-        self, *, accession_number: str | None = None
+        self, *, accession_number: str | None = None, limit: int | None = None
     ) -> tuple[JournalEntry, ...]:
-        """Return chronological research notes, optionally linked to one accession."""
+        """Return chronological research notes, optionally linked to one accession.
+
+        Args:
+            accession_number: Restrict notes to one filing association.
+            limit: Return the most recent bounded selection, or all notes with None.
+
+        Returns:
+            Immutable notes in chronological order, including within bounded pages.
+        """
         if accession_number:
             return self._read_models(
                 JournalEntry,
-                "SELECT payload FROM notes JOIN note_filings ON notes.key=note_filings.note_id WHERE accession=? ORDER BY timestamp,key",
-                (accession_number,),
+                "SELECT * FROM (SELECT payload,timestamp,key FROM notes JOIN note_filings ON notes.key=note_filings.note_id WHERE accession=? ORDER BY timestamp DESC,key DESC LIMIT ?) ORDER BY timestamp,key",
+                (accession_number, _row_limit(limit)),
             )
         return self._read_models(
-            JournalEntry, "SELECT payload FROM notes ORDER BY timestamp,key"
+            JournalEntry,
+            "SELECT * FROM (SELECT payload,timestamp,key FROM notes ORDER BY timestamp DESC,key DESC LIMIT ?) ORDER BY timestamp,key",
+            (_row_limit(limit),),
         )
 
     def save_brief(self, brief: Brief) -> bool:
         """Append an immutable observation snapshot and report whether it was new."""
         with self._connect() as connection:
-            return self._save_immutable(
+            inserted = self._save_immutable(
                 connection,
                 "briefs",
                 brief.brief_id,
                 _timestamp(brief.generated_at),
                 brief.model_dump_json(),
             )
+            if inserted:
+                pulse_schema.project_brief(connection, brief)
+            return inserted
 
     def list_note_links(self) -> dict[str, tuple[str, ...]]:
         """Return every note-to-accession association for portable exports."""
@@ -877,16 +1208,19 @@ class WorkspaceStore:
         Returns:
             The latest compatible saved brief, or None before a matching run.
         """
-        with self._connect() as connection:
-            for row in connection.execute(
-                "SELECT payload FROM briefs ORDER BY timestamp DESC,key"
-            ):
-                brief = Brief.model_validate_json(_text(row, "payload"))
-                if brief.demo == demo and (
-                    settings is None or brief.settings == settings
-                ):
-                    return brief
-        return None
+        parameters: tuple[SqlValue, ...] = (int(demo),)
+        condition = "i.demo=?"
+        if settings is not None:
+            condition += " AND i.profile=?"
+            parameters += (pulse_schema.profile_fingerprint(settings),)
+        records = self._read_models(
+            Brief,
+            "SELECT b.payload FROM pulse_brief_index i JOIN briefs b ON b.key=i.key WHERE "
+            + condition
+            + " ORDER BY i.timestamp DESC,i.key LIMIT 1",
+            parameters,
+        )
+        return records[0] if records else None
 
     def list_briefs(self, *, limit: int | None = 100) -> tuple[Brief, ...]:
         """Return reproducible brief snapshots, including explicitly labeled demos."""

@@ -1,5 +1,9 @@
 # Workspace consolidation validation
 
+This document records the consolidation checkpoint before daily review.
+See [Pulse daily review validation](PULSE_VALIDATION.md) for the current checks,
+startup and query measurements, and updated size accounting.
+
 Verified on September 26, 2026, on the current macOS machine with Python 3.13.
 The application now shares discovery, reading, research, and persistence services
 between its terminal interface and scriptable commands.

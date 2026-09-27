@@ -25,6 +25,14 @@ The workspace replaces the all-command Pydantic root, analyze wizard, generic fl
 
 Old command names return migration guidance rather than importing their former implementations. Ordinary specialist flags remain available after `research NAME`; positional ticker lists still work. Workspace paths and `--json` may follow the action. Help/version create no run or workspace.
 
+Pulse daily review extends the existing groups: `workspace pulse` lists focused
+unreviewed evidence, `workspace pulse list` accepts filters and continuation
+cursors, and `workspace pulse mark`/`undo` explicitly change acknowledgement
+state. `workspace watchlist save` edits authored fields while preserving omitted
+values. Bare `journal review` now combines due watchlist and journal targets;
+`journal review complete` and `defer` append review actions. See [Pulse](PULSE.md)
+for the complete command examples.
+
 ## Data
 
 Run `sec-nlp workspace migrate --workspace DESTINATION --from ORIGINAL` explicitly. Migration validates the input first, preserves originals, and imports known profiles, immutable journals, brief JSON snapshots, and authored recipes. Repeating it does not duplicate existing records. Conflicting IDs or different destination profiles are reported instead of overwriting user data.
@@ -34,6 +42,13 @@ SQLite owns filing identity, entity associations, manifests, read/bookmark state
 Recognized SEC submission headers provide cache identity and declared company information. Files without sufficient trustworthy metadata remain registered external cache references with warnings; no issuer is inferred from the accession prefix. Migration reports what was imported and where expanded recipe settings were saved. Specialist output files are retained at their original paths.
 
 The old HTML report renderer is retired. Saved `brief.json` evidence remains importable, and Markdown/JSON exports preserve timestamps, source URLs, notes, filing links, scan definitions, and coverage. Existing HTML files are not deleted.
+
+Version 1 SQLite ledgers upgrade transactionally to version 2 at open. Original
+payloads remain intact while indexed activity, latest observations, and profile
+fingerprints are populated once. Existing evidence starts unacknowledged in
+Pulse; filing read/bookmark state retains its previous value. Workspace exports
+advance to schema version 2 to include Pulse state and review history. Profile
+and brief formats remain version 1.
 
 ## Authored jobs and profiling
 
